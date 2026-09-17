@@ -1,0 +1,61 @@
+name: Build Android v0.4 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/lib/main_v04.dart'
+      - 'apps/mobile/test/v04_test.dart'
+      - 'apps/mobile/pubspec.yaml'
+      - '.github/workflows/android-v04-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v04-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create temporary Android runner project
+        run: |
+          flutter create --platforms=android --org com.voicechatdemo --project-name voice_chat_app /tmp/voice_chat_v04
+          rm -rf /tmp/voice_chat_v04/lib /tmp/voice_chat_v04/test
+          cp -R apps/mobile/lib /tmp/voice_chat_v04/lib
+          cp -R apps/mobile/test /tmp/voice_chat_v04/test
+          cp apps/mobile/pubspec.yaml /tmp/voice_chat_v04/pubspec.yaml
+
+      - name: Get dependencies
+        working-directory: /tmp/voice_chat_v04
+        run: flutter pub get
+
+      - name: Analyze v0.4
+        working-directory: /tmp/voice_chat_v04
+        run: flutter analyze lib/main_v04.dart --no-fatal-infos
+
+      - name: Test v0.4
+        working-directory: /tmp/voice_chat_v04
+        run: flutter test test/v04_test.dart
+
+      - name: Build installable v0.4 debug APK
+        working-directory: /tmp/voice_chat_v04
+        run: flutter build apk --debug -t lib/main_v04.dart
+
+      - name: Upload v0.4 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-chat-v0.4-apk
+          path: /tmp/voice_chat_v04/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
