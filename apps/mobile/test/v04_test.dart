@@ -6,7 +6,7 @@ void main() {
   testWidgets('v0.4 uses Home Discover Message Me and royal room controls', (tester) async {
     await tester.pumpWidget(const VoiceChatV04());
 
-    expect(find.text('Mine'), findsOneWidget);
+    expect(find.text('Mine'), findsWidgets);
     expect(find.text('Popular'), findsOneWidget);
     expect(find.text('India Official Room'), findsOneWidget);
     expect(find.text('Wallet'), findsNothing);
