@@ -1,29 +1,20 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const VoiceChatApp());
-}
+void main() => runApp(const VoiceChatApp());
 
 class VoiceChatApp extends StatelessWidget {
   const VoiceChatApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF8A5CFF),
-      brightness: Brightness.dark,
-    );
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Voice Chat Demo',
+      title: 'Voice Chat v0.2',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: const Color(0xFF101014),
-        cardTheme: const CardThemeData(
-          margin: EdgeInsets.zero,
-        ),
+        brightness: Brightness.dark,
+        colorSchemeSeed: const Color(0xFF8A5CFF),
+        scaffoldBackgroundColor: const Color(0xFF0F1016),
       ),
       home: const DemoLoginPage(),
     );
@@ -43,52 +34,47 @@ class DemoLoginPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              Container(
-                width: 92,
-                height: 92,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF9B6CFF), Color(0xFF5F3DFF)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFA56FFF), Color(0xFF5A36E8)],
+                    ),
+                    borderRadius: BorderRadius.circular(28),
                   ),
-                  borderRadius: BorderRadius.circular(28),
+                  child: const Icon(Icons.graphic_eq_rounded, size: 48),
                 ),
-                child: const Icon(Icons.graphic_eq_rounded, size: 48),
               ),
               const SizedBox(height: 28),
               const Text(
-                'Voice Chat',
+                'Voice Chat v0.2',
                 style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
-              Text(
-                'Phase 1 local demo. Explore rooms, seats, chat, gifts and wallet flows without a cloud server.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
+              const Text(
+                'GitHub-only interactive demo with 30 seats, Invite Mode, seat requests and Owner/Admin controls.',
+                style: TextStyle(height: 1.45, color: Colors.white70),
               ),
               const Spacer(),
               FilledButton.icon(
                 key: const Key('continue-demo'),
-                onPressed: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const DemoShell()),
-                  );
-                },
+                onPressed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const DemoShell()),
+                ),
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),
                   child: Text('Continue in Demo Mode'),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Google Sign-In and real server login will be connected in a later phase.',
+              const SizedBox(height: 10),
+              const Text(
+                'No real money, cloud account or live microphone is used in this build.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: TextStyle(fontSize: 12, color: Colors.white54),
               ),
             ],
           ),
@@ -108,23 +94,17 @@ class DemoShell extends StatefulWidget {
 class _DemoShellState extends State<DemoShell> {
   int _index = 0;
   int _coins = 10000;
-  int _diamonds = 1200;
+  final int _diamonds = 1200;
   final List<WalletEntry> _transactions = [
     const WalletEntry('Welcome bonus', 10000, true),
     const WalletEntry('Demo diamonds', 1200, false),
   ];
 
   bool _sendGift(int cost, String giftName) {
-    if (_coins < cost) {
-      return false;
-    }
-
+    if (_coins < cost) return false;
     setState(() {
       _coins -= cost;
-      _transactions.insert(
-        0,
-        WalletEntry('Sent $giftName gift', -cost, true),
-      );
+      _transactions.insert(0, WalletEntry('Sent $giftName gift', -cost, true));
     });
     return true;
   }
@@ -144,14 +124,9 @@ class _DemoShellState extends State<DemoShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomePage(onOpenRoom: _openRoom, coins: _coins, diamonds: _diamonds),
-      WalletPage(
-        coins: _coins,
-        diamonds: _diamonds,
-        transactions: _transactions,
-      ),
+      WalletPage(coins: _coins, diamonds: _diamonds, transactions: _transactions),
       const MePage(),
     ];
-
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
@@ -159,10 +134,7 @@ class _DemoShellState extends State<DemoShell> {
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_rounded),
-            label: 'Wallet',
-          ),
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet_rounded), label: 'Wallet'),
           NavigationDestination(icon: Icon(Icons.person_rounded), label: 'Me'),
         ],
       ),
@@ -187,13 +159,10 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Discover Rooms'),
-        actions: [
+        actions: const [
           Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: const Text('V'),
-            ),
+            padding: EdgeInsets.only(right: 16),
+            child: CircleAvatar(child: Text('V')),
           ),
         ],
       ),
@@ -202,38 +171,24 @@ class HomePage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: _BalanceCard(
-                  icon: Icons.monetization_on_rounded,
-                  label: 'Coins',
-                  value: '$coins',
-                ),
-              ),
+              Expanded(child: _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Coins', value: '$coins')),
               const SizedBox(width: 12),
-              Expanded(
-                child: _BalanceCard(
-                  icon: Icons.diamond_rounded,
-                  label: 'Diamonds',
-                  value: '$diamonds',
-                ),
-              ),
+              Expanded(child: _BalanceCard(icon: Icons.diamond_rounded, label: 'Diamonds', value: '$diamonds')),
             ],
           ),
           const SizedBox(height: 24),
-          const Text(
-            'Featured',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
+          const Text('Featured', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           InkWell(
+            key: const Key('open-night-vibes'),
             borderRadius: BorderRadius.circular(24),
             onTap: onOpenRoom,
             child: Ink(
-              height: 190,
+              height: 206,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF452A77), Color(0xFF1C1635)],
+                  colors: [Color(0xFF50318A), Color(0xFF17152A)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -243,57 +198,34 @@ class HomePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       children: [
-                        const CircleAvatar(
-                          radius: 24,
-                          child: Icon(Icons.music_note_rounded),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
+                        CircleAvatar(radius: 24, child: Icon(Icons.music_note_rounded)),
+                        SizedBox(width: 12),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Night Vibes',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              Text('Night Vibes', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
                               Text('Room ID 10000000 • Hindi / English'),
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.headphones_rounded, size: 16),
-                              SizedBox(width: 4),
-                              Text('18'),
-                            ],
-                          ),
-                        ),
+                        Chip(label: Text('v0.2')),
                       ],
                     ),
                     const Spacer(),
-                    const Text(
-                      'Tap to enter the local demo room',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    const Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _Tag('30 seats'),
+                        _Tag('Invite Mode'),
+                        _Tag('Owner/Admin tools'),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Seat controls, chat and gifts are active in demo mode.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                    ),
+                    const SizedBox(height: 12),
+                    const Text('Tap to enter the upgraded local demo room.'),
                   ],
                 ),
               ),
@@ -301,48 +233,11 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const _InfoTile(
-            icon: Icons.lock_outline_rounded,
-            title: 'GitHub-only mode',
-            subtitle: 'No real user data or money is used in this build.',
+            icon: Icons.cloud_off_rounded,
+            title: 'GitHub-only build',
+            subtitle: 'Realtime voice and multi-phone sync will be connected later.',
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
-                Text(
-                  value,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -364,31 +259,30 @@ class DemoRoomPage extends StatefulWidget {
 
 class _DemoRoomPageState extends State<DemoRoomPage> {
   late int _coins;
-  bool _isSeated = false;
+  bool _inviteMode = true;
   bool _micMuted = true;
   int? _mySeat;
+  int? _selectedSeat;
+  final Set<int> _lockedSeats = {8, 14, 24};
+  final List<SeatRequest> _requests = [
+    const SeatRequest('Zara', 7, 5),
+    const SeatRequest('Rahul', 0, 11),
+  ];
+  final List<String?> _seats = List<String?>.filled(30, null);
   final TextEditingController _chatController = TextEditingController();
   final List<RoomMessage> _messages = [
-    const RoomMessage('Host', 'Welcome to Night Vibes 👋'),
-    const RoomMessage('Aisha', 'Hello everyone!'),
-  ];
-  final List<String?> _seats = [
-    'Host',
-    'Aisha',
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
+    const RoomMessage('Owner', 'Welcome to Night Vibes 👋'),
+    const RoomMessage('Admin • VIP6', 'Invite Mode is ON.'),
   ];
 
   @override
   void initState() {
     super.initState();
     _coins = widget.startingCoins;
+    _seats[0] = 'Owner';
+    _seats[1] = 'Admin';
+    _seats[3] = 'Aisha';
+    _seats[6] = 'Sam';
   }
 
   @override
@@ -397,22 +291,77 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
     super.dispose();
   }
 
-  void _toggleSeat() {
-    setState(() {
-      if (_isSeated && _mySeat != null) {
-        _seats[_mySeat!] = null;
-        _isSeated = false;
-        _mySeat = null;
-        _micMuted = true;
+  void _tapSeat(int index) {
+    setState(() => _selectedSeat = index);
+    if (_lockedSeats.contains(index)) {
+      _snack('Seat ${index + 1} is locked by the Owner.');
+      return;
+    }
+    if (_seats[index] != null) {
+      _snack('${_seats[index]} is sitting on seat ${index + 1}.');
+      return;
+    }
+    if (_mySeat != null) {
+      _snack('Leave your current seat before choosing another one.');
+      return;
+    }
+    if (_inviteMode) {
+      if (_requests.any((request) => request.name == 'You')) {
+        _snack('You already have an active seat request.');
         return;
       }
+      setState(() => _requests.add(SeatRequest('You', 0, index)));
+      _snack('Seat ${index + 1} request sent to Owner/Admin.');
+    } else {
+      setState(() {
+        _seats[index] = 'You';
+        _mySeat = index;
+      });
+    }
+  }
 
-      final emptySeat = _seats.indexWhere((seat) => seat == null);
-      if (emptySeat >= 0) {
-        _seats[emptySeat] = 'You';
-        _isSeated = true;
-        _mySeat = emptySeat;
+  void _toggleLock(int index) {
+    if (_seats[index] != null) {
+      _snack('Occupied seat cannot be locked in this demo.');
+      return;
+    }
+    setState(() {
+      if (_lockedSeats.contains(index)) {
+        _lockedSeats.remove(index);
+      } else {
+        _lockedSeats.add(index);
       }
+    });
+  }
+
+  void _acceptRequest(SeatRequest request) {
+    final preferred = request.preferredSeat;
+    int target = preferred;
+    if (target < 0 || target >= _seats.length || _seats[target] != null || _lockedSeats.contains(target)) {
+      target = _seats.indexWhere((seat) => seat == null && !_lockedSeats.contains(_seats.indexOf(seat)));
+    }
+    if (target < 0 || target >= _seats.length) {
+      _snack('No available unlocked seat.');
+      return;
+    }
+    setState(() {
+      _requests.remove(request);
+      _seats[target] = request.name;
+      if (request.name == 'You') _mySeat = target;
+      _messages.add(RoomMessage('System', '${request.name} joined seat ${target + 1}.'));
+    });
+  }
+
+  void _rejectRequest(SeatRequest request) {
+    setState(() => _requests.remove(request));
+  }
+
+  void _leaveSeat() {
+    if (_mySeat == null) return;
+    setState(() {
+      _seats[_mySeat!] = null;
+      _mySeat = null;
+      _micMuted = true;
     });
   }
 
@@ -425,67 +374,143 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
     });
   }
 
+  void _clearChat() {
+    setState(() {
+      _messages
+        ..clear()
+        ..add(const RoomMessage('System', 'Chat cleared by Owner/Admin.'));
+    });
+  }
+
+  void _openOwnerTools() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          void refresh(VoidCallback action) {
+            setState(action);
+            setSheetState(() {});
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Owner / Admin Controls', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Invite Mode'),
+                      subtitle: const Text('ON = normal users request a seat before sitting.'),
+                      value: _inviteMode,
+                      onChanged: (value) => refresh(() => _inviteMode = value),
+                    ),
+                    const Divider(),
+                    Text('Seat requests (${_requests.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    if (_requests.isEmpty) const Text('No pending requests.', style: TextStyle(color: Colors.white60)),
+                    ..._requests.map(
+                      (request) => Card(
+                        child: ListTile(
+                          leading: CircleAvatar(child: Text(request.vip > 0 ? 'V${request.vip}' : request.name.characters.first)),
+                          title: Text(request.name),
+                          subtitle: Text('Preferred seat ${request.preferredSeat + 1}${request.vip > 0 ? ' • VIP${request.vip}' : ''}'),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () => refresh(() => _rejectRequest(request)),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                              IconButton(
+                                tooltip: 'Accept',
+                                onPressed: () {
+                                  _acceptRequest(request);
+                                  setSheetState(() {});
+                                },
+                                icon: const Icon(Icons.check_rounded),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        _clearChat();
+                        Navigator.pop(sheetContext);
+                      },
+                      icon: const Icon(Icons.delete_sweep_rounded),
+                      label: const Text('Clear room chat'),
+                    ),
+                    if (_mySeat != null)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          _leaveSeat();
+                          Navigator.pop(sheetContext);
+                        },
+                        icon: const Icon(Icons.keyboard_return_rounded),
+                        label: const Text('Move You to audience'),
+                      ),
+                    const SizedBox(height: 8),
+                    const Text('Tip: long-press any empty seat to lock/unlock it.', style: TextStyle(color: Colors.white60)),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _openGiftSheet() {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Send demo gift to Host',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                _GiftTile(
-                  icon: '🌹',
-                  name: 'Rose',
-                  cost: 100,
-                  onTap: () => _sendGift(sheetContext, 'Rose', 100),
-                ),
-                _GiftTile(
-                  icon: '💎',
-                  name: 'Crystal',
-                  cost: 500,
-                  onTap: () => _sendGift(sheetContext, 'Crystal', 500),
-                ),
-                _GiftTile(
-                  icon: '👑',
-                  name: 'Crown',
-                  cost: 1000,
-                  onTap: () => _sendGift(sheetContext, 'Crown', 1000),
-                ),
-              ],
-            ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Send demo gift to Owner', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              _GiftTile(icon: '🌹', name: 'Rose', cost: 100, onTap: () => _sendGift(sheetContext, 'Rose', 100)),
+              _GiftTile(icon: '💎', name: 'Crystal', cost: 500, onTap: () => _sendGift(sheetContext, 'Crystal', 500)),
+              _GiftTile(icon: '👑', name: 'Crown', cost: 1000, onTap: () => _sendGift(sheetContext, 'Crown', 1000)),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   void _sendGift(BuildContext sheetContext, String name, int cost) {
     final sent = widget.onSendGift(cost, name);
-    Navigator.of(sheetContext).pop();
-
+    Navigator.pop(sheetContext);
     if (!sent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not enough demo Coins.')),
-      );
+      _snack('Not enough demo Coins.');
       return;
     }
-
     setState(() {
       _coins -= cost;
-      _messages.add(RoomMessage('System', 'You sent $name to Host 🎁'));
+      _messages.add(RoomMessage('System', 'You sent $name to Owner 🎁'));
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$name sent. $cost demo Coins deducted.')),
-    );
+    _snack('$name sent. $cost demo Coins deducted.');
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -496,215 +521,190 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Night Vibes', style: TextStyle(fontSize: 17)),
-            Text('Room ID 10000000', style: TextStyle(fontSize: 11)),
+            Text('Room ID 10000000 • 30 seats', style: TextStyle(fontSize: 11)),
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text('🪙 $_coins'),
-            ),
+          Center(child: Text('🪙 $_coins')),
+          IconButton(
+            key: const Key('owner-tools'),
+            tooltip: 'Owner/Admin controls',
+            onPressed: _openOwnerTools,
+            icon: const Icon(Icons.admin_panel_settings_rounded),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                const CircleAvatar(child: Icon(Icons.shield_rounded)),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Host • Owner', style: TextStyle(fontWeight: FontWeight.w700)),
-                      Text('Voice is simulated in this GitHub-only build.'),
-                    ],
-                  ),
-                ),
-                Icon(_micMuted ? Icons.mic_off_rounded : Icons.mic_rounded),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _seats.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                childAspectRatio: 0.78,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemBuilder: (context, index) {
-                final occupant = _seats[index];
-                final isMine = occupant == 'You';
-                return Column(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isMine
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.outlineVariant,
-                            width: isMine ? 2.5 : 1,
-                          ),
-                          color: occupant == null
-                              ? Theme.of(context).colorScheme.surfaceContainerHighest
-                              : Theme.of(context).colorScheme.primaryContainer,
-                        ),
-                        alignment: Alignment.center,
-                        child: occupant == null
-                            ? const Icon(Icons.add_rounded)
-                            : Text(
-                                occupant.substring(0, 1),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      occupant ?? 'Seat ${index + 1}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView.builder(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               padding: const EdgeInsets.all(12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: RichText(
-                    text: TextSpan(
-                      style: DefaultTextStyle.of(context).style,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(child: Icon(Icons.workspace_premium_rounded)),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextSpan(
-                          text: '${message.sender}: ',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        TextSpan(text: message.text),
+                        Text('Owner • VIP11', style: TextStyle(fontWeight: FontWeight.w800)),
+                        Text('Admin: VIP6 • Room demo mode', style: TextStyle(fontSize: 12)),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _chatController,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _sendMessage(),
-                          decoration: const InputDecoration(
-                            hintText: 'Message the room',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        onPressed: _sendMessage,
-                        icon: const Icon(Icons.send_rounded),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: _toggleSeat,
-                          icon: Icon(
-                            _isSeated
-                                ? Icons.airline_seat_recline_normal_rounded
-                                : Icons.event_seat_rounded,
-                          ),
-                          label: Text(_isSeated ? 'Leave seat' : 'Take seat'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: 'Microphone',
-                        onPressed: _isSeated
-                            ? () => setState(() => _micMuted = !_micMuted)
-                            : null,
-                        icon: Icon(
-                          _micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        tooltip: 'Gift',
-                        onPressed: _openGiftSheet,
-                        icon: const Icon(Icons.card_giftcard_rounded),
-                      ),
-                    ],
-                  ),
+                  Chip(label: Text(_inviteMode ? 'Invite ON' : 'Invite OFF')),
                 ],
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Text('${_requests.length} requests', style: const TextStyle(color: Colors.white60)),
+                  const Spacer(),
+                  Text(_selectedSeat == null ? 'Tap a seat' : 'Selected seat ${_selectedSeat! + 1}', style: const TextStyle(color: Colors.white60)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              flex: 5,
+              child: GridView.builder(
+                key: const Key('seat-grid'),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                itemCount: 30,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 7,
+                  mainAxisSpacing: 7,
+                ),
+                itemBuilder: (context, index) {
+                  final occupant = _seats[index];
+                  final locked = _lockedSeats.contains(index);
+                  final mine = occupant == 'You';
+                  return InkWell(
+                    onTap: () => _tapSeat(index),
+                    onLongPress: () => _toggleLock(index),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: mine ? const Color(0xFF5536A9) : const Color(0xFF191A22),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _selectedSeat == index ? Theme.of(context).colorScheme.primary : Colors.white12,
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 19,
+                            backgroundColor: locked ? Colors.white10 : null,
+                            child: locked
+                                ? const Icon(Icons.lock_rounded, size: 18)
+                                : occupant == null
+                                    ? const Icon(Icons.add_rounded, size: 18)
+                                    : Text(occupant.characters.first),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            occupant ?? (locked ? 'Locked' : 'Seat ${index + 1}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Container(
+              height: 52,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _mySeat == null ? null : _leaveSeat,
+                      icon: const Icon(Icons.event_seat_outlined),
+                      label: Text(_mySeat == null ? 'Audience' : 'Leave seat'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: _mySeat == null ? null : () => setState(() => _micMuted = !_micMuted),
+                    icon: Icon(_micMuted ? Icons.mic_off_rounded : Icons.mic_rounded),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(onPressed: _openGiftSheet, icon: const Icon(Icons.card_giftcard_rounded)),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF15161D),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _messages[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(text: '${message.author}: ', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  TextSpan(text: message.text),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _chatController,
+                              onSubmitted: (_) => _sendMessage(),
+                              decoration: const InputDecoration(
+                                hintText: 'Message room…',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          IconButton(onPressed: _sendMessage, icon: const Icon(Icons.send_rounded)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
-}
-
-class _GiftTile extends StatelessWidget {
-  const _GiftTile({
-    required this.icon,
-    required this.name,
-    required this.cost,
-    required this.onTap,
-  });
-
-  final String icon;
-  final String name;
-  final int cost;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: Text(icon, style: const TextStyle(fontSize: 30)),
-      title: Text(name),
-      trailing: Text('🪙 $cost'),
     );
   }
 }
@@ -730,50 +730,24 @@ class WalletPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: _BalanceCard(
-                  icon: Icons.monetization_on_rounded,
-                  label: 'Coins',
-                  value: '$coins',
-                ),
-              ),
+              Expanded(child: _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Coins', value: '$coins')),
               const SizedBox(width: 12),
-              Expanded(
-                child: _BalanceCard(
-                  icon: Icons.diamond_rounded,
-                  label: 'Diamonds',
-                  value: '$diamonds',
-                ),
-              ),
+              Expanded(child: _BalanceCard(icon: Icons.diamond_rounded, label: 'Diamonds', value: '$diamonds')),
             ],
           ),
-          const SizedBox(height: 18),
-          const _InfoTile(
-            icon: Icons.science_rounded,
-            title: 'Demo wallet',
-            subtitle: 'Balances are local test values and have no cash value.',
-          ),
           const SizedBox(height: 22),
-          const Text(
-            'Transactions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
+          const Text('Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           ...transactions.map(
-            (entry) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                child: Icon(
-                  entry.amount >= 0
-                      ? Icons.south_west_rounded
-                      : Icons.north_east_rounded,
+            (entry) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text(entry.title),
+                subtitle: Text(entry.isCoins ? 'Coins' : 'Diamonds'),
+                trailing: Text(
+                  '${entry.amount > 0 ? '+' : ''}${entry.amount}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-              ),
-              title: Text(entry.label),
-              subtitle: Text(entry.isCoin ? 'Coins' : 'Diamonds'),
-              trailing: Text(
-                '${entry.amount >= 0 ? '+' : ''}${entry.amount}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -788,70 +762,68 @@ class MePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const shortcuts = [
+      ('VIP', Icons.workspace_premium_rounded),
+      ('Bag', Icons.backpack_rounded),
+      ('Medal', Icons.military_tech_rounded),
+      ('Agency', Icons.groups_rounded),
+      ('Tasks', Icons.task_alt_rounded),
+      ('Language', Icons.language_rounded),
+      ('Settings', Icons.settings_rounded),
+      ('My Room', Icons.meeting_room_rounded),
+    ];
     return Scaffold(
       appBar: AppBar(title: const Text('Me')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                    child: const Text(
-                      'V',
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
-                    ),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(colors: [Color(0xFF4D2D84), Color(0xFF1B1730)]),
+            ),
+            child: const Row(
+              children: [
+                CircleAvatar(radius: 34, child: Text('V', style: TextStyle(fontSize: 24))),
+                SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Demo User', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                      SizedBox(height: 4),
+                      Text('ID 10000000  🇮🇳'),
+                      SizedBox(height: 6),
+                      Wrap(spacing: 6, children: [Chip(label: Text('VIP11')), Chip(label: Text('Owner'))]),
+                    ],
                   ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Demo User',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                        ),
-                        SizedBox(height: 3),
-                        Text('ID: 10000001 • India 🇮🇳'),
-                        SizedBox(height: 5),
-                        Text('VIP: Not active • Level 1'),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.edit_rounded),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          const _InfoTile(
-            icon: Icons.storefront_rounded,
-            title: 'Store',
-            subtitle: 'Catalog placeholder for the next phase.',
+          const SizedBox(height: 18),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _Stat('128', 'Following'),
+              _Stat('2.4K', 'Followers'),
+              _Stat('86', 'Friends'),
+            ],
           ),
-          const _InfoTile(
-            icon: Icons.workspace_premium_rounded,
-            title: 'VIP',
-            subtitle: 'VIP1–VIP11 system will be added incrementally.',
+          const SizedBox(height: 20),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 4,
+            childAspectRatio: 0.92,
+            children: shortcuts.map((item) => _Shortcut(title: item.$1, icon: item.$2)).toList(),
           ),
+          const SizedBox(height: 10),
           const _InfoTile(
-            icon: Icons.inventory_2_rounded,
-            title: 'Bag',
-            subtitle: 'Owned and equipped cosmetics will appear here.',
-          ),
-          const _InfoTile(
-            icon: Icons.language_rounded,
-            title: 'Language',
-            subtitle: 'English • Hindi and more later.',
-          ),
-          const _InfoTile(
-            icon: Icons.settings_rounded,
-            title: 'Settings',
-            subtitle: 'Privacy, security and account controls.',
+            icon: Icons.verified_user_rounded,
+            title: 'v0.2 profile preview',
+            subtitle: 'Profile editing, badges and entitlement data are local demo content for now.',
           ),
         ],
       ),
@@ -859,13 +831,57 @@ class MePage extends StatelessWidget {
   }
 }
 
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.icon, required this.label, required this.value});
+  final IconData icon;
+  final String label;
+  final String value;
 
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          children: [
+            Icon(icon),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
+                  Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GiftTile extends StatelessWidget {
+  const _GiftTile({required this.icon, required this.name, required this.cost, required this.onTap});
+  final String icon;
+  final String name;
+  final int cost;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Text(icon, style: const TextStyle(fontSize: 28)),
+      title: Text(name),
+      trailing: Text('🪙 $cost'),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({required this.icon, required this.title, required this.subtitle});
   final IconData icon;
   final String title;
   final String subtitle;
@@ -873,28 +889,79 @@ class _InfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: Icon(icon),
         title: Text(title),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right_rounded),
       ),
     );
   }
 }
 
-class WalletEntry {
-  const WalletEntry(this.label, this.amount, this.isCoin);
+class _Tag extends StatelessWidget {
+  const _Tag(this.text);
+  final String text;
 
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
+      child: Text(text, style: const TextStyle(fontSize: 12)),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat(this.value, this.label);
+  final String value;
   final String label;
-  final int amount;
-  final bool isCoin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        Text(label, style: const TextStyle(color: Colors.white60)),
+      ],
+    );
+  }
+}
+
+class _Shortcut extends StatelessWidget {
+  const _Shortcut({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircleAvatar(child: Icon(icon)),
+        const SizedBox(height: 6),
+        Text(title, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
 }
 
 class RoomMessage {
-  const RoomMessage(this.sender, this.text);
-
-  final String sender;
+  const RoomMessage(this.author, this.text);
+  final String author;
   final String text;
+}
+
+class SeatRequest {
+  const SeatRequest(this.name, this.vip, this.preferredSeat);
+  final String name;
+  final int vip;
+  final int preferredSeat;
+}
+
+class WalletEntry {
+  const WalletEntry(this.title, this.amount, this.isCoins);
+  final String title;
+  final int amount;
+  final bool isCoins;
 }
