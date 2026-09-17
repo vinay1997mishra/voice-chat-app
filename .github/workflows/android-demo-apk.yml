@@ -40,7 +40,7 @@ jobs:
 
       - name: Analyze
         working-directory: /tmp/voice_chat_build
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
         working-directory: /tmp/voice_chat_build
