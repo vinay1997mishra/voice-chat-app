@@ -4,6 +4,13 @@ import 'package:voice_chat_app/main_v05.dart';
 
 void main() {
   testWidgets('v0.5 shows seat actions and room four-box tools', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     await tester.pumpWidget(const VoiceChatV05());
 
     expect(find.text('Create Room'), findsOneWidget);
