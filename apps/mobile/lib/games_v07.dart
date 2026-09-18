@@ -328,80 +328,86 @@ class _LudoBoardPainter extends CustomPainter {
   final List<int> red;
   final List<int> blue;
 
-  Offset trackPoint(int step, Size size, bool bluePlayer) {
-    final normalized = bluePlayer ? (step + 26) % 52 : step % 52;
-    final t = normalized / 52;
-    final margin = size.width * .12;
-    final side = size.width - margin * 2;
-    if (t < .25) return Offset(margin + side * (t / .25), margin);
-    if (t < .5) return Offset(size.width - margin, margin + side * ((t - .25) / .25));
-    if (t < .75) return Offset(size.width - margin - side * ((t - .5) / .25), size.height - margin);
-    return Offset(margin, size.height - margin - side * ((t - .75) / .25));
+  static const safe = <int>{0, 8, 13, 21, 26, 34, 39, 47};
+
+  Offset _trackPoint(int step, Size size, bool bluePlayer) {
+    final n = bluePlayer ? (step + 26) % 52 : step % 52;
+    final cell = size.width / 15;
+    // 52-cell loop mapped around the standard 15x15 cross.
+    const path = <Offset>[
+      Offset(6,1),Offset(6,2),Offset(6,3),Offset(6,4),Offset(6,5),
+      Offset(5,6),Offset(4,6),Offset(3,6),Offset(2,6),Offset(1,6),Offset(0,6),
+      Offset(0,7),Offset(0,8),Offset(1,8),Offset(2,8),Offset(3,8),Offset(4,8),
+      Offset(5,8),Offset(6,9),Offset(6,10),Offset(6,11),Offset(6,12),Offset(6,13),
+      Offset(6,14),Offset(7,14),Offset(8,14),Offset(8,13),Offset(8,12),Offset(8,11),
+      Offset(8,10),Offset(8,9),Offset(9,8),Offset(10,8),Offset(11,8),Offset(12,8),
+      Offset(13,8),Offset(14,8),Offset(14,7),Offset(14,6),Offset(13,6),Offset(12,6),
+      Offset(11,6),Offset(10,6),Offset(9,6),Offset(8,5),Offset(8,4),Offset(8,3),
+      Offset(8,2),Offset(8,1),Offset(8,0),Offset(7,0),Offset(6,0)
+    ];
+    final p = path[n % 52];
+    return Offset((p.dx + .5) * cell, (p.dy + .5) * cell);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(24)),
-      Paint()..color = const Color(0xFF1B1024),
-    );
-    final redPaint = Paint()..color = const Color(0xFFE84A5F);
-    final bluePaint = Paint()..color = const Color(0xFF3A86FF);
-    final homeSize = size.width * .28;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * .06, size.height * .06, homeSize, homeSize),
-        const Radius.circular(20),
-      ),
-      redPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width - homeSize - size.width * .06,
-            size.height - homeSize - size.height * .06, homeSize, homeSize),
-        const Radius.circular(20),
-      ),
-      bluePaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * .12, size.height * .12, size.width * .76, size.height * .76),
-        const Radius.circular(18),
-      ),
-      Paint()
-        ..color = Colors.white24
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5,
-    );
+    final cell = size.width / 15;
+    final grid = Paint()..color = const Color(0xFF4D4655)..style = PaintingStyle.stroke..strokeWidth = .7;
+    final white = Paint()..color = const Color(0xFFF7F4F0);
+    final redP = Paint()..color = const Color(0xFFE53935);
+    final blueP = Paint()..color = const Color(0xFF1E88E5);
+    final greenP = Paint()..color = const Color(0xFF43A047);
+    final yellowP = Paint()..color = const Color(0xFFFDD835);
+    canvas.drawRect(Offset.zero & size, white);
 
-    void drawTokens(List<int> values, bool bluePlayer, Paint paint, Offset yard) {
-      for (var i = 0; i < 4; i++) {
-        final p = values[i];
-        final pos = p == -1
-            ? yard + Offset((i % 2) * 32.0, (i ~/ 2) * 32.0)
-            : p >= 52
-                ? Offset(size.width / 2, size.height / 2) +
-                    Offset((i % 2) * 24.0 - 12, (i ~/ 2) * 24.0 - 12)
-                : trackPoint(p, size, bluePlayer);
-        canvas.drawCircle(pos, 10, paint);
-        canvas.drawCircle(
-          pos,
-          10,
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2,
-        );
-      }
+    // Four recognizable Ludo yards.
+    canvas.drawRect(Rect.fromLTWH(0,0,cell*6,cell*6), redP);
+    canvas.drawRect(Rect.fromLTWH(cell*9,0,cell*6,cell*6), greenP);
+    canvas.drawRect(Rect.fromLTWH(0,cell*9,cell*6,cell*6), yellowP);
+    canvas.drawRect(Rect.fromLTWH(cell*9,cell*9,cell*6,cell*6), blueP);
+    for (final o in const [Offset(1.2,1.2),Offset(3.7,1.2),Offset(1.2,3.7),Offset(3.7,3.7)]) {
+      canvas.drawCircle(Offset(o.dx*cell,o.dy*cell),cell*.55,white);
+      canvas.drawCircle(Offset((15-o.dx)*cell,(15-o.dy)*cell),cell*.55,white);
     }
 
-    drawTokens(red, false, redPaint, Offset(size.width * .12, size.height * .12));
-    drawTokens(blue, true, bluePaint, Offset(size.width * .70, size.height * .70));
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      24,
-      Paint()..color = const Color(0xFFFFD166),
-    );
+    // Cross track and grid.
+    for (var r=0;r<15;r++) {
+      for (var col=0;col<15;col++) {
+        if ((col>=6&&col<=8)||(r>=6&&r<=8)) {
+          final rect=Rect.fromLTWH(col*cell,r*cell,cell,cell);
+          canvas.drawRect(rect, white); canvas.drawRect(rect, grid);
+        }
+      }
+    }
+    // Home lanes for the two playable colors.
+    for (var i=1;i<=5;i++) {
+      canvas.drawRect(Rect.fromLTWH(7*cell,i*cell,cell,cell), redP);
+      canvas.drawRect(Rect.fromLTWH(7*cell,(14-i)*cell,cell,cell), blueP);
+    }
+    // Center home triangles.
+    final center=Offset(7.5*cell,7.5*cell);
+    final redTri=Path()..moveTo(6*cell,6*cell)..lineTo(9*cell,6*cell)..lineTo(center.dx,center.dy)..close();
+    final blueTri=Path()..moveTo(6*cell,9*cell)..lineTo(9*cell,9*cell)..lineTo(center.dx,center.dy)..close();
+    canvas.drawPath(redTri,redP); canvas.drawPath(blueTri,blueP);
+
+    void token(List<int> vals,bool blue,Paint paint) {
+      for(var i=0;i<4;i++) {
+        final p=vals[i];
+        Offset pos;
+        if(p<0) {
+          final base=blue?const Offset(10.5,10.5):const Offset(1.5,1.5);
+          pos=Offset((base.dx+(i%2)*2)*cell,(base.dy+(i~/2)*2)*cell);
+        } else if(p>=52) {
+          final lane=(p-51).clamp(1,5);
+          pos=blue?Offset(7.5*cell,(14-lane+.5)*cell):Offset(7.5*cell,(lane+.5)*cell);
+        } else {
+          pos=_trackPoint(p,size,blue);
+        }
+        canvas.drawCircle(pos,cell*.31,paint);
+        canvas.drawCircle(pos,cell*.31,Paint()..color=Colors.white..style=PaintingStyle.stroke..strokeWidth=2);
+      }
+    }
+    token(red,false,redP); token(blue,true,blueP);
   }
 
   @override
