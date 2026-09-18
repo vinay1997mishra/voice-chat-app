@@ -5,6 +5,153 @@ import 'package:image_picker/image_picker.dart';
 
 void main() => runApp(const VoiceChatV06());
 
+
+class DemoUser {
+  DemoUser(this.name, this.id, {this.diamonds = 0, this.avatar = '👤'});
+  final String name;
+  final String id;
+  int diamonds;
+  final String avatar;
+}
+
+class DemoGift {
+  const DemoGift(this.name, this.emoji, this.coins);
+  final String name;
+  final String emoji;
+  final int coins;
+}
+
+class DemoLedgerEntry {
+  DemoLedgerEntry(this.title, this.detail, this.amount);
+  final String title;
+  final String detail;
+  final int amount;
+}
+
+class DemoInboxItem {
+  DemoInboxItem(this.title, this.subtitle, this.icon);
+  final String title;
+  final String subtitle;
+  final IconData icon;
+}
+
+class DemoEconomy extends ChangeNotifier {
+  int coins = 10000000;
+  int diamonds = 25000;
+
+  final users = <DemoUser>[
+    DemoUser('Owner', '10000000', diamonds: 5000, avatar: '👑'),
+    DemoUser('Admin', '10000001', diamonds: 2400, avatar: '🛡️'),
+    DemoUser('Aisha', '10000011', diamonds: 1800, avatar: '🌸'),
+    DemoUser('Sam', '10000012', diamonds: 900, avatar: '🎧'),
+  ];
+
+  final gifts = const <DemoGift>[
+    DemoGift('Rose', '🌹', 100),
+    DemoGift('Heart', '💜', 500),
+    DemoGift('Crown', '👑', 1000),
+    DemoGift('Sports Car', '🏎️', 10000),
+    DemoGift('Yacht', '🛥️', 100000),
+    DemoGift('Dragon', '🐉', 1000000),
+    DemoGift('Galaxy', '🌌', 5000000),
+  ];
+
+  final ledger = <DemoLedgerEntry>[
+    DemoLedgerEntry('Opening balance', 'Demo wallet', 10000000),
+  ];
+
+  final inbox = <DemoInboxItem>[
+    DemoInboxItem(
+      'Welcome',
+      'v0.6 final local demo wallet and inbox are ready.',
+      Icons.celebration_rounded,
+    ),
+    DemoInboxItem(
+      'Owner',
+      'Welcome to India Official Room 👋',
+      Icons.forum_rounded,
+    ),
+  ];
+
+  DemoUser byName(String name) {
+    return users.firstWhere(
+      (user) => user.name == name,
+      orElse: () => users.first,
+    );
+  }
+
+  bool sendGift(DemoGift gift, DemoUser recipient, String roomId) {
+    if (coins < gift.coins) return false;
+    coins -= gift.coins;
+    recipient.diamonds += gift.coins;
+    final owner = users.first;
+    final ownerShare = gift.coins ~/ 10;
+    owner.diamonds += ownerShare;
+
+    ledger.insert(
+      0,
+      DemoLedgerEntry(
+        'Gift sent: ${gift.name}',
+        'To ${recipient.name} • ID ${recipient.id} • Room $roomId • Owner share $ownerShare Diamond',
+        -gift.coins,
+      ),
+    );
+    inbox.insert(
+      0,
+      DemoInboxItem(
+        'Gift sent to ID ${recipient.id}',
+        '${gift.emoji} ${gift.name} • ${gift.coins} Coins • recipient +${gift.coins} Diamond',
+        Icons.card_giftcard_rounded,
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  bool convertDiamonds(int amount) {
+    if (amount <= 0 || amount > diamonds) return false;
+    diamonds -= amount;
+    final converted = amount ~/ 2;
+    coins += converted;
+    ledger.insert(
+      0,
+      DemoLedgerEntry(
+        'Diamond converted',
+        '$amount Diamond → $converted Coins',
+        converted,
+      ),
+    );
+    inbox.insert(
+      0,
+      DemoInboxItem(
+        'Wallet conversion',
+        '$amount Diamond converted to $converted Coins',
+        Icons.swap_horiz_rounded,
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  void addInbox(String title, String subtitle, IconData icon) {
+    inbox.insert(0, DemoInboxItem(title, subtitle, icon));
+    notifyListeners();
+  }
+}
+
+final demoEconomy = DemoEconomy();
+
+String demoNumber(int value) {
+  final negative = value < 0;
+  final digits = value.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return '${negative ? '-' : ''}${buffer.toString()}';
+}
+
 class VoiceChatV06 extends StatelessWidget {
   const VoiceChatV06({super.key});
   @override
