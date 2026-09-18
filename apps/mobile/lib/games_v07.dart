@@ -3,6 +3,29 @@ import 'package:flutter/material.dart';
 
 enum V07GameMode { soloBot, localMulti }
 
+
+class _FourSeatHeaderV07 extends StatelessWidget {
+  const _FourSeatHeaderV07({required this.game});
+  final String game;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        _seat('P1', Icons.person, true),
+        _seat('P2', Icons.smart_toy, false),
+        Column(children:[Text(game,style:const TextStyle(fontWeight:FontWeight.w900)),const Text('4-seat table',style:TextStyle(fontSize:11))]),
+        _seat('P3', Icons.smart_toy, false),
+        _seat('P4', Icons.smart_toy, false),
+      ]),
+    ),
+  );
+  Widget _seat(String n, IconData i, bool active)=>Column(children:[
+    CircleAvatar(radius:18,child:Icon(i,size:20)),
+    Text(n,style:TextStyle(fontSize:11,fontWeight:active?FontWeight.w900:FontWeight.w500))
+  ]);
+}
+
 class GamesCenterV07 extends StatelessWidget {
   const GamesCenterV07({super.key});
   static const games = <(String, IconData)>[
@@ -72,14 +95,14 @@ class GameLauncherV07 extends StatelessWidget {
               key: const Key('solo-bot-mode-v07'),
               icon: Icons.smart_toy_rounded,
               title: 'Solo vs Bot',
-              subtitle: 'Akele khelo, opponent bot hoga.',
+              subtitle: '4-seat table: aap + 3 bots.',
               onTap: () => _open(context, V07GameMode.soloBot),
             ),
             _ModeCard(
               key: const Key('local-multi-mode-v07'),
               icon: Icons.groups_rounded,
               title: 'Local Multiplayer',
-              subtitle: 'Same phone par 2 players turn-by-turn khel sakte hain.',
+              subtitle: 'Same phone par 4 seats turn-by-turn khel sakti hain.',
               onTap: () => _open(context, V07GameMode.localMulti),
             ),
             const Card(
@@ -260,6 +283,7 @@ class _LudoGameV07State extends State<LudoGameV07> {
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
+          const _FourSeatHeaderV07(game: 'Ludo'),
           _LudoBoard(red: red, blue: blue),
           const SizedBox(height: 12),
           Card(
@@ -685,7 +709,8 @@ class _UnoGameV07State extends State<UnoGameV07> {
         padding: const EdgeInsets.all(12),
         children: [
           Text(status, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          Text(botMode ? 'Bot cards: ' + opponent.length.toString() : 'Player 2 cards: ' + opponent.length.toString()),
+          const _FourSeatHeaderV07(game: 'UNO'),
+          Text(botMode ? 'Opponent cards: ' + opponent.length.toString() : 'Next player cards: ' + opponent.length.toString()),
           SizedBox(
             height: 116,
             child: ListView(
