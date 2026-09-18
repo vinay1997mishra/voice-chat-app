@@ -1457,9 +1457,13 @@ class _RoomV07State extends State<RoomV07> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => StatefulBuilder(builder: (context, setLocal) => SafeArea(child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+      builder: (_) => StatefulBuilder(
+        builder: (context, setLocal) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
           const Text('Room Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
           SwitchListTile(
             title: const Text('Invite Mode'),
@@ -1507,8 +1511,11 @@ class _RoomV07State extends State<RoomV07> {
               trailing: const Icon(Icons.password_rounded),
               onTap: _editPassword,
             ),
-        ]),
-      ))),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
