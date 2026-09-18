@@ -121,7 +121,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
     expect(find.text('VIP 1–11'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, -2200));
+    await tester.drag(
+      find.byKey(const Key('vip-center-list-v07')),
+      const Offset(0, -1800),
+    );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('VIP 11'), findsOneWidget);
     expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
