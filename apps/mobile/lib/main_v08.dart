@@ -1110,7 +1110,13 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
           key: const Key('create-room-submit-v06'),
           onPressed: () {
             final cleanPin = pin.text.trim();
-            if (locked && !RegExp(r'^\d{4,6}
+            if (locked && !RegExp(r'^\d{4,6}$').hasMatch(cleanPin)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Room PIN must be 4 to 6 digits')),
+              );
+              return;
+            }
+            Navigator.pop(
               context,
               RoomData(
                 name.text.trim().isEmpty ? 'My Voice Room' : name.text.trim(),
