@@ -1886,7 +1886,14 @@ class _RoomV07State extends State<RoomV07> {
               onPressed: () {
                 final value = c.text.trim();
                 if (value.isNotEmpty) {
-                  setState(() => chat.add('You: $value'));
+                  setState(
+                    () => chat.add(
+                      'VIP ' +
+                          demoEconomy.activeVip.toString() +
+                          ' You: ' +
+                          value,
+                    ),
+                  );
                   demoEconomy.addInbox(
                     'Room message',
                     '${widget.room.name}: $value',
@@ -1949,7 +1956,7 @@ class DemoUserProfileV07 extends StatelessWidget {
                   itemBuilder: (_, i) {
                     final gift = demoEconomy.gifts[i];
                     return InkWell(
-                      onTap: () {
+                      onTap: () async {
                         final ok = demoEconomy.sendGift(
                           gift,
                           user,
@@ -1962,18 +1969,31 @@ class DemoUserProfileV07 extends StatelessWidget {
                           return;
                         }
                         Navigator.pop(sheetContext);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              gift.name +
-                                  ' sent to ID ' +
-                                  user.id +
-                                  ' • ' +
-                                  demoNumber(gift.coins) +
-                                  ' Coins',
+                        if (gift.coins >= 100000 &&
+                            demoEconomy.giftAnimations &&
+                            demoEconomy.threeDEffects) {
+                          await showDialog<void>(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => BigGift3DV07(
+                              gift: gift,
+                              recipient: user,
                             ),
-                          ),
-                        );
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                gift.name +
+                                    ' sent to ID ' +
+                                    user.id +
+                                    ' • ' +
+                                    demoNumber(gift.coins) +
+                                    ' Coins',
+                              ),
+                            ),
+                          );
+                        }
                       },
                       borderRadius: BorderRadius.circular(16),
                       child: Card(
@@ -2084,17 +2104,21 @@ class DemoUserProfileV07 extends StatelessWidget {
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: () {
-                  demoEconomy.addInbox(
-                    'Followed ' + user.name,
-                    'ID ' + user.id + ' added to local follow list.',
-                    Icons.person_add_alt_1_rounded,
-                  );
+                  demoEconomy.followUser(user);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Following ' + user.name)),
                   );
                 },
-                icon: const Icon(Icons.person_add_alt_1_rounded),
-                label: const Text('Follow'),
+                icon: Icon(
+                  demoEconomy.following.contains(user.id)
+                      ? Icons.check_circle_rounded
+                      : Icons.person_add_alt_1_rounded,
+                ),
+                label: Text(
+                  demoEconomy.following.contains(user.id)
+                      ? 'Following'
+                      : 'Follow',
+                ),
               ),
             ],
           ),
@@ -2316,6 +2340,23 @@ class _BigGift3DV07State extends State<BigGift3DV07>
       );
 }
 
+List<String> vipPreviewBenefitsV07(int level) {
+  final benefits = <String>[
+    'VIP profile badge',
+    'VIP profile frame preview',
+    'VIP chat badge preview',
+    'VIP room badge preview',
+    'VIP room-entry effect preview',
+    'Enhanced profile highlight',
+    'Animated profile frame preview',
+    'Premium gift-effect preview',
+    'Premium 3D aura preview',
+    'Elite room-entry preview',
+    'Royal VIP11 3D aura and frame preview',
+  ];
+  return benefits.take(level.clamp(1, benefits.length)).toList();
+}
+
 class VipCenterV07 extends StatelessWidget {
   const VipCenterV07({super.key});
 
@@ -2412,10 +2453,15 @@ class _Vip3DCardV07State extends State<Vip3DCardV07>
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      '3D badge preview • profile frame • room/chat badge • entry-effect preview',
-                      textAlign: TextAlign.center,
-                    ),
+                    for (final benefit
+                        in vipPreviewBenefitsV07(widget.level))
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.check_circle_outline_rounded,
+                        ),
+                        title: Text(benefit),
+                      ),
                     const SizedBox(height: 14),
                     FilledButton.icon(
                       onPressed: () {
@@ -2546,25 +2592,64 @@ class ProfileV07 extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(18),
             children: [
-              const Row(
+              Row(
                 children: [
-                  CircleAvatar(
-                    radius: 34,
-                    child: Text('😎', style: TextStyle(fontSize: 30)),
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFD56A),
+                        width: 2,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          blurRadius: 14,
+                          color: Color(0x668E35FF),
+                        ),
+                      ],
+                    ),
+                    child: const CircleAvatar(
+                      radius: 34,
+                      child: Text('😎', style: TextStyle(fontSize: 30)),
+                    ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'My Profile',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        Text('ID 10000050'),
+                        const Text('ID 10000050'),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            Chip(
+                              avatar: const Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                'VIP ' + demoEconomy.activeVip.toString(),
+                              ),
+                            ),
+                            Chip(
+                              avatar: const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 16,
+                              ),
+                              label: Text(demoEconomy.equippedFrame),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
