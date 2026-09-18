@@ -2364,6 +2364,7 @@ class VipCenterV07 extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('VIP Center')),
         body: ListView(
+          key: const Key('vip-center-list-v07'),
           padding: const EdgeInsets.all(16),
           children: [
             const Text(
