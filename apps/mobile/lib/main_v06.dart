@@ -1218,9 +1218,9 @@ class _RoomV06State extends State<RoomV06> {
                   child: Text('Your Coins: ${demoNumber(demoEconomy.coins)}'),
                 ),
                 const SizedBox(height: 8),
-                Flexible(
+                SizedBox(
+                  height: 330,
                   child: GridView.builder(
-                    shrinkWrap: true,
                     itemCount: demoEconomy.gifts.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
