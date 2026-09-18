@@ -92,7 +92,7 @@ const normalGiftsV08 = <GiftV08>[
   GiftV08(name: 'Star Cruiser', emoji: '🚀', coins: 1999000, theme: 'space'),
 
   GiftV08(name: 'Private Jet', emoji: '✈️', coins: 2599000, theme: 'luxury'),
-  GiftV08(name: 'Dragon King', emoji: '🐉', coins: 2599000, theme: 'dragon'),
+  GiftV08(name: 'Dragon Lord', emoji: '🐉', coins: 2599000, theme: 'dragon'),
   GiftV08(name: 'Crystal Palace', emoji: '🏰', coins: 2599000, theme: 'crystal'),
   GiftV08(name: 'Golden Phoenix', emoji: '🔥', coins: 2599000, theme: 'phoenix'),
   GiftV08(name: 'Mystic Tiger', emoji: '🐯', coins: 2599000, theme: 'mystic'),
