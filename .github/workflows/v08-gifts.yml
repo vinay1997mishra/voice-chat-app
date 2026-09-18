@@ -5,6 +5,7 @@ on:
     branches: [v08-dev]
     paths:
       - 'apps/mobile/lib/gift_catalog_v08.dart'
+      - 'apps/mobile/lib/gift_effects_v08.dart'
       - 'apps/mobile/test/gift_catalog_v08_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/v08-gifts.yml'
@@ -34,7 +35,7 @@ jobs:
 
       - name: Analyze v0.8 gift catalog
         working-directory: apps/mobile
-        run: flutter analyze lib/gift_catalog_v08.dart --no-fatal-infos
+        run: flutter analyze lib/gift_catalog_v08.dart lib/gift_effects_v08.dart --no-fatal-infos
 
       - name: Test v0.8 gift catalog
         working-directory: apps/mobile
