@@ -1481,37 +1481,49 @@ class _RoomV07State extends State<RoomV07> {
               setLocal(() {});
             },
           ),
-          SwitchListTile(
-            key: const Key('room-lock-switch-v08'),
-            title: const Text('Room Lock'),
-            subtitle: Text(
-              widget.room.locked
-                  ? (widget.room.ownedByMe
-                      ? 'Locked • Owner entry does not need PIN'
-                      : 'Locked with a 4–6 digit PIN')
-                  : 'Anyone can enter without a PIN',
+          if (widget.room.ownedByMe)
+            SwitchListTile(
+              key: const Key('room-lock-switch-v08'),
+              title: const Text('Room Lock'),
+              subtitle: Text(
+                widget.room.locked
+                    ? 'Locked • Owner entry does not need PIN'
+                    : 'Set any 4–6 digit PIN',
+              ),
+              value: widget.room.locked,
+              onChanged: (value) async {
+                if (!value) {
+                  setState(() {
+                    widget.room.locked = false;
+                    widget.room.pin = '';
+                  });
+                  setLocal(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Room lock removed')),
+                  );
+                  return;
+                }
+                await _editPassword(forceEnable: true);
+                if (mounted) setLocal(() {});
+              },
+            )
+          else
+            ListTile(
+              leading: Icon(widget.room.locked ? Icons.lock_rounded : Icons.lock_open_rounded),
+              title: const Text('Room Lock'),
+              subtitle: Text(
+                widget.room.locked
+                    ? 'Locked • Only the room owner can change it'
+                    : 'Only the room owner can enable it',
+              ),
             ),
-            value: widget.room.locked,
-            onChanged: (value) async {
-              if (!value) {
-                setState(() {
-                  widget.room.locked = false;
-                  widget.room.pin = '';
-                });
-                setLocal(() {});
-                return;
-              }
-              await _editPassword(forceEnable: true);
-              if (mounted) setLocal(() {});
-            },
-          ),
           ListTile(
             title: const Text('Edit Room Notice'),
             subtitle: Text(notice),
             trailing: const Icon(Icons.edit_rounded),
             onTap: _editNotice,
           ),
-          if (widget.room.locked)
+          if (widget.room.ownedByMe && widget.room.locked)
             ListTile(
               title: const Text('Change Room PIN'),
               subtitle: const Text('Update the room PIN'),
