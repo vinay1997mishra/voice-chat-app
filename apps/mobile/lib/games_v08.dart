@@ -433,8 +433,6 @@ class _LudoBoardPainter extends CustomPainter {
   final List<int> red;
   final List<int> blue;
 
-  static const safe = <int>{0, 8, 13, 21, 26, 34, 39, 47};
-
   Offset _trackPoint(int step, Size size, bool bluePlayer) {
     final n = bluePlayer ? (step + 26) % 52 : step % 52;
     final cell = size.width / 15;
@@ -931,16 +929,11 @@ class _UnoGameV08State extends State<UnoGameV08> {
 // ---------------- CARROM 4 PLAYER 3D ----------------
 
 class _CarromPiece {
-  _CarromPiece({
-    required this.p,
-    required this.kind,
-    this.v = Offset.zero,
-    this.pocketed = false,
-  });
+  _CarromPiece({required this.p, required this.kind});
   Offset p;
-  Offset v;
+  Offset v = Offset.zero;
   final int kind;
-  bool pocketed;
+  bool pocketed = false;
 }
 
 class CarromGameV08 extends StatefulWidget {
