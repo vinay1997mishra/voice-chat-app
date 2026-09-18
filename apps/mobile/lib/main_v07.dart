@@ -1259,48 +1259,10 @@ class _RoomV07State extends State<RoomV07> {
                           if (big) {
                             await showDialog<void>(
                               context: this.context,
-                              builder: (dialogContext) => AlertDialog(
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      '✨ BIG GIFT ✨',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      gift.emoji,
-                                      style: const TextStyle(fontSize: 80),
-                                    ),
-                                    Text(
-                                      gift.name,
-                                      style: const TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    Text('${demoNumber(gift.coins)} Coins'),
-                                    Text(
-                                      'To ${recipient.name} • ID ${recipient.id}',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'Recipient wallet +${demoNumber(gift.coins)} Diamond',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                                actions: [
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.pop(dialogContext),
-                                    child: const Text('Awesome'),
-                                  ),
-                                ],
+                              barrierDismissible: false,
+                              builder: (dialogContext) => BigGift3DV07(
+                                gift: gift,
+                                recipient: recipient,
                               ),
                             );
                           } else {
@@ -1825,6 +1787,346 @@ class _GameCard extends StatelessWidget {
       );
 }
 
+class BigGift3DV07 extends StatefulWidget {
+  const BigGift3DV07({
+    super.key,
+    required this.gift,
+    required this.recipient,
+  });
+
+  final DemoGift gift;
+  final DemoUser recipient;
+
+  @override
+  State<BigGift3DV07> createState() => _BigGift3DV07State();
+}
+
+class _BigGift3DV07State extends State<BigGift3DV07>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: AnimatedBuilder(
+          animation: controller,
+          builder: (context, child) {
+            final turn = (controller.value - .5) * .20;
+            final lift = 1 + (controller.value * .05);
+            final matrix = Matrix4.identity()
+              ..setEntry(3, 2, 0.0014)
+              ..rotateY(turn)
+              ..rotateX(-turn * .35)
+              ..scale(lift);
+            return Transform(
+              alignment: Alignment.center,
+              transform: matrix,
+              child: child,
+            );
+          },
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6F2BFF),
+                  Color(0xFF271044),
+                  Color(0xFF100416),
+                ],
+              ),
+              border: Border.all(
+                color: const Color(0xFFFFD56A),
+                width: 2,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  blurRadius: 30,
+                  spreadRadius: 4,
+                  color: Color(0x668E35FF),
+                ),
+                BoxShadow(
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                  color: Color(0x66FFD56A),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '✨ 3D BIG GIFT ✨',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const SizedBox(
+                      width: 150,
+                      height: 150,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              Color(0x88FFD56A),
+                              Color(0x338E35FF),
+                              Color(0x00100316),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      widget.gift.emoji,
+                      style: const TextStyle(fontSize: 92),
+                    ),
+                  ],
+                ),
+                Text(
+                  widget.gift.name,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(demoNumber(widget.gift.coins) + ' Coins'),
+                const SizedBox(height: 8),
+                Text(
+                  'To ' + widget.recipient.name + ' • ID ' + widget.recipient.id,
+                  textAlign: TextAlign.center,
+                ),
+                Text(
+                  '+' + demoNumber(widget.gift.coins) + ' Diamond credited',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Awesome'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class VipCenterV07 extends StatelessWidget {
+  const VipCenterV07({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('VIP Center')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'VIP 1–11',
+              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Local 3D preview. Exact VIP prices/benefit rules will use your final VIP table, not guessed values.',
+            ),
+            const SizedBox(height: 16),
+            for (var level = 1; level <= 11; level++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Vip3DCardV07(level: level),
+              ),
+          ],
+        ),
+      );
+}
+
+class Vip3DCardV07 extends StatefulWidget {
+  const Vip3DCardV07({super.key, required this.level});
+  final int level;
+
+  @override
+  State<Vip3DCardV07> createState() => _Vip3DCardV07State();
+}
+
+class _Vip3DCardV07State extends State<Vip3DCardV07>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1800 + widget.level * 70),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: controller,
+        builder: (context, child) {
+          final strength = widget.level >= 9 ? .10 : .065;
+          final angle = (controller.value - .5) * strength;
+          final matrix = Matrix4.identity()
+            ..setEntry(3, 2, 0.0012)
+            ..rotateY(angle)
+            ..rotateX(-angle * .45);
+          return Transform(
+            alignment: Alignment.center,
+            transform: matrix,
+            child: child,
+          );
+        },
+        child: InkWell(
+          key: widget.level == 11 ? const Key('vip11-3d-v07') : null,
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            builder: (_) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'VIP ' + widget.level.toString(),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      '3D badge preview • profile frame • room/chat badge • entry-effect preview',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Done'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                colors: widget.level >= 9
+                    ? const [
+                        Color(0xFFFFB84D),
+                        Color(0xFF8E35FF),
+                        Color(0xFF26113C),
+                      ]
+                    : const [
+                        Color(0xFF5B2387),
+                        Color(0xFF2D0B48),
+                        Color(0xFF14051B),
+                      ],
+              ),
+              border: Border.all(
+                color: widget.level == 11
+                    ? const Color(0xFFFFE18A)
+                    : const Color(0xFF9A6CC2),
+                width: widget.level == 11 ? 2.5 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: widget.level == 11 ? 24 : 10,
+                  spreadRadius: widget.level == 11 ? 2 : 0,
+                  color: widget.level == 11
+                      ? const Color(0x66FFD56A)
+                      : const Color(0x448E35FF),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        Color(0xFFFFE9A6),
+                        Color(0xFFFFB84D),
+                        Color(0xFF6F2BFF),
+                      ],
+                    ),
+                  ),
+                  child: Text(
+                    widget.level.toString(),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'VIP ' + widget.level.toString(),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        widget.level == 11
+                            ? 'Elite 3D aura + frame preview'
+                            : '3D badge + frame preview',
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.view_in_ar_rounded),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+
 class ProfileV07 extends StatelessWidget {
   const ProfileV07({super.key});
 
@@ -1901,10 +2203,9 @@ class ProfileV07 extends StatelessWidget {
                 icon: Icons.workspace_premium_rounded,
                 title: 'VIP',
                 subtitle: 'VIP levels 1–11',
-                onTap: () => _simple(
+                onTap: () => Navigator.push(
                   context,
-                  'VIP Center',
-                  'VIP1–VIP11 demo benefits, status and cosmetics.',
+                  MaterialPageRoute(builder: (_) => const VipCenterV07()),
                 ),
               ),
               _ProfileTile(
