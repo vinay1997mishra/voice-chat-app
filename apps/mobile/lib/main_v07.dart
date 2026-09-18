@@ -2769,7 +2769,7 @@ class StoreV07 extends StatelessWidget {
                 gridDelegate:
                     const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  childAspectRatio: .72,
+                  childAspectRatio: .58,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                 ),
