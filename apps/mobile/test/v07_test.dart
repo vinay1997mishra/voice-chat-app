@@ -1,8 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_chat_app/main_v07.dart';
+import 'package:voice_chat_app/games_v07.dart';
 
 void main() {
+  testWidgets('playable games expose bot and local multiplayer modes', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(
+      home: GameLauncherV07(game: 'Ludo'),
+    ));
+    expect(find.text('Solo vs Bot'), findsOneWidget);
+    expect(find.text('Local Multiplayer'), findsOneWidget);
+    expect(find.text('Online Multiplayer'), findsOneWidget);
+
+    await tester.tap(find.text('Solo vs Bot'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ludo'), findsWidgets);
+    expect(find.byKey(const Key('ludo-roll-v07')), findsOneWidget);
+  });
+
   void setPhoneViewport(WidgetTester tester) {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
