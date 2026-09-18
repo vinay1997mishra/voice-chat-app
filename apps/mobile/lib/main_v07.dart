@@ -1189,6 +1189,7 @@ class _RoomV07State extends State<RoomV07> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   key: const Key('gift-recipient-v06'),
+                  isExpanded: true,
                   value: recipient.id,
                   decoration: const InputDecoration(
                     labelText: 'Send to user ID',
@@ -1217,7 +1218,7 @@ class _RoomV07State extends State<RoomV07> {
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 330,
+                  height: 410,
                   child: GridView.builder(
                     itemCount: demoEconomy.gifts.length,
                     gridDelegate:
