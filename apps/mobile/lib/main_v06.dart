@@ -158,14 +158,14 @@ class _CreateRoomV06State extends State<CreateRoomV06> {
         TextField(controller: name, decoration: const InputDecoration(labelText: 'Room name', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: category,
+          value: category,
           decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
           items: const ['Friends', 'Music', 'Game', 'Official'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: (v) => setState(() => category = v ?? 'Friends'),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          initialValue: seats,
+          value: seats,
           decoration: const InputDecoration(labelText: 'Seats', border: OutlineInputBorder()),
           items: const [10, 15, 20, 25, 30].map((e) => DropdownMenuItem(value: e, child: Text('$e seats'))).toList(),
           onChanged: (v) => setState(() => seats = v ?? 15),
