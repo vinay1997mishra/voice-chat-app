@@ -35,7 +35,7 @@ class GamesCenterV07 extends StatelessWidget {
     ('Lucky Dice', Icons.casino_outlined),
     ('Lucky Wheel', Icons.track_changes_rounded),
     ('Rock Paper Scissors', Icons.back_hand_rounded),
-    ('Teen Patti', Icons.playing_cards_rounded),
+    ('Teen Patti', Icons.style_rounded),
   ];
 
   @override
