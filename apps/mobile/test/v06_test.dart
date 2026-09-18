@@ -3,12 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_chat_app/main_v06.dart';
 
 void main() {
-  testWidgets('final v0.6 includes v0.5 shell, wallet and v0.6 room controls', (tester) async {
+  void setPhoneViewport(WidgetTester tester) {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+  }
 
+  testWidgets('final v0.6 includes shell wallet and room tools', (tester) async {
+    setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV06());
 
     expect(find.byKey(const Key('create-room-v06')), findsOneWidget);
@@ -22,14 +25,14 @@ void main() {
     expect(find.text('Coins'), findsOneWidget);
     expect(find.text('Diamond'), findsOneWidget);
     expect(find.text('VIP'), findsOneWidget);
+    expect(find.text('Wallet'), findsOneWidget);
 
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
-
     await tester.tap(find.byKey(const Key('open-v06-room')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('v06-seat-grid')), findsOneWidget);
 
+    expect(find.byKey(const Key('v06-seat-grid')), findsOneWidget);
     await tester.tap(find.byKey(const Key('v06-seat-0')));
     await tester.pumpAndSettle();
     expect(find.text('Lock Seat'), findsOneWidget);
@@ -49,5 +52,41 @@ void main() {
     expect(find.text('Members'), findsOneWidget);
     expect(find.text('Admins'), findsOneWidget);
     expect(find.text('Block'), findsOneWidget);
+  });
+
+  testWidgets('gift goes to recipient ID and appears in inbox and wallet', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const VoiceChatV06());
+
+    await tester.tap(find.byKey(const Key('open-v06-room')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Gift'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('gift-recipient-v06')), findsOneWidget);
+    expect(find.text('Owner • ID 10000000'), findsOneWidget);
+    expect(find.text('Rose'), findsOneWidget);
+    expect(find.text('Dragon'), findsOneWidget);
+    expect(find.text('Galaxy'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('gift-rose-v06')));
+    await tester.pumpAndSettle();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Message'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gift sent to ID 10000000'), findsOneWidget);
+
+    await tester.tap(find.text('Me'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wallet'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Transaction History'), findsOneWidget);
+    expect(find.text('Gift sent: Rose'), findsOneWidget);
+    expect(find.text('Diamond → Coins'), findsOneWidget);
   });
 }
