@@ -73,7 +73,7 @@ void main() {
     await tester.tap(find.byKey(const Key('gift-rose-v06')));
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Message'));
