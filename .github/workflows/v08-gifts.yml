@@ -1,0 +1,41 @@
+name: Test v0.8 Gifts
+
+on:
+  push:
+    branches: [v08-dev]
+    paths:
+      - 'apps/mobile/lib/gift_catalog_v08.dart'
+      - 'apps/mobile/test/gift_catalog_v08_test.dart'
+      - 'apps/mobile/pubspec.yaml'
+      - '.github/workflows/v08-gifts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-v08-gifts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Analyze v0.8 gift catalog
+        working-directory: apps/mobile
+        run: flutter analyze lib/gift_catalog_v08.dart --no-fatal-infos
+
+      - name: Test v0.8 gift catalog
+        working-directory: apps/mobile
+        run: flutter test test/gift_catalog_v08_test.dart
