@@ -151,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('create-room-submit-v06')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('My Room'), findsOneWidget);
+    expect(find.textContaining('• My Room'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('create-room-v06')));
     await tester.pumpAndSettle();
