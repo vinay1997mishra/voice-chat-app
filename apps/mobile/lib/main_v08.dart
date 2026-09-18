@@ -898,7 +898,7 @@ class _V07HomeState extends State<V07Home> {
   }
 
   Future<void> _openRoom(RoomData room) async {
-    if (room.locked) {
+    if (room.locked && !room.ownedByMe) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (_) => _RouteTextEditorV08(
@@ -911,7 +911,7 @@ class _V07HomeState extends State<V07Home> {
             obscureText: true,
             maxLength: 6,
             decoration: const InputDecoration(
-              labelText: '6-digit PIN',
+              labelText: 'Room PIN (4–6 digits)',
               border: OutlineInputBorder(),
             ),
           ),
@@ -942,7 +942,10 @@ class _V07HomeState extends State<V07Home> {
       context,
       MaterialPageRoute(builder: (_) => RoomV07(room: room)),
     );
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (room.closed && room.ownedByMe) rooms.remove(room);
+    });
   }
 
   @override
@@ -1095,14 +1098,24 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
         ),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Invite Mode'), value: invite, onChanged: (v) => setState(() => invite = v)),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Password Lock'), value: locked, onChanged: (v) => setState(() => locked = v)),
-        if (locked) TextField(controller: pin, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: '6-digit room PIN', border: OutlineInputBorder())),
+        if (locked)
+          TextField(
+            key: const Key('create-room-pin-v08'),
+            controller: pin,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            decoration: const InputDecoration(
+              labelText: 'Room PIN (4–6 digits)',
+              border: OutlineInputBorder(),
+            ),
+          ),
         FilledButton(
           key: const Key('create-room-submit-v06'),
           onPressed: () {
             final cleanPin = pin.text.trim();
-            if (locked && !RegExp(r'^\d{6}$').hasMatch(cleanPin)) {
+            if (locked && !RegExp(r'^\d{4,6}$').hasMatch(cleanPin)) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password must be exactly 6 digits')),
+                const SnackBar(content: Text('Room PIN must be 4 to 6 digits')),
               );
               return;
             }
@@ -2347,6 +2360,7 @@ class RoomData {
     this.pin = '',
     this.dpPath,
     this.ownedByMe = false,
+    this.closed = false,
   });
 
   String name;
@@ -2359,6 +2373,7 @@ class RoomData {
   String pin;
   String? dpPath;
   bool ownedByMe;
+  bool closed;
 }
 
 class _BottomTool extends StatelessWidget {
