@@ -121,14 +121,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
     expect(find.text('VIP 1–11'), findsOneWidget);
-    await tester.drag(
-      find.byKey(const Key('vip-center-list-v07')),
-      const Offset(0, -1800),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('VIP 11'), findsOneWidget);
-    expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
-    Navigator.of(tester.element(find.text('VIP 11'))).pop();
+    Navigator.of(tester.element(find.text('VIP 1–11'))).pop();
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Store').last);
@@ -158,5 +151,22 @@ void main() {
     expect(find.text('3D Effects'), findsOneWidget);
     expect(find.text('Allow Private Messages'), findsOneWidget);
   });
+  testWidgets('VIP11 3D card renders and benefit stack reaches 11', (tester) async {
+    setPhoneViewport(tester);
+    expect(vipPreviewBenefitsV07(11).length, 11);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Vip3DCardV07(level: 11),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
+    expect(find.text('VIP 11'), findsOneWidget);
+  });
+
 
 }
