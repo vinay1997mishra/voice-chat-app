@@ -5,6 +5,7 @@ on:
     branches: [v07-dev]
     paths:
       - 'apps/mobile/lib/main_v07.dart'
+      - 'apps/mobile/lib/games_v07.dart'
       - 'apps/mobile/test/v07_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/android-v07-apk.yml'
