@@ -1379,33 +1379,338 @@ class _Carrom3DPainterV08 extends CustomPainter {
 }
 
 class LuckyDiceGameV08 extends StatefulWidget {
-  const LuckyDiceGameV08({super.key, required this.mode}); final V08GameMode mode;
-  @override State<LuckyDiceGameV08> createState()=>_LuckyDiceGameV08State();
+  const LuckyDiceGameV08({super.key, required this.mode});
+  final V08GameMode mode;
+  @override
+  State<LuckyDiceGameV08> createState() => _LuckyDiceGameV08State();
 }
+
 class _LuckyDiceGameV08State extends State<LuckyDiceGameV08> {
-  final r=Random(); int you=0,other=0,round=0; String status='Roll to start';
-  void roll(){ final a=r.nextInt(6)+1,b=r.nextInt(6)+1; setState((){round++; if(a>b)you++; if(b>a)other++; status='You: $a • ${widget.mode==V08GameMode.soloBot?'Bot':'P2'}: $b';});}
-  @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Lucky Dice')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status,style:const TextStyle(fontSize:24,fontWeight:FontWeight.w900)),Text('Score $you - $other • Round $round'),const SizedBox(height:18),FilledButton.icon(key:const Key('lucky-dice-roll-v08'),onPressed:roll,icon:const Icon(Icons.casino),label:const Text('Roll Dice'))])));
+  final r = Random();
+  int you = 0;
+  int other = 0;
+  int round = 0;
+  int dieA = 1;
+  int dieB = 1;
+  String status = 'Roll to start';
+
+  void roll() {
+    final a = r.nextInt(6) + 1;
+    final b = r.nextInt(6) + 1;
+    setState(() {
+      dieA = a;
+      dieB = b;
+      round++;
+      if (a > b) you++;
+      if (b > a) other++;
+      status = a == b ? 'Draw round' : (a > b ? 'You win round' : 'Opponent wins round');
+    });
+  }
+
+  Widget _die(int value, Color color) => Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, .0015)
+          ..rotateX(-.12)
+          ..rotateY(.16),
+        child: Container(
+          width: 105,
+          height: 105,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [color.withOpacity(.95), color.withOpacity(.46)]),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white60, width: 2),
+            boxShadow: [BoxShadow(color: color.withOpacity(.4), blurRadius: 18, offset: const Offset(0, 12))],
+          ),
+          child: Center(
+            child: Text(value.toString(), style: const TextStyle(fontSize: 46, fontWeight: FontWeight.w900)),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xFF0B1020),
+        appBar: AppBar(title: const Text('Lucky Dice 3D')),
+        body: _GameSceneV08(
+          child: Center(
+            child: Card(
+              color: Colors.white10,
+              child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(status, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                    Text('Score ' + you.toString() + ' - ' + other.toString() + ' • Round ' + round.toString()),
+                    const SizedBox(height: 22),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      _die(dieA, Colors.cyan),
+                      const SizedBox(width: 20),
+                      _die(dieB, Colors.pinkAccent),
+                    ]),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      key: const Key('lucky-dice-roll-v08'),
+                      onPressed: roll,
+                      icon: const Icon(Icons.casino),
+                      label: const Text('Roll Dice'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
+
 class LuckyWheelGameV08 extends StatefulWidget {
- const LuckyWheelGameV08({super.key,required this.mode}); final V08GameMode mode;
- @override State<LuckyWheelGameV08> createState()=>_LuckyWheelGameV08State();
+  const LuckyWheelGameV08({super.key, required this.mode});
+  final V08GameMode mode;
+  @override
+  State<LuckyWheelGameV08> createState() => _LuckyWheelGameV08State();
 }
-class _LuckyWheelGameV08State extends State<LuckyWheelGameV08>{
- final r=Random(); final prizes=['10 points','25 points','50 points','100 points','Bonus','Try Again']; String result='Spin the wheel';
- void spin()=>setState(()=>result=prizes[r.nextInt(prizes.length)]);
- @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Lucky Wheel')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Container(width:220,height:220,decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(width:10)),child:Center(child:Text(result,textAlign:TextAlign.center,style:const TextStyle(fontSize:25,fontWeight:FontWeight.w900)))),const SizedBox(height:20),FilledButton(key:const Key('lucky-wheel-spin-v08'),onPressed:spin,child:const Text('SPIN'))])));
+
+class _LuckyWheelGameV08State extends State<LuckyWheelGameV08> {
+  final r = Random();
+  final prizes = ['10 points', '25 points', '50 points', '100 points', 'Bonus', 'Try Again'];
+  String result = 'SPIN';
+  double angle = 0;
+
+  void spin() => setState(() {
+        angle += 5.5 + r.nextDouble() * 5;
+        result = prizes[r.nextInt(prizes.length)];
+      });
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xFF0B1020),
+        appBar: AppBar(title: const Text('Lucky Wheel 3D')),
+        body: _GameSceneV08(
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 550),
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, .0014)
+                  ..rotateX(.12)
+                  ..rotateZ(angle),
+                transformAlignment: Alignment.center,
+                width: 245,
+                height: 245,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const SweepGradient(
+                    colors: [Colors.pinkAccent, Colors.amber, Colors.greenAccent, Colors.cyan, Colors.purpleAccent, Colors.pinkAccent],
+                  ),
+                  border: Border.all(color: Colors.white70, width: 7),
+                  boxShadow: const [BoxShadow(color: Colors.black87, blurRadius: 24, offset: Offset(0, 16))],
+                ),
+                child: Center(
+                  child: Container(
+                    width: 115,
+                    height: 115,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xDD17132C)),
+                    child: Center(
+                      child: Text(result, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              FilledButton(
+                key: const Key('lucky-wheel-spin-v08'),
+                onPressed: spin,
+                child: const Text('SPIN'),
+              ),
+            ]),
+          ),
+        ),
+      );
 }
-class RpsGameV08 extends StatefulWidget {const RpsGameV08({super.key,required this.mode});final V08GameMode mode;@override State<RpsGameV08> createState()=>_RpsGameV08State();}
-class _RpsGameV08State extends State<RpsGameV08>{
- final r=Random(); final choices=['Rock','Paper','Scissors']; String result='Choose your move'; int wins=0,losses=0;
- void play(String me){final bot=choices[r.nextInt(3)]; final win=(me=='Rock'&&bot=='Scissors')||(me=='Paper'&&bot=='Rock')||(me=='Scissors'&&bot=='Paper'); setState((){if(me==bot)result='Draw • $bot';else if(win){wins++;result='You win • opponent: $bot';}else{losses++;result='Opponent wins • $bot';}});}
- @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Rock Paper Scissors')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(result,style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900)),Text('Wins $wins • Losses $losses'),const SizedBox(height:16),Wrap(spacing:10,children:[for(final x in choices)FilledButton(onPressed:()=>play(x),child:Text(x))])])));
+
+class RpsGameV08 extends StatefulWidget {
+  const RpsGameV08({super.key, required this.mode});
+  final V08GameMode mode;
+  @override
+  State<RpsGameV08> createState() => _RpsGameV08State();
 }
-class TeenPattiGameV08 extends StatefulWidget {const TeenPattiGameV08({super.key,required this.mode});final V08GameMode mode;@override State<TeenPattiGameV08> createState()=>_TeenPattiGameV08State();}
-class _TeenPattiGameV08State extends State<TeenPattiGameV08>{
- final r=Random(); List<int> hand=[]; String rank='';
- void deal(){final cards=<int>{};while(cards.length<3)cards.add(r.nextInt(52)); final h=cards.toList(); final vals=h.map((x)=>x%13+2).toList()..sort(); final suits=h.map((x)=>x~/13).toList(); final same=vals.toSet().length==1,pair=vals.toSet().length==2,color=suits.toSet().length==1,seq=(vals[2]-vals[1]==1&&vals[1]-vals[0]==1); setState((){hand=h;rank=same?'Trail':color&&seq?'Pure Sequence':seq?'Sequence':color?'Color':pair?'Pair':'High Card';});}
- String card(int x)=>['♠','♥','♦','♣'][x~/13]+(['2','3','4','5','6','7','8','9','10','J','Q','K','A'][x%13]);
- @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Teen Patti Practice')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[const Text('Practice only • no betting or cash rewards'),const SizedBox(height:14),Text(hand.isEmpty?'Deal cards':hand.map(card).join('   '),style:const TextStyle(fontSize:30,fontWeight:FontWeight.w900)),Text(rank,style:const TextStyle(fontSize:22)),const SizedBox(height:18),FilledButton(key:const Key('teen-patti-deal-v08'),onPressed:deal,child:const Text('Deal'))])));
+
+class _RpsGameV08State extends State<RpsGameV08> {
+  final r = Random();
+  final choices = ['Rock', 'Paper', 'Scissors'];
+  String result = 'Choose your move';
+  int wins = 0;
+  int losses = 0;
+
+  void play(String me) {
+    final bot = choices[r.nextInt(3)];
+    final win = (me == 'Rock' && bot == 'Scissors') ||
+        (me == 'Paper' && bot == 'Rock') ||
+        (me == 'Scissors' && bot == 'Paper');
+    setState(() {
+      if (me == bot) {
+        result = 'Draw • ' + bot;
+      } else if (win) {
+        wins++;
+        result = 'You win • opponent: ' + bot;
+      } else {
+        losses++;
+        result = 'Opponent wins • ' + bot;
+      }
+    });
+  }
+
+  IconData _icon(String value) {
+    if (value == 'Rock') return Icons.circle;
+    if (value == 'Paper') return Icons.note_rounded;
+    return Icons.content_cut_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xFF0B1020),
+        appBar: AppBar(title: const Text('Rock Paper Scissors 3D')),
+        body: _GameSceneV08(
+          child: Center(
+            child: Card(
+              color: Colors.white10,
+              child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(result, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                  Text('Wins ' + wins.toString() + ' • Losses ' + losses.toString()),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (var i = 0; i < choices.length; i++)
+                        Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, .0014)
+                            ..rotateX(-.08)
+                            ..rotateY((i - 1) * .07),
+                          child: FilledButton.tonalIcon(
+                            onPressed: () => play(choices[i]),
+                            icon: Icon(_icon(choices[i]), size: 30),
+                            label: Text(choices[i]),
+                          ),
+                        ),
+                    ],
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class TeenPattiGameV08 extends StatefulWidget {
+  const TeenPattiGameV08({super.key, required this.mode});
+  final V08GameMode mode;
+  @override
+  State<TeenPattiGameV08> createState() => _TeenPattiGameV08State();
+}
+
+class _TeenPattiGameV08State extends State<TeenPattiGameV08> {
+  final r = Random();
+  List<int> hand = [];
+  String rank = '';
+
+  void deal() {
+    final cards = <int>{};
+    while (cards.length < 3) {
+      cards.add(r.nextInt(52));
+    }
+    final h = cards.toList();
+    final vals = h.map((x) => x % 13 + 2).toList()..sort();
+    final suits = h.map((x) => x ~/ 13).toList();
+    final same = vals.toSet().length == 1;
+    final pair = vals.toSet().length == 2;
+    final color = suits.toSet().length == 1;
+    final seq = vals[2] - vals[1] == 1 && vals[1] - vals[0] == 1;
+    setState(() {
+      hand = h;
+      rank = same
+          ? 'Trail'
+          : color && seq
+              ? 'Pure Sequence'
+              : seq
+                  ? 'Sequence'
+                  : color
+                      ? 'Color'
+                      : pair
+                          ? 'Pair'
+                          : 'High Card';
+    });
+  }
+
+  String card(int x) =>
+      ['♠', '♥', '♦', '♣'][x ~/ 13] + ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'][x % 13];
+
+  Widget _card3d(int x, int i) {
+    final text = card(x);
+    final red = text.startsWith('♥') || text.startsWith('♦');
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()
+        ..setEntry(3, 2, .0015)
+        ..rotateX(-.10)
+        ..rotateY((i - 1) * .10),
+      child: Container(
+        width: 84,
+        height: 122,
+        margin: const EdgeInsets.all(5),
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFE8E8F1)]),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, 10))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: red ? Colors.red : Colors.black),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xFF071B17),
+        appBar: AppBar(title: const Text('Teen Patti Practice 3D')),
+        body: _GameSceneV08(
+          child: Center(
+            child: Card(
+              color: Colors.white10,
+              child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('Practice only • no betting or cash rewards'),
+                  const SizedBox(height: 18),
+                  if (hand.isEmpty)
+                    const Icon(Icons.style_rounded, size: 88)
+                  else
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      for (var i = 0; i < hand.length; i++) _card3d(hand[i], i),
+                    ]),
+                  const SizedBox(height: 10),
+                  Text(rank, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 18),
+                  FilledButton(
+                    key: const Key('teen-patti-deal-v08'),
+                    onPressed: deal,
+                    child: const Text('Deal'),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      );
 }
