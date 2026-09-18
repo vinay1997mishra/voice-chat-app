@@ -29,15 +29,51 @@ class DemoLedgerEntry {
 }
 
 class DemoInboxItem {
-  DemoInboxItem(this.title, this.subtitle, this.icon);
+  DemoInboxItem(
+    this.title,
+    this.subtitle,
+    this.icon, {
+    this.unread = true,
+  });
   final String title;
   final String subtitle;
   final IconData icon;
+  bool unread;
+}
+
+class DemoGiftHistory {
+  DemoGiftHistory({
+    required this.gift,
+    required this.fromName,
+    required this.fromId,
+    required this.toName,
+    required this.toId,
+    required this.coins,
+    required this.diamonds,
+    required this.direction,
+  });
+
+  final String gift;
+  final String fromName;
+  final String fromId;
+  final String toName;
+  final String toId;
+  final int coins;
+  final int diamonds;
+  final String direction;
 }
 
 class DemoEconomy extends ChangeNotifier {
   int coins = 10000000;
   int diamonds = 25000;
+  int wealthXp = 1800;
+  int activeVip = 3;
+  String equippedFrame = 'Purple Glow';
+  bool threeDEffects = true;
+  bool messageNotifications = true;
+  bool giftAnimations = true;
+  bool allowPrivateMessages = true;
+  final following = <String>{};
 
   final users = <DemoUser>[
     DemoUser('Owner', '10000000', diamonds: 5000, avatar: '👑'),
@@ -73,11 +109,118 @@ class DemoEconomy extends ChangeNotifier {
     ),
   ];
 
+  final giftHistory = <DemoGiftHistory>[];
+
+  final conversations = <String, List<String>>{
+    '10000000': ['Owner: Welcome to India Official Room 👋'],
+    '10000001': ['Admin: Room rules are active.'],
+    '10000011': ['Aisha: Hi 👋'],
+    '10000012': ['Sam: Music room tonight?'],
+  };
+
+  final unreadMessages = <String, int>{
+    '10000000': 1,
+    '10000011': 1,
+  };
+
+  final ownedItems = <String>[
+    'Purple Glow',
+    'Silver Ring',
+    'Royal Mic Badge',
+  ];
+
   DemoUser byName(String name) {
     return users.firstWhere(
       (user) => user.name == name,
       orElse: () => users.first,
     );
+  }
+
+  DemoUser byId(String id) {
+    return users.firstWhere(
+      (user) => user.id == id,
+      orElse: () => users.first,
+    );
+  }
+
+  List<String> conversationFor(String userId) {
+    return conversations.putIfAbsent(userId, () => <String>[]);
+  }
+
+  void markConversationRead(String userId) {
+    unreadMessages[userId] = 0;
+    notifyListeners();
+  }
+
+  void sendDirectMessage(DemoUser user, String message) {
+    final clean = message.trim();
+    if (clean.isEmpty) return;
+    conversationFor(user.id).add('You: ' + clean);
+    inbox.insert(
+      0,
+      DemoInboxItem(
+        user.name,
+        'You: ' + clean,
+        Icons.forum_rounded,
+        unread: false,
+      ),
+    );
+    notifyListeners();
+  }
+
+  void followUser(DemoUser user) {
+    following.add(user.id);
+    addInbox(
+      'Following ' + user.name,
+      'ID ' + user.id + ' added to local follow list.',
+      Icons.person_add_alt_1_rounded,
+    );
+  }
+
+  void equipFrame(String frame) {
+    if (!ownedItems.contains(frame)) ownedItems.add(frame);
+    equippedFrame = frame;
+    notifyListeners();
+  }
+
+  void setVipPreview(int level) {
+    activeVip = level.clamp(1, 11);
+    notifyListeners();
+  }
+
+  void simulateIncomingGift() {
+    const incoming = DemoGift('Crown', '👑', 1000);
+    diamonds += incoming.coins;
+    giftHistory.insert(
+      0,
+      DemoGiftHistory(
+        gift: incoming.emoji + ' ' + incoming.name,
+        fromName: 'Aisha',
+        fromId: '10000011',
+        toName: 'You',
+        toId: '10000050',
+        coins: incoming.coins,
+        diamonds: incoming.coins,
+        direction: 'Received',
+      ),
+    );
+    ledger.insert(
+      0,
+      DemoLedgerEntry(
+        'Gift received: Crown',
+        'From Aisha • ID 10000011',
+        incoming.coins,
+      ),
+    );
+    inbox.insert(
+      0,
+      DemoInboxItem(
+        'Gift received from ID 10000011',
+        '👑 Crown • +1,000 Diamond',
+        Icons.redeem_rounded,
+      ),
+    );
+    notifyListeners();
   }
 
   bool sendGift(DemoGift gift, DemoUser recipient, String roomId) {
@@ -87,6 +230,21 @@ class DemoEconomy extends ChangeNotifier {
     final owner = users.first;
     final ownerShare = gift.coins ~/ 10;
     owner.diamonds += ownerShare;
+    wealthXp += gift.coins ~/ 100;
+
+    giftHistory.insert(
+      0,
+      DemoGiftHistory(
+        gift: gift.emoji + ' ' + gift.name,
+        fromName: 'You',
+        fromId: '10000050',
+        toName: recipient.name,
+        toId: recipient.id,
+        coins: gift.coins,
+        diamonds: gift.coins,
+        direction: 'Sent',
+      ),
+    );
 
     ledger.insert(
       0,
