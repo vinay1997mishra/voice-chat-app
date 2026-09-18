@@ -1821,6 +1821,12 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _settings() {
+    if (!widget.room.ownedByMe) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Only the room owner can change room settings')),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1848,8 +1854,8 @@ class _RoomV07State extends State<RoomV07> {
             title: const Text('Room Lock'),
             subtitle: Text(
               widget.room.locked
-                  ? 'Locked with a 6-digit PIN'
-                  : 'Anyone can enter without a PIN',
+                  ? 'Locked • Owner entry does not need PIN'
+                  : 'Set any 4–6 digit PIN',
             ),
             value: widget.room.locked,
             onChanged: (value) async {
@@ -1874,7 +1880,7 @@ class _RoomV07State extends State<RoomV07> {
           if (widget.room.locked)
             ListTile(
               title: const Text('Change Room PIN'),
-              subtitle: const Text('Update the 6-digit room password'),
+              subtitle: const Text('Update the 4–6 digit room PIN'),
               trailing: const Icon(Icons.password_rounded),
               onTap: _editPassword,
             ),
@@ -1897,6 +1903,12 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _luckyBag() {
+    if (!widget.room.ownedByMe) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Only the room owner can create Lucky Bags')),
+      );
+      return;
+    }
     showDialog<void>(
       context: context,
       builder: (_) => _RouteTextEditorV08(
@@ -1965,6 +1977,7 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   Future<void> _changeRoomDp() async {
+    if (!widget.room.ownedByMe) return;
     final source = await showModalBottomSheet<ImageSource?>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -2011,6 +2024,7 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _backgrounds() {
+    if (!widget.room.ownedByMe) return;
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -2044,6 +2058,7 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _admins() {
+    if (!widget.room.ownedByMe) return;
     final users = seats.whereType<String>().where((m) => m != 'Owner' && m != 'You').toList();
     showModalBottomSheet<void>(
       context: context,
@@ -2073,6 +2088,7 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _blockList() {
+    if (!widget.room.ownedByMe) return;
     final users = seats.whereType<String>().where((m) => m != 'Owner' && m != 'You').toList();
     showModalBottomSheet<void>(
       context: context,
@@ -2309,6 +2325,204 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
+
+  GiftV08? _recommendedGiftV08() {
+    final affordable = normalGiftsV08
+        .where((gift) => gift.coins <= demoEconomy.coins)
+        .toList()
+      ..sort((a, b) => a.coins.compareTo(b.coins));
+    if (affordable.isEmpty) return null;
+
+    final softBudget = demoEconomy.coins ~/ 100;
+    GiftV08 pick = affordable.first;
+    for (final gift in affordable) {
+      if (gift.coins <= softBudget) pick = gift;
+    }
+    return pick;
+  }
+
+  void _aiGiftAssistant() {
+    final names = seats
+        .whereType<String>()
+        .where((name) => name != 'You' && name != 'Owner')
+        .toSet()
+        .toList();
+    if (names.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI Gift Assistant needs another user in the room')),
+      );
+      return;
+    }
+
+    DemoUser recipient = demoEconomy.byName(names.first);
+    GiftV08? recommendation = _recommendedGiftV08();
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setLocal) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'AI Gift Assistant',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'v0.8 uses local smart recommendations. A real AI model can replace this later through the backend.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  key: const Key('ai-gift-recipient-v08'),
+                  value: recipient.id,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Recipient',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: names.map((name) {
+                    final user = demoEconomy.byName(name);
+                    return DropdownMenuItem(
+                      value: user.id,
+                      child: Text(user.name + ' • ID ' + user.id),
+                    );
+                  }).toList(),
+                  onChanged: (id) {
+                    if (id == null) return;
+                    setLocal(() {
+                      recipient = demoEconomy.users.firstWhere((user) => user.id == id);
+                      recommendation = _recommendedGiftV08();
+                    });
+                  },
+                ),
+                const SizedBox(height: 14),
+                if (recommendation == null)
+                  const ListTile(
+                    leading: Icon(Icons.info_outline_rounded),
+                    title: Text('No affordable gift available'),
+                  )
+                else
+                  Card(
+                    child: ListTile(
+                      leading: Text(
+                        recommendation!.emoji,
+                        style: const TextStyle(fontSize: 32),
+                      ),
+                      title: Text('Suggested: ' + recommendation!.name),
+                      subtitle: Text(
+                        formatGiftCoinsV08(recommendation!.coins) +
+                            ' Coins • for ' +
+                            recipient.name,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  key: const Key('ai-gift-send-v08'),
+                  onPressed: recommendation == null
+                      ? null
+                      : () async {
+                          final gift = recommendation!;
+                          final confirmed = await showDialog<bool>(
+                            context: sheetContext,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Confirm AI Gift'),
+                              content: Text(
+                                'Send ' +
+                                    gift.name +
+                                    ' to ' +
+                                    recipient.name +
+                                    ' for ' +
+                                    formatGiftCoinsV08(gift.coins) +
+                                    ' Coins?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  key: const Key('confirm-ai-gift-v08'),
+                                  onPressed: () => Navigator.pop(dialogContext, true),
+                                  child: const Text('Send Gift'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+
+                          final ok = demoEconomy.sendGiftV08(
+                            gift,
+                            recipient,
+                            widget.room.id,
+                          );
+                          if (!ok) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(content: Text('Not enough Coins')),
+                            );
+                            return;
+                          }
+
+                          setState(() {
+                            chat.add(
+                              'AI Gift Assistant: You sent ' +
+                                  gift.emoji +
+                                  ' ' +
+                                  gift.name +
+                                  ' to ' +
+                                  recipient.name,
+                            );
+                          });
+                          Navigator.pop(sheetContext);
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text(gift.name + ' sent to ' + recipient.name)),
+                          );
+                        },
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  label: const Text('Send Suggested Gift'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _closeOwnedRoom() {
+    if (!widget.room.ownedByMe) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Close My Room?'),
+        content: const Text(
+          'This closes the local room. After that you can create a new room.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-close-room-v08'),
+            onPressed: () {
+              widget.room.closed = true;
+              Navigator.pop(dialogContext);
+              Navigator.pop(context);
+            },
+            child: const Text('Close Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _music() {
     showModalBottomSheet<void>(
       context: context,
@@ -2356,56 +2570,65 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   Future<void> _editPassword({bool forceEnable = false}) async {
-    bool enabled = forceEnable || widget.room.locked;
-    await showDialog<void>(
+    if (!widget.room.ownedByMe) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Only the room owner can change the PIN')),
+      );
+      return;
+    }
+
+    String? errorText;
+    final result = await showDialog<String>(
       context: context,
       builder: (_) => _RouteTextEditorV08(
         initialText: widget.room.pin,
         builder: (dialogContext, controller) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Room Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enable password'),
-                value: enabled,
-                onChanged: (value) => setLocal(() => enabled = value),
+          builder: (context, setLocal) => AlertDialog(
+            title: Text(widget.room.locked ? 'Change Room PIN' : 'Set Room Lock'),
+            content: TextField(
+              key: const Key('room-pin-input-v08'),
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              decoration: InputDecoration(
+                labelText: 'Room PIN',
+                helperText: 'Enter any 4 to 6 digits',
+                errorText: errorText,
+                border: const OutlineInputBorder(),
               ),
-              if (enabled)
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  maxLength: 6,
-                  decoration: const InputDecoration(labelText: '6-digit PIN', border: OutlineInputBorder()),
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('set-room-lock-v08'),
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (!RegExp(r'^\d{4,6}$').hasMatch(value)) {
+                    setLocal(() => errorText = 'PIN must be 4 to 6 digits');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, value);
+                },
+                child: Text(widget.room.locked ? 'Save PIN' : 'Set Lock'),
+              ),
             ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (enabled && !RegExp(r'^\d{6}$').hasMatch(value)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('PIN must be exactly 6 digits')),
-                  );
-                  return;
-                }
-                setState(() {
-                  widget.room.locked = enabled;
-                  widget.room.pin = enabled ? value : '';
-                });
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Save'),
-            ),
-          ],
         ),
       ),
-      ),
+    );
+
+    if (!mounted || result == null) return;
+    setState(() {
+      widget.room.locked = true;
+      widget.room.pin = result;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Room lock enabled')),
     );
   }
 
