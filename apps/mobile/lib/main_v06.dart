@@ -183,16 +183,8 @@ class _MainShellV06State extends State<MainShellV06> {
   Widget build(BuildContext context) {
     final pages = [
       const V06Home(),
-      const BasicPageV06(
-        title: 'Discover',
-        icon: Icons.explore_rounded,
-        subtitle: 'Popular rooms, categories and Game Center discovery.',
-      ),
-      const BasicPageV06(
-        title: 'Message',
-        icon: Icons.forum_rounded,
-        subtitle: 'Room chat and private-message demo hub.',
-      ),
+      const DiscoverV06(),
+      const InboxV06(),
       const ProfileV06(),
     ];
     return Scaffold(
@@ -209,6 +201,233 @@ class _MainShellV06State extends State<MainShellV06> {
       ),
     );
   }
+}
+
+class DiscoverV06 extends StatelessWidget {
+  const DiscoverV06({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      ('Voice Rooms', Icons.graphic_eq_rounded),
+      ('Game Center', Icons.sports_esports_rounded),
+      ('Music', Icons.music_note_rounded),
+      ('VIP', Icons.workspace_premium_rounded),
+      ('Events', Icons.celebration_rounded),
+      ('Official', Icons.verified_rounded),
+    ];
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF35105D), Color(0xFF120316)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            const Text(
+              'Discover',
+              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 14),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              childAspectRatio: 1.35,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              children: [
+                for (final item in items)
+                  InkWell(
+                    onTap: () => showModalBottomSheet<void>(
+                      context: context,
+                      showDragHandle: true,
+                      builder: (_) => SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(item.$2, size: 46),
+                              const SizedBox(height: 10),
+                              Text(
+                                item.$1,
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                item.$1 == 'Game Center'
+                                    ? 'Dice, Lucky Wheel and room games are active local demos.'
+                                    : 'This section is active in the v0.6 local demo.',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 14),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Done'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Card(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(item.$2, size: 38),
+                          const SizedBox(height: 8),
+                          Text(
+                            item.$1,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class InboxV06 extends StatelessWidget {
+  const InboxV06({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: demoEconomy,
+      builder: (context, _) => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF35105D), Color(0xFF120316)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              const Text(
+                'Message Inbox',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              for (final item in demoEconomy.inbox)
+                Card(
+                  child: ListTile(
+                    leading: CircleAvatar(child: Icon(item.icon)),
+                    title: Text(item.title),
+                    subtitle: Text(item.subtitle),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DemoChatV06(title: item.title),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DemoChatV06 extends StatefulWidget {
+  const DemoChatV06({super.key, required this.title});
+  final String title;
+
+  @override
+  State<DemoChatV06> createState() => _DemoChatV06State();
+}
+
+class _DemoChatV06State extends State<DemoChatV06> {
+  final controller = TextEditingController();
+  final messages = <String>['Hello 👋'];
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final value = controller.text.trim();
+    if (value.isEmpty) return;
+    setState(() => messages.add('You: $value'));
+    demoEconomy.addInbox(
+      'Message sent',
+      'To ${widget.title}: $value',
+      Icons.send_rounded,
+    );
+    controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final message in messages)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(message),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          hintText: 'Type message...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _send,
+                      icon: const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class V06Home extends StatefulWidget {
