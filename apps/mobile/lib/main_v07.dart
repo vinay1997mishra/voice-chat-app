@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'games_v07.dart';
+import 'games_v07.dart';
 
 void main() => runApp(const VoiceChatV07());
 
@@ -1381,13 +1382,20 @@ class _RoomV07State extends State<RoomV07> {
           children: [
             _GameCard('Dice', Icons.casino_rounded, () => _playGame('Dice')),
             _GameCard('Lucky Wheel', Icons.motion_photos_on_rounded, () => _playGame('Lucky Wheel')),
-            _GameCard('Ludo', Icons.grid_view_rounded, () => _playGame('Ludo')),
-            _GameCard('UNO', Icons.style_rounded, () => _playGame('UNO')),
-            _GameCard('Carrom', Icons.sports_esports_rounded, () => _playGame('Carrom')),
+            _GameCard('Ludo', Icons.grid_view_rounded, () => _openPlayableGame('Ludo')),
+            _GameCard('UNO', Icons.style_rounded, () => _openPlayableGame('UNO')),
+            _GameCard('Carrom', Icons.sports_esports_rounded, () => _openPlayableGame('Carrom')),
           ],
         ),
       ]),
     )));
+  }
+
+  void _openPlayableGame(String name) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => GameLauncherV07(game: name)),
+    );
   }
 
   void _playGame(String name) {
