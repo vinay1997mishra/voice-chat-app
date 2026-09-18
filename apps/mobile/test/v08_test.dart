@@ -109,10 +109,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('owner enters own locked room without PIN prompt', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const VoiceChatV08());
+
+    await tester.tap(find.byKey(const Key('create-room-v06')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Password Lock'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('create-room-pin-v08')), '4321');
+    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('• Locked'), findsOneWidget);
+    expect(find.textContaining('• My Room'), findsOneWidget);
+
+    await tester.tap(find.text('My Voice Room'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RoomV07), findsOneWidget);
+    expect(find.byKey(const Key('join-room-pin-v06')), findsNothing);
+  });
+
+  testWidgets('non-owner cannot change room lock from settings', (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData('Guest room', '999', '🎧', true, pin: '4321');
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('room-lock-switch-v08')), findsNothing);
+    expect(find.text('Only the room owner can change it'), findsOneWidget);
+  });
+
   testWidgets('room lock sets a 4-6 digit PIN and disables cleanly',
       (tester) async {
     setPhoneViewport(tester);
-    final room = RoomData('Test room', '123', '🎧', false);
+    final room = RoomData('Test room', '123', '🎧', false, ownedByMe: true);
     await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
