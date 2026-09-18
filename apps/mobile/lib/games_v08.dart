@@ -928,7 +928,7 @@ class _UnoGameV08State extends State<UnoGameV08> {
   }
 }
 
-// ---------------- CARROM ----------------
+// ---------------- CARROM 4 PLAYER 3D ----------------
 
 class _CarromPiece {
   _CarromPiece({
@@ -946,7 +946,6 @@ class _CarromPiece {
 class CarromGameV08 extends StatefulWidget {
   const CarromGameV08({super.key, required this.mode});
   final V08GameMode mode;
-
   @override
   State<CarromGameV08> createState() => _CarromGameV08State();
 }
@@ -954,52 +953,61 @@ class CarromGameV08 extends StatefulWidget {
 class _CarromGameV08State extends State<CarromGameV08>
     with SingleTickerProviderStateMixin {
   final pieces = <_CarromPiece>[];
+  final scores = List<int>.filled(4, 0);
   late final AnimationController ticker;
   int turn = 0;
-  int score1 = 0;
-  int score2 = 0;
   Offset? dragStart;
   Offset? dragNow;
   bool shotActive = false;
   bool botThinking = false;
 
-  bool get botTurn => widget.mode == V08GameMode.soloBot && turn == 1;
+  bool get botMode => widget.mode == V08GameMode.soloBot;
+  bool get botTurn => botMode && turn != 0;
   _CarromPiece get striker => pieces.last;
+
+  String _name(int seat) {
+    if (!botMode) return 'P' + (seat + 1).toString();
+    return seat == 0 ? 'You' : 'Bot ' + seat.toString();
+  }
+
+  Offset _home(int seat) {
+    if (seat == 0) return const Offset(.50, .86);
+    if (seat == 1) return const Offset(.86, .50);
+    if (seat == 2) return const Offset(.50, .14);
+    return const Offset(.14, .50);
+  }
 
   @override
   void initState() {
     super.initState();
     _setup();
-    ticker = AnimationController(
-      vsync: this,
-      duration: const Duration(days: 1),
-    )
+    ticker = AnimationController(vsync: this, duration: const Duration(days: 1))
       ..addListener(_physicsTick)
       ..repeat();
   }
 
   void _setup() {
+    pieces.clear();
     final center = const Offset(.5, .5);
-    final offsets = [
+    final offsets = <Offset>[
       Offset.zero,
-      const Offset(.055, 0),
-      const Offset(-.055, 0),
-      const Offset(0, .055),
-      const Offset(0, -.055),
-      const Offset(.042, .042),
-      const Offset(-.042, .042),
-      const Offset(.042, -.042),
-      const Offset(-.042, -.042),
+      const Offset(.055, 0), const Offset(-.055, 0),
+      const Offset(0, .055), const Offset(0, -.055),
+      const Offset(.042, .042), const Offset(-.042, .042),
+      const Offset(.042, -.042), const Offset(-.042, -.042),
+      const Offset(.082, 0), const Offset(-.082, 0),
+      const Offset(0, .082), const Offset(0, -.082),
+      const Offset(.07, .07), const Offset(-.07, .07),
+      const Offset(.07, -.07), const Offset(-.07, -.07),
+      const Offset(.11, 0), const Offset(-.11, 0),
     ];
     for (var i = 0; i < offsets.length; i++) {
-      pieces.add(
-        _CarromPiece(
-          p: center + offsets[i],
-          kind: i == 0 ? 2 : (i.isEven ? 0 : 1),
-        ),
-      );
+      pieces.add(_CarromPiece(
+        p: center + offsets[i],
+        kind: i == 0 ? 2 : (i.isEven ? 0 : 1),
+      ));
     }
-    pieces.add(_CarromPiece(p: const Offset(.5, .86), kind: 3));
+    pieces.add(_CarromPiece(p: _home(0), kind: 3));
   }
 
   @override
@@ -1010,37 +1018,36 @@ class _CarromGameV08State extends State<CarromGameV08>
 
   void _physicsTick() {
     if (!mounted) return;
-    var anyMoving = false;
-    for (final p in pieces) {
-      if (p.pocketed) continue;
-      if (p.v.distance > .0002) {
-        anyMoving = true;
-        p.p += p.v;
-        p.v *= .985;
-        var dx = p.p.dx;
-        var dy = p.p.dy;
-        var vx = p.v.dx;
-        var vy = p.v.dy;
+    var moving = false;
+    for (final piece in pieces) {
+      if (piece.pocketed) continue;
+      if (piece.v.distance > .00018) {
+        moving = true;
+        piece.p += piece.v;
+        piece.v *= .984;
+        var dx = piece.p.dx;
+        var dy = piece.p.dy;
+        var vx = piece.v.dx;
+        var vy = piece.v.dy;
         const minV = .055;
         const maxV = .945;
         if (dx < minV || dx > maxV) {
           dx = dx.clamp(minV, maxV);
-          vx = -vx * .86;
+          vx = -vx * .88;
         }
         if (dy < minV || dy > maxV) {
           dy = dy.clamp(minV, maxV);
-          vy = -vy * .86;
+          vy = -vy * .88;
         }
-        p.p = Offset(dx, dy);
-        p.v = Offset(vx, vy);
+        piece
+          ..p = Offset(dx, dy)
+          ..v = Offset(vx, vy);
         for (final hole in const [
-          Offset(.065, .065),
-          Offset(.935, .065),
-          Offset(.065, .935),
-          Offset(.935, .935),
+          Offset(.065, .065), Offset(.935, .065),
+          Offset(.065, .935), Offset(.935, .935),
         ]) {
-          if ((p.p - hole).distance < .055) {
-            _pocket(p);
+          if ((piece.p - hole).distance < .055) {
+            _pocket(piece);
             break;
           }
         }
@@ -1048,72 +1055,70 @@ class _CarromGameV08State extends State<CarromGameV08>
     }
 
     for (var i = 0; i < pieces.length; i++) {
-      final a = pieces[i];
-      if (a.pocketed) continue;
+      final x = pieces[i];
+      if (x.pocketed) continue;
       for (var j = i + 1; j < pieces.length; j++) {
-        final b = pieces[j];
-        if (b.pocketed) continue;
-        final d = b.p - a.p;
-        final dist = d.distance;
-        if (dist > 0 && dist < .045) {
-          final n = d / dist;
-          final rel = (a.v - b.v).dx * n.dx + (a.v - b.v).dy * n.dy;
-          if (rel > 0) {
-            final impulse = n * (rel * .92);
-            a.v -= impulse;
-            b.v += impulse;
+        final y = pieces[j];
+        if (y.pocketed) continue;
+        final delta = y.p - x.p;
+        final distance = delta.distance;
+        if (distance > 0 && distance < .045) {
+          final normal = delta / distance;
+          final relative = (x.v - y.v).dx * normal.dx + (x.v - y.v).dy * normal.dy;
+          if (relative > 0) {
+            final impulse = normal * (relative * .94);
+            x.v -= impulse;
+            y.v += impulse;
           }
         }
       }
     }
 
-    if (shotActive && !anyMoving) {
+    if (shotActive && !moving) {
       shotActive = false;
       _finishTurn();
     }
     setState(() {});
   }
 
-  void _pocket(_CarromPiece p) {
-    if (p.kind == 3) {
-      p.p = turn == 0 ? const Offset(.5, .86) : const Offset(.5, .14);
-      p.v = Offset.zero;
-      if (turn == 0) score1 = max(0, score1 - 1);
-      if (turn == 1) score2 = max(0, score2 - 1);
+  void _pocket(_CarromPiece piece) {
+    if (piece.kind == 3) {
+      piece
+        ..p = _home(turn)
+        ..v = Offset.zero;
+      scores[turn] = max(0, scores[turn] - 1);
       return;
     }
-    p.pocketed = true;
-    p.v = Offset.zero;
-    final points = p.kind == 2 ? 3 : 1;
-    if (turn == 0) {
-      score1 += points;
-    } else {
-      score2 += points;
-    }
+    piece
+      ..pocketed = true
+      ..v = Offset.zero;
+    scores[turn] += piece.kind == 2 ? 3 : 1;
   }
 
   void _finishTurn() {
     if (pieces.where((p) => p.kind != 3 && !p.pocketed).isEmpty) return;
-    turn = 1 - turn;
+    turn = (turn + 1) % 4;
     striker
       ..pocketed = false
       ..v = Offset.zero
-      ..p = turn == 0 ? const Offset(.5, .86) : const Offset(.5, .14);
+      ..p = _home(turn);
     setState(() {});
-    if (botTurn) {
-      Future.delayed(const Duration(milliseconds: 700), _botShot);
-    }
+    if (botTurn) Future.delayed(const Duration(milliseconds: 650), _botShot);
   }
 
   void _botShot() {
     if (!mounted || !botTurn || shotActive || botThinking) return;
     botThinking = true;
     final targets = pieces.where((p) => p.kind != 3 && !p.pocketed).toList();
-    if (targets.isEmpty) return;
-    final target = targets.first;
-    final dir = target.p - striker.p;
-    final len = max(.001, dir.distance);
-    striker.v = dir / len * .018;
+    if (targets.isEmpty) {
+      botThinking = false;
+      return;
+    }
+    targets.sort((x, y) =>
+        (x.p - striker.p).distance.compareTo((y.p - striker.p).distance));
+    final direction = targets.first.p - striker.p;
+    final length = max(.001, direction.distance);
+    striker.v = direction / length * .019;
     shotActive = true;
     botThinking = false;
     setState(() {});
@@ -1124,164 +1129,239 @@ class _CarromGameV08State extends State<CarromGameV08>
     final pull = start - end;
     final velocity = Offset(pull.dx / size.width, pull.dy / size.height);
     if (velocity.distance < .01) return;
-    final capped = min(.03, velocity.distance * .09);
-    striker.v = velocity / velocity.distance * capped;
+    final power = min(.032, velocity.distance * .095);
+    striker.v = velocity / velocity.distance * power;
     shotActive = true;
     setState(() {});
   }
 
+  int? get winner {
+    if (pieces.any((p) => p.kind != 3 && !p.pocketed)) return null;
+    var best = 0;
+    for (var i = 1; i < 4; i++) {
+      if (scores[i] > scores[best]) best = i;
+    }
+    return best;
+  }
+
+  Widget _seat(int seat) {
+    final active = turn == seat && winner == null;
+    final colors = [Colors.cyanAccent, Colors.pinkAccent, Colors.amberAccent, Colors.greenAccent];
+    return Expanded(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        key: Key('carrom-seat-' + (seat + 1).toString() + '-v08'),
+        margin: const EdgeInsets.all(3),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+        decoration: BoxDecoration(
+          color: active ? colors[seat].withOpacity(.16) : Colors.black26,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
+          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.3), blurRadius: 12)] : null,
+        ),
+        child: Column(
+          children: [
+            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
+            Text(_name(seat), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+            Text(scores[seat].toString() + ' pts', style: const TextStyle(fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final remaining = pieces.where((p) => p.kind != 3 && !p.pocketed).length;
+    final left = pieces.where((p) => p.kind != 3 && !p.pocketed).length;
     return Scaffold(
-      appBar: AppBar(title: const Text('Carrom')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              children: [
-                Expanded(child: Text('P1: ' + score1.toString())),
-                Text(
-                  remaining == 0
-                      ? (score1 >= score2 ? 'P1 wins 🎉' : 'P2 wins 🎉')
-                      : (turn == 0
-                          ? 'Player 1 turn'
-                          : (botTurn ? 'Bot turn' : 'Player 2 turn')),
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-                Expanded(
-                  child: Text(
-                    'P2: ' + score2.toString(),
-                    textAlign: TextAlign.end,
+      backgroundColor: const Color(0xFF07131A),
+      appBar: AppBar(title: const Text('Carrom • 4 Player 3D')),
+      body: _GameSceneV08(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                key: const Key('carrom-four-player-v08'),
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
+              ),
+              Text(
+                winner != null
+                    ? _name(winner!) + ' wins 🎉'
+                    : _name(turn) + ' turn • ' + left.toString() + ' coins left',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final size = Size(box.maxWidth, box.maxHeight);
+                          return Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..setEntry(3, 2, .0014)
+                              ..rotateX(.065)
+                              ..rotateZ(turn.isEven ? -.008 : .008),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(25),
+                                boxShadow: const [
+                                  BoxShadow(color: Colors.black87, blurRadius: 26, offset: Offset(0, 18)),
+                                  BoxShadow(color: Color(0x5539FFCE), blurRadius: 20, spreadRadius: 2),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(25),
+                                child: GestureDetector(
+                                  key: const Key('carrom-board-v08'),
+                                  onPanStart: shotActive || botTurn || winner != null
+                                      ? null
+                                      : (d) => setState(() {
+                                            dragStart = d.localPosition;
+                                            dragNow = d.localPosition;
+                                          }),
+                                  onPanUpdate: shotActive || botTurn || winner != null
+                                      ? null
+                                      : (d) => setState(() => dragNow = d.localPosition),
+                                  onPanEnd: shotActive || botTurn || winner != null
+                                      ? null
+                                      : (_) {
+                                          final start = dragStart;
+                                          final end = dragNow;
+                                          dragStart = null;
+                                          dragNow = null;
+                                          if (start != null && end != null) _shoot(size, start, end);
+                                        },
+                                  child: CustomPaint(
+                                    painter: _Carrom3DPainterV08(
+                                      pieces: pieces,
+                                      dragStart: dragStart,
+                                      dragNow: dragNow,
+                                      activeSeat: turn,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: LayoutBuilder(
-                  builder: (context, box) {
-                    final size = Size(box.maxWidth, box.maxHeight);
-                    return GestureDetector(
-                      key: const Key('carrom-board-v08'),
-                      onPanStart: shotActive || botTurn
-                          ? null
-                          : (d) => setState(() {
-                                dragStart = d.localPosition;
-                                dragNow = d.localPosition;
-                              }),
-                      onPanUpdate: shotActive || botTurn
-                          ? null
-                          : (d) => setState(() => dragNow = d.localPosition),
-                      onPanEnd: shotActive || botTurn
-                          ? null
-                          : (_) {
-                              final start = dragStart;
-                              final end = dragNow;
-                              dragStart = null;
-                              dragNow = null;
-                              if (start != null && end != null) {
-                                _shoot(size, start, end);
-                              }
-                            },
-                      child: CustomPaint(
-                        painter: _CarromPainter(
-                          pieces: pieces,
-                          dragStart: dragStart,
-                          dragNow: dragNow,
-                        ),
-                      ),
-                    );
-                  },
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 2, 16, 14),
+                child: Text(
+                  'Drag striker opposite direction me release karo • Queen = 3 points • 4 seats turn-by-turn.',
+                  textAlign: TextAlign.center,
                 ),
               ),
-            ),
+            ],
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 18),
-            child: Text(
-              'Striker se opposite direction me drag karke release karo. Corners me coins pocket karo. Queen = 3 points.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _CarromPainter extends CustomPainter {
-  _CarromPainter({
+class _Carrom3DPainterV08 extends CustomPainter {
+  _Carrom3DPainterV08({
     required this.pieces,
     required this.dragStart,
     required this.dragNow,
+    required this.activeSeat,
   });
   final List<_CarromPiece> pieces;
   final Offset? dragStart;
   final Offset? dragNow;
+  final int activeSeat;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final outer = Offset.zero & size;
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18)),
-      Paint()..color = const Color(0xFFD9B77A),
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(size.width * .05, size.height * .05, size.width * .9, size.height * .9),
-      Paint()..color = const Color(0xFFF0D19B),
-    );
-    final line = Paint()
-      ..color = const Color(0xFF6B3A1E)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width * .12, line);
-    canvas.drawLine(
-      Offset(size.width * .2, size.height * .86),
-      Offset(size.width * .8, size.height * .86),
-      line,
-    );
-    canvas.drawLine(
-      Offset(size.width * .2, size.height * .14),
-      Offset(size.width * .8, size.height * .14),
-      line,
+      RRect.fromRectAndRadius(outer, const Radius.circular(24)),
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF5B2D18), Color(0xFFB97432), Color(0xFF3A1E13)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(outer),
     );
 
-    for (final hole in const [
-      Offset(.065, .065),
-      Offset(.935, .065),
-      Offset(.065, .935),
-      Offset(.935, .935),
-    ]) {
-      canvas.drawCircle(
-        Offset(hole.dx * size.width, hole.dy * size.height),
-        size.width * .042,
-        Paint()..color = Colors.black87,
+    final board = Rect.fromLTWH(size.width * .055, size.height * .055, size.width * .89, size.height * .89);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(board, const Radius.circular(16)),
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xFFFFE6B3), Color(0xFFF1C67E), Color(0xFFD99B54)],
+          radius: .9,
+        ).createShader(board),
+    );
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final line = Paint()
+      ..color = const Color(0xFF7A351F)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    canvas.drawCircle(center, size.width * .125, line);
+    canvas.drawCircle(center, size.width * .045, Paint()..color = const Color(0x99C43D3D));
+
+    void base(Offset x, Offset y, int seat) {
+      final colors = [Colors.cyan, Colors.pinkAccent, Colors.amber, Colors.greenAccent];
+      canvas.drawLine(
+        x,
+        y,
+        Paint()
+          ..color = seat == activeSeat ? colors[seat] : const Color(0xFF7A351F)
+          ..strokeWidth = seat == activeSeat ? 4 : 2,
       );
     }
 
-    for (final p in pieces) {
-      if (p.pocketed) continue;
-      final color = p.kind == 0
-          ? Colors.white
-          : p.kind == 1
-              ? Colors.black
-              : p.kind == 2
-                  ? Colors.red
-                  : const Color(0xFF673AB7);
-      final pos = Offset(p.p.dx * size.width, p.p.dy * size.height);
-      final radius = size.width * (p.kind == 3 ? .032 : .024);
-      canvas.drawCircle(pos, radius, Paint()..color = color);
+    base(Offset(size.width*.2,size.height*.86), Offset(size.width*.8,size.height*.86),0);
+    base(Offset(size.width*.86,size.height*.2), Offset(size.width*.86,size.height*.8),1);
+    base(Offset(size.width*.2,size.height*.14), Offset(size.width*.8,size.height*.14),2);
+    base(Offset(size.width*.14,size.height*.2), Offset(size.width*.14,size.height*.8),3);
+
+    for (final hole in const [
+      Offset(.065,.065), Offset(.935,.065), Offset(.065,.935), Offset(.935,.935),
+    ]) {
+      final p = Offset(hole.dx * size.width, hole.dy * size.height);
+      canvas.drawCircle(p + const Offset(2, 4), size.width*.048, Paint()..color=Colors.black54);
+      canvas.drawCircle(p, size.width*.044, Paint()..color=Colors.black87);
+    }
+
+    for (final piece in pieces) {
+      if (piece.pocketed) continue;
+      final pos = Offset(piece.p.dx * size.width, piece.p.dy * size.height);
+      final radius = size.width * (piece.kind == 3 ? .033 : .024);
+      final baseColor = piece.kind == 0
+          ? const Color(0xFFF9F2DF)
+          : piece.kind == 1
+              ? const Color(0xFF171717)
+              : piece.kind == 2
+                  ? const Color(0xFFD92F3D)
+                  : const Color(0xFF7E57C2);
+      canvas.drawCircle(pos + Offset(1.5, radius*.35), radius*1.05, Paint()..color=Colors.black38);
       canvas.drawCircle(
         pos,
         radius,
         Paint()
-          ..color = Colors.black54
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
+          ..shader = RadialGradient(
+            colors: [Colors.white.withOpacity(.75), baseColor, Color.lerp(baseColor, Colors.black, .35)!],
+            stops: const [0, .38, 1],
+            center: const Alignment(-.35,-.35),
+          ).createShader(Rect.fromCircle(center: pos, radius: radius)),
+      );
+      canvas.drawCircle(
+        pos,
+        radius,
+        Paint()..color=Colors.black45..style=PaintingStyle.stroke..strokeWidth=1.2,
       );
     }
 
@@ -1289,15 +1369,13 @@ class _CarromPainter extends CustomPainter {
       canvas.drawLine(
         dragStart!,
         dragNow!,
-        Paint()
-          ..color = Colors.deepPurple
-          ..strokeWidth = 3,
+        Paint()..color=Colors.cyanAccent..strokeWidth=4..strokeCap=StrokeCap.round,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _CarromPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _Carrom3DPainterV08 oldDelegate) => true;
 }
 
 class LuckyDiceGameV08 extends StatefulWidget {
