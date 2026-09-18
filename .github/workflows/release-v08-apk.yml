@@ -1,0 +1,43 @@
+name: Publish v0.8 Direct APK
+
+on:
+  push:
+    branches: [v08-dev]
+    paths:
+      - '.github/workflows/release-v08-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified v0.8 APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/vinay1997mishra/voice-chat-app/actions/artifacts/10549481035/zip > /tmp/v08.zip
+          mkdir -p /tmp/v08
+          unzip -q /tmp/v08.zip -d /tmp/v08
+          APK=$(find /tmp/v08 -type f -name 'app-debug.apk' | head -1)
+          test -n "$APK"
+          cp "$APK" /tmp/voice-chat-v0.8.apk
+          ls -lh /tmp/voice-chat-v0.8.apk
+
+      - name: Publish direct install APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=v0.8-current
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" /tmp/voice-chat-v0.8.apk --clobber
+          else
+            gh release create "$TAG" /tmp/voice-chat-v0.8.apk               --target "8db1976c79f7e9c5e21d02d6c0f5fe8f3c2bf21f"               --title "Voice Chat v0.8 Current"               --notes "Verified v0.8 Android APK. Includes latest gifts and upgraded game suite. Android 5+."
+          fi
