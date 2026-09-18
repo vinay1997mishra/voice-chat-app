@@ -519,17 +519,15 @@ class _LudoBoardPainter extends CustomPainter {
   bool shouldRepaint(covariant _LudoBoardPainter oldDelegate) => true;
 }
 
-// ---------------- UNO ----------------
+// ---------------- UNO 4 PLAYER ----------------
 
 class _UnoCardData {
   const _UnoCardData(this.color, this.value);
   final String color;
   final String value;
   bool get wild => color == 'Wild';
-
   bool canPlayOn(_UnoCardData top, String activeColor) =>
       wild || color == activeColor || value == top.value;
-
   @override
   String toString() => color + ' ' + value;
 }
@@ -537,7 +535,6 @@ class _UnoCardData {
 class UnoGameV08 extends StatefulWidget {
   const UnoGameV08({super.key, required this.mode});
   final V08GameMode mode;
-
   @override
   State<UnoGameV08> createState() => _UnoGameV08State();
 }
@@ -545,14 +542,16 @@ class UnoGameV08 extends StatefulWidget {
 class _UnoGameV08State extends State<UnoGameV08> {
   final rng = Random();
   final deck = <_UnoCardData>[];
-  final player = <_UnoCardData>[];
-  final opponent = <_UnoCardData>[];
   final discard = <_UnoCardData>[];
+  final hands = List<List<_UnoCardData>>.generate(4, (_) => <_UnoCardData>[]);
   int turn = 0;
+  int direction = 1;
+  int? winner;
   String activeColor = 'Red';
-  String status = 'Your turn';
+  String status = 'Player 1 turn';
 
   bool get botMode => widget.mode == V08GameMode.soloBot;
+  bool get currentIsBot => botMode && turn != 0;
 
   @override
   void initState() {
@@ -560,7 +559,31 @@ class _UnoGameV08State extends State<UnoGameV08> {
     _newGame();
   }
 
+  String _name(int seat) {
+    if (!botMode) return 'Player ' + (seat + 1).toString();
+    return seat == 0 ? 'You' : 'Bot ' + seat.toString();
+  }
+
+  int _next([int steps = 1]) {
+    var value = turn;
+    for (var i = 0; i < steps; i++) {
+      value = (value + direction) % 4;
+      if (value < 0) value += 4;
+    }
+    return value;
+  }
+
   void _newGame() {
+    deck.clear();
+    discard.clear();
+    for (final hand in hands) {
+      hand.clear();
+    }
+    turn = 0;
+    direction = 1;
+    winner = null;
+    status = botMode ? 'Your turn' : 'Player 1 turn';
+
     for (final color in ['Red', 'Blue', 'Green', 'Yellow']) {
       for (var n = 0; n <= 9; n++) {
         deck.add(_UnoCardData(color, n.toString()));
@@ -576,8 +599,9 @@ class _UnoGameV08State extends State<UnoGameV08> {
       deck.add(const _UnoCardData('Wild', '+4'));
     }
     deck.shuffle(rng);
-    player.addAll(List.generate(7, (_) => deck.removeLast()));
-    opponent.addAll(List.generate(7, (_) => deck.removeLast()));
+    for (final hand in hands) {
+      hand.addAll(List.generate(7, (_) => deck.removeLast()));
+    }
     discard.add(deck.removeLast());
     while (discard.last.wild) {
       deck.insert(0, discard.removeLast());
@@ -601,26 +625,38 @@ class _UnoGameV08State extends State<UnoGameV08> {
     }
   }
 
-  Future<String> _chooseColor() async {
-    if (botMode && turn == 1) {
+  Color _colorFor(String color) {
+    if (color == 'Red') return const Color(0xFFE63B52);
+    if (color == 'Blue') return const Color(0xFF2D7EF7);
+    if (color == 'Green') return const Color(0xFF22B573);
+    if (color == 'Yellow') return const Color(0xFFFFBE2E);
+    return const Color(0xFF7B4DFF);
+  }
+
+  Future<String> _chooseColor(int seat) async {
+    if (botMode && seat != 0) {
       final counts = <String, int>{'Red': 0, 'Blue': 0, 'Green': 0, 'Yellow': 0};
-      for (final c in opponent) {
-        if (counts.containsKey(c.color)) counts[c.color] = counts[c.color]! + 1;
+      for (final card in hands[seat]) {
+        if (counts.containsKey(card.color)) {
+          counts[card.color] = counts[card.color]! + 1;
+        }
       }
-      return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+      return counts.entries.reduce((x, y) => x.value >= y.value ? x : y).key;
     }
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose color'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_name(seat) + ': choose color'),
         content: Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             for (final color in ['Red', 'Blue', 'Green', 'Yellow'])
               ActionChip(
+                avatar: CircleAvatar(backgroundColor: _colorFor(color)),
                 label: Text(color),
-                onPressed: () => Navigator.pop(context, color),
+                onPressed: () => Navigator.pop(dialogContext, color),
               ),
           ],
         ),
@@ -629,112 +665,166 @@ class _UnoGameV08State extends State<UnoGameV08> {
     return result ?? 'Red';
   }
 
+  void _scheduleBot() {
+    if (currentIsBot && winner == null) {
+      Future.delayed(const Duration(milliseconds: 600), _botPlay);
+    }
+  }
+
   Future<void> playCard(int index) async {
-    final hand = turn == 0 ? player : opponent;
+    if (winner != null) return;
+    final seat = turn;
+    final hand = hands[seat];
     if (index < 0 || index >= hand.length) return;
     final card = hand[index];
-    if (!card.canPlayOn(discard.last, activeColor)) return;
+    if (!card.canPlayOn(discard.last, activeColor)) {
+      if (!currentIsBot) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ye card abhi play nahi ho sakta')),
+        );
+      }
+      return;
+    }
 
     setState(() {
       hand.removeAt(index);
       discard.add(card);
       if (!card.wild) activeColor = card.color;
-      status = (turn == 0 ? 'You' : (botMode ? 'Bot' : 'Player 2')) +
-          ' played ' +
-          card.toString();
+      status = _name(seat) + ' played ' + card.value;
     });
 
     if (card.wild) {
-      final chosen = await _chooseColor();
+      final chosen = await _chooseColor(seat);
       if (!mounted) return;
       setState(() => activeColor = chosen);
     }
 
     if (hand.isEmpty) {
       setState(() {
-        status = (turn == 0 ? 'You' : (botMode ? 'Bot' : 'Player 2')) +
-            ' wins! 🎉';
+        winner = seat;
+        status = _name(seat) + ' wins! 🎉';
       });
       return;
     }
 
-    var skip = false;
-    if (card.value == '+4') {
-      setState(() => _drawTo(turn == 0 ? opponent : player, 4));
-      skip = true;
-    } else if (card.value == '+2') {
-      setState(() => _drawTo(turn == 0 ? opponent : player, 2));
-      skip = true;
-    } else if (card.value == 'Skip' || card.value == 'Reverse') {
-      // In a two-player match Reverse acts like Skip.
-      skip = true;
+    var steps = 1;
+    if (card.value == 'Reverse') {
+      direction = -direction;
+    } else if (card.value == 'Skip') {
+      steps = 2;
+    } else if (card.value == '+2' || card.value == '+4') {
+      final victim = _next();
+      _drawTo(hands[victim], card.value == '+4' ? 4 : 2);
+      steps = 2;
     }
-    if (!skip) setState(() => turn = 1 - turn);
 
-    if (botMode && turn == 1) {
-      Future.delayed(const Duration(milliseconds: 650), _botPlay);
-    }
+    setState(() {
+      turn = _next(steps);
+      status = _name(turn) + ' turn';
+    });
+    _scheduleBot();
   }
 
   void drawCard() {
-    if (botMode && turn == 1) return;
+    if (winner != null || currentIsBot) return;
     setState(() {
-      _drawTo(turn == 0 ? player : opponent, 1);
-      turn = 1 - turn;
-      status = turn == 0 ? 'Player 1 turn' : (botMode ? 'Bot turn' : 'Player 2 turn');
+      _drawTo(hands[turn], 1);
+      turn = _next();
+      status = _name(turn) + ' turn';
     });
-    if (botMode && turn == 1) {
-      Future.delayed(const Duration(milliseconds: 650), _botPlay);
-    }
+    _scheduleBot();
   }
 
   Future<void> _botPlay() async {
-    if (!mounted || turn != 1) return;
+    if (!mounted || !currentIsBot || winner != null) return;
+    final seat = turn;
+    final hand = hands[seat];
     final playable = <int>[];
-    for (var i = 0; i < opponent.length; i++) {
-      if (opponent[i].canPlayOn(discard.last, activeColor)) playable.add(i);
+    for (var i = 0; i < hand.length; i++) {
+      if (hand[i].canPlayOn(discard.last, activeColor)) playable.add(i);
     }
     if (playable.isEmpty) {
       setState(() {
-        _drawTo(opponent, 1);
-        turn = 0;
-        status = 'Bot drew • Your turn';
+        _drawTo(hand, 1);
+        turn = _next();
+        status = _name(seat) + ' drew • ' + _name(turn) + ' turn';
       });
+      _scheduleBot();
       return;
     }
     await playCard(playable.first);
-    if (mounted && turn == 0 && !status.contains('wins')) {
-      setState(() => status = 'Your turn');
-    }
   }
 
-  Color _colorFor(String color) {
-    if (color == 'Red') return Colors.red;
-    if (color == 'Blue') return Colors.blue;
-    if (color == 'Green') return Colors.green;
-    if (color == 'Yellow') return Colors.amber;
-    return Colors.deepPurple;
-  }
-
-  Widget _card(_UnoCardData card, {VoidCallback? onTap, bool hidden = false}) {
+  Widget _card3d(_UnoCardData card, {VoidCallback? onTap}) {
+    final base = _colorFor(card.color);
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 68,
-        height: 102,
-        margin: const EdgeInsets.all(4),
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: hidden ? const Color(0xFF2C1640) : _colorFor(card.color),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white70, width: 2),
-        ),
-        child: Center(
-          child: Text(
-            hidden ? 'UNO' : card.value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w900),
+      child: Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, .0015)
+          ..rotateX(-.07)
+          ..rotateY(.045),
+        child: Container(
+          width: 70,
+          height: 104,
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [base.withOpacity(.96), base.withOpacity(.52)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.white70, width: 2),
+            boxShadow: [
+              BoxShadow(color: base.withOpacity(.45), blurRadius: 13, offset: const Offset(0, 8)),
+              const BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 5)),
+            ],
           ),
+          child: Center(
+            child: Container(
+              width: 50,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(.16),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Center(
+                child: Text(
+                  card.value,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _seat(int seat) {
+    final active = turn == seat && winner == null;
+    final colors = [Colors.cyanAccent, Colors.pinkAccent, Colors.amberAccent, Colors.greenAccent];
+    return Expanded(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        key: Key('uno-seat-' + (seat + 1).toString() + '-v08'),
+        margin: const EdgeInsets.all(3),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+        decoration: BoxDecoration(
+          color: active ? colors[seat].withOpacity(.16) : Colors.black26,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
+          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.3), blurRadius: 12)] : null,
+        ),
+        child: Column(
+          children: [
+            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
+            Text(_name(seat), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+            Text(hands[seat].length.toString() + ' cards', style: const TextStyle(fontSize: 9)),
+          ],
         ),
       ),
     );
@@ -742,73 +832,97 @@ class _UnoGameV08State extends State<UnoGameV08> {
 
   @override
   Widget build(BuildContext context) {
-    final top = discard.last;
+    final humanCanPlay = winner == null && !currentIsBot;
     return Scaffold(
-      appBar: AppBar(title: const Text('UNO')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Text(status, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          const _FourSeatHeaderV08(game: 'UNO'),
-          Text(botMode ? 'Opponent cards: ' + opponent.length.toString() : 'Next player cards: ' + opponent.length.toString()),
-          SizedBox(
-            height: 116,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (var i = 0; i < opponent.length; i++)
-                  _card(
-                    opponent[i],
-                    hidden: botMode || turn == 0,
-                    onTap: !botMode && turn == 1 ? () => playCard(i) : null,
-                  ),
-              ],
-            ),
-          ),
-          const Divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: const Color(0xFF090E1D),
+      appBar: AppBar(title: const Text('UNO • 4 Player 3D')),
+      body: _GameSceneV08(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(12),
             children: [
-              _card(top),
-              const SizedBox(width: 12),
-              Column(
-                children: [
-                  Text('Active: ' + activeColor),
-                  FilledButton.icon(
-                    key: const Key('uno-draw-v08'),
-                    onPressed: !botMode || turn == 0 ? drawCard : null,
-                    icon: const Icon(Icons.add_box_rounded),
-                    label: const Text('Draw'),
-                  ),
-                ],
+              Container(
+                key: const Key('uno-four-player-v08'),
+                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
               ),
+              const SizedBox(height: 12),
+              Card(
+                color: Colors.white10,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    children: [
+                      Text(status, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                      Text('Direction: ' + (direction == 1 ? '↻' : '↺') + ' • Active: ' + activeColor),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _card3d(discard.last),
+                          const SizedBox(width: 16),
+                          Column(
+                            children: [
+                              Container(
+                                width: 62,
+                                height: 92,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [Color(0xFF32104F), Color(0xFF11182D)]),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.white38, width: 2),
+                                  boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 7))],
+                                ),
+                                child: Center(child: Text(deck.length.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+                              ),
+                              const SizedBox(height: 7),
+                              FilledButton.icon(
+                                key: const Key('uno-draw-v08'),
+                                onPressed: humanCanPlay ? drawCard : null,
+                                icon: const Icon(Icons.add_box_rounded),
+                                label: const Text('Draw'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                winner != null ? _name(winner!) + ' won the match' : _name(turn) + ' hand',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              SizedBox(
+                height: 122,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (var i = 0; i < hands[turn].length; i++)
+                      _card3d(hands[turn][i], onTap: humanCanPlay ? () => playCard(i) : null),
+                  ],
+                ),
+              ),
+              if (!botMode && winner == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Phone ' + _name(turn) + ' ko de do • current player ki hand hi visible hai.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (winner != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: FilledButton.icon(
+                    onPressed: () => setState(_newGame),
+                    icon: const Icon(Icons.replay_rounded),
+                    label: const Text('Play Again'),
+                  ),
+                ),
             ],
           ),
-          const Divider(),
-          Text(
-            turn == 0 ? 'Your hand' : (botMode ? 'Waiting for bot...' : 'Player 1 hand'),
-            style: const TextStyle(fontWeight: FontWeight.w900),
-          ),
-          SizedBox(
-            height: 116,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (var i = 0; i < player.length; i++)
-                  _card(
-                    player[i],
-                    hidden: !botMode && turn == 1,
-                    onTap: turn == 0 ? () => playCard(i) : null,
-                  ),
-              ],
-            ),
-          ),
-          if (!botMode && turn == 1)
-            const Text(
-              'Phone Player 2 ko de do. Upar wali cards se play kare.',
-              textAlign: TextAlign.center,
-            ),
-        ],
+        ),
       ),
     );
   }
