@@ -21,28 +21,6 @@ class _GameSceneV08 extends StatelessWidget {
 
 
 
-class _FourSeatHeaderV08 extends StatelessWidget {
-  const _FourSeatHeaderV08({required this.game});
-  final String game;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        _seat('P1', Icons.person, true),
-        _seat('P2', Icons.smart_toy, false),
-        Column(children:[Text(game,style:const TextStyle(fontWeight:FontWeight.w900)),const Text('4-seat table',style:TextStyle(fontSize:11))]),
-        _seat('P3', Icons.smart_toy, false),
-        _seat('P4', Icons.smart_toy, false),
-      ]),
-    ),
-  );
-  Widget _seat(String n, IconData i, bool active)=>Column(children:[
-    CircleAvatar(radius:18,child:Icon(i,size:20)),
-    Text(n,style:TextStyle(fontSize:11,fontWeight:active?FontWeight.w900:FontWeight.w500))
-  ]);
-}
-
 class GamesCenterV08 extends StatelessWidget {
   const GamesCenterV08({super.key});
   static const games = <(String, IconData)>[
