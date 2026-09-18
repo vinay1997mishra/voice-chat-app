@@ -898,7 +898,7 @@ class _V07HomeState extends State<V07Home> {
   }
 
   Future<void> _openRoom(RoomData room) async {
-    if (room.locked) {
+    if (room.locked && !room.ownedByMe) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (_) => _RouteTextEditorV08(
@@ -1486,7 +1486,9 @@ class _RoomV07State extends State<RoomV07> {
             title: const Text('Room Lock'),
             subtitle: Text(
               widget.room.locked
-                  ? 'Locked with a 4–6 digit PIN'
+                  ? (widget.room.ownedByMe
+                      ? 'Locked • Owner entry does not need PIN'
+                      : 'Locked with a 4–6 digit PIN')
                   : 'Anyone can enter without a PIN',
             ),
             value: widget.room.locked,
