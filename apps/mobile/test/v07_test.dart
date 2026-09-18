@@ -24,6 +24,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ludo'), findsWidgets);
     expect(find.byKey(const Key('ludo-roll-v07')), findsOneWidget);
+    expect(find.byKey(const Key('ludo-board-v07')), findsOneWidget);
+  });
+
+  testWidgets('UNO exposes real action-card gameplay surface', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: UnoGameV07(mode: V07GameMode.soloBot)));
+    expect(find.text('UNO'), findsWidgets);
+    expect(find.byKey(const Key('uno-draw-v07')), findsOneWidget);
+    expect(find.textContaining('Bot cards:'), findsOneWidget);
+    expect(find.text('Your hand'), findsOneWidget);
   });
 
   testWidgets('final v0.7 includes shell wallet and room tools', (tester) async {
