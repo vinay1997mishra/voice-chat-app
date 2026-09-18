@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'games_v07.dart';
 
 void main() => runApp(const VoiceChatV07());
 
@@ -406,7 +407,12 @@ class DiscoverV06 extends StatelessWidget {
               children: [
                 for (final item in items)
                   InkWell(
-                    onTap: () => showModalBottomSheet<void>(
+                    onTap: () {
+                      if (item.$1 == 'Game Center') {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const GamesCenterV07()));
+                        return;
+                      }
+                      showModalBottomSheet<void>(
                       context: context,
                       showDragHandle: true,
                       builder: (_) => SafeArea(
@@ -440,7 +446,8 @@ class DiscoverV06 extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ),
+                    );
+                    },
                     borderRadius: BorderRadius.circular(18),
                     child: Card(
                       child: Column(
