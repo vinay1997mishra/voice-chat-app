@@ -7,8 +7,9 @@ on:
       - 'apps/mobile/lib/main_v08.dart'
       - 'apps/mobile/lib/gift_catalog_v08.dart'
       - 'apps/mobile/lib/gift_effects_v08.dart'
-      - 'apps/mobile/lib/games_v07.dart'
+      - 'apps/mobile/lib/games_v08.dart'
       - 'apps/mobile/test/v08_test.dart'
+      - 'apps/mobile/test/games_v08_test.dart'
       - 'apps/mobile/test/gift_catalog_v08_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/android-v08-apk.yml'
@@ -53,13 +54,14 @@ jobs:
 
       - name: Analyze v0.8
         working-directory: /tmp/voice_chat_v08
-        run: flutter analyze lib/main_v08.dart lib/gift_catalog_v08.dart lib/gift_effects_v08.dart --no-fatal-infos
+        run: flutter analyze lib/main_v08.dart lib/games_v08.dart lib/gift_catalog_v08.dart lib/gift_effects_v08.dart --no-fatal-infos
 
       - name: Test v0.8 gifts and gameplay regression
         working-directory: /tmp/voice_chat_v08
         run: |
           flutter test test/gift_catalog_v08_test.dart
           flutter test test/v08_test.dart
+          flutter test test/games_v08_test.dart
 
       - name: Build universal Android 5+ debug APK
         working-directory: /tmp/voice_chat_v08
