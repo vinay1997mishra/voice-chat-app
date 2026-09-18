@@ -150,11 +150,20 @@ class _V06HomeState extends State<V06Home> {
             padding: const EdgeInsets.all(18),
             children: [
               Row(children: [
-                const Text('Mine', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-                const SizedBox(width: 20),
-                const Text('Popular', style: TextStyle(fontSize: 22, color: Colors.white60)),
-                const Spacer(),
-                IconButton(key: const Key('create-room-v06'), onPressed: _createRoom, icon: const Icon(Icons.add_circle_rounded, size: 30)),
+                const Text('Mine', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Popular',
+                    style: TextStyle(fontSize: 20, color: Colors.white60),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('create-room-v06'),
+                  onPressed: _createRoom,
+                  icon: const Icon(Icons.add_circle_rounded, size: 30),
+                ),
               ]),
               const SizedBox(height: 18),
               for (final room in rooms)
