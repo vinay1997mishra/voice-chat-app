@@ -1,0 +1,83 @@
+name: Publish v0.7 Direct APK
+
+on:
+  push:
+    branches: [v07-dev]
+    paths:
+      - '.github/workflows/release-v07-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-v07-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter compatible with Android 5+
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+          cache: true
+
+      - name: Create Android 5+ runner
+        run: |
+          flutter create --platforms=android --org com.voicechat.compat.v07 --project-name voice_chat_app /tmp/voice_chat_v07_release
+          rm -rf /tmp/voice_chat_v07_release/lib /tmp/voice_chat_v07_release/test
+          cp -R apps/mobile/lib /tmp/voice_chat_v07_release/lib
+          cp -R apps/mobile/test /tmp/voice_chat_v07_release/test
+          cp apps/mobile/pubspec.yaml /tmp/voice_chat_v07_release/pubspec.yaml
+
+          if [ -f /tmp/voice_chat_v07_release/android/app/build.gradle.kts ]; then
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' /tmp/voice_chat_v07_release/android/app/build.gradle.kts
+          fi
+          if [ -f /tmp/voice_chat_v07_release/android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' /tmp/voice_chat_v07_release/android/app/build.gradle
+          fi
+
+      - name: Get dependencies
+        working-directory: /tmp/voice_chat_v07_release
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: /tmp/voice_chat_v07_release
+        run: flutter analyze lib/main_v07.dart --no-fatal-infos
+
+      - name: Test
+        working-directory: /tmp/voice_chat_v07_release
+        run: flutter test test/v07_test.dart
+
+      - name: Build universal APK
+        working-directory: /tmp/voice_chat_v07_release
+        run: flutter build apk --debug -t lib/main_v07.dart
+
+      - name: Verify APK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS=$(ls -1d "$SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          APK=/tmp/voice_chat_v07_release/build/app/outputs/flutter-apk/app-debug.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee /tmp/v07-release-badging.txt
+          grep "sdkVersion:'21'" /tmp/v07-release-badging.txt
+
+      - name: Publish direct APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=v0.7-current
+          APK=/tmp/voice_chat_v07_release/build/app/outputs/flutter-apk/app-debug.apk
+          cp "$APK" /tmp/voice-chat-v0.7-current.apk
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" /tmp/voice-chat-v0.7-current.apk --clobber
+          else
+            gh release create "$TAG" /tmp/voice-chat-v0.7-current.apk \
+              --target "${GITHUB_SHA}" \
+              --title "Voice Chat v0.7 Current" \
+              --notes "Current tested v0.7 local-demo Android APK. Android 5+."
+          fi
