@@ -1450,16 +1450,370 @@ class _RoomV07State extends State<RoomV07> {
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
           crossAxisCount: 4,
           children: [
-            _QuickTool(Icons.settings_rounded, 'Settings', () { Navigator.pop(sheetContext); _settings(); }),
-            _QuickTool(Icons.card_giftcard_rounded, 'LP', () { Navigator.pop(sheetContext); _luckyBag(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.workspace_premium_rounded, 'Owner', () {
+                Navigator.pop(sheetContext);
+                _ownerPanel();
+              }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.settings_rounded, 'Settings', () { Navigator.pop(sheetContext); _settings(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.card_giftcard_rounded, 'LP', () { Navigator.pop(sheetContext); _luckyBag(); }),
             _QuickTool(Icons.sports_esports_rounded, 'Game', () { Navigator.pop(sheetContext); _gameCenter(); }),
-            _QuickTool(Icons.wallpaper_rounded, 'Room DP', () { Navigator.pop(sheetContext); _changeRoomDp(); }),
-            _QuickTool(Icons.image_rounded, 'Background', () { Navigator.pop(sheetContext); _backgrounds(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.wallpaper_rounded, 'Room DP', () { Navigator.pop(sheetContext); _changeRoomDp(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.image_rounded, 'Background', () { Navigator.pop(sheetContext); _backgrounds(); }),
             _QuickTool(Icons.music_note_rounded, 'Music', () { Navigator.pop(sheetContext); _music(); }),
             _QuickTool(Icons.people_alt_rounded, 'Members', () { Navigator.pop(sheetContext); _members(); }),
-            _QuickTool(Icons.admin_panel_settings_rounded, 'Admins', () { Navigator.pop(sheetContext); _admins(); }),
-            _QuickTool(Icons.block_rounded, 'Block', () { Navigator.pop(sheetContext); _blockList(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.admin_panel_settings_rounded, 'Admins', () { Navigator.pop(sheetContext); _admins(); }),
+            if (widget.room.ownedByMe)
+              _QuickTool(Icons.block_rounded, 'Block', () { Navigator.pop(sheetContext); _blockList(); }),
             _QuickTool(Icons.more_horiz_rounded, 'More', () { Navigator.pop(sheetContext); _more(); }),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  void _ownerPanel() {
+    if (!widget.room.ownedByMe) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Only the room owner can open Owner Panel')),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setLocal) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .88,
+            child: ListView(
+              key: const Key('owner-panel-v08'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              children: [
+                const Text(
+                  'Room Owner Panel',
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Text(widget.room.name + ' • ID ' + widget.room.id),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      avatar: Icon(
+                        widget.room.locked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                        size: 18,
+                      ),
+                      label: Text(widget.room.locked ? 'Locked' : 'Open'),
+                    ),
+                    Chip(label: Text(widget.room.category)),
+                    Chip(label: Text(widget.room.seatCount.toString() + ' seats')),
+                    Chip(label: Text(inviteMode ? 'Invite Mode' : 'Open Seats')),
+                  ],
+                ),
+                const Divider(height: 28),
+                const Text(
+                  'Room Controls',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                ListTile(
+                  key: const Key('owner-edit-name-v08'),
+                  leading: const Icon(Icons.edit_rounded),
+                  title: const Text('Room Name'),
+                  subtitle: Text(widget.room.name),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _editRoomName();
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Invite Mode'),
+                  subtitle: const Text('Control whether seats need an invite'),
+                  value: inviteMode,
+                  onChanged: (value) {
+                    setState(() {
+                      inviteMode = value;
+                      widget.room.inviteMode = value;
+                    });
+                    setLocal(() {});
+                  },
+                ),
+                ListTile(
+                  key: const Key('owner-room-lock-v08'),
+                  leading: Icon(widget.room.locked ? Icons.lock_reset_rounded : Icons.lock_rounded),
+                  title: Text(widget.room.locked ? 'Change Room PIN' : 'Lock Room'),
+                  subtitle: Text(
+                    widget.room.locked
+                        ? 'Owner never needs the PIN to enter or unlock'
+                        : 'Set any 4–6 digit numeric PIN',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _editPassword(forceEnable: true);
+                  },
+                ),
+                if (widget.room.locked)
+                  ListTile(
+                    key: const Key('owner-remove-lock-v08'),
+                    leading: const Icon(Icons.lock_open_rounded),
+                    title: const Text('Remove Room Lock'),
+                    subtitle: const Text('No PIN required for the owner'),
+                    onTap: () {
+                      setState(() {
+                        widget.room.locked = false;
+                        widget.room.pin = '';
+                      });
+                      Navigator.pop(sheetContext);
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        const SnackBar(content: Text('Room lock removed')),
+                      );
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.campaign_rounded),
+                  title: const Text('Edit Room Notice'),
+                  subtitle: Text(notice),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _editNotice();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.category_rounded),
+                  title: const Text('Room Category'),
+                  subtitle: Text(widget.room.category),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _editRoomCategory();
+                  },
+                ),
+                const Divider(height: 28),
+                const Text(
+                  'People & Moderation',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people_alt_rounded),
+                  title: const Text('Members'),
+                  subtitle: Text(seats.whereType<String>().length.toString() + ' user(s) on seats'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _members();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings_rounded),
+                  title: const Text('Admins'),
+                  subtitle: Text(admins.length.toString() + ' admin(s)'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _admins();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.block_rounded),
+                  title: const Text('Block List'),
+                  subtitle: Text(blocked.length.toString() + ' blocked user(s)'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockList();
+                  },
+                ),
+                ListTile(
+                  key: const Key('owner-unlock-seats-v08'),
+                  leading: const Icon(Icons.event_seat_rounded),
+                  title: const Text('Unlock All Seats'),
+                  subtitle: Text(lockedSeats.length.toString() + ' seat(s) locked'),
+                  onTap: () {
+                    setState(() => lockedSeats.clear());
+                    setLocal(() {});
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.mic_off_rounded),
+                  title: const Text('Mute All Guests'),
+                  subtitle: const Text('Owner/Admin seats stay unchanged'),
+                  onTap: () {
+                    setState(() {
+                      for (var i = 0; i < seats.length; i++) {
+                        final name = seats[i];
+                        if (name != null && name != 'Owner' && name != 'Admin') {
+                          mutedSeats.add(i);
+                        }
+                      }
+                    });
+                    setLocal(() {});
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services_rounded),
+                  title: const Text('Clear Room Chat'),
+                  onTap: () {
+                    setState(() {
+                      chat
+                        ..clear()
+                        ..add('System: Room chat was cleared by the owner');
+                    });
+                    setLocal(() {});
+                  },
+                ),
+                const Divider(height: 28),
+                const Text(
+                  'Room Experience',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.card_giftcard_rounded),
+                  title: const Text('Lucky Bag (LP)'),
+                  subtitle: Text(
+                    _lpRemaining > 0
+                        ? _lpRemaining.toString() + ' LP active'
+                        : 'Create a Lucky Bag',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _luckyBag();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.wallpaper_rounded),
+                  title: const Text('Room DP'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _changeRoomDp();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.image_rounded),
+                  title: const Text('Background'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _backgrounds();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.music_note_rounded),
+                  title: const Text('Music'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _music();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sports_esports_rounded),
+                  title: const Text('Game Center'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _gameCenter();
+                  },
+                ),
+                const Divider(height: 28),
+                const Text(
+                  'AI Assistant',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                ListTile(
+                  key: const Key('ai-gift-assistant-v08'),
+                  leading: const Icon(Icons.auto_awesome_rounded),
+                  title: const Text('AI Gift Assistant'),
+                  subtitle: const Text(
+                    'Suggest a recipient + gift. Sending always asks for confirmation.',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _aiGiftAssistant();
+                  },
+                ),
+                const Divider(height: 28),
+                ListTile(
+                  key: const Key('owner-close-room-v08'),
+                  leading: const Icon(Icons.delete_forever_rounded),
+                  title: const Text('Close My Room'),
+                  subtitle: const Text('Close this room so you can create another one'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _closeOwnedRoom();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _editRoomName() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _RouteTextEditorV08(
+        initialText: widget.room.name,
+        builder: (dialogContext, controller) => AlertDialog(
+          title: const Text('Edit Room Name'),
+          content: TextField(
+            key: const Key('owner-room-name-input-v08'),
+            controller: controller,
+            maxLength: 40,
+            decoration: const InputDecoration(
+              labelText: 'Room name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) return;
+                setState(() => widget.room.name = value);
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editRoomCategory() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'Room Category',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            for (final category in const ['Friends', 'Music', 'Game', 'Official'])
+              RadioListTile<String>(
+                value: category,
+                groupValue: widget.room.category,
+                title: Text(category),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => widget.room.category = value);
+                  Navigator.pop(sheetContext);
+                },
+              ),
           ],
         ),
       ),
