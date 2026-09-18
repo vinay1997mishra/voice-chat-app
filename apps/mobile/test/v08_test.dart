@@ -121,8 +121,7 @@ void main() {
     await tester.tap(find.byKey(const Key('create-room-submit-v06')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('• Locked'), findsOneWidget);
-    expect(find.textContaining('• My Room'), findsOneWidget);
+    expect(find.textContaining('• Locked • My Room'), findsOneWidget);
 
     await tester.tap(find.text('My Voice Room'));
     await tester.pumpAndSettle();
@@ -142,7 +141,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('room-lock-switch-v08')), findsNothing);
-    expect(find.text('Only the room owner can change it'), findsOneWidget);
+    expect(
+      find.textContaining('Only the room owner can change it'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('room lock sets a 4-6 digit PIN and disables cleanly',
