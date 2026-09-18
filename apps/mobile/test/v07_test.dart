@@ -78,6 +78,8 @@ void main() {
 
     await tester.tap(find.text('Message'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Inbox'));
+    await tester.pumpAndSettle();
     expect(find.text('Gift sent to ID 10000000'), findsOneWidget);
 
     await tester.tap(find.text('Me'));
@@ -89,4 +91,60 @@ void main() {
     expect(find.text('Gift sent: Rose'), findsOneWidget);
     expect(find.text('Diamond → Coins'), findsOneWidget);
   });
+  test('local economy tracks sent and received gifts safely', () {
+    final economy = DemoEconomy();
+    final recipient = economy.users[2];
+    final beforeCoins = economy.coins;
+    final beforeDiamonds = recipient.diamonds;
+
+    expect(economy.sendGift(economy.gifts.first, recipient, 'ROOM1'), isTrue);
+    expect(economy.coins, beforeCoins - economy.gifts.first.coins);
+    expect(recipient.diamonds, beforeDiamonds + economy.gifts.first.coins);
+    expect(economy.giftHistory.first.direction, 'Sent');
+    expect(economy.giftHistory.first.toId, recipient.id);
+
+    final myDiamonds = economy.diamonds;
+    economy.simulateIncomingGift();
+    expect(economy.diamonds, greaterThan(myDiamonds));
+    expect(economy.giftHistory.first.direction, 'Received');
+  });
+
+  testWidgets('VIP 1-11, store, bag, level and settings open', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const VoiceChatV07());
+
+    await tester.tap(find.text('Me'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('VIP'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('VIP 1–11'), findsOneWidget);
+    expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
+    Navigator.of(tester.element(find.text('VIP 1–11'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Store'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gift Catalog'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Gift Catalog'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Bag'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Equipped:'), findsOneWidget);
+    Navigator.of(tester.element(find.textContaining('Equipped:'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Level'));
+    await tester.pumpAndSettle();
+    expect(find.text('User Level'), findsOneWidget);
+    Navigator.of(tester.element(find.text('User Level'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('3D Effects'), findsOneWidget);
+    expect(find.text('Allow Private Messages'), findsOneWidget);
+  });
+
 }
