@@ -176,6 +176,14 @@ List<GiftV08> get allGiftsV08 => <GiftV08>[
       ...flagGiftsV08,
     ];
 
+
+String flagEmojiV08(String code) {
+  final upper = code.toUpperCase();
+  if (upper.length != 2) return '🏳️';
+  return String.fromCharCodes(
+    upper.codeUnits.map((unit) => 0x1F1E6 + unit - 65),
+  );
+}
 String formatGiftCoinsV08(int coins) {
   if (coins >= 1000000) {
     final value = coins / 1000000;
