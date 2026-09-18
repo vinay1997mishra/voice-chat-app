@@ -1393,11 +1393,50 @@ class _RoomV07State extends State<RoomV07> {
                 );
               },
             ),
-          ListTile(title: Text(isLocked ? 'Unlock Seat' : 'Lock Seat'), leading: Icon(isLocked ? Icons.lock_open : Icons.lock), onTap: () { setState(() => isLocked ? lockedSeats.remove(i) : lockedSeats.add(i)); Navigator.pop(sheetContext); }),
-          ListTile(title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'), leading: Icon(isMuted ? Icons.mic : Icons.mic_off), onTap: () { setState(() => isMuted ? mutedSeats.remove(i) : mutedSeats.add(i)); Navigator.pop(sheetContext); }),
-          if (!isLocked) ListTile(title: const Text('Go to Seat'), leading: const Icon(Icons.event_seat_rounded), onTap: () { setState(() { if (mySeat != null) seats[mySeat!] = null; seats[i] = 'You'; mySeat = i; }); Navigator.pop(sheetContext); }),
-          if (seats[i] != null && seats[i] != 'Owner') ListTile(title: const Text('Move to Audience'), leading: const Icon(Icons.keyboard_arrow_down_rounded), onTap: () { setState(() => seats[i] = null); Navigator.pop(sheetContext); }),
-          if (seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
+          if (widget.room.ownedByMe)
+            ListTile(
+              title: Text(isLocked ? 'Unlock Seat' : 'Lock Seat'),
+              leading: Icon(isLocked ? Icons.lock_open : Icons.lock),
+              onTap: () {
+                setState(() => isLocked ? lockedSeats.remove(i) : lockedSeats.add(i));
+                Navigator.pop(sheetContext);
+              },
+            ),
+          if (widget.room.ownedByMe)
+            ListTile(
+              title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'),
+              leading: Icon(isMuted ? Icons.mic : Icons.mic_off),
+              onTap: () {
+                setState(() => isMuted ? mutedSeats.remove(i) : mutedSeats.add(i));
+                Navigator.pop(sheetContext);
+              },
+            ),
+          if (!isLocked && (seats[i] == null || seats[i] == 'You'))
+            ListTile(
+              title: const Text('Go to Seat'),
+              leading: const Icon(Icons.event_seat_rounded),
+              onTap: () {
+                setState(() {
+                  if (mySeat != null) seats[mySeat!] = null;
+                  seats[i] = 'You';
+                  mySeat = i;
+                });
+                Navigator.pop(sheetContext);
+              },
+            ),
+          if (seats[i] == 'You' || (widget.room.ownedByMe && seats[i] != null && seats[i] != 'Owner'))
+            ListTile(
+              title: const Text('Move to Audience'),
+              leading: const Icon(Icons.keyboard_arrow_down_rounded),
+              onTap: () {
+                setState(() {
+                  if (seats[i] == 'You') mySeat = null;
+                  seats[i] = null;
+                });
+                Navigator.pop(sheetContext);
+              },
+            ),
+          if (widget.room.ownedByMe && seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
             ListTile(
               title: Text(admins.contains(seats[i]) ? 'Remove Admin' : 'Make Admin'),
               leading: const Icon(Icons.admin_panel_settings_rounded),
@@ -1409,7 +1448,7 @@ class _RoomV07State extends State<RoomV07> {
                 Navigator.pop(sheetContext);
               },
             ),
-          if (seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
+          if (widget.room.ownedByMe && seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
             ListTile(
               title: const Text('Block User'),
               leading: const Icon(Icons.block_rounded),
@@ -1422,7 +1461,7 @@ class _RoomV07State extends State<RoomV07> {
                 Navigator.pop(sheetContext);
               },
             ),
-          if (seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
+          if (widget.room.ownedByMe && seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
             ListTile(
               title: const Text('Kick 24h'),
               leading: const Icon(Icons.person_off_rounded),
