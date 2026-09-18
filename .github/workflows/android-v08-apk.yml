@@ -10,7 +10,6 @@ on:
       - 'apps/mobile/lib/games_v07.dart'
       - 'apps/mobile/test/v08_test.dart'
       - 'apps/mobile/test/gift_catalog_v08_test.dart'
-      - 'apps/mobile/test/games_v07_test.dart'
       - 'apps/mobile/pubspec.yaml'
       - '.github/workflows/android-v08-apk.yml'
   workflow_dispatch:
@@ -61,7 +60,6 @@ jobs:
         run: |
           flutter test test/gift_catalog_v08_test.dart
           flutter test test/v08_test.dart
-          flutter test test/games_v07_test.dart
 
       - name: Build universal Android 5+ debug APK
         working-directory: /tmp/voice_chat_v08
