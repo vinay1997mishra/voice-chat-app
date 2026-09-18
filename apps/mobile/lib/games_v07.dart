@@ -3,16 +3,57 @@ import 'package:flutter/material.dart';
 
 enum V07GameMode { soloBot, localMulti }
 
+class GamesCenterV07 extends StatelessWidget {
+  const GamesCenterV07({super.key});
+  static const games = <(String, IconData)>[
+    ('Ludo', Icons.casino_rounded),
+    ('UNO', Icons.style_rounded),
+    ('Carrom', Icons.adjust_rounded),
+    ('Lucky Dice', Icons.casino_outlined),
+    ('Lucky Wheel', Icons.track_changes_rounded),
+    ('Rock Paper Scissors', Icons.back_hand_rounded),
+    ('Teen Patti', Icons.playing_cards_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Game Center')),
+    body: GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2, childAspectRatio: 1.15, crossAxisSpacing: 12, mainAxisSpacing: 12),
+      itemCount: games.length,
+      itemBuilder: (context, i) {
+        final g=games[i];
+        return Card(child: InkWell(
+          key: Key('game-'+g.$1.toLowerCase().replaceAll(' ','-')+'-v07'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GameLauncherV07(game:g.$1))),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children:[
+            Icon(g.$2,size:42), const SizedBox(height:10),
+            Text(g.$1,textAlign:TextAlign.center,style:const TextStyle(fontWeight:FontWeight.w900)),
+          ]),
+        ));
+      },
+    ),
+  );
+}
+
 class GameLauncherV07 extends StatelessWidget {
   const GameLauncherV07({super.key, required this.game});
   final String game;
 
   void _open(BuildContext context, V07GameMode mode) {
-    final Widget page = game == 'Ludo'
-        ? LudoGameV07(mode: mode)
-        : game == 'UNO'
-            ? UnoGameV07(mode: mode)
-            : CarromGameV07(mode: mode);
+    final Widget page = switch (game) {
+      'Ludo' => LudoGameV07(mode: mode),
+      'UNO' => UnoGameV07(mode: mode),
+      'Carrom' => CarromGameV07(mode: mode),
+      'Lucky Dice' => LuckyDiceGameV07(mode: mode),
+      'Lucky Wheel' => LuckyWheelGameV07(mode: mode),
+      'Rock Paper Scissors' => RpsGameV07(mode: mode),
+      'Teen Patti' => TeenPattiGameV07(mode: mode),
+      _ => LudoGameV07(mode: mode),
+    };
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
@@ -1078,4 +1119,36 @@ class _CarromPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CarromPainter oldDelegate) => true;
+}
+
+class LuckyDiceGameV07 extends StatefulWidget {
+  const LuckyDiceGameV07({super.key, required this.mode}); final V07GameMode mode;
+  @override State<LuckyDiceGameV07> createState()=>_LuckyDiceGameV07State();
+}
+class _LuckyDiceGameV07State extends State<LuckyDiceGameV07> {
+  final r=Random(); int you=0,other=0,round=0; String status='Roll to start';
+  void roll(){ final a=r.nextInt(6)+1,b=r.nextInt(6)+1; setState((){round++; if(a>b)you++; if(b>a)other++; status='You: $a • ${widget.mode==V07GameMode.soloBot?'Bot':'P2'}: $b';});}
+  @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Lucky Dice')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(status,style:const TextStyle(fontSize:24,fontWeight:FontWeight.w900)),Text('Score $you - $other • Round $round'),const SizedBox(height:18),FilledButton.icon(key:const Key('lucky-dice-roll-v07'),onPressed:roll,icon:const Icon(Icons.casino),label:const Text('Roll Dice'))])));
+}
+class LuckyWheelGameV07 extends StatefulWidget {
+ const LuckyWheelGameV07({super.key,required this.mode}); final V07GameMode mode;
+ @override State<LuckyWheelGameV07> createState()=>_LuckyWheelGameV07State();
+}
+class _LuckyWheelGameV07State extends State<LuckyWheelGameV07>{
+ final r=Random(); final prizes=['10 points','25 points','50 points','100 points','Bonus','Try Again']; String result='Spin the wheel';
+ void spin()=>setState(()=>result=prizes[r.nextInt(prizes.length)]);
+ @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Lucky Wheel')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Container(width:220,height:220,decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(width:10)),child:Center(child:Text(result,textAlign:TextAlign.center,style:const TextStyle(fontSize:25,fontWeight:FontWeight.w900)))),const SizedBox(height:20),FilledButton(key:const Key('lucky-wheel-spin-v07'),onPressed:spin,child:const Text('SPIN'))])));
+}
+class RpsGameV07 extends StatefulWidget {const RpsGameV07({super.key,required this.mode});final V07GameMode mode;@override State<RpsGameV07> createState()=>_RpsGameV07State();}
+class _RpsGameV07State extends State<RpsGameV07>{
+ final r=Random(); final choices=['Rock','Paper','Scissors']; String result='Choose your move'; int wins=0,losses=0;
+ void play(String me){final bot=choices[r.nextInt(3)]; final win=(me=='Rock'&&bot=='Scissors')||(me=='Paper'&&bot=='Rock')||(me=='Scissors'&&bot=='Paper'); setState((){if(me==bot)result='Draw • $bot';else if(win){wins++;result='You win • opponent: $bot';}else{losses++;result='Opponent wins • $bot';}});}
+ @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Rock Paper Scissors')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(result,style:const TextStyle(fontSize:22,fontWeight:FontWeight.w900)),Text('Wins $wins • Losses $losses'),const SizedBox(height:16),Wrap(spacing:10,children:[for(final x in choices)FilledButton(onPressed:()=>play(x),child:Text(x))])])));
+}
+class TeenPattiGameV07 extends StatefulWidget {const TeenPattiGameV07({super.key,required this.mode});final V07GameMode mode;@override State<TeenPattiGameV07> createState()=>_TeenPattiGameV07State();}
+class _TeenPattiGameV07State extends State<TeenPattiGameV07>{
+ final r=Random(); List<int> hand=[]; String rank='';
+ void deal(){final cards=<int>{};while(cards.length<3)cards.add(r.nextInt(52)); final h=cards.toList(); final vals=h.map((x)=>x%13+2).toList()..sort(); final suits=h.map((x)=>x~/13).toList(); final same=vals.toSet().length==1,pair=vals.toSet().length==2,color=suits.toSet().length==1,seq=(vals[2]-vals[1]==1&&vals[1]-vals[0]==1); setState((){hand=h;rank=same?'Trail':color&&seq?'Pure Sequence':seq?'Sequence':color?'Color':pair?'Pair':'High Card';});}
+ String card(int x)=>['♠','♥','♦','♣'][x~/13]+(['2','3','4','5','6','7','8','9','10','J','Q','K','A'][x%13]);
+ @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Teen Patti Practice')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[const Text('Practice only • no betting or cash rewards'),const SizedBox(height:14),Text(hand.isEmpty?'Deal cards':hand.map(card).join('   '),style:const TextStyle(fontSize:30,fontWeight:FontWeight.w900)),Text(rank,style:const TextStyle(fontSize:22)),const SizedBox(height:18),FilledButton(key:const Key('teen-patti-deal-v07'),onPressed:deal,child:const Text('Deal'))])));
 }
