@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'games_v07.dart';
-import 'games_v07.dart';
 
 void main() => runApp(const VoiceChatV07());
 
@@ -410,7 +409,12 @@ class DiscoverV06 extends StatelessWidget {
                   InkWell(
                     onTap: () {
                       if (item.$1 == 'Game Center') {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const GamesCenterV07()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const GameLauncherV07(game: 'Ludo'),
+                          ),
+                        );
                         return;
                       }
                       showModalBottomSheet<void>(
