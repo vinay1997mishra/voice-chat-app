@@ -191,10 +191,14 @@ void main() {
     expect(find.byKey(const Key('owner-panel-v08')), findsOneWidget);
     expect(find.text('Room Owner Panel'), findsOneWidget);
     expect(find.text('Room Controls'), findsOneWidget);
-    expect(find.text('People & Moderation'), findsOneWidget);
 
     final aiTile = find.byKey(const Key('ai-gift-assistant-v08'));
-    await tester.ensureVisible(aiTile);
+    await tester.scrollUntilVisible(
+      aiTile,
+      400,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('People & Moderation'), findsOneWidget);
     await tester.tap(aiTile);
     await tester.pumpAndSettle();
 
