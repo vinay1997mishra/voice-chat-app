@@ -2658,36 +2658,6 @@ class ProfileV07 extends StatelessWidget {
     );
   }
 
-  void _simple(BuildContext context, String title, String body) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(body, textAlign: TextAlign.center),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class StoreV07 extends StatelessWidget {
