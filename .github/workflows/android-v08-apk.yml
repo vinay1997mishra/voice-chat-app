@@ -1,0 +1,95 @@
+name: Build Android v0.8 APK
+
+on:
+  push:
+    branches: [v08-dev]
+    paths:
+      - 'apps/mobile/lib/main_v08.dart'
+      - 'apps/mobile/lib/gift_catalog_v08.dart'
+      - 'apps/mobile/lib/gift_effects_v08.dart'
+      - 'apps/mobile/lib/games_v07.dart'
+      - 'apps/mobile/test/v08_test.dart'
+      - 'apps/mobile/test/gift_catalog_v08_test.dart'
+      - 'apps/mobile/test/games_v07_test.dart'
+      - 'apps/mobile/pubspec.yaml'
+      - '.github/workflows/android-v08-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v08-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter compatible with Android 5+
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+          cache: true
+
+      - name: Create broad-compat Android runner
+        run: |
+          flutter create --platforms=android --org com.voicechat.compat.v08 --project-name voice_chat_app /tmp/voice_chat_v08
+          rm -rf /tmp/voice_chat_v08/lib /tmp/voice_chat_v08/test
+          cp -R apps/mobile/lib /tmp/voice_chat_v08/lib
+          cp -R apps/mobile/test /tmp/voice_chat_v08/test
+          cp apps/mobile/pubspec.yaml /tmp/voice_chat_v08/pubspec.yaml
+
+          if [ -f /tmp/voice_chat_v08/android/app/build.gradle.kts ]; then
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' /tmp/voice_chat_v08/android/app/build.gradle.kts
+          fi
+          if [ -f /tmp/voice_chat_v08/android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' /tmp/voice_chat_v08/android/app/build.gradle
+          fi
+
+      - name: Get dependencies
+        working-directory: /tmp/voice_chat_v08
+        run: flutter pub get
+
+      - name: Analyze v0.8
+        working-directory: /tmp/voice_chat_v08
+        run: flutter analyze lib/main_v08.dart lib/gift_catalog_v08.dart lib/gift_effects_v08.dart --no-fatal-infos
+
+      - name: Test v0.8 gifts and gameplay regression
+        working-directory: /tmp/voice_chat_v08
+        run: |
+          flutter test test/gift_catalog_v08_test.dart
+          flutter test test/v08_test.dart
+          flutter test test/games_v07_test.dart
+
+      - name: Build universal Android 5+ debug APK
+        working-directory: /tmp/voice_chat_v08
+        run: flutter build apk --debug -t lib/main_v08.dart
+
+      - name: Build Android 5+ ABI APKs
+        working-directory: /tmp/voice_chat_v08
+        run: flutter build apk --debug --split-per-abi -t lib/main_v08.dart
+
+      - name: Verify universal APK signing and SDK floor
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS=$(ls -1d "$SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          APK=/tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-debug.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee /tmp/apk-v08-badging.txt
+          grep "sdkVersion:'21'" /tmp/apk-v08-badging.txt
+          grep -E "package:|targetSdkVersion:|native-code:" /tmp/apk-v08-badging.txt
+
+      - name: Upload v0.8 broad compatibility APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-chat-v0.8-android5-plus-apks
+          path: |
+            /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-debug.apk
+            /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-armeabi-v7a-debug.apk
+            /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+            /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-x86_64-debug.apk
+          if-no-files-found: error
+          retention-days: 14
