@@ -1,7 +1,7 @@
 name: voice_chat_app
 description: GitHub-only Flutter demo for the voice chat app project.
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.6.0+6
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
