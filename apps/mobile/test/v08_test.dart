@@ -60,12 +60,17 @@ void main() {
     }
   });
 
-  testWidgets('Lucky Bag becomes visible in room and can be claimed',
+  testWidgets('owner Lucky Bag becomes visible and can be claimed',
       (tester) async {
     setPhoneViewport(tester);
-    await tester.pumpWidget(const VoiceChatV08());
-    await tester.tap(find.byKey(const Key('open-v07-room')));
-    await tester.pumpAndSettle();
+    final room = RoomData(
+      'Owner room',
+      'LP-1',
+      '🎧',
+      false,
+      ownedByMe: true,
+    );
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
@@ -130,21 +135,57 @@ void main() {
     expect(find.byKey(const Key('join-room-pin-v06')), findsNothing);
   });
 
-  testWidgets('non-owner cannot change room lock from settings', (tester) async {
+  testWidgets('non-owner cannot see owner management controls', (tester) async {
     setPhoneViewport(tester);
     final room = RoomData('Guest room', '999', '🎧', true, pin: '4321');
     await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Settings'));
+
+    expect(find.text('Owner'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
+    expect(find.text('LP'), findsNothing);
+    expect(find.text('Admins'), findsNothing);
+    expect(find.text('Block'), findsNothing);
+  });
+
+  testWidgets('owner panel exposes management and AI gift assistant',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Owner panel room',
+      'OWN-1',
+      '👑',
+      false,
+      ownedByMe: true,
+    );
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Owner'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('room-lock-switch-v08')), findsNothing);
-    expect(
-      find.textContaining('Only the room owner can change it'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('owner-panel-v08')), findsOneWidget);
+    expect(find.text('Room Owner Panel'), findsOneWidget);
+    expect(find.text('Room Controls'), findsOneWidget);
+    expect(find.text('People & Moderation'), findsOneWidget);
+
+    final aiTile = find.byKey(const Key('ai-gift-assistant-v08'));
+    await tester.ensureVisible(aiTile);
+    await tester.tap(aiTile);
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI Gift Assistant'), findsWidgets);
+    expect(find.byKey(const Key('ai-gift-send-v08')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ai-gift-send-v08')));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm AI Gift'), findsOneWidget);
+    expect(find.byKey(const Key('confirm-ai-gift-v08')), findsOneWidget);
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('room lock sets a 4-6 digit PIN and disables cleanly',
