@@ -143,11 +143,27 @@ void main() {
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Owner'), findsNothing);
-    expect(find.text('Settings'), findsNothing);
-    expect(find.text('LP'), findsNothing);
-    expect(find.text('Admins'), findsNothing);
-    expect(find.text('Block'), findsNothing);
+    final tools = find.byKey(const Key('v07-tools-grid'));
+    expect(
+      find.descendant(of: tools, matching: find.text('Owner')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tools, matching: find.text('Settings')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tools, matching: find.text('LP')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tools, matching: find.text('Admins')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tools, matching: find.text('Block')),
+      findsNothing,
+    );
   });
 
   testWidgets('owner panel exposes management and AI gift assistant',
@@ -164,7 +180,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Owner'));
+    final ownerTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('Owner'),
+    );
+    expect(ownerTool, findsOneWidget);
+    await tester.tap(ownerTool);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('owner-panel-v08')), findsOneWidget);
