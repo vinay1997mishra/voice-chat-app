@@ -1371,20 +1371,62 @@ class _RoomV07State extends State<RoomV07> {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Text('Game Center', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _GameCard('Dice', Icons.casino_rounded, () => _playGame('Dice'))),
-          const SizedBox(width: 10),
-          Expanded(child: _GameCard('Lucky Wheel', Icons.motion_photos_on_rounded, () => _playGame('Lucky Wheel'))),
-        ]),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          childAspectRatio: 1.05,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          children: [
+            _GameCard('Dice', Icons.casino_rounded, () => _playGame('Dice')),
+            _GameCard('Lucky Wheel', Icons.motion_photos_on_rounded, () => _playGame('Lucky Wheel')),
+            _GameCard('Ludo', Icons.grid_view_rounded, () => _playGame('Ludo')),
+            _GameCard('UNO', Icons.style_rounded, () => _playGame('UNO')),
+            _GameCard('Carrom', Icons.sports_esports_rounded, () => _playGame('Carrom')),
+          ],
+        ),
       ]),
     )));
   }
 
   void _playGame(String name) {
     final random = Random();
-    final result = name == 'Dice'
-        ? '${random.nextInt(6) + 1}'
-        : ['10x', '2x', 'Try Again', '5x'][random.nextInt(4)];
+    String result;
+    switch (name) {
+      case 'Dice':
+        result = '${random.nextInt(6) + 1}';
+        break;
+      case 'Lucky Wheel':
+        result = ['10x', '2x', 'Try Again', '5x'][random.nextInt(4)];
+        break;
+      case 'Ludo':
+        result = [
+          'Red moved 6',
+          'Blue captured a token',
+          'Green reached Home',
+          'Yellow got another turn',
+        ][random.nextInt(4)];
+        break;
+      case 'UNO':
+        result = [
+          'Red +2',
+          'Skip turn',
+          'Wild color changed',
+          'UNO! 1 card left',
+        ][random.nextInt(4)];
+        break;
+      case 'Carrom':
+        result = [
+          'White pocketed',
+          'Black pocketed',
+          'Queen covered',
+          'Foul - turn lost',
+        ][random.nextInt(4)];
+        break;
+      default:
+        result = 'Demo result';
+    }
     setState(() => chat.add('Game: $name result → $result'));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$name result: $result')),
