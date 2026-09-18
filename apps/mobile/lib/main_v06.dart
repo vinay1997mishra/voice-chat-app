@@ -828,6 +828,22 @@ class _RoomV06State extends State<RoomV06> {
       builder: (sheetContext) => SafeArea(
         child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(14, 0, 14, 18), children: [
           Text('Seat ${i + 1} options', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+          if (seats[i] != null && seats[i] != 'You')
+            Builder(
+              builder: (_) {
+                final user = demoEconomy.byName(seats[i]!);
+                return ListTile(
+                  leading: CircleAvatar(child: Text(user.avatar)),
+                  title: Text(user.name),
+                  subtitle: Text(
+                    'ID ${user.id} • ${demoNumber(user.diamonds)} Diamond',
+                  ),
+                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Opened profile ID ${user.id}')),
+                  ),
+                );
+              },
+            ),
           ListTile(title: Text(isLocked ? 'Unlock Seat' : 'Lock Seat'), leading: Icon(isLocked ? Icons.lock_open : Icons.lock), onTap: () { setState(() => isLocked ? lockedSeats.remove(i) : lockedSeats.add(i)); Navigator.pop(sheetContext); }),
           ListTile(title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'), leading: Icon(isMuted ? Icons.mic : Icons.mic_off), onTap: () { setState(() => isMuted ? mutedSeats.remove(i) : mutedSeats.add(i)); Navigator.pop(sheetContext); }),
           if (!isLocked) ListTile(title: const Text('Go to Seat'), leading: const Icon(Icons.event_seat_rounded), onTap: () { setState(() { if (mySeat != null) seats[mySeat!] = null; seats[i] = 'You'; mySeat = i; }); Navigator.pop(sheetContext); }),
@@ -1448,22 +1464,94 @@ class _RoomV06State extends State<RoomV06> {
 
   void _members() {
     final members = seats.whereType<String>().toList();
-    showModalBottomSheet<void>(context: context, builder: (_) => SafeArea(child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
-      const Text('Members', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-      for (final m in members) ListTile(leading: CircleAvatar(child: Text(m.substring(0, 1))), title: Text(m)),
-    ])));
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'Members',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            for (final name in members)
+              if (name == 'You')
+                const ListTile(
+                  leading: CircleAvatar(child: Text('😎')),
+                  title: Text('You'),
+                  subtitle: Text('ID 10000050'),
+                )
+              else
+                Builder(
+                  builder: (_) {
+                    final user = demoEconomy.byName(name);
+                    return ListTile(
+                      leading: CircleAvatar(child: Text(user.avatar)),
+                      title: Text(user.name),
+                      subtitle: Text(
+                        'ID ${user.id} • ${demoNumber(user.diamonds)} Diamond',
+                      ),
+                      trailing: name == 'Owner'
+                          ? const Text('Owner')
+                          : admins.contains(name)
+                              ? const Text('Admin')
+                              : null,
+                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Opened profile ID ${user.id}')),
+                      ),
+                    );
+                  },
+                ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _sendMessage() {
     final c = TextEditingController();
-    showModalBottomSheet<void>(context: context, isScrollControlled: true, builder: (sheetContext) => Padding(
-      padding: EdgeInsets.fromLTRB(14, 14, 14, MediaQuery.of(sheetContext).viewInsets.bottom + 14),
-      child: Row(children: [
-        Expanded(child: TextField(controller: c, decoration: const InputDecoration(hintText: 'Message...', border: OutlineInputBorder()))),
-        const SizedBox(width: 8),
-        FilledButton(onPressed: () { if (c.text.trim().isNotEmpty) setState(() => chat.add('You: ${c.text.trim()}')); Navigator.pop(sheetContext); }, child: const Text('Send')),
-      ]),
-    ));
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          14,
+          14,
+          14,
+          MediaQuery.of(sheetContext).viewInsets.bottom + 14,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: c,
+                decoration: const InputDecoration(
+                  hintText: 'Message...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                final value = c.text.trim();
+                if (value.isNotEmpty) {
+                  setState(() => chat.add('You: $value'));
+                  demoEconomy.addInbox(
+                    'Room message',
+                    '${widget.room.name}: $value',
+                    Icons.chat_bubble_rounded,
+                  );
+                }
+                Navigator.pop(sheetContext);
+              },
+              child: const Text('Send'),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(c.dispose);
   }
 }
 
