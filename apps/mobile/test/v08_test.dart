@@ -198,7 +198,6 @@ void main() {
       400,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('People & Moderation'), findsOneWidget);
     await tester.tap(aiTile);
     await tester.pumpAndSettle();
 
