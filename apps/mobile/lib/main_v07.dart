@@ -295,6 +295,10 @@ class DemoEconomy extends ChangeNotifier {
     inbox.insert(0, DemoInboxItem(title, subtitle, icon));
     notifyListeners();
   }
+
+  void refresh() {
+    notifyListeners();
+  }
 }
 
 final demoEconomy = DemoEconomy();
@@ -571,7 +575,7 @@ class MessageHubV07 extends StatelessWidget {
                                     : null,
                                 onTap: () {
                                   item.unread = false;
-                                  demoEconomy.notifyListeners();
+                                  demoEconomy.refresh();
                                   showModalBottomSheet<void>(
                                     context: context,
                                     showDragHandle: true,
@@ -2901,7 +2905,7 @@ class SettingsV07 extends StatelessWidget {
                 value: demoEconomy.threeDEffects,
                 onChanged: (value) {
                   demoEconomy.threeDEffects = value;
-                  demoEconomy.notifyListeners();
+                  demoEconomy.refresh();
                 },
               ),
               SwitchListTile(
@@ -2909,7 +2913,7 @@ class SettingsV07 extends StatelessWidget {
                 value: demoEconomy.giftAnimations,
                 onChanged: (value) {
                   demoEconomy.giftAnimations = value;
-                  demoEconomy.notifyListeners();
+                  demoEconomy.refresh();
                 },
               ),
               SwitchListTile(
@@ -2917,7 +2921,7 @@ class SettingsV07 extends StatelessWidget {
                 value: demoEconomy.messageNotifications,
                 onChanged: (value) {
                   demoEconomy.messageNotifications = value;
-                  demoEconomy.notifyListeners();
+                  demoEconomy.refresh();
                 },
               ),
               SwitchListTile(
@@ -2925,7 +2929,7 @@ class SettingsV07 extends StatelessWidget {
                 value: demoEconomy.allowPrivateMessages,
                 onChanged: (value) {
                   demoEconomy.allowPrivateMessages = value;
-                  demoEconomy.notifyListeners();
+                  demoEconomy.refresh();
                 },
               ),
               const Divider(),
