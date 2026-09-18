@@ -342,7 +342,7 @@ class _MainShellV07State extends State<MainShellV07> {
     final pages = [
       const V07Home(),
       const DiscoverV06(),
-      const InboxV06(),
+      const MessageHubV07(),
       const ProfileV07(),
     ];
     return Scaffold(
@@ -463,46 +463,154 @@ class DiscoverV06 extends StatelessWidget {
   }
 }
 
-class InboxV06 extends StatelessWidget {
-  const InboxV06({super.key});
+class MessageHubV07 extends StatelessWidget {
+  const MessageHubV07({super.key});
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: demoEconomy,
-      builder: (context, _) => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF35105D), Color(0xFF120316)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      builder: (context, _) => DefaultTabController(
+        length: 3,
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF35105D), Color(0xFF120316)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(18),
-            children: [
-              const Text(
-                'Message Inbox',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 12),
-              for (final item in demoEconomy.inbox)
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Icon(item.icon)),
-                    title: Text(item.title),
-                    subtitle: Text(item.subtitle),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DemoChatV06(title: item.title),
+          child: SafeArea(
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(18, 14, 18, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Message',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                   ),
                 ),
-            ],
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Chats'),
+                    Tab(text: 'Inbox'),
+                    Tab(text: 'Gifts'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          for (final user in demoEconomy.users)
+                            Card(
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(user.avatar),
+                                ),
+                                title: Text(user.name),
+                                subtitle: Text(
+                                  'ID ' +
+                                      user.id +
+                                      ' • ' +
+                                      (demoEconomy.conversationFor(user.id).isEmpty
+                                          ? 'No messages yet'
+                                          : demoEconomy.conversationFor(user.id).last),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing:
+                                    (demoEconomy.unreadMessages[user.id] ?? 0) > 0
+                                        ? Badge(
+                                            label: Text(
+                                              (demoEconomy.unreadMessages[user.id] ?? 0)
+                                                  .toString(),
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.chevron_right_rounded,
+                                          ),
+                                onTap: () {
+                                  demoEconomy.markConversationRead(user.id);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          DemoChatV07(user: user),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                      ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          for (final item in demoEconomy.inbox)
+                            Card(
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  child: Icon(item.icon),
+                                ),
+                                title: Text(item.title),
+                                subtitle: Text(
+                                  item.subtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: item.unread
+                                    ? const Badge(label: Text('NEW'))
+                                    : null,
+                                onTap: () {
+                                  item.unread = false;
+                                  demoEconomy.notifyListeners();
+                                  showModalBottomSheet<void>(
+                                    context: context,
+                                    showDragHandle: true,
+                                    builder: (_) => SafeArea(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(18),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(item.icon, size: 42),
+                                            const SizedBox(height: 10),
+                                            Text(
+                                              item.title,
+                                              style: const TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              item.subtitle,
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                      GiftHistoryV07(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -510,17 +618,87 @@ class InboxV06 extends StatelessWidget {
   }
 }
 
-class DemoChatV06 extends StatefulWidget {
-  const DemoChatV06({super.key, required this.title});
-  final String title;
+class GiftHistoryV07 extends StatelessWidget {
+  const GiftHistoryV07({super.key});
 
   @override
-  State<DemoChatV06> createState() => _DemoChatV06State();
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Gift History',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: demoEconomy.simulateIncomingGift,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Demo Receive'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (demoEconomy.giftHistory.isEmpty)
+            const Card(
+              child: ListTile(
+                title: Text('No gifts yet'),
+                subtitle: Text('Send a gift in a room or use Demo Receive.'),
+              ),
+            ),
+          for (final item in demoEconomy.giftHistory)
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  child: Icon(
+                    item.direction == 'Sent'
+                        ? Icons.north_east_rounded
+                        : Icons.south_west_rounded,
+                  ),
+                ),
+                title: Text(item.direction + ' • ' + item.gift),
+                subtitle: Text(
+                  'From ' +
+                      item.fromName +
+                      ' (' +
+                      item.fromId +
+                      ') → ' +
+                      item.toName +
+                      ' (' +
+                      item.toId +
+                      ')',
+                ),
+                trailing: Text(
+                  demoNumber(item.coins) + '\nCoins',
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+        ],
+      );
 }
 
-class _DemoChatV06State extends State<DemoChatV06> {
+class DemoChatV07 extends StatefulWidget {
+  const DemoChatV07({super.key, required this.user});
+  final DemoUser user;
+
+  @override
+  State<DemoChatV07> createState() => _DemoChatV07State();
+}
+
+class _DemoChatV07State extends State<DemoChatV07> {
   final controller = TextEditingController();
-  final messages = <String>['Hello 👋'];
+
+  @override
+  void initState() {
+    super.initState();
+    demoEconomy.markConversationRead(widget.user.id);
+  }
 
   @override
   void dispose() {
@@ -529,31 +707,68 @@ class _DemoChatV06State extends State<DemoChatV06> {
   }
 
   void _send() {
+    if (!demoEconomy.allowPrivateMessages) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Private messages are disabled in Settings')),
+      );
+      return;
+    }
     final value = controller.text.trim();
     if (value.isEmpty) return;
-    setState(() => messages.add('You: $value'));
-    demoEconomy.addInbox(
-      'Message sent',
-      'To ${widget.title}: $value',
-      Icons.send_rounded,
-    );
+    demoEconomy.sendDirectMessage(widget.user, value);
     controller.clear();
+    setState(() {});
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: demoEconomy,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(
+          title: InkWell(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DemoUserProfileV07(user: widget.user),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(child: Text(widget.user.avatar)),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.user.name),
+                    Text(
+                      'ID ' + widget.user.id,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
         body: Column(
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 children: [
-                  for (final message in messages)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(message),
+                  for (final message
+                      in demoEconomy.conversationFor(widget.user.id))
+                    Align(
+                      alignment: message.startsWith('You:')
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(message),
+                        ),
                       ),
                     ),
                 ],
@@ -585,7 +800,9 @@ class _DemoChatV06State extends State<DemoChatV06> {
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class V07Home extends StatefulWidget {
@@ -1841,7 +2058,7 @@ class DemoUserProfileV07 extends StatelessWidget {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => DemoChatV06(title: user.name),
+                          builder: (_) => DemoChatV07(user: user),
                         ),
                       ),
                       icon: const Icon(Icons.forum_rounded),
