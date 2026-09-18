@@ -2587,40 +2587,36 @@ class ProfileV07 extends StatelessWidget {
                 icon: Icons.shopping_bag_rounded,
                 title: 'Store',
                 subtitle: 'Gifts, frames and room cosmetics',
-                onTap: () => _simple(
+                onTap: () => Navigator.push(
                   context,
-                  'Store',
-                  'Gift and cosmetic store demo is open.',
+                  MaterialPageRoute(builder: (_) => const StoreV07()),
                 ),
               ),
               _ProfileTile(
                 icon: Icons.inventory_2_rounded,
                 title: 'Bag',
                 subtitle: 'Owned items',
-                onTap: () => _simple(
+                onTap: () => Navigator.push(
                   context,
-                  'Bag',
-                  'Your owned demo items appear here.',
+                  MaterialPageRoute(builder: (_) => const BagV07()),
                 ),
               ),
               _ProfileTile(
                 icon: Icons.bar_chart_rounded,
                 title: 'Level',
                 subtitle: 'User and wealth level',
-                onTap: () => _simple(
+                onTap: () => Navigator.push(
                   context,
-                  'Level',
-                  'User and wealth level progress demo.',
+                  MaterialPageRoute(builder: (_) => const LevelCenterV07()),
                 ),
               ),
               _ProfileTile(
                 icon: Icons.settings_rounded,
                 title: 'Settings',
                 subtitle: 'Account and app settings',
-                onTap: () => _simple(
+                onTap: () => Navigator.push(
                   context,
-                  'Settings',
-                  'Account, privacy and local demo settings.',
+                  MaterialPageRoute(builder: (_) => const SettingsV07()),
                 ),
               ),
             ],
@@ -2668,6 +2664,273 @@ class ProfileV07 extends StatelessWidget {
     );
   }
 }
+
+class StoreV07 extends StatelessWidget {
+  const StoreV07({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: demoEconomy,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Store')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'Gift Catalog',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: demoEconomy.gifts.length,
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: .72,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemBuilder: (_, i) {
+                  final gift = demoEconomy.gifts[i];
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(gift.emoji, style: const TextStyle(fontSize: 34)),
+                          const SizedBox(height: 4),
+                          Text(
+                            gift.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            demoNumber(gift.coins) + ' Coins',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Cosmetics',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              for (final frame in const [
+                'Purple Glow',
+                'Silver Ring',
+                'Royal Mic Badge',
+                'Golden Crown Frame',
+                'Galaxy Aura',
+              ])
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.auto_awesome_rounded),
+                    title: Text(frame),
+                    subtitle: Text(
+                      demoEconomy.ownedItems.contains(frame)
+                          ? 'Owned • tap to equip'
+                          : 'Local demo item • claim free for testing',
+                    ),
+                    trailing: demoEconomy.equippedFrame == frame
+                        ? const Icon(Icons.check_circle_rounded)
+                        : const Icon(Icons.chevron_right_rounded),
+                    onTap: () {
+                      demoEconomy.equipFrame(frame);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(frame + ' equipped')),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
+class BagV07 extends StatelessWidget {
+  const BagV07({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: demoEconomy,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Bag')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Equipped: ' + demoEconomy.equippedFrame,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final item in demoEconomy.ownedItems)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.inventory_2_rounded),
+                    title: Text(item),
+                    trailing: demoEconomy.equippedFrame == item
+                        ? const Text('Equipped')
+                        : FilledButton(
+                            onPressed: () => demoEconomy.equipFrame(item),
+                            child: const Text('Equip'),
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
+class LevelCenterV07 extends StatelessWidget {
+  const LevelCenterV07({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: demoEconomy,
+      builder: (context, _) {
+        final level = 1 + (demoEconomy.wealthXp ~/ 1000);
+        final cappedLevel = level > 99 ? 99 : level;
+        final progress = (demoEconomy.wealthXp % 1000) / 1000;
+        return Scaffold(
+          appBar: AppBar(title: const Text('Level Center')),
+          body: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              const Text(
+                'User Level',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 38,
+                        child: Text(
+                          cappedLevel.toString(),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(value: progress),
+                      const SizedBox(height: 8),
+                      Text(
+                        (demoEconomy.wealthXp % 1000).toString() +
+                            ' / 1000 XP to next level',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const ListTile(
+                leading: Icon(Icons.graphic_eq_rounded),
+                title: Text('Room activity'),
+                subtitle: Text('Local level progress from room/gift activity.'),
+              ),
+              const ListTile(
+                leading: Icon(Icons.card_giftcard_rounded),
+                title: Text('Wealth XP'),
+                subtitle: Text(
+                  'Sending gifts increases local demo wealth XP.',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class SettingsV07 extends StatelessWidget {
+  const SettingsV07({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: demoEconomy,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Settings')),
+          body: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              SwitchListTile(
+                title: const Text('3D Effects'),
+                subtitle: const Text('VIP cards and premium gift effects'),
+                value: demoEconomy.threeDEffects,
+                onChanged: (value) {
+                  demoEconomy.threeDEffects = value;
+                  demoEconomy.notifyListeners();
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Gift Animations'),
+                value: demoEconomy.giftAnimations,
+                onChanged: (value) {
+                  demoEconomy.giftAnimations = value;
+                  demoEconomy.notifyListeners();
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Message Notifications'),
+                value: demoEconomy.messageNotifications,
+                onChanged: (value) {
+                  demoEconomy.messageNotifications = value;
+                  demoEconomy.notifyListeners();
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Allow Private Messages'),
+                value: demoEconomy.allowPrivateMessages,
+                onChanged: (value) {
+                  demoEconomy.allowPrivateMessages = value;
+                  demoEconomy.notifyListeners();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('Local Demo Mode'),
+                subtitle: const Text(
+                  'Backend/database connection will be added later.',
+                ),
+                onTap: () => showAboutDialog(
+                  context: context,
+                  applicationName: 'Voice Chat v0.7',
+                  applicationVersion: '0.7.0',
+                  children: const [
+                    Text(
+                      'Local-first build with gift, wallet, room, message, VIP and profile flows.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
 
 class WalletV06 extends StatefulWidget {
   const WalletV06({super.key});
@@ -2765,6 +3028,20 @@ class _WalletV06State extends State<WalletV06> {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(title: const Text('Gift History')),
+                    body: const GiftHistoryV07(),
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.card_giftcard_rounded),
+              label: const Text('Open Gift History'),
             ),
             const SizedBox(height: 14),
             const Text(
