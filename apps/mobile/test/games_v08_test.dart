@@ -22,6 +22,20 @@ void main() {
     expect(find.text('Teen Patti'), findsOneWidget);
   });
 
+  testWidgets('Ludo local mode has four playable seats and 3D board', (tester) async {
+    phone(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: LudoGameV08(mode: V08GameMode.localMulti)),
+    );
+    expect(find.byKey(const Key('ludo-four-player-v08')), findsOneWidget);
+    for (var i = 1; i <= 4; i++) {
+      expect(find.byKey(Key('ludo-seat-' + i.toString() + '-v08')), findsOneWidget);
+    }
+    expect(find.byKey(const Key('ludo-board-v08')), findsOneWidget);
+    expect(find.byKey(const Key('ludo-roll-v08')), findsOneWidget);
+    expect(find.textContaining('4 Player 3D'), findsOneWidget);
+  });
+
   testWidgets('UNO local mode is a real four-seat table', (tester) async {
     phone(tester);
     await tester.pumpWidget(
