@@ -36,6 +36,26 @@ void main() {
     expect(find.text('Your hand'), findsOneWidget);
   });
 
+  testWidgets('game center exposes all seven local games', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: GamesCenterV07()));
+    for (final name in ['Ludo','UNO','Carrom','Lucky Dice','Lucky Wheel','Rock Paper Scissors','Teen Patti']) {
+      expect(find.text(name), findsOneWidget);
+    }
+  });
+
+  testWidgets('dice wheel rps and teen patti are interactive', (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: LuckyDiceGameV07(mode: V07GameMode.soloBot)));
+    expect(find.byKey(const Key('lucky-dice-roll-v07')), findsOneWidget);
+    await tester.pumpWidget(const MaterialApp(home: LuckyWheelGameV07(mode: V07GameMode.soloBot)));
+    expect(find.byKey(const Key('lucky-wheel-spin-v07')), findsOneWidget);
+    await tester.pumpWidget(const MaterialApp(home: RpsGameV07(mode: V07GameMode.soloBot)));
+    expect(find.text('Rock'), findsOneWidget);
+    await tester.pumpWidget(const MaterialApp(home: TeenPattiGameV07(mode: V07GameMode.soloBot)));
+    expect(find.byKey(const Key('teen-patti-deal-v07')), findsOneWidget);
+  });
+
   testWidgets('final v0.7 includes shell wallet and room tools', (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV07());
