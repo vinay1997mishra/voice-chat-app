@@ -1631,7 +1631,9 @@ class _RoomV07State extends State<RoomV07> {
                           Navigator.pop(sheetContext);
                           if (!mounted) return;
 
-                          if (big) {
+                          if (big &&
+                              demoEconomy.giftAnimations &&
+                              demoEconomy.threeDEffects) {
                             await showDialog<void>(
                               context: this.context,
                               barrierDismissible: false,
@@ -2324,6 +2326,11 @@ class VipCenterV07 extends StatelessWidget {
               style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 6),
+            Text(
+              'Active local VIP: VIP ' + demoEconomy.activeVip.toString(),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
             const Text(
               'Local 3D preview. Exact VIP prices/benefit rules will use your final VIP table, not guessed values.',
             ),
@@ -2375,6 +2382,7 @@ class _Vip3DCardV07State extends State<Vip3DCardV07>
             ..setEntry(3, 2, 0.0012)
             ..rotateY(angle)
             ..rotateX(-angle * .45);
+          if (!demoEconomy.threeDEffects) return child ?? const SizedBox();
           return Transform(
             alignment: Alignment.center,
             transform: matrix,
@@ -2405,9 +2413,22 @@ class _Vip3DCardV07State extends State<Vip3DCardV07>
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 14),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Done'),
+                    FilledButton.icon(
+                      onPressed: () {
+                        demoEconomy.setVipPreview(widget.level);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'VIP ' +
+                                  widget.level.toString() +
+                                  ' activated locally',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.workspace_premium_rounded),
+                      label: const Text('Activate Local VIP'),
                     ),
                   ],
                 ),
