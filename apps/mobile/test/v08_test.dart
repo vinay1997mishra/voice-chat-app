@@ -109,7 +109,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('room lock enables with PIN and disables from settings',
+  testWidgets('room lock sets a 4-6 digit PIN and disables cleanly',
       (tester) async {
     setPhoneViewport(tester);
     final room = RoomData('Test room', '123', '🎧', false);
@@ -124,17 +124,25 @@ void main() {
     expect(lockSwitch, findsOneWidget);
     await tester.tap(lockSwitch);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, '123');
-    await tester.tap(find.text('Save'));
+
+    final pinInput = find.byKey(const Key('room-pin-input-v08'));
+    final setLock = find.byKey(const Key('set-room-lock-v08'));
+    expect(pinInput, findsOneWidget);
+    expect(setLock, findsOneWidget);
+
+    await tester.enterText(pinInput, '123');
+    await tester.tap(setLock);
     await tester.pumpAndSettle();
+    expect(find.text('PIN must be 4 to 6 digits'), findsOneWidget);
     expect(room.locked, isFalse);
 
-    await tester.enterText(find.byType(TextField).last, '654321');
-    await tester.tap(find.text('Save'));
+    await tester.enterText(pinInput, '4321');
+    await tester.tap(setLock);
     await tester.pumpAndSettle();
     expect(room.locked, isTrue);
-    expect(room.pin, '654321');
+    expect(room.pin, '4321');
     expect(find.text('Change Room PIN'), findsOneWidget);
+    expect(find.text('Room lock enabled'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('room-lock-switch-v08')));
     await tester.pumpAndSettle();
