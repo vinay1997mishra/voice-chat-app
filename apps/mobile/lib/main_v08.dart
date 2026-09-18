@@ -1420,56 +1420,6 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
-  void _openPlayableGame(String name) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => GameLauncherV08(game: name)),
-    );
-  }
-
-  void _playGame(String name) {
-    final random = Random();
-    String result;
-    switch (name) {
-      case 'Dice':
-        result = '${random.nextInt(6) + 1}';
-        break;
-      case 'Lucky Wheel':
-        result = ['10x', '2x', 'Try Again', '5x'][random.nextInt(4)];
-        break;
-      case 'Ludo':
-        result = [
-          'Red moved 6',
-          'Blue captured a token',
-          'Green reached Home',
-          'Yellow got another turn',
-        ][random.nextInt(4)];
-        break;
-      case 'UNO':
-        result = [
-          'Red +2',
-          'Skip turn',
-          'Wild color changed',
-          'UNO! 1 card left',
-        ][random.nextInt(4)];
-        break;
-      case 'Carrom':
-        result = [
-          'White pocketed',
-          'Black pocketed',
-          'Queen covered',
-          'Foul - turn lost',
-        ][random.nextInt(4)];
-        break;
-      default:
-        result = 'Demo result';
-    }
-    setState(() => chat.add('Game: $name result → $result'));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$name result: $result')),
-    );
-  }
-
   Future<void> _changeRoomDp() async {
     final source = await showModalBottomSheet<ImageSource?>(
       context: context,
@@ -2277,29 +2227,6 @@ class _QuickTool extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircleAvatar(child: Icon(icon)), const SizedBox(height: 6), Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))]));
-}
-
-class _GameCard extends StatelessWidget {
-  const _GameCard(this.label, this.icon, this.onPlay);
-  final String label;
-  final IconData icon;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            children: [
-              Icon(icon, size: 40),
-              const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              FilledButton(onPressed: onPlay, child: const Text('Play')),
-            ],
-          ),
-        ),
-      );
 }
 
 class BigGift3DV07 extends StatefulWidget {
