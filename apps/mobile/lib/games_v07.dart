@@ -319,7 +319,7 @@ class _LudoBoard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
-        child: CustomPaint(painter: _LudoBoardPainter(red: red, blue: blue)),
+        child: CustomPaint(key: const Key('ludo-board-v07'), painter: _LudoBoardPainter(red: red, blue: blue)),
       );
 }
 
@@ -455,13 +455,14 @@ class _UnoGameV07State extends State<UnoGameV07> {
         deck.add(_UnoCardData(color, n.toString()));
         if (n != 0) deck.add(_UnoCardData(color, n.toString()));
       }
-      for (final action in ['Skip', '+2']) {
+      for (final action in ['Skip', 'Reverse', '+2']) {
         deck.add(_UnoCardData(color, action));
         deck.add(_UnoCardData(color, action));
       }
     }
     for (var i = 0; i < 4; i++) {
       deck.add(const _UnoCardData('Wild', 'Wild'));
+      deck.add(const _UnoCardData('Wild', '+4'));
     }
     deck.shuffle(rng);
     player.addAll(List.generate(7, (_) => deck.removeLast()));
@@ -547,10 +548,14 @@ class _UnoGameV07State extends State<UnoGameV07> {
     }
 
     var skip = false;
-    if (card.value == '+2') {
+    if (card.value == '+4') {
+      setState(() => _drawTo(turn == 0 ? opponent : player, 4));
+      skip = true;
+    } else if (card.value == '+2') {
       setState(() => _drawTo(turn == 0 ? opponent : player, 2));
       skip = true;
-    } else if (card.value == 'Skip') {
+    } else if (card.value == 'Skip' || card.value == 'Reverse') {
+      // In a two-player match Reverse acts like Skip.
       skip = true;
     }
     if (!skip) setState(() => turn = 1 - turn);
