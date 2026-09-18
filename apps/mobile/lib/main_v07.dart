@@ -1225,7 +1225,7 @@ class _RoomV07State extends State<RoomV07> {
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
-                      childAspectRatio: .78,
+                      childAspectRatio: .64,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
