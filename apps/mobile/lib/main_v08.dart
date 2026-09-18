@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'games_v07.dart';
+import 'games_v08.dart';
 import 'gift_catalog_v08.dart';
 import 'gift_effects_v08.dart';
 
@@ -455,7 +455,7 @@ class DiscoverV06 extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const GameLauncherV07(game: 'Ludo'),
+                            builder: (_) => const GamesCenterV08(),
                           ),
                         );
                         return;
@@ -1414,34 +1414,16 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _gameCenter() {
-    showModalBottomSheet<void>(context: context, showDragHandle: true, builder: (_) => SafeArea(child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Game Center', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          childAspectRatio: 1.05,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          children: [
-            _GameCard('Dice', Icons.casino_rounded, () => _playGame('Dice')),
-            _GameCard('Lucky Wheel', Icons.motion_photos_on_rounded, () => _playGame('Lucky Wheel')),
-            _GameCard('Ludo', Icons.grid_view_rounded, () => _openPlayableGame('Ludo')),
-            _GameCard('UNO', Icons.style_rounded, () => _openPlayableGame('UNO')),
-            _GameCard('Carrom', Icons.sports_esports_rounded, () => _openPlayableGame('Carrom')),
-          ],
-        ),
-      ]),
-    )));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const GamesCenterV08()),
+    );
   }
 
   void _openPlayableGame(String name) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => GameLauncherV07(game: name)),
+      MaterialPageRoute(builder: (_) => GameLauncherV08(game: name)),
     );
   }
 
