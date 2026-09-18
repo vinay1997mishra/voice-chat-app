@@ -876,6 +876,18 @@ class _V07HomeState extends State<V07Home> {
   ];
 
   Future<void> _createRoom() async {
+    final existingIndex = rooms.indexWhere((room) => room.ownedByMe);
+    if (existingIndex >= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You already created "${rooms[existingIndex].name}". One user can create only one room.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final room = await showModalBottomSheet<RoomData>(
       context: context,
       isScrollControlled: true,
@@ -971,7 +983,7 @@ class _V07HomeState extends State<V07Home> {
                     key: room.id == '1524843' ? const Key('open-v07-room') : null,
                     leading: room.dpPath == null ? CircleAvatar(child: Text(room.dp)) : CircleAvatar(backgroundImage: FileImage(File(room.dpPath!))),
                     title: Text(room.name),
-                    subtitle: Text('${room.category} • ${room.seatCount} seats • ID ${room.id}${room.locked ? ' • Locked' : ''}'),
+                    subtitle: Text('${room.category} • ${room.seatCount} seats • ID ${room.id}${room.locked ? ' • Locked' : ''}${room.ownedByMe ? ' • My Room' : ''}'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _openRoom(room),
                   ),
@@ -1106,6 +1118,7 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
                 inviteMode: invite,
                 pin: locked ? cleanPin : '',
                 dpPath: dpPath,
+                ownedByMe: true,
               ),
             );
           },
@@ -1135,7 +1148,11 @@ class _RoomV07State extends State<RoomV07> {
   int? mySeat;
   bool micOn = false;
   int backgroundIndex = 0;
+  int _lpRemaining = 0;
+  bool _lpClaimed = false;
   final picker = ImagePicker();
+  final TextEditingController _roomMessageController = TextEditingController();
+  final ScrollController _roomScrollController = ScrollController();
   static const roomBackgrounds = <List<Color>>[
     [Color(0xFF5B2387), Color(0xFF2D0B48), Color(0xFF100216)],
     [Color(0xFF0E4C92), Color(0xFF12305F), Color(0xFF07111F)],
@@ -1161,6 +1178,13 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   @override
+  void dispose() {
+    _roomMessageController.dispose();
+    _roomScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
@@ -1177,7 +1201,10 @@ class _RoomV07State extends State<RoomV07> {
                 const SizedBox(width: 8),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(widget.room.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  Text('${widget.room.category} • ID ${widget.room.id} • ${inviteMode ? 'Invite Mode' : 'Open Seats'}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                  Text(
+                    '${widget.room.category} • ID ${widget.room.id} • ${inviteMode ? 'Invite Mode' : 'Open Seats'}${widget.room.locked ? ' • 🔒 Locked' : ''}',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
                 ])),
                 IconButton(key: const Key('v07-four-box'), onPressed: _openTools, icon: const Icon(Icons.grid_view_rounded)),
               ]),
@@ -1185,13 +1212,21 @@ class _RoomV07State extends State<RoomV07> {
             Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Align(alignment: Alignment.centerLeft, child: Text('📢 $notice', maxLines: 1, overflow: TextOverflow.ellipsis))),
             const SizedBox(height: 6),
             Expanded(
-              child: ListView(padding: const EdgeInsets.symmetric(horizontal: 10), children: [
+              child: ListView(
+                controller: _roomScrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                children: [
                 GridView.builder(
                   key: const Key('v07-seat-grid'),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: seats.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, childAspectRatio: .72, crossAxisSpacing: 6, mainAxisSpacing: 6),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 6,
+                    childAspectRatio: .82,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
                   itemBuilder: (_, i) => GestureDetector(
                     key: i == 0 ? const Key('v07-seat-0') : null,
                     onTap: () => _seatOptions(i),
@@ -1206,45 +1241,115 @@ class _RoomV07State extends State<RoomV07> {
                         child: Center(child: lockedSeats.contains(i) ? const Icon(Icons.lock_rounded) : mutedSeats.contains(i) ? const Icon(Icons.mic_off_rounded) : seats[i] != null ? Text(seats[i]!.substring(0, 1)) : const Icon(Icons.add_rounded)),
                       )),
                       const SizedBox(height: 2),
-                      Text(seats[i] ?? 'Seat ${i + 1}', style: const TextStyle(fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        seats[i] ?? 'Seat ${i + 1}',
+                        style: const TextStyle(fontSize: 8),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ]),
                   ),
                 ),
                 const SizedBox(height: 8),
+                if (_lpRemaining > 0)
+                  Card(
+                    key: const Key('active-lp-v08'),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.card_giftcard_rounded),
+                      ),
+                      title: Text('Lucky Bag • $_lpRemaining LP remaining'),
+                      subtitle: Text(
+                        _lpClaimed
+                            ? 'You already claimed this Lucky Bag.'
+                            : 'Lucky Bag is live in this room. Tap Claim to open it.',
+                      ),
+                      trailing: FilledButton(
+                        key: const Key('claim-lp-v08'),
+                        onPressed: _lpClaimed ? null : _claimLuckyBag,
+                        child: const Text('Claim'),
+                      ),
+                    ),
+                  ),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Room Chat', style: TextStyle(fontWeight: FontWeight.w800)),
-                      for (final m in chat) Padding(padding: const EdgeInsets.only(top: 4), child: Text(m)),
+                      for (final m in chat.length > 10 ? chat.sublist(chat.length - 10) : chat)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(m),
+                        ),
                     ]),
                   ),
                 ),
               ]),
             ),
             Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               color: const Color(0xCC17051F),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                _BottomTool(Icons.chat_bubble_outline_rounded, 'Message', _sendMessage),
-                _BottomTool(
-                  micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
-                  micOn ? 'Mic On' : 'Mic Off',
-                  () => setState(() => micOn = !micOn),
-                ),
-                _BottomTool(Icons.card_giftcard_rounded, 'Gift', _gift),
-                _BottomTool(
-                  Icons.person_add_alt_1_rounded,
-                  'Invite',
-                  () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        inviteMode ? 'Invite request created' : 'Room link ready to share',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const Key('room-message-input-v08'),
+                          controller: _roomMessageController,
+                          minLines: 1,
+                          maxLines: 3,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _sendMessage(),
+                          decoration: const InputDecoration(
+                            hintText: 'Type a room message...',
+                            border: OutlineInputBorder(),
+                            isDense: false,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        key: const Key('room-message-send-v08'),
+                        tooltip: 'Send message',
+                        onPressed: _sendMessage,
+                        icon: const Icon(Icons.send_rounded),
+                      ),
+                    ],
                   ),
-                ),
-              ]),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _BottomTool(
+                        micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+                        micOn ? 'Mic On' : 'Mic Off',
+                        () => setState(() => micOn = !micOn),
+                      ),
+                      _BottomTool(Icons.card_giftcard_rounded, 'Gift', _gift),
+                      _BottomTool(
+                        Icons.person_add_alt_1_rounded,
+                        'Invite',
+                        () => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              inviteMode
+                                  ? 'Invite request created'
+                                  : 'Room link ready to share',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ]),
         ),
@@ -1356,9 +1461,52 @@ class _RoomV07State extends State<RoomV07> {
         padding: const EdgeInsets.all(18),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('Room Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          SwitchListTile(title: const Text('Invite Mode'), value: inviteMode, onChanged: (v) { setState(() { inviteMode = v; widget.room.inviteMode = v; }); setLocal(() {}); }),
-          ListTile(title: const Text('Edit Room Notice'), subtitle: Text(notice), trailing: const Icon(Icons.edit_rounded), onTap: _editNotice),
-          ListTile(title: const Text('Room Password'), subtitle: Text(widget.room.locked ? 'Enabled' : 'Disabled'), trailing: const Icon(Icons.password_rounded), onTap: _editPassword),
+          SwitchListTile(
+            title: const Text('Invite Mode'),
+            value: inviteMode,
+            onChanged: (v) {
+              setState(() {
+                inviteMode = v;
+                widget.room.inviteMode = v;
+              });
+              setLocal(() {});
+            },
+          ),
+          SwitchListTile(
+            key: const Key('room-lock-switch-v08'),
+            title: const Text('Room Lock'),
+            subtitle: Text(
+              widget.room.locked
+                  ? 'Locked with a 6-digit PIN'
+                  : 'Anyone can enter without a PIN',
+            ),
+            value: widget.room.locked,
+            onChanged: (value) async {
+              if (!value) {
+                setState(() {
+                  widget.room.locked = false;
+                  widget.room.pin = '';
+                });
+                setLocal(() {});
+                return;
+              }
+              await _editPassword(forceEnable: true);
+              if (mounted) setLocal(() {});
+            },
+          ),
+          ListTile(
+            title: const Text('Edit Room Notice'),
+            subtitle: Text(notice),
+            trailing: const Icon(Icons.edit_rounded),
+            onTap: _editNotice,
+          ),
+          if (widget.room.locked)
+            ListTile(
+              title: const Text('Change Room PIN'),
+              subtitle: const Text('Update the 6-digit room password'),
+              trailing: const Icon(Icons.password_rounded),
+              onTap: _editPassword,
+            ),
         ]),
       ))),
     );
@@ -1404,7 +1552,11 @@ class _RoomV07State extends State<RoomV07> {
                 );
                 return;
               }
-              setState(() => chat.add('System: Lucky Bag $value LP created'));
+              setState(() {
+                _lpRemaining = value;
+                _lpClaimed = false;
+                chat.add('System: Lucky Bag $value LP created');
+              });
               Navigator.pop(dialogContext);
             },
             child: const Text('Create LP'),
@@ -1412,6 +1564,22 @@ class _RoomV07State extends State<RoomV07> {
         ],
       ),
       ),
+    );
+  }
+
+  void _claimLuckyBag() {
+    if (_lpRemaining <= 0 || _lpClaimed) return;
+    var reward = _lpRemaining ~/ 10;
+    if (reward < 100) reward = 100;
+    if (reward > 1000) reward = 1000;
+    if (reward > _lpRemaining) reward = _lpRemaining;
+    setState(() {
+      _lpRemaining -= reward;
+      _lpClaimed = true;
+      chat.add('You claimed $reward LP from Lucky Bag 🎁');
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('You claimed $reward LP')),
     );
   }
 
@@ -1813,8 +1981,8 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
-  Future<void> _editPassword() async {
-    bool enabled = widget.room.locked;
+  Future<void> _editPassword({bool forceEnable = false}) async {
+    bool enabled = forceEnable || widget.room.locked;
     await showDialog<void>(
       context: context,
       builder: (_) => _RouteTextEditorV08(
@@ -1922,56 +2090,25 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _sendMessage() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _RouteTextEditorV08(
-        builder: (sheetContext, c) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          14,
-          14,
-          14,
-          MediaQuery.of(sheetContext).viewInsets.bottom + 14,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: c,
-                decoration: const InputDecoration(
-                  hintText: 'Message...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: () {
-                final value = c.text.trim();
-                if (value.isNotEmpty) {
-                  setState(
-                    () => chat.add(
-                      'VIP ' +
-                          demoEconomy.activeVip.toString() +
-                          ' You: ' +
-                          value,
-                    ),
-                  );
-                  demoEconomy.addInbox(
-                    'Room message',
-                    '${widget.room.name}: $value',
-                    Icons.chat_bubble_rounded,
-                  );
-                }
-                Navigator.pop(sheetContext);
-              },
-              child: const Text('Send'),
-            ),
-          ],
-        ),
-      ),
-      ),
+    final value = _roomMessageController.text.trim();
+    if (value.isEmpty) return;
+
+    setState(() => chat.add('You: $value'));
+    _roomMessageController.clear();
+    demoEconomy.addInbox(
+      'Room message',
+      '${widget.room.name}: $value',
+      Icons.chat_bubble_rounded,
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_roomScrollController.hasClients) return;
+      _roomScrollController.animateTo(
+        _roomScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
   }
 }
 
@@ -2202,6 +2339,7 @@ class RoomData {
     this.inviteMode = true,
     this.pin = '',
     this.dpPath,
+    this.ownedByMe = false,
   });
 
   String name;
@@ -2213,6 +2351,7 @@ class RoomData {
   bool inviteMode;
   String pin;
   String? dpPath;
+  bool ownedByMe;
 }
 
 class _BottomTool extends StatelessWidget {
