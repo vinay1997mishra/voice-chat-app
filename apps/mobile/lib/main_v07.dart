@@ -838,9 +838,7 @@ class _RoomV07State extends State<RoomV07> {
                   subtitle: Text(
                     'ID ${user.id} • ${demoNumber(user.diamonds)} Diamond',
                   ),
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opened profile ID ${user.id}')),
-                  ),
+                  onTap: () => _openUserProfile(user),
                 );
               },
             ),
@@ -1497,14 +1495,21 @@ class _RoomV07State extends State<RoomV07> {
                           : admins.contains(name)
                               ? const Text('Admin')
                               : null,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Opened profile ID ${user.id}')),
-                      ),
+                      onTap: () => _openUserProfile(user),
                     );
                   },
                 ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openUserProfile(DemoUser user) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DemoUserProfileV07(user: user),
       ),
     );
   }
@@ -1554,6 +1559,205 @@ class _RoomV07State extends State<RoomV07> {
     ).whenComplete(c.dispose);
   }
 }
+
+class DemoUserProfileV07 extends StatelessWidget {
+  const DemoUserProfileV07({super.key, required this.user});
+  final DemoUser user;
+
+  Future<void> _gift(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: 520,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Row(
+                  children: [
+                    CircleAvatar(child: Text(user.avatar)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Gift to ' + user.name + ' • ID ' + user.id,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: demoEconomy.gifts.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: .70,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemBuilder: (_, i) {
+                    final gift = demoEconomy.gifts[i];
+                    return InkWell(
+                      onTap: () {
+                        final ok = demoEconomy.sendGift(
+                          gift,
+                          user,
+                          'PROFILE',
+                        );
+                        if (!ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Not enough Coins')),
+                          );
+                          return;
+                        }
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              gift.name +
+                                  ' sent to ID ' +
+                                  user.id +
+                                  ' • ' +
+                                  demoNumber(gift.coins) +
+                                  ' Coins',
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(gift.emoji, style: const TextStyle(fontSize: 34)),
+                              const SizedBox(height: 6),
+                              Text(
+                                gift.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              Text(
+                                demoNumber(gift.coins) + ' Coins',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: demoEconomy,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('User Profile')),
+          body: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Center(
+                child: CircleAvatar(
+                  radius: 48,
+                  child: Text(user.avatar, style: const TextStyle(fontSize: 38)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: Text(
+                  user.name,
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Center(child: Text('ID ' + user.id)),
+              const SizedBox(height: 14),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.diamond_rounded),
+                  title: const Text('Diamond'),
+                  trailing: Text(demoNumber(user.diamonds)),
+                ),
+              ),
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.workspace_premium_rounded),
+                  title: Text('VIP'),
+                  trailing: Text('VIP 3'),
+                ),
+              ),
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.bar_chart_rounded),
+                  title: Text('Level'),
+                  trailing: Text('Lv. 18'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DemoChatV06(title: user.name),
+                        ),
+                      ),
+                      icon: const Icon(Icons.forum_rounded),
+                      label: const Text('Message'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _gift(context),
+                      icon: const Icon(Icons.card_giftcard_rounded),
+                      label: const Text('Gift'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: () {
+                  demoEconomy.addInbox(
+                    'Followed ' + user.name,
+                    'ID ' + user.id + ' added to local follow list.',
+                    Icons.person_add_alt_1_rounded,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Following ' + user.name)),
+                  );
+                },
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Follow'),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
 
 class RoomData {
   RoomData(
