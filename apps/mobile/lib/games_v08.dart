@@ -162,36 +162,38 @@ class _ModeCard extends StatelessWidget {
       );
 }
 
-// ---------------- LUDO ----------------
+// ---------------- LUDO 4 PLAYER 3D ----------------
 
 class LudoGameV08 extends StatefulWidget {
   const LudoGameV08({super.key, required this.mode});
   final V08GameMode mode;
-
   @override
   State<LudoGameV08> createState() => _LudoGameV08State();
 }
 
 class _LudoGameV08State extends State<LudoGameV08> {
   final rng = Random();
-  final red = List<int>.filled(4, -1);
-  final blue = List<int>.filled(4, -1);
+  final tokens = List<List<int>>.generate(4, (_) => List<int>.filled(4, -1));
   int current = 0;
   int? dice;
   String status = 'Roll the dice';
   bool busy = false;
+  int? winner;
 
-  bool get botTurn => widget.mode == V08GameMode.soloBot && current == 1;
-  String get currentName => current == 0
-      ? 'You / Red'
-      : (widget.mode == V08GameMode.soloBot ? 'Bot / Blue' : 'Player 2 / Blue');
+  bool get botMode => widget.mode == V08GameMode.soloBot;
+  bool get botTurn => botMode && current != 0;
 
-  List<int> get tokens => current == 0 ? red : blue;
+  String _name(int seat) {
+    const colors = ['Red', 'Green', 'Blue', 'Yellow'];
+    if (!botMode) return 'P' + (seat + 1).toString() + ' / ' + colors[seat];
+    return seat == 0 ? 'You / Red' : 'Bot ' + seat.toString() + ' / ' + colors[seat];
+  }
 
   List<int> movable(int roll) {
     final result = <int>[];
+    final list = tokens[current];
     for (var i = 0; i < 4; i++) {
-      final p = tokens[i];
+      final p = list[i];
       if (p == -1 && roll == 6) result.add(i);
       if (p >= 0 && p < 56 && p + roll <= 56) result.add(i);
     }
@@ -199,79 +201,86 @@ class _LudoGameV08State extends State<LudoGameV08> {
   }
 
   Future<void> rollDice() async {
-    if (busy || dice != null || botTurn) return;
+    if (busy || dice != null || botTurn || winner != null) return;
     final value = rng.nextInt(6) + 1;
     setState(() {
       dice = value;
-      status = currentName + ' rolled ' + value.toString();
+      status = _name(current) + ' rolled ' + value.toString();
     });
     if (movable(value).isEmpty) {
-      await Future.delayed(const Duration(milliseconds: 450));
+      await Future.delayed(const Duration(milliseconds: 400));
       _endTurn(extra: false);
     }
   }
 
   void moveToken(int index) {
-    if (dice == null || busy || botTurn) return;
+    if (dice == null || busy || botTurn || winner != null) return;
     if (!movable(dice!).contains(index)) return;
     _applyMove(index, dice!);
   }
 
   void _applyMove(int index, int roll) {
-    final list = current == 0 ? red : blue;
+    final seat = current;
+    final list = tokens[seat];
     setState(() {
       list[index] = list[index] == -1 ? 0 : list[index] + roll;
-      status = currentName + ' moved token ' + (index + 1).toString();
+      status = _name(seat) + ' moved token ' + (index + 1).toString();
       dice = null;
     });
-    _captureIfNeeded(index);
+    _captureIfNeeded(seat, index);
     if (list.every((p) => p == 56)) {
-      setState(() => status = currentName + ' wins! 🎉');
+      setState(() {
+        winner = seat;
+        status = _name(seat) + ' wins! 🎉';
+      });
       return;
     }
     _endTurn(extra: roll == 6);
   }
 
-  void _captureIfNeeded(int index) {
-    final mine = current == 0 ? red[index] : blue[index];
-    if (mine <= 0 || mine >= 52) return;
-    final opponent = current == 0 ? blue : red;
-    final mineTrack = current == 0 ? mine : (mine + 26) % 52;
-    for (var i = 0; i < opponent.length; i++) {
-      final p = opponent[i];
-      if (p <= 0 || p >= 52) continue;
-      final oppTrack = current == 0 ? (p + 26) % 52 : p;
-      if (mineTrack == oppTrack &&
-          !{0, 8, 13, 21, 26, 34, 39, 47}.contains(mineTrack)) {
-        opponent[i] = -1;
-        status += ' • captured opponent token!';
+  void _captureIfNeeded(int seat, int index) {
+    final position = tokens[seat][index];
+    if (position <= 0 || position >= 52) return;
+    const starts = [0, 13, 26, 39];
+    const safe = <int>{0, 8, 13, 21, 26, 34, 39, 47};
+    final global = (position + starts[seat]) % 52;
+    if (safe.contains(global)) return;
+
+    for (var other = 0; other < 4; other++) {
+      if (other == seat) continue;
+      for (var i = 0; i < 4; i++) {
+        final p = tokens[other][i];
+        if (p <= 0 || p >= 52) continue;
+        final otherGlobal = (p + starts[other]) % 52;
+        if (global == otherGlobal) {
+          tokens[other][i] = -1;
+          status += ' • captured ' + _name(other) + ' token';
+        }
       }
     }
   }
 
   void _endTurn({required bool extra}) {
-    if (red.every((p) => p == 56) || blue.every((p) => p == 56)) return;
+    if (winner != null) return;
     setState(() {
       dice = null;
-      if (!extra) current = 1 - current;
-      status = extra ? currentName + ' gets another turn' : currentName + ' turn';
+      if (!extra) current = (current + 1) % 4;
+      status = extra ? _name(current) + ' gets another turn' : _name(current) + ' turn';
     });
-    if (botTurn) {
-      Future.delayed(const Duration(milliseconds: 650), _botMove);
-    }
+    if (botTurn) Future.delayed(const Duration(milliseconds: 550), _botMove);
   }
 
   Future<void> _botMove() async {
-    if (!mounted || !botTurn || busy) return;
+    if (!mounted || !botTurn || busy || winner != null) return;
     busy = true;
-    await Future.delayed(const Duration(milliseconds: 450));
+    await Future.delayed(const Duration(milliseconds: 350));
     final roll = rng.nextInt(6) + 1;
     if (!mounted) return;
     setState(() {
       dice = roll;
-      status = 'Bot rolled ' + roll.toString();
+      status = _name(current) + ' rolled ' + roll.toString();
     });
-    await Future.delayed(const Duration(milliseconds: 450));
+    await Future.delayed(const Duration(milliseconds: 350));
     final moves = movable(roll);
     busy = false;
     if (moves.isEmpty) {
@@ -280,7 +289,8 @@ class _LudoGameV08State extends State<LudoGameV08> {
     }
     var pick = moves.first;
     for (final i in moves) {
-      if (blue[i] + roll == 56 || (blue[i] == -1 && roll == 6)) {
+      final p = tokens[current][i];
+      if (p + roll == 56 || (p == -1 && roll == 6)) {
         pick = i;
         break;
       }
@@ -288,102 +298,132 @@ class _LudoGameV08State extends State<LudoGameV08> {
     _applyMove(pick, roll);
   }
 
+  Widget _seat(int seat) {
+    final active = current == seat && winner == null;
+    final colors = [Colors.redAccent, Colors.greenAccent, Colors.blueAccent, Colors.amberAccent];
+    return Expanded(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        key: Key('ludo-seat-' + (seat + 1).toString() + '-v08'),
+        margin: const EdgeInsets.all(3),
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 3),
+        decoration: BoxDecoration(
+          color: active ? colors[seat].withOpacity(.15) : Colors.black26,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
+          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.28), blurRadius: 12)] : null,
+        ),
+        child: Column(
+          children: [
+            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
+            Text(_name(seat), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+            Text(tokens[seat].where((p) => p == 56).length.toString() + '/4 home', style: const TextStyle(fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final winner = red.every((p) => p == 56)
-        ? 'Red'
-        : blue.every((p) => p == 56)
-            ? 'Blue'
-            : null;
     return Scaffold(
       backgroundColor: const Color(0xFF0C1022),
-      appBar: AppBar(title: const Text('Ludo 3D')),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          const _FourSeatHeaderV08(game: 'Ludo'),
-          _LudoBoard(red: red, blue: blue),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  Text(
-                    winner == null ? currentName : winner + ' wins! 🎉',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(status, textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  if (winner == null)
-                    FilledButton.icon(
-                      key: const Key('ludo-roll-v08'),
-                      onPressed: dice == null && !botTurn ? rollDice : null,
-                      icon: const Icon(Icons.casino_rounded),
-                      label: Text(dice == null ? 'Roll Dice' : 'Dice: ' + dice.toString()),
-                    ),
-                ],
+      appBar: AppBar(title: const Text('Ludo • 4 Player 3D')),
+      body: _GameSceneV08(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              Container(
+                key: const Key('ludo-four-player-v08'),
+                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
               ),
-            ),
+              const SizedBox(height: 8),
+              _LudoBoardV08(tokens: tokens),
+              const SizedBox(height: 10),
+              Card(
+                color: Colors.white10,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      Text(
+                        winner == null ? _name(current) : _name(winner!) + ' wins! 🎉',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(status, textAlign: TextAlign.center),
+                      const SizedBox(height: 10),
+                      if (winner == null)
+                        FilledButton.icon(
+                          key: const Key('ludo-roll-v08'),
+                          onPressed: dice == null && !botTurn ? rollDice : null,
+                          icon: const Icon(Icons.casino_rounded),
+                          label: Text(dice == null ? 'Roll Dice' : 'Dice: ' + dice.toString()),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (winner == null)
+                _LudoTokenPanelV08(
+                  title: _name(current) + ' tokens',
+                  values: tokens[current],
+                  dice: dice,
+                  enabled: !botTurn,
+                  onTap: moveToken,
+                ),
+              if (!botMode && winner == null)
+                Text(
+                  'Phone ' + _name(current) + ' ko de do • 4-player local turn-by-turn.',
+                  textAlign: TextAlign.center,
+                ),
+            ],
           ),
-          _TokenPanel(
-            title: 'Red tokens',
-            values: red,
-            active: current == 0,
-            dice: dice,
-            onTap: current == 0 ? moveToken : null,
-          ),
-          _TokenPanel(
-            title: 'Blue tokens',
-            values: blue,
-            active: current == 1,
-            dice: dice,
-            onTap: current == 1 && !botTurn ? moveToken : null,
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _TokenPanel extends StatelessWidget {
-  const _TokenPanel({
+class _LudoTokenPanelV08 extends StatelessWidget {
+  const _LudoTokenPanelV08({
     required this.title,
     required this.values,
-    required this.active,
     required this.dice,
-    this.onTap,
+    required this.enabled,
+    required this.onTap,
   });
   final String title;
   final List<int> values;
-  final bool active;
   final int? dice;
-  final ValueChanged<int>? onTap;
+  final bool enabled;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) => Card(
+        color: Colors.white10,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 7),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (var i = 0; i < 4; i++)
+                  for (var i = 0; i < values.length; i++)
                     ActionChip(
-                      onPressed: active && dice != null && onTap != null ? () => onTap!(i) : null,
-                      avatar: const Icon(Icons.circle, size: 16),
+                      onPressed: enabled && dice != null ? () => onTap(i) : null,
+                      avatar: const Icon(Icons.circle, size: 14),
                       label: Text(
                         values[i] == -1
-                            ? 'T' + (i + 1).toString() + ': Yard'
+                            ? 'Yard'
                             : values[i] == 56
-                                ? 'T' + (i + 1).toString() + ': Home'
-                                : 'T' + (i + 1).toString() + ': ' + values[i].toString() + '/56',
+                                ? 'Home'
+                                : 'T' + (i + 1).toString() + ': ' + values[i].toString(),
                       ),
                     ),
                 ],
@@ -394,10 +434,9 @@ class _TokenPanel extends StatelessWidget {
       );
 }
 
-class _LudoBoard extends StatelessWidget {
-  const _LudoBoard({required this.red, required this.blue});
-  final List<int> red;
-  final List<int> blue;
+class _LudoBoardV08 extends StatelessWidget {
+  const _LudoBoardV08({required this.tokens});
+  final List<List<int>> tokens;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
@@ -420,7 +459,7 @@ class _LudoBoard extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               child: CustomPaint(
                 key: const Key('ludo-board-v08'),
-                painter: _LudoBoardPainter(red: red, blue: blue),
+                painter: _LudoBoardPainterV08(tokens: tokens),
               ),
             ),
           ),
@@ -428,93 +467,115 @@ class _LudoBoard extends StatelessWidget {
       );
 }
 
-class _LudoBoardPainter extends CustomPainter {
-  _LudoBoardPainter({required this.red, required this.blue});
-  final List<int> red;
-  final List<int> blue;
+class _LudoBoardPainterV08 extends CustomPainter {
+  _LudoBoardPainterV08({required this.tokens});
+  final List<List<int>> tokens;
 
-  Offset _trackPoint(int step, Size size, bool bluePlayer) {
-    final n = bluePlayer ? (step + 26) % 52 : step % 52;
-    final cell = size.width / 15;
-    // 52-cell loop mapped around the standard 15x15 cross.
-    const path = <Offset>[
-      Offset(6,1),Offset(6,2),Offset(6,3),Offset(6,4),Offset(6,5),
-      Offset(5,6),Offset(4,6),Offset(3,6),Offset(2,6),Offset(1,6),Offset(0,6),
-      Offset(0,7),Offset(0,8),Offset(1,8),Offset(2,8),Offset(3,8),Offset(4,8),
-      Offset(5,8),Offset(6,9),Offset(6,10),Offset(6,11),Offset(6,12),Offset(6,13),
-      Offset(6,14),Offset(7,14),Offset(8,14),Offset(8,13),Offset(8,12),Offset(8,11),
-      Offset(8,10),Offset(8,9),Offset(9,8),Offset(10,8),Offset(11,8),Offset(12,8),
-      Offset(13,8),Offset(14,8),Offset(14,7),Offset(14,6),Offset(13,6),Offset(12,6),
-      Offset(11,6),Offset(10,6),Offset(9,6),Offset(8,5),Offset(8,4),Offset(8,3),
-      Offset(8,2),Offset(8,1),Offset(8,0),Offset(7,0),Offset(6,0)
-    ];
-    final p = path[n % 52];
+  static const path = <Offset>[
+    Offset(6,1),Offset(6,2),Offset(6,3),Offset(6,4),Offset(6,5),
+    Offset(5,6),Offset(4,6),Offset(3,6),Offset(2,6),Offset(1,6),Offset(0,6),
+    Offset(0,7),Offset(0,8),Offset(1,8),Offset(2,8),Offset(3,8),Offset(4,8),
+    Offset(5,8),Offset(6,9),Offset(6,10),Offset(6,11),Offset(6,12),Offset(6,13),
+    Offset(6,14),Offset(7,14),Offset(8,14),Offset(8,13),Offset(8,12),Offset(8,11),
+    Offset(8,10),Offset(8,9),Offset(9,8),Offset(10,8),Offset(11,8),Offset(12,8),
+    Offset(13,8),Offset(14,8),Offset(14,7),Offset(14,6),Offset(13,6),Offset(12,6),
+    Offset(11,6),Offset(10,6),Offset(9,6),Offset(8,5),Offset(8,4),Offset(8,3),
+    Offset(8,2),Offset(8,1),Offset(8,0),Offset(7,0),Offset(6,0)
+  ];
+
+  Offset _track(int relative, int seat, double cell) {
+    const starts = [0, 13, 26, 39];
+    final p = path[(relative + starts[seat]) % 52];
     return Offset((p.dx + .5) * cell, (p.dy + .5) * cell);
+  }
+
+  Offset _homeLane(int progress, int seat, double cell) {
+    final lane = (progress - 51).clamp(1, 5);
+    if (seat == 0) return Offset(7.5 * cell, (lane + .5) * cell);
+    if (seat == 1) return Offset((14 - lane + .5) * cell, 7.5 * cell);
+    if (seat == 2) return Offset(7.5 * cell, (14 - lane + .5) * cell);
+    return Offset((lane + .5) * cell, 7.5 * cell);
+  }
+
+  Offset _yard(int seat, int token, double cell) {
+    const bases = [Offset(1.5,1.5), Offset(10.5,1.5), Offset(10.5,10.5), Offset(1.5,10.5)];
+    final b = bases[seat];
+    return Offset((b.dx + (token % 2) * 2) * cell, (b.dy + (token ~/ 2) * 2) * cell);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final cell = size.width / 15;
-    final grid = Paint()..color = const Color(0xFF4D4655)..style = PaintingStyle.stroke..strokeWidth = .7;
-    final white = Paint()..color = const Color(0xFFF7F4F0);
-    final redP = Paint()..color = const Color(0xFFE53935);
-    final blueP = Paint()..color = const Color(0xFF1E88E5);
-    final greenP = Paint()..color = const Color(0xFF43A047);
-    final yellowP = Paint()..color = const Color(0xFFFDD835);
+    final white = Paint()..color = const Color(0xFFF8F5F0);
+    final grid = Paint()..color = const Color(0xFF48414E)..style = PaintingStyle.stroke..strokeWidth = .7;
+    final colors = [
+      const Color(0xFFE53935),
+      const Color(0xFF43A047),
+      const Color(0xFF1E88E5),
+      const Color(0xFFFBC02D),
+    ];
+
     canvas.drawRect(Offset.zero & size, white);
+    canvas.drawRect(Rect.fromLTWH(0,0,cell*6,cell*6), Paint()..color=colors[0]);
+    canvas.drawRect(Rect.fromLTWH(cell*9,0,cell*6,cell*6), Paint()..color=colors[1]);
+    canvas.drawRect(Rect.fromLTWH(cell*9,cell*9,cell*6,cell*6), Paint()..color=colors[2]);
+    canvas.drawRect(Rect.fromLTWH(0,cell*9,cell*6,cell*6), Paint()..color=colors[3]);
 
-    // Four recognizable Ludo yards.
-    canvas.drawRect(Rect.fromLTWH(0,0,cell*6,cell*6), redP);
-    canvas.drawRect(Rect.fromLTWH(cell*9,0,cell*6,cell*6), greenP);
-    canvas.drawRect(Rect.fromLTWH(0,cell*9,cell*6,cell*6), yellowP);
-    canvas.drawRect(Rect.fromLTWH(cell*9,cell*9,cell*6,cell*6), blueP);
-    for (final o in const [Offset(1.2,1.2),Offset(3.7,1.2),Offset(1.2,3.7),Offset(3.7,3.7)]) {
-      canvas.drawCircle(Offset(o.dx*cell,o.dy*cell),cell*.55,white);
-      canvas.drawCircle(Offset((15-o.dx)*cell,(15-o.dy)*cell),cell*.55,white);
-    }
-
-    // Cross track and grid.
-    for (var r=0;r<15;r++) {
-      for (var col=0;col<15;col++) {
-        if ((col>=6&&col<=8)||(r>=6&&r<=8)) {
-          final rect=Rect.fromLTWH(col*cell,r*cell,cell,cell);
-          canvas.drawRect(rect, white); canvas.drawRect(rect, grid);
+    for (var row=0; row<15; row++) {
+      for (var col=0; col<15; col++) {
+        if ((col>=6 && col<=8) || (row>=6 && row<=8)) {
+          final rect=Rect.fromLTWH(col*cell,row*cell,cell,cell);
+          canvas.drawRect(rect,white);
+          canvas.drawRect(rect,grid);
         }
       }
     }
-    // Home lanes for the two playable colors.
+
     for (var i=1;i<=5;i++) {
-      canvas.drawRect(Rect.fromLTWH(7*cell,i*cell,cell,cell), redP);
-      canvas.drawRect(Rect.fromLTWH(7*cell,(14-i)*cell,cell,cell), blueP);
+      canvas.drawRect(Rect.fromLTWH(7*cell,i*cell,cell,cell), Paint()..color=colors[0]);
+      canvas.drawRect(Rect.fromLTWH((14-i)*cell,7*cell,cell,cell), Paint()..color=colors[1]);
+      canvas.drawRect(Rect.fromLTWH(7*cell,(14-i)*cell,cell,cell), Paint()..color=colors[2]);
+      canvas.drawRect(Rect.fromLTWH(i*cell,7*cell,cell,cell), Paint()..color=colors[3]);
     }
-    // Center home triangles.
-    final center=Offset(7.5*cell,7.5*cell);
-    final redTri=Path()..moveTo(6*cell,6*cell)..lineTo(9*cell,6*cell)..lineTo(center.dx,center.dy)..close();
-    final blueTri=Path()..moveTo(6*cell,9*cell)..lineTo(9*cell,9*cell)..lineTo(center.dx,center.dy)..close();
-    canvas.drawPath(redTri,redP); canvas.drawPath(blueTri,blueP);
 
-    void token(List<int> vals,bool blue,Paint paint) {
-      for(var i=0;i<4;i++) {
-        final p=vals[i];
-        Offset pos;
-        if(p<0) {
-          final base=blue?const Offset(10.5,10.5):const Offset(1.5,1.5);
-          pos=Offset((base.dx+(i%2)*2)*cell,(base.dy+(i~/2)*2)*cell);
-        } else if(p>=52) {
-          final lane=(p-51).clamp(1,5);
-          pos=blue?Offset(7.5*cell,(14-lane+.5)*cell):Offset(7.5*cell,(lane+.5)*cell);
-        } else {
-          pos=_trackPoint(p,size,blue);
-        }
-        canvas.drawCircle(pos,cell*.31,paint);
-        canvas.drawCircle(pos,cell*.31,Paint()..color=Colors.white..style=PaintingStyle.stroke..strokeWidth=2);
+    final center=Offset(7.5*cell,7.5*cell);
+    for (var seat=0; seat<4; seat++) {
+      final angle = seat * pi / 2;
+      final p=Path()
+        ..moveTo(center.dx,center.dy)
+        ..lineTo(center.dx + cos(angle-.78)*cell*2.1, center.dy + sin(angle-.78)*cell*2.1)
+        ..lineTo(center.dx + cos(angle+.78)*cell*2.1, center.dy + sin(angle+.78)*cell*2.1)
+        ..close();
+      canvas.drawPath(p,Paint()..color=colors[seat]);
+    }
+
+    for (var seat=0; seat<4; seat++) {
+      for (var i=0;i<4;i++) {
+        final value=tokens[seat][i];
+        final pos=value<0
+            ? _yard(seat,i,cell)
+            : value>=52
+                ? _homeLane(value,seat,cell)
+                : _track(value,seat,cell);
+        final radius=cell*.30;
+        canvas.drawCircle(pos+const Offset(1.5,2.5),radius,Paint()..color=Colors.black38);
+        canvas.drawCircle(
+          pos,
+          radius,
+          Paint()
+            ..shader=RadialGradient(
+              colors:[Colors.white.withOpacity(.7),colors[seat],Color.lerp(colors[seat],Colors.black,.3)!],
+              stops:const [0,.4,1],
+              center:const Alignment(-.35,-.35),
+            ).createShader(Rect.fromCircle(center:pos,radius:radius)),
+        );
+        canvas.drawCircle(pos,radius,Paint()..color=Colors.white70..style=PaintingStyle.stroke..strokeWidth=1.5);
       }
     }
-    token(red,false,redP); token(blue,true,blueP);
   }
 
   @override
-  bool shouldRepaint(covariant _LudoBoardPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _LudoBoardPainterV08 oldDelegate) => true;
 }
 
 // ---------------- UNO 4 PLAYER ----------------
