@@ -887,10 +887,10 @@ class _V07HomeState extends State<V07Home> {
 
   Future<void> _openRoom(RoomData room) async {
     if (room.locked) {
-      final controller = TextEditingController();
       final ok = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (_) => _RouteTextEditorV08(
+          builder: (dialogContext, controller) => AlertDialog(
           title: const Text('Room Password'),
           content: TextField(
             key: const Key('join-room-pin-v06'),
@@ -922,8 +922,8 @@ class _V07HomeState extends State<V07Home> {
             ),
           ],
         ),
+        ),
       );
-      controller.dispose();
       if (ok != true || !mounted) return;
     }
     await Navigator.push(
@@ -1365,19 +1365,21 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _editNotice() {
-    final c = TextEditingController(text: notice);
-    showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+    showDialog<void>(context: context, builder: (_) => _RouteTextEditorV08(
+      initialText: notice,
+      builder: (dialogContext, c) => AlertDialog(
       title: const Text('Edit Room Notice'),
       content: TextField(controller: c),
       actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')), FilledButton(onPressed: () { setState(() => notice = c.text.trim().isEmpty ? notice : c.text.trim()); Navigator.pop(dialogContext); }, child: const Text('Save'))],
-    ));
+    )));
   }
 
   void _luckyBag() {
-    final amount = TextEditingController(text: '6000');
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (_) => _RouteTextEditorV08(
+        initialText: '6000',
+        builder: (dialogContext, amount) => AlertDialog(
         title: const Text('Lucky Bag (LP)'),
         content: TextField(
           key: const Key('lp-amount-v06'),
@@ -1409,7 +1411,8 @@ class _RoomV07State extends State<RoomV07> {
           ),
         ],
       ),
-    ).whenComplete(amount.dispose);
+      ),
+    );
   }
 
   void _gameCenter() {
@@ -1811,11 +1814,12 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   Future<void> _editPassword() async {
-    final controller = TextEditingController(text: widget.room.pin);
     bool enabled = widget.room.locked;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
+      builder: (_) => _RouteTextEditorV08(
+        initialText: widget.room.pin,
+        builder: (dialogContext, controller) => StatefulBuilder(
         builder: (context, setLocal) => AlertDialog(
           title: const Text('Room Password'),
           content: Column(
@@ -1859,8 +1863,8 @@ class _RoomV07State extends State<RoomV07> {
           ],
         ),
       ),
+      ),
     );
-    controller.dispose();
   }
 
   void _members() {
@@ -1918,11 +1922,11 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _sendMessage() {
-    final c = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => Padding(
+      builder: (_) => _RouteTextEditorV08(
+        builder: (sheetContext, c) => Padding(
         padding: EdgeInsets.fromLTRB(
           14,
           14,
@@ -1966,7 +1970,8 @@ class _RoomV07State extends State<RoomV07> {
           ],
         ),
       ),
-    ).whenComplete(c.dispose);
+      ),
+    );
   }
 }
 
@@ -3340,4 +3345,35 @@ class BasicPageV07 extends StatelessWidget {
           ),
         ),
       );
+}
+
+  
+// The editor owns its controller for the entire route lifetime, including the
+// reverse animation. A Navigator pop future completes before route disposal.
+class _RouteTextEditorV08 extends StatefulWidget {
+  const _RouteTextEditorV08({this.initialText = '', required this.builder});
+  final String initialText;
+  final Widget Function(BuildContext, TextEditingController) builder;
+
+  @override
+  State<_RouteTextEditorV08> createState() => _RouteTextEditorV08State();
+}
+
+class _RouteTextEditorV08State extends State<_RouteTextEditorV08> {
+  late final TextEditingController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, controller);
 }
