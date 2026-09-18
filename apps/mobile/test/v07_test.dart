@@ -4,6 +4,13 @@ import 'package:voice_chat_app/main_v07.dart';
 import 'package:voice_chat_app/games_v07.dart';
 
 void main() {
+  void setPhoneViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   testWidgets('playable games expose bot and local multiplayer modes', (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const MaterialApp(
@@ -18,13 +25,6 @@ void main() {
     expect(find.text('Ludo'), findsWidgets);
     expect(find.byKey(const Key('ludo-roll-v07')), findsOneWidget);
   });
-
-  void setPhoneViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-  }
 
   testWidgets('final v0.7 includes shell wallet and room tools', (tester) async {
     setPhoneViewport(tester);
