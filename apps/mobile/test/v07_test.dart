@@ -121,8 +121,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
     expect(find.text('VIP 1–11'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -2200));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('VIP 11'), findsOneWidget);
     expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
-    Navigator.of(tester.element(find.text('VIP 1–11'))).pop();
+    Navigator.of(tester.element(find.text('VIP 11'))).pop();
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Store').last);
