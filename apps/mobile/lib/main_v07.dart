@@ -3029,6 +3029,45 @@ class _WalletV06State extends State<WalletV06> {
     super.dispose();
   }
 
+  void _showBalanceInfo(String type, int balance) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                type == 'Coins'
+                    ? Icons.monetization_on_rounded
+                    : Icons.diamond_rounded,
+                size: 46,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                type,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text('Current balance: ' + demoNumber(balance)),
+              const SizedBox(height: 8),
+              Text(
+                type == 'Coins'
+                    ? 'Coins are used for local gifts and game demos.'
+                    : 'Diamond can be converted to Coins at the local 50% demo rate.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _convert() {
     final amount = int.tryParse(conversion.text.trim()) ?? 0;
     if (!demoEconomy.convertDiamonds(amount)) {
@@ -3063,7 +3102,10 @@ class _WalletV06State extends State<WalletV06> {
                     title: 'Coins',
                     value: demoNumber(demoEconomy.coins),
                     icon: Icons.monetization_on_rounded,
-                    onTap: () {},
+                    onTap: () => _showBalanceInfo(
+                      'Coins',
+                      demoEconomy.coins,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -3072,7 +3114,10 @@ class _WalletV06State extends State<WalletV06> {
                     title: 'Diamond',
                     value: demoNumber(demoEconomy.diamonds),
                     icon: Icons.diamond_rounded,
-                    onTap: () {},
+                    onTap: () => _showBalanceInfo(
+                      'Diamond',
+                      demoEconomy.diamonds,
+                    ),
                   ),
                 ),
               ],
