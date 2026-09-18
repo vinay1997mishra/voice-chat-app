@@ -1142,24 +1142,206 @@ class _RoomV06State extends State<RoomV06> {
     );
   }
 
-  void _gift() {
-    showModalBottomSheet<void>(
+  Future<void> _gift() async {
+    final activeNames = seats
+        .whereType<String>()
+        .where((name) => name != 'You')
+        .toSet()
+        .toList();
+    if (activeNames.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No recipient is on a seat')),
+      );
+      return;
+    }
+
+    DemoUser recipient = demoEconomy.byName(activeNames.first);
+
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text('Send Gift', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-            for (final gift in const ['Rose 🌹', 'Crown 👑', 'Rocket 🚀'])
-              ListTile(
-                title: Text(gift),
-                onTap: () {
-                  setState(() => chat.add('You sent $gift'));
-                  Navigator.pop(sheetContext);
-                },
-              ),
-          ],
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setLocal) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Send Gift',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  key: const Key('gift-recipient-v06'),
+                  value: recipient.id,
+                  decoration: const InputDecoration(
+                    labelText: 'Send to user ID',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: activeNames.map((name) {
+                    final user = demoEconomy.byName(name);
+                    return DropdownMenuItem(
+                      value: user.id,
+                      child: Text('${user.name} • ID ${user.id}'),
+                    );
+                  }).toList(),
+                  onChanged: (id) {
+                    if (id == null) return;
+                    setLocal(() {
+                      recipient = demoEconomy.users.firstWhere(
+                        (user) => user.id == id,
+                      );
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Your Coins: ${demoNumber(demoEconomy.coins)}'),
+                ),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    itemCount: demoEconomy.gifts.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: .78,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemBuilder: (_, i) {
+                      final gift = demoEconomy.gifts[i];
+                      final big = gift.coins >= 100000;
+                      return InkWell(
+                        key: gift.name == 'Rose'
+                            ? const Key('gift-rose-v06')
+                            : null,
+                        onTap: () async {
+                          final ok = demoEconomy.sendGift(
+                            gift,
+                            recipient,
+                            widget.room.id,
+                          );
+                          if (!ok) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Not enough Coins')),
+                            );
+                            return;
+                          }
+                          setState(() {
+                            chat.add(
+                              'You sent ${gift.emoji} ${gift.name} to '
+                              '${recipient.name} • ID ${recipient.id}',
+                            );
+                          });
+                          Navigator.pop(sheetContext);
+                          if (!mounted) return;
+
+                          if (big) {
+                            await showDialog<void>(
+                              context: this.context,
+                              builder: (dialogContext) => AlertDialog(
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '✨ BIG GIFT ✨',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      gift.emoji,
+                                      style: const TextStyle(fontSize: 80),
+                                    ),
+                                    Text(
+                                      gift.name,
+                                      style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text('${demoNumber(gift.coins)} Coins'),
+                                    Text(
+                                      'To ${recipient.name} • ID ${recipient.id}',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Recipient wallet +${demoNumber(gift.coins)} Diamond',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                                actions: [
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext),
+                                    child: const Text('Awesome'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${gift.name} sent to ID ${recipient.id}. '
+                                  '+${demoNumber(gift.coins)} Diamond credited.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  gift.emoji,
+                                  style: TextStyle(fontSize: big ? 36 : 30),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  gift.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  demoNumber(gift.coins),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                if (big)
+                                  const Text(
+                                    'BIG',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
