@@ -412,7 +412,7 @@ class DiscoverV06 extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const GameLauncherV07(game: 'Ludo'),
+                            builder: (_) => const GamesCenterV07(),
                           ),
                         );
                         return;
