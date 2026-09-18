@@ -1536,7 +1536,10 @@ class ProfileV06 extends StatelessWidget {
   const ProfileV06({super.key});
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: demoEconomy,
+      builder: (context, _) => Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF43126C), Color(0xFF130419)],
@@ -1550,54 +1553,342 @@ class ProfileV06 extends StatelessWidget {
             children: [
               const Row(
                 children: [
-                  CircleAvatar(radius: 34, child: Icon(Icons.person_rounded, size: 34)),
+                  CircleAvatar(
+                    radius: 34,
+                    child: Text('😎', style: TextStyle(fontSize: 30)),
+                  ),
                   SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('My Profile', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                      Text('ID 10000000'),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'My Profile',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text('ID 10000050'),
+                      ],
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
               Row(
                 children: [
-                  Expanded(child: _WalletCard(title: 'Coins', value: '1,000,000', icon: Icons.monetization_on_rounded)),
+                  Expanded(
+                    child: _WalletCard(
+                      title: 'Coins',
+                      value: demoNumber(demoEconomy.coins),
+                      icon: Icons.monetization_on_rounded,
+                      onTap: () => _openWallet(context),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: _WalletCard(title: 'Diamond', value: '25,000', icon: Icons.diamond_rounded)),
+                  Expanded(
+                    child: _WalletCard(
+                      title: 'Diamond',
+                      value: demoNumber(demoEconomy.diamonds),
+                      icon: Icons.diamond_rounded,
+                      onTap: () => _openWallet(context),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              const ListTile(leading: Icon(Icons.workspace_premium_rounded), title: Text('VIP'), subtitle: Text('VIP levels 1–11 demo')),
-              const ListTile(leading: Icon(Icons.shopping_bag_rounded), title: Text('Bag / Store')),
-              const ListTile(leading: Icon(Icons.bar_chart_rounded), title: Text('Level')),
-              const ListTile(leading: Icon(Icons.settings_rounded), title: Text('Settings')),
+              _ProfileTile(
+                icon: Icons.account_balance_wallet_rounded,
+                title: 'Wallet',
+                subtitle: 'Balances, conversion and transaction history',
+                onTap: () => _openWallet(context),
+              ),
+              _ProfileTile(
+                icon: Icons.workspace_premium_rounded,
+                title: 'VIP',
+                subtitle: 'VIP levels 1–11',
+                onTap: () => _simple(
+                  context,
+                  'VIP Center',
+                  'VIP1–VIP11 demo benefits, status and cosmetics.',
+                ),
+              ),
+              _ProfileTile(
+                icon: Icons.shopping_bag_rounded,
+                title: 'Store',
+                subtitle: 'Gifts, frames and room cosmetics',
+                onTap: () => _simple(
+                  context,
+                  'Store',
+                  'Gift and cosmetic store demo is open.',
+                ),
+              ),
+              _ProfileTile(
+                icon: Icons.inventory_2_rounded,
+                title: 'Bag',
+                subtitle: 'Owned items',
+                onTap: () => _simple(
+                  context,
+                  'Bag',
+                  'Your owned demo items appear here.',
+                ),
+              ),
+              _ProfileTile(
+                icon: Icons.bar_chart_rounded,
+                title: 'Level',
+                subtitle: 'User and wealth level',
+                onTap: () => _simple(
+                  context,
+                  'Level',
+                  'User and wealth level progress demo.',
+                ),
+              ),
+              _ProfileTile(
+                icon: Icons.settings_rounded,
+                title: 'Settings',
+                subtitle: 'Account and app settings',
+                onTap: () => _simple(
+                  context,
+                  'Settings',
+                  'Account, privacy and local demo settings.',
+                ),
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openWallet(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const WalletV06()),
+    );
+  }
+
+  void _simple(BuildContext context, String title, String body) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(body, textAlign: TextAlign.center),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WalletV06 extends StatefulWidget {
+  const WalletV06({super.key});
+
+  @override
+  State<WalletV06> createState() => _WalletV06State();
+}
+
+class _WalletV06State extends State<WalletV06> {
+  final conversion = TextEditingController(text: '1000');
+
+  @override
+  void dispose() {
+    conversion.dispose();
+    super.dispose();
+  }
+
+  void _convert() {
+    final amount = int.tryParse(conversion.text.trim()) ?? 0;
+    if (!demoEconomy.convertDiamonds(amount)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid Diamond amount')),
+      );
+      return;
+    }
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$amount Diamond converted to ${amount ~/ 2} Coins',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: demoEconomy,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(title: const Text('Wallet')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _WalletCard(
+                    title: 'Coins',
+                    value: demoNumber(demoEconomy.coins),
+                    icon: Icons.monetization_on_rounded,
+                    onTap: () {},
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WalletCard(
+                    title: 'Diamond',
+                    value: demoNumber(demoEconomy.diamonds),
+                    icon: Icons.diamond_rounded,
+                    onTap: () {},
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Diamond → Coins',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const Text('Conversion rate: 50%'),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: conversion,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Diamond amount',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton(
+                      onPressed: _convert,
+                      child: const Text('Convert'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Transaction History',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            for (final entry in demoEconomy.ledger)
+              Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Icon(
+                      entry.amount >= 0
+                          ? Icons.south_west_rounded
+                          : Icons.north_east_rounded,
+                    ),
+                  ),
+                  title: Text(entry.title),
+                  subtitle: Text(entry.detail),
+                  trailing: Text(
+                    '${entry.amount >= 0 ? '+' : ''}${demoNumber(entry.amount)}',
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletCard extends StatelessWidget {
+  const _WalletCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                Icon(icon, size: 30),
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       );
 }
 
-class _WalletCard extends StatelessWidget {
-  const _WalletCard({required this.title, required this.value, required this.icon});
-  final String title;
-  final String value;
+class _ProfileTile extends StatelessWidget {
+  const _ProfileTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
   final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Icon(icon, size: 30),
-              const SizedBox(height: 8),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(value),
-            ],
-          ),
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onTap,
         ),
       );
 }
