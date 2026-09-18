@@ -116,32 +116,38 @@ void main() {
     await tester.tap(find.text('Me'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('VIP'));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('VIP').last);
+    await tester.tap(find.text('VIP').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
     expect(find.text('VIP 1–11'), findsOneWidget);
     expect(find.byKey(const Key('vip11-3d-v07')), findsOneWidget);
     Navigator.of(tester.element(find.text('VIP 1–11'))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Store'));
+    await tester.ensureVisible(find.text('Store').last);
+    await tester.tap(find.text('Store').last);
     await tester.pumpAndSettle();
     expect(find.text('Gift Catalog'), findsOneWidget);
     Navigator.of(tester.element(find.text('Gift Catalog'))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Bag'));
+    await tester.ensureVisible(find.text('Bag').last);
+    await tester.tap(find.text('Bag').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('Equipped:'), findsOneWidget);
     Navigator.of(tester.element(find.textContaining('Equipped:'))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Level'));
+    await tester.ensureVisible(find.text('Level').last);
+    await tester.tap(find.text('Level').last);
     await tester.pumpAndSettle();
     expect(find.text('User Level'), findsOneWidget);
     Navigator.of(tester.element(find.text('User Level'))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Settings'));
+    await tester.ensureVisible(find.text('Settings').last);
+    await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
     expect(find.text('3D Effects'), findsOneWidget);
     expect(find.text('Allow Private Messages'), findsOneWidget);
