@@ -1216,6 +1216,26 @@ class _RoomV07State extends State<RoomV07> {
                 controller: _roomScrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 children: [
+                if (_lpRemaining > 0)
+                  Card(
+                    key: const Key('active-lp-v08'),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.card_giftcard_rounded),
+                      ),
+                      title: Text('Lucky Bag • $_lpRemaining LP remaining'),
+                      subtitle: Text(
+                        _lpClaimed
+                            ? 'You already claimed this Lucky Bag.'
+                            : 'Lucky Bag is live in this room. Tap Claim to open it.',
+                      ),
+                      trailing: FilledButton(
+                        key: const Key('claim-lp-v08'),
+                        onPressed: _lpClaimed ? null : _claimLuckyBag,
+                        child: const Text('Claim'),
+                      ),
+                    ),
+                  ),
                 GridView.builder(
                   key: const Key('v07-seat-grid'),
                   shrinkWrap: true,
@@ -1251,26 +1271,6 @@ class _RoomV07State extends State<RoomV07> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (_lpRemaining > 0)
-                  Card(
-                    key: const Key('active-lp-v08'),
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        child: Icon(Icons.card_giftcard_rounded),
-                      ),
-                      title: Text('Lucky Bag • $_lpRemaining LP remaining'),
-                      subtitle: Text(
-                        _lpClaimed
-                            ? 'You already claimed this Lucky Bag.'
-                            : 'Lucky Bag is live in this room. Tap Claim to open it.',
-                      ),
-                      trailing: FilledButton(
-                        key: const Key('claim-lp-v08'),
-                        onPressed: _lpClaimed ? null : _claimLuckyBag,
-                        child: const Text('Claim'),
-                      ),
-                    ),
-                  ),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(10),
