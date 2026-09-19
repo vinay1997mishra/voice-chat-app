@@ -421,6 +421,11 @@ String demoNumber(int value) {
 
 class VoiceChatV08 extends StatelessWidget {
   const VoiceChatV08({super.key});
+  bool get _canModerateSeatRequests =>
+      widget.room.ownedByMe ||
+      widget.room.currentUserIsAdmin ||
+      admins.contains('You');
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -1215,6 +1220,7 @@ class _RoomV07State extends State<RoomV07> {
   late List<String?> seats;
   final lockedSeats = <int>{};
   final mutedSeats = <int>{};
+  final pendingSeatRequests = <int, String>{};
   late final Set<String> audienceMembers;
   final admins = <String>{'Admin'};
   final blocked = <String>{};
@@ -1243,24 +1249,28 @@ class _RoomV07State extends State<RoomV07> {
     seats = List<String?>.filled(widget.room.seatCount, null);
     audienceMembers = widget.room.audienceMembers;
     lockedSeats.addAll(widget.room.savedLockedSeats);
+    pendingSeatRequests.addAll(widget.room.pendingSeatRequests);
     if (seats.isNotEmpty) {
       seats[0] = 'Owner';
       if (widget.room.ownedByMe) mySeat = 0;
     }
     if (seats.length > 1 &&
         !lockedSeats.contains(1) &&
-        !audienceMembers.contains('Admin')) {
+        !audienceMembers.contains('Admin') &&
+        !pendingSeatRequests.containsValue('Admin')) {
       seats[1] = 'Admin';
     }
     if (seats.length > 2 &&
         !lockedSeats.contains(2) &&
-        !audienceMembers.contains('Aisha')) {
+        !audienceMembers.contains('Aisha') &&
+        !pendingSeatRequests.containsValue('Aisha')) {
       seats[2] = 'Aisha';
       mutedSeats.add(2);
     }
     if (seats.length > 6 &&
         !lockedSeats.contains(6) &&
-        !audienceMembers.contains('Sam')) {
+        !audienceMembers.contains('Sam') &&
+        !pendingSeatRequests.containsValue('Sam')) {
       seats[6] = 'Sam';
     }
     for (final i in [8, 14, 24]) {
@@ -1358,7 +1368,11 @@ class _RoomV07State extends State<RoomV07> {
                       )),
                       const SizedBox(height: 2),
                       Text(
-                        seats[i] ?? 'Seat ${i + 1}',
+                        seats[i] ??
+                            (_canModerateSeatRequests &&
+                                    pendingSeatRequests[i] != null
+                                ? 'Request: ${pendingSeatRequests[i]}'
+                                : 'Seat ${i + 1}'),
                         key: Key('seat-label-$i-v08'),
                         style: const TextStyle(fontSize: 8),
                         maxLines: 1,
@@ -1544,6 +1558,7 @@ class _RoomV07State extends State<RoomV07> {
   void _seatOptions(int i) {
     final isLocked = lockedSeats.contains(i);
     final isMuted = mutedSeats.contains(i);
+    final pendingRequester = pendingSeatRequests[i];
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1575,6 +1590,18 @@ class _RoomV07State extends State<RoomV07> {
                     lockedSeats.remove(i);
                     widget.room.savedLockedSeats.remove(i);
                   } else {
+                    final pending = pendingSeatRequests.remove(i);
+                    widget.room.pendingSeatRequests.remove(i);
+                    if (pending != null) {
+                      audienceMembers.add(pending);
+                      chat.add(
+                        'System: ' +
+                            pending +
+                            ' seat request was cancelled because Seat ' +
+                            (i + 1).toString() +
+                            ' was locked.',
+                      );
+                    }
                     final occupant = seats[i];
                     if (occupant != null) {
                       audienceMembers.add(occupant);
@@ -1596,6 +1623,30 @@ class _RoomV07State extends State<RoomV07> {
                 Navigator.pop(sheetContext);
               },
             ),
+          if (_canModerateSeatRequests &&
+              !isLocked &&
+              seats[i] == null &&
+              pendingRequester != null) ...[
+            ListTile(
+              key: const Key('seat-approve-request-v08'),
+              title: Text('Approve ' + pendingRequester),
+              subtitle: Text('Allow ' + pendingRequester + ' to join this seat'),
+              leading: const Icon(Icons.check_circle_rounded),
+              onTap: () {
+                _approveSeatRequest(i, pendingRequester);
+                Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
+              key: const Key('seat-reject-request-v08'),
+              title: Text('Reject ' + pendingRequester),
+              leading: const Icon(Icons.cancel_rounded),
+              onTap: () {
+                _rejectSeatRequest(i, pendingRequester);
+                Navigator.pop(sheetContext);
+              },
+            ),
+          ],
           if (widget.room.ownedByMe)
             ListTile(
               title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'),
@@ -1607,14 +1658,66 @@ class _RoomV07State extends State<RoomV07> {
             ),
           if (!isLocked && (seats[i] == null || seats[i] == 'You'))
             ListTile(
-              title: const Text('Go to Seat'),
-              leading: const Icon(Icons.event_seat_rounded),
+              key: const Key('seat-join-action-v08'),
+              title: Text(
+                inviteMode && !_canModerateSeatRequests
+                    ? 'Request Seat'
+                    : 'Go to Seat',
+              ),
+              subtitle: inviteMode && !_canModerateSeatRequests
+                  ? const Text('Owner or Admin approval required')
+                  : null,
+              leading: Icon(
+                inviteMode && !_canModerateSeatRequests
+                    ? Icons.how_to_reg_rounded
+                    : Icons.event_seat_rounded,
+              ),
               onTap: () {
+                if (inviteMode && !_canModerateSeatRequests) {
+                  setState(() {
+                    pendingSeatRequests.removeWhere(
+                      (seat, user) => user == 'You',
+                    );
+                    widget.room.pendingSeatRequests.removeWhere(
+                      (seat, user) => user == 'You',
+                    );
+                    pendingSeatRequests[i] = 'You';
+                    widget.room.pendingSeatRequests[i] = 'You';
+                    if (mySeat == null) {
+                      audienceMembers.add('You');
+                    }
+                    chat.add(
+                      'System: You requested Seat ' +
+                          (i + 1).toString() +
+                          '. Waiting for Owner/Admin approval.',
+                    );
+                  });
+                  Navigator.pop(sheetContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Seat ' +
+                            (i + 1).toString() +
+                            ' request sent. Waiting for Owner/Admin approval.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
                 setState(() {
-                  if (mySeat != null) seats[mySeat!] = null;
+                  if (mySeat != null && mySeat != i) {
+                    seats[mySeat!] = null;
+                    mutedSeats.remove(mySeat!);
+                  }
                   seats[i] = 'You';
                   mySeat = i;
                   audienceMembers.remove('You');
+                  pendingSeatRequests.removeWhere(
+                    (seat, user) => user == 'You',
+                  );
+                  widget.room.pendingSeatRequests.removeWhere(
+                    (seat, user) => user == 'You',
+                  );
                 });
                 Navigator.pop(sheetContext);
               },
@@ -1713,6 +1816,51 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
+
+  void _approveSeatRequest(int i, String requester) {
+    setState(() {
+      if (lockedSeats.contains(i) ||
+          seats[i] != null ||
+          pendingSeatRequests[i] != requester) {
+        return;
+      }
+      final previousSeat = seats.indexOf(requester);
+      if (previousSeat >= 0 && previousSeat != i) {
+        seats[previousSeat] = null;
+        mutedSeats.remove(previousSeat);
+      }
+      seats[i] = requester;
+      if (requester == 'You') {
+        mySeat = i;
+      }
+      audienceMembers.remove(requester);
+      pendingSeatRequests.remove(i);
+      widget.room.pendingSeatRequests.remove(i);
+      chat.add(
+        'System: ' +
+            requester +
+            ' was approved for Seat ' +
+            (i + 1).toString() +
+            '.',
+      );
+    });
+  }
+
+  void _rejectSeatRequest(int i, String requester) {
+    setState(() {
+      if (pendingSeatRequests[i] != requester) return;
+      pendingSeatRequests.remove(i);
+      widget.room.pendingSeatRequests.remove(i);
+      audienceMembers.add(requester);
+      chat.add(
+        'System: ' +
+            requester +
+            ' seat request for Seat ' +
+            (i + 1).toString() +
+            ' was rejected.',
+      );
+    });
+  }
 
   void _ownerPanel() {
     if (!widget.room.ownedByMe) {
@@ -3394,6 +3542,7 @@ class RoomData {
     this.pin = '',
     this.dpPath,
     this.ownedByMe = false,
+    this.currentUserIsAdmin = false,
     this.closed = false,
   });
 
@@ -3407,9 +3556,11 @@ class RoomData {
   String pin;
   String? dpPath;
   bool ownedByMe;
+  final bool currentUserIsAdmin;
   bool closed;
   final Set<int> savedLockedSeats = <int>{};
   final Set<String> audienceMembers = <String>{};
+  final Map<int, String> pendingSeatRequests = <int, String>{};
 }
 
 class _BottomTool extends StatelessWidget {
