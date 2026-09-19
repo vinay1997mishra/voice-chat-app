@@ -1432,9 +1432,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('room-seat-2-v08')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('seat-kick-24h-v08')), findsOneWidget);
+    final kick24h = find.byKey(const Key('seat-kick-24h-v08'));
+    expect(kick24h, findsOneWidget);
+    await tester.ensureVisible(kick24h);
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('seat-kick-24h-v08')));
+    await tester.tap(kick24h);
     await tester.pumpAndSettle();
 
     expect(room.kickedUntil.containsKey('Aisha'), isTrue);
