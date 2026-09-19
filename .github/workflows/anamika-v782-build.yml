@@ -37,8 +37,8 @@ jobs:
         run: |
           TEST_LAB="anamika_build/project/app/src/main/java/com/anamika/ai/TestLabActivity.java"
           test -f "$TEST_LAB"
-          sed -i 's/OwnerSession\\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
-          ! grep -q 'OwnerSession\\.isValid(' "$TEST_LAB"
+          sed -i 's/OwnerSession\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
+          ! grep -Fq 'OwnerSession.isValid(' "$TEST_LAB"
 
       - uses: actions/setup-java@v5
         with:
