@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'games_v08.dart';
 import 'gift_catalog_v08.dart';
 import 'gift_effects_v08.dart';
+import 'dynamic_gifts_v08.dart';
+import 'dynamic_gift_manager_v08.dart';
 
 void main() => runApp(const VoiceChatV08());
 
@@ -262,6 +264,65 @@ class DemoEconomy extends ChangeNotifier {
         'Gift sent to ID ${recipient.id}',
         '${gift.emoji} ${gift.name} • ${gift.coins} Coins • recipient +${gift.coins} Diamond',
         Icons.card_giftcard_rounded,
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  bool sendDynamicGiftV08(
+    DynamicGiftV08 gift,
+    DemoUser recipient,
+    String roomId,
+  ) {
+    if (coins < gift.coins) return false;
+    coins -= gift.coins;
+    recipient.diamonds += gift.coins;
+    final owner = users.first;
+    final ownerShare = gift.coins ~/ 10;
+    owner.diamonds += ownerShare;
+    wealthXp += gift.coins ~/ 100;
+
+    giftHistory.insert(
+      0,
+      DemoGiftHistory(
+        gift: '🎬 ' + gift.name,
+        fromName: 'You',
+        fromId: '10000050',
+        toName: recipient.name,
+        toId: recipient.id,
+        coins: gift.coins,
+        diamonds: gift.coins,
+        direction: 'Sent',
+      ),
+    );
+    ledger.insert(
+      0,
+      DemoLedgerEntry(
+        'Video gift sent: ' + gift.name,
+        'To ' +
+            recipient.name +
+            ' • ID ' +
+            recipient.id +
+            ' • Room ' +
+            roomId +
+            ' • Owner share ' +
+            ownerShare.toString() +
+            ' Diamond',
+        -gift.coins,
+      ),
+    );
+    inbox.insert(
+      0,
+      DemoInboxItem(
+        'Video gift sent to ID ' + recipient.id,
+        gift.name +
+            ' • ' +
+            gift.coins.toString() +
+            ' Coins • recipient +' +
+            gift.coins.toString() +
+            ' Diamond',
+        Icons.ondemand_video_rounded,
       ),
     );
     notifyListeners();
