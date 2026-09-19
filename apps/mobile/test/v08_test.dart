@@ -561,6 +561,108 @@ void main() {
       tester.widget<Text>(find.byKey(const Key('seat-label-2-v08'))).data,
       'Seat 3',
     );
+
+    await tester.tap(find.byKey(const Key('room-seat-2-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('seat-lock-action-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.savedLockedSeats, isNot(contains(2)));
+    expect(room.audienceMembers, contains('Aisha'));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('seat-label-2-v08'))).data,
+      'Seat 3',
+    );
+    expect(find.byKey(const Key('audience-id-10000011-v08')), findsOneWidget);
+  });
+
+  testWidgets('invite mode keeps guest in audience until owner or admin approves',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Invite room',
+      'INVITE-1',
+      '🎧',
+      false,
+      inviteMode: true,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    await tester.tap(find.byKey(const Key('room-seat-3-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Request Seat'), findsOneWidget);
+    expect(find.text('Owner or Admin approval required'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('seat-join-action-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.pendingSeatRequests[3], 'You');
+    expect(room.audienceMembers, contains('You'));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('seat-label-3-v08'))).data,
+      'Seat 4',
+    );
+    expect(find.textContaining('Waiting for Owner/Admin approval'), findsWidgets);
+  });
+
+  testWidgets('room owner can approve a pending invite-mode seat request',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Owner approval room',
+      'INVITE-OWNER',
+      '👑',
+      false,
+      inviteMode: true,
+      ownedByMe: true,
+    );
+    room.audienceMembers.add('Aisha');
+    room.pendingSeatRequests[3] = 'Aisha';
+
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    await tester.tap(find.byKey(const Key('room-seat-3-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approve Aisha'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('seat-approve-request-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.pendingSeatRequests.containsKey(3), isFalse);
+    expect(room.audienceMembers, isNot(contains('Aisha')));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('seat-label-3-v08'))).data,
+      'Aisha',
+    );
+  });
+
+  testWidgets('room admin can approve a pending invite-mode seat request',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Admin approval room',
+      'INVITE-ADMIN',
+      '🛡️',
+      false,
+      inviteMode: true,
+      currentUserIsAdmin: true,
+    );
+    room.audienceMembers.add('Aisha');
+    room.pendingSeatRequests[3] = 'Aisha';
+
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    await tester.tap(find.byKey(const Key('room-seat-3-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approve Aisha'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('seat-approve-request-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.pendingSeatRequests.containsKey(3), isFalse);
+    expect(room.audienceMembers, isNot(contains('Aisha')));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('seat-label-3-v08'))).data,
+      'Aisha',
+    );
   });
 
 
