@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-android-v08-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-v08-apk:
     runs-on: ubuntu-latest
