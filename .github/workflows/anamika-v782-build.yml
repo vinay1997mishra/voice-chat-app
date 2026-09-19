@@ -39,8 +39,18 @@ jobs:
 
       - name: Install Android SDK 36
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -n "$SDKMANAGER"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+          echo "$SDKROOT/platform-tools" >> "$GITHUB_PATH"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -61,6 +71,16 @@ jobs:
         run: |
           mkdir -p artifacts/lite
           cp anamika_build/project/app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-Lite-debug.apk
+          sha256sum artifacts/lite/*.apk > artifacts/LITE-SHA256SUMS.txt
+
+      - name: Upload lite APK immediately
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-lite-apk
+          compression-level: 0
+          path: |
+            artifacts/lite/
+            artifacts/LITE-SHA256SUMS.txt
 
       - name: Bundle verified local coding model
         working-directory: anamika_build/project
