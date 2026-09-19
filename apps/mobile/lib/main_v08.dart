@@ -2432,10 +2432,11 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   Future<void> _gift() async {
-    final activeNames = seats
-        .whereType<String>()
-        .where((name) => name != 'You')
-        .toSet()
+    final activeNames = <String>{
+      ...seats.whereType<String>(),
+      ...audienceMembers,
+    }
+        .where((name) => name != 'You' && !blocked.contains(name))
         .toList();
     if (activeNames.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2632,29 +2633,112 @@ class _RoomV07State extends State<RoomV07> {
                         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        key: const Key('gift-recipient-v08'),
-                        isExpanded: true,
-                        value: recipient.id,
-                        decoration: const InputDecoration(
-                          labelText: 'Send to user ID',
-                          border: OutlineInputBorder(),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Select receiver • swipe for more',
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                         ),
-                        items: activeNames.map((name) {
-                          final user = demoEconomy.byName(name);
-                          return DropdownMenuItem(
-                            value: user.id,
-                            child: Text(user.name + ' • ID ' + user.id),
-                          );
-                        }).toList(),
-                        onChanged: (id) {
-                          if (id == null) return;
-                          setLocal(() {
-                            recipient = demoEconomy.users.firstWhere(
-                              (user) => user.id == id,
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 92,
+                        child: ListView.separated(
+                          key: const Key('gift-recipient-v08'),
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          itemCount: activeNames.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (_, index) {
+                            final user = demoEconomy.byName(activeNames[index]);
+                            final selected = recipient.id == user.id;
+                            return GestureDetector(
+                              key: ValueKey('gift-recipient-' + user.id + '-v08'),
+                              onTap: () {
+                                setLocal(() => recipient = user);
+                              },
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 180),
+                                opacity: selected ? 1 : .38,
+                                child: SizedBox(
+                                  width: 68,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: selected
+                                              ? const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFFFFD54F),
+                                                    Color(0xFFFF5EC4),
+                                                    Color(0xFF7B61FF),
+                                                  ],
+                                                )
+                                              : null,
+                                          border: selected
+                                              ? null
+                                              : Border.all(
+                                                  color: Colors.white24,
+                                                  width: 1,
+                                                ),
+                                          boxShadow: selected
+                                              ? const [
+                                                  BoxShadow(
+                                                    color: Color(0x887B61FF),
+                                                    blurRadius: 12,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ]
+                                              : null,
+                                        ),
+                                        child: CircleAvatar(
+                                          radius: selected ? 26 : 24,
+                                          backgroundColor: const Color(0xFF2C1640),
+                                          child: Text(
+                                            user.avatar,
+                                            style: TextStyle(
+                                              fontSize: selected ? 28 : 24,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        user.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: selected
+                                              ? FontWeight.w900
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             );
-                          });
-                        },
+                          },
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'To: ' + recipient.name + ' • ID ' + recipient.id,
+                          key: const Key('gift-selected-recipient-v08'),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Align(
