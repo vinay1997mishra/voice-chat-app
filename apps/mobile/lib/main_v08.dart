@@ -2060,7 +2060,6 @@ class _RoomV07State extends State<RoomV07> {
         !audienceMembers.contains('Aisha') &&
         !pendingSeatRequests.containsValue('Aisha')) {
       seats[2] = 'Aisha';
-      mutedSeats.add(2);
     }
     if (seats.length > 6 &&
         !lockedSeats.contains(6) &&
@@ -2068,12 +2067,6 @@ class _RoomV07State extends State<RoomV07> {
         !audienceMembers.contains('Sam') &&
         !pendingSeatRequests.containsValue('Sam')) {
       seats[6] = 'Sam';
-    }
-    for (final i in [8, 14, 24]) {
-      if (i < seats.length) {
-        lockedSeats.add(i);
-        widget.room.savedLockedSeats.add(i);
-      }
     }
   }
 
