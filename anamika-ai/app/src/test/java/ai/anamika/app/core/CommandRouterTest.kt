@@ -35,4 +35,12 @@ class CommandRouterTest {
         assertTrue(router.parse("git push") is Command.GitPush)
         assertTrue(router.parse("git pull") is Command.GitPull)
     }
+
+    @Test
+    fun offlineFileCommandsAreDetected() {
+        assertTrue(router.parse("file list") is Command.FileList)
+        assertTrue(router.parse("file read app/src/main.kt") is Command.FileRead)
+        assertTrue(router.parse("file write notes.txt :: hello") is Command.FileWrite)
+        assertTrue(router.parse("file delete notes.txt") is Command.FileDelete)
+    }
 }
