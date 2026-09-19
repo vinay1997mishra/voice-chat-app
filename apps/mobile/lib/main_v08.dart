@@ -276,7 +276,7 @@ class DemoEconomy extends ChangeNotifier {
         fromName: 'Aisha',
         fromId: '10000011',
         toName: 'You',
-        toId: '10000050',
+        toId: currentUserId,
         coins: incoming.coins,
         diamonds: incoming.coins,
         direction: 'Received',
@@ -316,7 +316,7 @@ class DemoEconomy extends ChangeNotifier {
       DemoGiftHistory(
         gift: gift.emoji + ' ' + gift.name,
         fromName: 'You',
-        fromId: '10000050',
+        fromId: currentUserId,
         toName: recipient.name,
         toId: recipient.id,
         coins: gift.coins,
@@ -368,7 +368,7 @@ class DemoEconomy extends ChangeNotifier {
       DemoGiftHistory(
         gift: '🎬 ' + gift.name,
         fromName: 'You',
-        fromId: '10000050',
+        fromId: currentUserId,
         toName: recipient.name,
         toId: recipient.id,
         coins: gift.coins,
@@ -424,7 +424,7 @@ class DemoEconomy extends ChangeNotifier {
       DemoGiftHistory(
         gift: gift.emoji + ' ' + gift.name,
         fromName: 'You',
-        fromId: '10000050',
+        fromId: currentUserId,
         toName: recipient.name,
         toId: recipient.id,
         coins: gift.coins,
@@ -1527,7 +1527,7 @@ class _RoomV07State extends State<RoomV07> {
                                           ? null
                                           : demoEconomy.byName(name);
                                       final id = name == 'You'
-                                          ? '10000050'
+                                          ? demoEconomy.currentUserId
                                           : user!.id;
                                       final avatar = name == 'You'
                                           ? '🙂'
@@ -2516,7 +2516,7 @@ class _RoomV07State extends State<RoomV07> {
           GameVoicePlayerV08(
             name: 'You',
             avatar: '🙂',
-            userId: '10000050',
+            userId: demoEconomy.currentUserId,
             micOn: !mutedSeats.contains(i),
           ),
         );
@@ -3392,7 +3392,7 @@ class _RoomV07State extends State<RoomV07> {
                 const ListTile(
                   leading: CircleAvatar(child: Text('😎')),
                   title: Text('You'),
-                  subtitle: Text('ID 10000050'),
+                  subtitle: Text('ID ' + demoEconomy.currentUserId),
                 )
               else
                 Builder(
@@ -4159,7 +4159,7 @@ class ProfileV07 extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const Text('ID 10000050'),
+                        Text('ID ' + demoEconomy.currentUserId),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 6,
@@ -4683,18 +4683,25 @@ class OwnerUsersRolesV08 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: appOwnerControlsV08,
+        animation: Listenable.merge([appOwnerControlsV08, demoEconomy]),
         builder: (context, _) => Scaffold(
           appBar: AppBar(title: const Text('Users, Admins & VIP')),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Card(
+              Card(
                 child: ListTile(
-                  leading: Icon(Icons.workspace_premium_rounded),
-                  title: Text('Main App Owner'),
+                  leading: const Icon(Icons.workspace_premium_rounded),
+                  title: const Text('Main App Owner'),
                   subtitle: Text(
-                    'ID 10000050 • fixed owner role • cannot be removed here',
+                    'ID ' +
+                        demoEconomy.currentUserId +
+                        ' • fixed owner role • Room ID stays synced',
+                  ),
+                  trailing: TextButton(
+                    key: const Key('owner-edit-current-user-id-v08'),
+                    onPressed: () => _editCurrentUserId(context),
+                    child: const Text('Edit ID'),
                   ),
                 ),
               ),
@@ -4712,6 +4719,11 @@ class OwnerUsersRolesV08 extends StatelessWidget {
                               ' • ' +
                               demoNumber(user.diamonds) +
                               ' Diamond',
+                        ),
+                        trailing: TextButton(
+                          key: Key('owner-edit-user-id-' + user.id + '-v08'),
+                          onPressed: () => _editUserId(context, user),
+                          child: const Text('Edit ID'),
                         ),
                       ),
                       SwitchListTile(
@@ -4768,6 +4780,105 @@ class OwnerUsersRolesV08 extends StatelessWidget {
           ),
         ),
       );
+
+  Future<void> _editCurrentUserId(BuildContext context) async {
+    final currentId = demoEconomy.currentUserId;
+    final newId = await _requestId(
+      context,
+      title: 'Change Main Owner User ID',
+      currentId: currentId,
+    );
+    if (newId == null || !context.mounted) return;
+    final ok = demoEconomy.changeCurrentUserId(newId);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'User ID and owned Room ID changed to ' + newId
+              : 'ID must be unique and contain 5–12 digits',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editUserId(BuildContext context, DemoUser user) async {
+    final currentId = user.id;
+    final newId = await _requestId(
+      context,
+      title: 'Change ' + user.name + ' User ID',
+      currentId: currentId,
+    );
+    if (newId == null || !context.mounted) return;
+    final ok = demoEconomy.changeUserId(user, newId);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? user.name +
+                  ' User ID changed to ' +
+                  newId +
+                  '. Owned Room ID synced automatically.'
+              : 'ID must be unique and contain 5–12 digits',
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _requestId(
+    BuildContext context, {
+    required String title,
+    required String currentId,
+  }) {
+    String? errorText;
+    return showDialog<String>(
+      context: context,
+      builder: (_) => _RouteTextEditorV08(
+        initialText: currentId,
+        builder: (dialogContext, controller) => StatefulBuilder(
+          builder: (context, setLocal) => AlertDialog(
+            title: Text(title),
+            content: TextField(
+              key: const Key('owner-user-id-input-v08'),
+              controller: controller,
+              keyboardType: TextInputType.number,
+              maxLength: 12,
+              decoration: InputDecoration(
+                labelText: 'New User ID',
+                helperText: '5–12 digits • must be unique',
+                errorText: errorText,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('owner-save-user-id-v08'),
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (!demoEconomy.isValidUserId(value) ||
+                      !demoEconomy.isUserIdAvailable(
+                        value,
+                        exceptId: currentId,
+                      )) {
+                    setLocal(
+                      () => errorText =
+                          'Use a unique numeric ID with 5–12 digits',
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, value);
+                },
+                child: const Text('Save ID'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class OwnerModerationV08 extends StatelessWidget {
