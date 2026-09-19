@@ -5,13 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
-/** Best-effort wake-service resume after reboot. Newer Android may require the owner to reopen Anamika. */
+/** Best-effort always-on wake-service resume after reboot/app update for a remembered owner. */
 public final class BootWakeReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         if(context==null) return;
-        boolean enabled=context.getSharedPreferences("anamika_v7",Context.MODE_PRIVATE)
-                .getBoolean("wake_enabled",false);
-        if(!enabled || !OwnerSession.isTrusted(context)) return;
+        if(!OwnerSession.isTrusted(context)) return;
+        context.getSharedPreferences("anamika_v7",Context.MODE_PRIVATE)
+                .edit().putBoolean("wake_enabled",true).apply();
         try{
             Intent svc=new Intent(context,BackgroundWakeService.class)
                     .setAction(BackgroundWakeService.ACTION_START);
