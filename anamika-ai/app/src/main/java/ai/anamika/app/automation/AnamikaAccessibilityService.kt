@@ -9,10 +9,12 @@ import android.view.accessibility.AccessibilityNodeInfo
 class AnamikaAccessibilityService : AccessibilityService() {
     private lateinit var policy: AppAccessPolicy
     private lateinit var observations: AppObservationStore
+    private lateinit var study: AppStudyStore
 
     override fun onServiceConnected() {
         policy = AppAccessPolicy(this)
         observations = AppObservationStore(this)
+        study = AppStudyStore(this)
 
         serviceInfo = serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
@@ -56,6 +58,17 @@ class AnamikaAccessibilityService : AccessibilityService() {
                 timestamp = System.currentTimeMillis()
             )
         )
+
+        if (
+            study.isActiveFor(pkg) &&
+            (
+                e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                    e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+                    e.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED
+                )
+        ) {
+            captureCurrentScreen(pkg, e.className?.toString().orEmpty())
+        }
     }
 
     override fun onInterrupt() = Unit
@@ -100,6 +113,70 @@ class AnamikaAccessibilityService : AccessibilityService() {
             )
         }
         return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
+    fun captureCurrentScreen(packageName: String, className: String = ""): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val pkg = root.packageName?.toString().orEmpty()
+        if (pkg != packageName || !policy.isAllowed(pkg) || !study.isActiveFor(pkg)) return false
+
+        val nodes = mutableListOf<StudyNode>()
+        collectStudyNodes(root, nodes, 0)
+
+        val title = nodes
+            .firstOrNull { it.text.isNotBlank() }
+            ?.text
+            .orEmpty()
+
+        study.add(
+            StudyScreen(
+                packageName = pkg,
+                className = className.ifBlank { root.className?.toString().orEmpty() },
+                title = title,
+                nodes = nodes,
+                timestamp = System.currentTimeMillis()
+            )
+        )
+        return true
+    }
+
+    private fun collectStudyNodes(
+        node: AccessibilityNodeInfo?,
+        out: MutableList<StudyNode>,
+        depth: Int
+    ) {
+        val current = node ?: return
+        if (depth > 30 || out.size >= 300) return
+        if (current.isPassword || looksSensitive(current)) return
+
+        val text = sanitizeLabel(
+            listOfNotNull(
+                current.text?.toString(),
+                current.contentDescription?.toString(),
+                current.hintText?.toString()
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+        )
+
+        if (
+            text.isNotBlank() ||
+            current.isClickable ||
+            current.isEditable ||
+            current.isScrollable
+        ) {
+            out += StudyNode(
+                text = text,
+                viewId = current.viewIdResourceName.orEmpty(),
+                className = current.className?.toString().orEmpty(),
+                clickable = current.isClickable,
+                editable = current.isEditable,
+                scrollable = current.isScrollable
+            )
+        }
+
+        for (i in 0 until current.childCount) {
+            collectStudyNodes(current.getChild(i), out, depth + 1)
+            if (out.size >= 300) break
+        }
     }
 
     private fun looksSensitive(node: AccessibilityNodeInfo): Boolean {
