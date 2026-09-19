@@ -111,7 +111,7 @@ void main() {
     await tester.tap(muteAll);
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
+    Navigator.of(tester.element(muteAll)).pop();
     await tester.pumpAndSettle();
     expect(
       find.descendant(
