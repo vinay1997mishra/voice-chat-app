@@ -76,8 +76,8 @@ public final class PluginManagerActivity extends Activity {
     private void runSelected() {
         if(!OwnerSession.isActive(this)){ toast("Owner session expired. Verify PIN again."); finish(); return; }
         if(selectedPackage.isEmpty()) { toast("Select an app first"); return; }
-        if(!PluginRegistry.isEnabled(this,selectedPackage)) { toast("Enable plugin for "+selectedLabel+" first"); return; }
-        if(!isAutomationServiceEnabled()){ toast("Enable Anamika App Control in Accessibility settings first"); startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); return; }
+        if(!PluginRegistry.isEnabled(this,selectedPackage)) { toast(selectedLabel+" is not owner-enabled. No control action was performed."); return; }
+        if(!isAutomationServiceEnabled()){ toast("Anamika App Control service is off. No control action was performed."); return; }
         String result=AppPluginEngine.openAndRun(this,selectedPackage,commandInput.getText().toString().trim());
         toast(result);
     }
@@ -85,8 +85,8 @@ public final class PluginManagerActivity extends Activity {
     private void startInspection(){
         if(!OwnerSession.isActive(this)){ toast("Owner session expired. Verify PIN again."); finish(); return; }
         if(selectedPackage.isEmpty()){ toast("Select an app first"); return; }
-        if(!PluginRegistry.isEnabled(this,selectedPackage)){ toast("Enable plugin for "+selectedLabel+" first"); return; }
-        if(!isAutomationServiceEnabled()){ toast("Enable Anamika App Control in Accessibility settings first"); startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); return; }
+        if(!PluginRegistry.isEnabled(this,selectedPackage)){ toast(selectedLabel+" is not owner-enabled. Audit was not started."); return; }
+        if(!isAutomationServiceEnabled()){ toast("Anamika App Control service is off. Audit was not started."); return; }
         String result=AppPluginEngine.openAndRun(this,selectedPackage,"check all functions");
         inspectionStatus.setText("Automatic audit requested for "+selectedLabel+
                 ". Anamika will inspect visible screens and operate safe controls automatically. "+
