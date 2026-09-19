@@ -116,3 +116,37 @@ jobs:
           name: AnamikaAI-V7.8.2-final-apks
           compression-level: 0
           path: artifacts/
+
+      - name: Split full APK for connector download
+        run: |
+          mkdir -p artifacts/fullparts
+          split -b 300M -d -a 2 artifacts/full/AnamikaAI-V7.8.2-FullLocalAI-debug.apk artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-
+          ls -lh artifacts/fullparts/
+          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-00
+          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-01
+          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-02
+          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-03
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-full-part-00
+          compression-level: 0
+          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-00
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-full-part-01
+          compression-level: 0
+          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-01
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-full-part-02
+          compression-level: 0
+          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-02
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-full-part-03
+          compression-level: 0
+          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-03
