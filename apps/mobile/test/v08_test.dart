@@ -296,6 +296,16 @@ void main() {
     expect(gift.isHumanRide, isTrue);
   });
 
+  test('diamond conversion never burns balance for zero coin output', () {
+    final economy = DemoEconomy();
+    final beforeDiamonds = economy.diamonds;
+    final beforeCoins = economy.coins;
+
+    expect(economy.convertDiamonds(1), isFalse);
+    expect(economy.diamonds, beforeDiamonds);
+    expect(economy.coins, beforeCoins);
+  });
+
   test('message notifications toggle suppresses demo inbox notifications', () {
     final economy = DemoEconomy();
     final user = economy.users[2];
