@@ -4194,62 +4194,706 @@ class MainOwnerPanelV08 extends StatelessWidget {
   const MainOwnerPanelV08({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final active = dynamicGiftStoreV08.gifts
-        .where((gift) => gift.activeAt(DateTime.now()))
-        .length;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Main Owner Panel')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                child: Icon(Icons.shield_rounded),
-              ),
-              title: Text('App Owner Controls'),
-              subtitle: Text(
-                'This local v0.8 panel represents the future secure main-owner role.',
-              ),
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) {
+          final activeVideoGifts = dynamicGiftStoreV08.gifts
+              .where((gift) => gift.activeAt(DateTime.now()))
+              .length;
+          return Scaffold(
+            appBar: AppBar(title: const Text('Main Owner / Admin Panel')),
+            body: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  key: const Key('main-owner-dashboard-v08'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            CircleAvatar(child: Icon(Icons.shield_rounded)),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'App Owner Control Center',
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            Chip(
+                              avatar: Icon(
+                                appOwnerControlsV08.maintenanceMode
+                                    ? Icons.build_circle_rounded
+                                    : Icons.check_circle_rounded,
+                                size: 17,
+                              ),
+                              label: Text(
+                                appOwnerControlsV08.maintenanceMode
+                                    ? 'Maintenance'
+                                    : 'App Live',
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                appOwnerControlsV08.globalAdminIds.length
+                                        .toString() +
+                                    ' Admin',
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                appOwnerControlsV08.bannedUserIds.length
+                                        .toString() +
+                                    ' Banned',
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                activeVideoGifts.toString() + ' Video Gifts',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const _OwnerSectionTitleV08('Communication & People'),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-global-announcement-v08'),
+                  icon: Icons.campaign_rounded,
+                  title: 'Global Announcement',
+                  subtitle: appOwnerControlsV08.announcement,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerAnnouncementV08(),
+                    ),
+                  ),
+                ),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-users-roles-v08'),
+                  icon: Icons.manage_accounts_rounded,
+                  title: 'Users, Admins & VIP',
+                  subtitle:
+                      'Admin role, VIP 0–11, global ban/unban and user status',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerUsersRolesV08(),
+                    ),
+                  ),
+                ),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-moderation-v08'),
+                  icon: Icons.gavel_rounded,
+                  title: 'Moderation & Reports',
+                  subtitle: appOwnerControlsV08.openReports.length.toString() +
+                      ' open report(s) • global ban controls',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerModerationV08(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const _OwnerSectionTitleV08('App Controls'),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-feature-controls-v08'),
+                  icon: Icons.tune_rounded,
+                  title: 'Feature Controls',
+                  subtitle:
+                      'Maintenance, rooms, gifts, video gifts, 3D, animations and DMs',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerFeatureControlsV08(),
+                    ),
+                  ),
+                ),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-game-controls-v08'),
+                  icon: Icons.sports_esports_rounded,
+                  title: 'Game Controls',
+                  subtitle:
+                      'Master switch + Ludo, UNO, Carrom, Dice and Wheel',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerGameControlsV08(),
+                    ),
+                  ),
+                ),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-economy-controls-v08'),
+                  icon: Icons.account_balance_wallet_rounded,
+                  title: 'Economy Controls',
+                  subtitle: 'Gift owner share ' +
+                      appOwnerControlsV08.ownerGiftSharePercent.toString() +
+                      '% • ' +
+                      appOwnerControlsV08.diamondsPerCoin.toString() +
+                      ':1 Diamond conversion',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerEconomyControlsV08(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const _OwnerSectionTitleV08('Gifts & Content'),
+                _OwnerPanelTileV08(
+                  key: const Key('main-owner-video-gifts-v08'),
+                  icon: Icons.video_collection_rounded,
+                  title: 'Global Video Gifts',
+                  subtitle: activeVideoGifts.toString() +
+                      ' active • add / disable / preview / remove videos',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DynamicGiftManagerV08(
+                        title: 'Main Owner • Video Gifts',
+                        vipLevel: 11,
+                        isAppOwner: true,
+                      ),
+                    ),
+                  ),
+                ),
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.rule_rounded),
+                    title: Text('Video Gift Limits'),
+                    subtitle: Text(
+                      'Maximum 8 seconds and 12 MB. App Owner can set 15d, 1m, 3m, 6m or Lifetime.',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const _OwnerSectionTitleV08('Security & Logs'),
+                _OwnerPanelTileV08(
+                  key: const Key('owner-audit-log-v08'),
+                  icon: Icons.history_rounded,
+                  title: 'Owner Activity Log',
+                  subtitle: appOwnerControlsV08.auditLog.length.toString() +
+                      ' recorded owner action(s)',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerAuditLogV08(),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              key: const Key('main-owner-video-gifts-v08'),
-              leading: const Icon(Icons.video_collection_rounded),
-              title: const Text('Global Video Gifts'),
-              subtitle: Text(
-                active.toString() +
-                    ' active • add / disable / preview / remove videos',
+          );
+        },
+      );
+}
+
+class _OwnerSectionTitleV08 extends StatelessWidget {
+  const _OwnerSectionTitleV08(this.title);
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+      );
+}
+
+class _OwnerPanelTileV08 extends StatelessWidget {
+  const _OwnerPanelTileV08({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onTap,
+        ),
+      );
+}
+
+class OwnerFeatureControlsV08 extends StatelessWidget {
+  const OwnerFeatureControlsV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Feature Controls')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              SwitchListTile(
+                key: const Key('owner-maintenance-toggle-v08'),
+                title: const Text('Maintenance Mode'),
+                subtitle: const Text('Global maintenance state for normal users'),
+                value: appOwnerControlsV08.maintenanceMode,
+                onChanged: appOwnerControlsV08.setMaintenance,
               ),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const DynamicGiftManagerV08(
-                    title: 'Main Owner • Video Gifts',
-                    vipLevel: 11,
-                    isAppOwner: true,
+              SwitchListTile(
+                key: const Key('owner-room-create-toggle-v08'),
+                title: const Text('Allow Room Creation'),
+                value: appOwnerControlsV08.roomCreationEnabled,
+                onChanged: appOwnerControlsV08.setRoomCreation,
+              ),
+              SwitchListTile(
+                key: const Key('owner-gifts-toggle-v08'),
+                title: const Text('Gift Sending'),
+                value: appOwnerControlsV08.giftsEnabled,
+                onChanged: appOwnerControlsV08.setGifts,
+              ),
+              SwitchListTile(
+                key: const Key('owner-video-gifts-toggle-v08'),
+                title: const Text('Room Video Gifts'),
+                value: appOwnerControlsV08.videoGiftsEnabled,
+                onChanged: appOwnerControlsV08.setVideoGifts,
+              ),
+              SwitchListTile(
+                key: const Key('owner-3d-toggle-v08'),
+                title: const Text('3D Gift Effects'),
+                value: appOwnerControlsV08.threeDEffectsEnabled,
+                onChanged: (value) {
+                  appOwnerControlsV08.setThreeDEffects(value);
+                  demoEconomy.threeDEffects = value;
+                  demoEconomy.refresh();
+                },
+              ),
+              SwitchListTile(
+                key: const Key('owner-gift-animation-toggle-v08'),
+                title: const Text('Gift Animations'),
+                value: appOwnerControlsV08.giftAnimationsEnabled,
+                onChanged: (value) {
+                  appOwnerControlsV08.setGiftAnimations(value);
+                  demoEconomy.giftAnimations = value;
+                  demoEconomy.refresh();
+                },
+              ),
+              SwitchListTile(
+                key: const Key('owner-private-message-toggle-v08'),
+                title: const Text('Private Messages'),
+                value: appOwnerControlsV08.privateMessagesEnabled,
+                onChanged: (value) {
+                  appOwnerControlsV08.setPrivateMessages(value);
+                  demoEconomy.allowPrivateMessages = value;
+                  demoEconomy.refresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class OwnerGameControlsV08 extends StatelessWidget {
+  const OwnerGameControlsV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Game Controls')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              SwitchListTile(
+                key: const Key('owner-games-master-toggle-v08'),
+                title: const Text('Game Center'),
+                subtitle: const Text('Master switch for all games'),
+                value: appOwnerControlsV08.gamesEnabled,
+                onChanged: appOwnerControlsV08.setGames,
+              ),
+              const Divider(),
+              _OwnerGameSwitchV08(
+                game: 'Ludo',
+                value: appOwnerControlsV08.ludoEnabled,
+              ),
+              _OwnerGameSwitchV08(
+                game: 'UNO',
+                value: appOwnerControlsV08.unoEnabled,
+              ),
+              _OwnerGameSwitchV08(
+                game: 'Carrom',
+                value: appOwnerControlsV08.carromEnabled,
+              ),
+              _OwnerGameSwitchV08(
+                game: 'Lucky Dice',
+                value: appOwnerControlsV08.luckyDiceEnabled,
+              ),
+              _OwnerGameSwitchV08(
+                game: 'Lucky Wheel',
+                value: appOwnerControlsV08.luckyWheelEnabled,
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _OwnerGameSwitchV08 extends StatelessWidget {
+  const _OwnerGameSwitchV08({required this.game, required this.value});
+  final String game;
+  final bool value;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+        key: Key(
+          'owner-game-' + game.toLowerCase().replaceAll(' ', '-') + '-v08',
+        ),
+        title: Text(game),
+        value: value,
+        onChanged: appOwnerControlsV08.gamesEnabled
+            ? (enabled) => appOwnerControlsV08.setGame(game, enabled)
+            : null,
+      );
+}
+
+class OwnerUsersRolesV08 extends StatelessWidget {
+  const OwnerUsersRolesV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Users, Admins & VIP')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.workspace_premium_rounded),
+                  title: Text('Main App Owner'),
+                  subtitle: Text(
+                    'ID 10000050 • fixed owner role • cannot be removed here',
                   ),
                 ),
               ),
-            ),
+              for (final user in demoEconomy.users)
+                Card(
+                  key: Key('owner-user-' + user.id + '-v08'),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: CircleAvatar(child: Text(user.avatar)),
+                        title: Text(user.name),
+                        subtitle: Text(
+                          'ID ' +
+                              user.id +
+                              ' • ' +
+                              demoNumber(user.diamonds) +
+                              ' Diamond',
+                        ),
+                      ),
+                      SwitchListTile(
+                        title: const Text('Global Admin'),
+                        value:
+                            appOwnerControlsV08.globalAdminIds.contains(user.id),
+                        onChanged:
+                            appOwnerControlsV08.bannedUserIds.contains(user.id)
+                                ? null
+                                : (value) =>
+                                    appOwnerControlsV08.setAdmin(user.id, value),
+                      ),
+                      SwitchListTile(
+                        title: const Text('Global Ban'),
+                        value:
+                            appOwnerControlsV08.bannedUserIds.contains(user.id),
+                        onChanged: (value) =>
+                            appOwnerControlsV08.setBanned(user.id, value),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'VIP Level',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            DropdownButton<int>(
+                              key: Key('owner-vip-' + user.id + '-v08'),
+                              value:
+                                  appOwnerControlsV08.userVipLevels[user.id] ?? 0,
+                              items: List.generate(
+                                12,
+                                (level) => DropdownMenuItem(
+                                  value: level,
+                                  child: Text('VIP ' + level.toString()),
+                                ),
+                              ),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  appOwnerControlsV08.setVip(user.id, value);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.rule_rounded),
-              title: Text('Video limits'),
-              subtitle: Text(
-                'Maximum 8 seconds and 12 MB per gift video. App Owner can use 15d, 1m, 3m, 6m or Lifetime.',
+        ),
+      );
+}
+
+class OwnerModerationV08 extends StatelessWidget {
+  const OwnerModerationV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Moderation & Reports')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'Open Reports',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              if (appOwnerControlsV08.openReports.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.check_circle_rounded),
+                    title: Text('No open reports'),
+                  ),
+                ),
+              for (final report
+                  in List<String>.from(appOwnerControlsV08.openReports))
+                Card(
+                  child: ListTile(
+                    title: Text(report),
+                    trailing: TextButton(
+                      onPressed: () =>
+                          appOwnerControlsV08.resolveReport(report),
+                      child: const Text('Resolve'),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 14),
+              const Text(
+                'Global Bans',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              if (appOwnerControlsV08.bannedUserIds.isEmpty)
+                const Card(
+                  child: ListTile(title: Text('No globally banned users')),
+                ),
+              for (final userId in appOwnerControlsV08.bannedUserIds)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.block_rounded),
+                    title: Text('ID ' + userId),
+                    trailing: TextButton(
+                      onPressed: () =>
+                          appOwnerControlsV08.setBanned(userId, false),
+                      child: const Text('Unban'),
+                    ),
+                  ),
+                ),
+              if (appOwnerControlsV08.bannedUserIds.isNotEmpty)
+                FilledButton.tonalIcon(
+                  onPressed: appOwnerControlsV08.clearBans,
+                  icon: const Icon(Icons.lock_open_rounded),
+                  label: const Text('Clear All Bans'),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
+class OwnerEconomyControlsV08 extends StatelessWidget {
+  const OwnerEconomyControlsV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Economy Controls')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Room Owner Gift Share: ' +
+                            appOwnerControlsV08.ownerGiftSharePercent.toString() +
+                            '%',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Slider(
+                        key: const Key('owner-gift-share-slider-v08'),
+                        min: 0,
+                        max: 30,
+                        divisions: 30,
+                        value: appOwnerControlsV08.ownerGiftSharePercent
+                            .toDouble(),
+                        label:
+                            appOwnerControlsV08.ownerGiftSharePercent.toString() +
+                                '%',
+                        onChanged: (value) => appOwnerControlsV08
+                            .setOwnerGiftSharePercent(value.round()),
+                      ),
+                      const Text(
+                        'Applied to local v0.8 gift settlement calculation.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  title: const Text('Diamond → Coin Conversion'),
+                  subtitle: Text(
+                    appOwnerControlsV08.diamondsPerCoin.toString() +
+                        ' Diamond = 1 Coin',
+                  ),
+                  trailing: DropdownButton<int>(
+                    key: const Key('owner-diamond-rate-v08'),
+                    value: appOwnerControlsV08.diamondsPerCoin,
+                    items: const [1, 2, 5, 10]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value.toString() + ':1'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        appOwnerControlsV08.setDiamondsPerCoin(value);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class OwnerAnnouncementV08 extends StatefulWidget {
+  const OwnerAnnouncementV08({super.key});
+
+  @override
+  State<OwnerAnnouncementV08> createState() => _OwnerAnnouncementV08State();
+}
+
+class _OwnerAnnouncementV08State extends State<OwnerAnnouncementV08> {
+  late final TextEditingController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController(text: appOwnerControlsV08.announcement);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Global Announcement')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextField(
+              key: const Key('owner-announcement-input-v08'),
+              controller: controller,
+              minLines: 3,
+              maxLines: 6,
+              maxLength: 180,
+              decoration: const InputDecoration(
+                labelText: 'Announcement',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              key: const Key('owner-announcement-save-v08'),
+              onPressed: () {
+                appOwnerControlsV08.setAnnouncement(controller.text);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Global announcement updated')),
+                );
+              },
+              icon: const Icon(Icons.save_rounded),
+              label: const Text('Publish Announcement'),
+            ),
+          ],
+        ),
+      );
+}
+
+class OwnerAuditLogV08 extends StatelessWidget {
+  const OwnerAuditLogV08({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appOwnerControlsV08,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(title: const Text('Owner Activity Log')),
+          body: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: appOwnerControlsV08.auditLog.length,
+            itemBuilder: (_, index) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.history_rounded),
+                title: Text(appOwnerControlsV08.auditLog[index]),
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
 }
 
 class StoreV07 extends StatelessWidget {
