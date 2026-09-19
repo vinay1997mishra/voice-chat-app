@@ -63,6 +63,12 @@ jobs:
           grep -Fq 'anamika|mika' app/src/main/java/com/anamika/ai/MainActivity.java
           grep -Fq 'Hello Mika / Hello Anamika' app/src/main/res/layout/activity_main.xml
           grep -Fq 'never auto-enable an app' app/src/main/res/layout/activity_plugin_manager.xml
+          test -f app/src/main/java/com/anamika/ai/BackgroundWakeService.java
+          test -f app/src/main/java/com/anamika/ai/BootWakeReceiver.java
+          grep -Fq 'android.permission.FOREGROUND_SERVICE_MICROPHONE' app/src/main/AndroidManifest.xml
+          grep -Fq 'android:foregroundServiceType="microphone"' app/src/main/AndroidManifest.xml
+          grep -Fq '24×7 Background Wake' app/src/main/res/layout/activity_main.xml
+          grep -Fq 'START_STICKY' app/src/main/java/com/anamika/ai/BackgroundWakeService.java
 
       - uses: actions/setup-java@v5
         with:
