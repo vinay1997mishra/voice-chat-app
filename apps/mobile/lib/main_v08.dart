@@ -80,6 +80,7 @@ class DemoEconomy extends ChangeNotifier {
   bool giftAnimations = true;
   bool allowPrivateMessages = true;
   final following = <String>{};
+  final Map<String, String> userIdAliases = <String, String>{};
 
   final users = <DemoUser>[
     DemoUser('Owner', '10000000', diamonds: 5000, avatar: '👑'),
@@ -143,11 +144,35 @@ class DemoEconomy extends ChangeNotifier {
   }
 
   DemoUser byId(String id) {
+    final resolved = resolveUserId(id);
     return users.firstWhere(
-      (user) => user.id == id,
+      (user) => user.id == resolved,
       orElse: () => users.first,
     );
   }
+
+  String resolveUserId(String id) {
+    var resolved = id.trim();
+    final seen = <String>{};
+    while (userIdAliases.containsKey(resolved) && seen.add(resolved)) {
+      resolved = userIdAliases[resolved]!;
+    }
+    return resolved;
+  }
+
+  DemoUser? findUserByAnyId(String id) {
+    final resolved = resolveUserId(id);
+    for (final user in users) {
+      if (user.id == resolved) return user;
+    }
+    return null;
+  }
+
+  bool matchesCurrentUserId(String id) =>
+      resolveUserId(id) == currentUserId;
+
+  bool isHistoricalUserId(String id) =>
+      userIdAliases.containsKey(id.trim());
 
   bool isValidUserId(String value) =>
       RegExp(r'^\d{5,12}$').hasMatch(value.trim());
@@ -155,8 +180,16 @@ class DemoEconomy extends ChangeNotifier {
   bool isUserIdAvailable(String value, {String? exceptId}) {
     final clean = value.trim();
     if (!isValidUserId(clean)) return false;
+    if (userIdAliases.containsKey(clean) && clean != exceptId) return false;
     if (currentUserId == clean && exceptId != currentUserId) return false;
     return !users.any((user) => user.id == clean && user.id != exceptId);
+  }
+
+  void _rememberUserIdAlias(String oldId, String newId) {
+    for (final key in userIdAliases.keys.toList()) {
+      if (userIdAliases[key] == oldId) userIdAliases[key] = newId;
+    }
+    userIdAliases[oldId] = newId;
   }
 
   bool changeUserId(DemoUser user, String newId) {
@@ -165,6 +198,7 @@ class DemoEconomy extends ChangeNotifier {
     if (clean == oldId) return true;
     if (!isUserIdAvailable(clean, exceptId: oldId)) return false;
 
+    _rememberUserIdAlias(oldId, clean);
     user.id = clean;
     _migrateUserIdReferences(oldId, clean);
     _syncOwnedRoomIds(oldId, clean);
@@ -179,6 +213,7 @@ class DemoEconomy extends ChangeNotifier {
     if (clean == oldId) return true;
     if (!isUserIdAvailable(clean, exceptId: oldId)) return false;
 
+    _rememberUserIdAlias(oldId, clean);
     currentUserId = clean;
     _migrateUserIdReferences(oldId, clean);
     _syncOwnedRoomIds(oldId, clean);
@@ -195,6 +230,20 @@ class DemoEconomy extends ChangeNotifier {
           ..id = newId;
       }
     }
+  }
+
+  RoomData? findOwnedRoomByAnyUserId(String id) {
+    final resolved = resolveUserId(id);
+    for (final room in roomRegistryV08) {
+      if (room.ownerUserId == resolved || room.id == resolved) return room;
+    }
+    return null;
+  }
+
+  String? matchedAliasFor(String searchedId) {
+    final clean = searchedId.trim();
+    if (!userIdAliases.containsKey(clean)) return null;
+    return clean;
   }
 
   void _migrateUserIdReferences(String oldId, String newId) {
@@ -1037,6 +1086,7 @@ class _V07HomeState extends State<V07Home> {
       ownerUserId: '10000012',
     ),
   ];
+  bool _showPopular = false;
 
   Future<void> _createRoom() async {
     if (!appOwnerControlsV08.roomCreationEnabled) {
@@ -1117,6 +1167,133 @@ class _V07HomeState extends State<V07Home> {
     });
   }
 
+  Future<void> _searchUserId() async {
+    final searchedId = await showDialog<String>(
+      context: context,
+      builder: (_) => _RouteTextEditorV08(
+        builder: (dialogContext, controller) => AlertDialog(
+          title: const Text('Search User ID'),
+          content: TextField(
+            key: const Key('popular-user-id-search-input-v08'),
+            controller: controller,
+            keyboardType: TextInputType.number,
+            maxLength: 12,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'User ID',
+              hintText: 'Enter old or current ID',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('popular-user-id-search-submit-v08'),
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) return;
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Search'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (searchedId == null || !mounted) return;
+    final resolvedId = demoEconomy.resolveUserId(searchedId);
+    final user = demoEconomy.findUserByAnyId(searchedId);
+    final isCurrentUser = demoEconomy.matchesCurrentUserId(searchedId);
+    final room = demoEconomy.findOwnedRoomByAnyUserId(searchedId);
+
+    if (user == null && !isCurrentUser && room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No user or room found for ID ' + searchedId)),
+      );
+      return;
+    }
+
+    final displayUser = user ??
+        DemoUser(
+          'You',
+          demoEconomy.currentUserId,
+          diamonds: demoEconomy.diamonds,
+          avatar: '😎',
+        );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          key: const Key('popular-id-search-results-v08'),
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          children: [
+            const Text(
+              'Search Result',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              searchedId == resolvedId
+                  ? 'ID ' + resolvedId
+                  : 'Old ID ' + searchedId + ' → Current ID ' + resolvedId,
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              key: const Key('popular-search-room-result-v08'),
+              enabled: room != null,
+              leading: const CircleAvatar(
+                child: Icon(Icons.meeting_room_rounded),
+              ),
+              title: const Text('Room'),
+              subtitle: Text(
+                room == null
+                    ? 'This user has no room'
+                    : room.name + ' • Room ID ' + room.id,
+              ),
+              trailing: room == null
+                  ? null
+                  : const Icon(Icons.chevron_right_rounded),
+              onTap: room == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      _openRoom(room);
+                    },
+            ),
+            ListTile(
+              key: const Key('popular-search-user-result-v08'),
+              leading: CircleAvatar(child: Text(displayUser.avatar)),
+              title: const Text('User'),
+              subtitle: Text(
+                displayUser.name + ' • ID ' + displayUser.id,
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserIdLookupV08(
+                      user: displayUser,
+                      searchedId: searchedId,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1132,22 +1309,69 @@ class _V07HomeState extends State<V07Home> {
           child: ListView(
             padding: const EdgeInsets.all(18),
             children: [
-              Row(children: [
-                const Text('Mine', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Popular',
-                    style: TextStyle(fontSize: 20, color: Colors.white60),
-                    overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  InkWell(
+                    key: const Key('home-mine-tab-v08'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => setState(() => _showPopular = false),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        'Mine',
+                        style: TextStyle(
+                          fontSize: _showPopular ? 20 : 28,
+                          fontWeight:
+                              _showPopular ? FontWeight.w500 : FontWeight.w900,
+                          color: _showPopular ? Colors.white60 : Colors.white,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: const Key('create-room-v06'),
-                  onPressed: _createRoom,
-                  icon: const Icon(Icons.add_circle_rounded, size: 30),
-                ),
-              ]),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: InkWell(
+                      key: const Key('home-popular-tab-v08'),
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setState(() => _showPopular = true),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          'Popular',
+                          style: TextStyle(
+                            fontSize: _showPopular ? 28 : 20,
+                            fontWeight:
+                                _showPopular ? FontWeight.w900 : FontWeight.w500,
+                            color: _showPopular ? Colors.white : Colors.white60,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: Key(
+                      _showPopular
+                          ? 'popular-user-search-v08'
+                          : 'create-room-v06',
+                    ),
+                    tooltip: _showPopular ? 'Search User ID' : 'Create Room',
+                    onPressed: _showPopular ? _searchUserId : _createRoom,
+                    icon: Icon(
+                      _showPopular
+                          ? Icons.manage_search_rounded
+                          : Icons.add_circle_rounded,
+                      size: 30,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
               AnimatedBuilder(
                 animation: appOwnerControlsV08,
@@ -1161,15 +1385,44 @@ class _V07HomeState extends State<V07Home> {
                 ),
               ),
               const SizedBox(height: 10),
+              if (_showPopular) ...[
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.search_rounded),
+                    title: Text('Search by User ID'),
+                    subtitle: Text(
+                      'Old ID and current ID both work. Use the search icon above.',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Popular Rooms',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+              ],
               for (final room in rooms)
                 Card(
                   child: ListTile(
                     key: room.name == 'India Official Room'
                         ? const Key('open-v07-room')
                         : null,
-                    leading: room.dpPath == null ? CircleAvatar(child: Text(room.dp)) : CircleAvatar(backgroundImage: FileImage(File(room.dpPath!))),
+                    leading: room.dpPath == null
+                        ? CircleAvatar(child: Text(room.dp))
+                        : CircleAvatar(
+                            backgroundImage: FileImage(File(room.dpPath!)),
+                          ),
                     title: Text(room.name),
-                    subtitle: Text('${room.category} • ${room.seatCount} seats • ID ${room.id}${room.locked ? ' • Locked' : ''}${room.ownedByMe ? ' • My Room' : ''}'),
+                    subtitle: Text(
+                      room.category +
+                          ' • ' +
+                          room.seatCount.toString() +
+                          ' seats • ID ' +
+                          room.id +
+                          (room.locked ? ' • Locked' : '') +
+                          (room.ownedByMe ? ' • My Room' : ''),
+                    ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _openRoom(room),
                   ),
@@ -1177,6 +1430,72 @@ class _V07HomeState extends State<V07Home> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class UserIdLookupV08 extends StatelessWidget {
+  const UserIdLookupV08({
+    super.key,
+    required this.user,
+    required this.searchedId,
+  });
+
+  final DemoUser user;
+  final String searchedId;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentId = demoEconomy.resolveUserId(searchedId);
+    final usedOldId = searchedId != currentId;
+    return Scaffold(
+      appBar: AppBar(title: const Text('User ID')),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Center(
+            child: CircleAvatar(
+              radius: 44,
+              child: Text(user.avatar, style: const TextStyle(fontSize: 36)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              user.name,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Card(
+            key: const Key('searched-user-id-card-v08'),
+            child: ListTile(
+              leading: const Icon(Icons.badge_rounded),
+              title: const Text('User ID'),
+              subtitle: Text(
+                usedOldId
+                    ? 'Current ID ' + currentId + ' • searched with old ID ' + searchedId
+                    : currentId,
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DemoUserProfileV07(user: user),
+                ),
+              ),
+            ),
+          ),
+          if (usedOldId)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Old ID remains searchable and always opens the current user.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ],
       ),
     );
   }
