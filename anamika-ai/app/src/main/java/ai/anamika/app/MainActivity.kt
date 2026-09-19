@@ -269,7 +269,7 @@ class MainActivity : Activity() {
 
     private fun startListeningWithPermission() {
         if (!features.isEnabled(FeatureId.VOICE_INPUT)) {
-            reply("Voice input owner policy se OFF hai.")
+            reply(if (features.isOwnerMode()) "Voice input owner policy se OFF hai." else "Voice input is not available.")
             return
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -290,7 +290,13 @@ class MainActivity : Activity() {
 
         val requiredFeature = featureFor(command)
         if (requiredFeature != null && !features.isEnabled(requiredFeature)) {
-            reply("Feature '${requiredFeature.key}' owner policy se OFF hai.")
+            reply(
+                if (features.isOwnerMode()) {
+                    "Feature '${requiredFeature.key}' owner policy se OFF hai."
+                } else {
+                    "This feature is not available."
+                }
+            )
             return
         }
 
@@ -666,6 +672,9 @@ class MainActivity : Activity() {
     }
 
     private fun isPrivateCommand(command: Command): Boolean = when (command) {
+        Command.InternetOn,
+        Command.InternetOff,
+        Command.InternetStatus,
         is Command.GitInit,
         Command.GitStatus,
         is Command.GitBranch,
@@ -1015,11 +1024,11 @@ class MainActivity : Activity() {
 
     private fun withInternet(action: () -> Unit) {
         if (!features.isEnabled(FeatureId.INTERNET)) {
-            reply("Internet feature owner policy se OFF hai.")
+            reply(if (features.isOwnerMode()) "Internet feature owner policy se OFF hai." else "This feature is not available.")
             return
         }
         if (!internetPolicy.isEnabled()) {
-            reply("Internet owner policy se OFF hai. Local kaam available hai.")
+            reply(if (features.isOwnerMode()) "Internet owner policy se OFF hai. Local kaam available hai." else "Internet access is unavailable.")
             return
         }
         action()
