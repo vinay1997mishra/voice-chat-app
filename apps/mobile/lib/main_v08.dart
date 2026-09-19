@@ -421,10 +421,6 @@ String demoNumber(int value) {
 
 class VoiceChatV08 extends StatelessWidget {
   const VoiceChatV08({super.key});
-  bool get _canModerateSeatRequests =>
-      widget.room.ownedByMe ||
-      widget.room.currentUserIsAdmin ||
-      admins.contains('You');
 
   @override
   Widget build(BuildContext context) {
@@ -1287,6 +1283,11 @@ class _RoomV07State extends State<RoomV07> {
     _roomScrollController.dispose();
     super.dispose();
   }
+
+  bool get _canModerateSeatRequests =>
+      widget.room.ownedByMe ||
+      widget.room.currentUserIsAdmin ||
+      admins.contains('You');
 
   @override
   Widget build(BuildContext context) {
