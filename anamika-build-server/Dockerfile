@@ -20,7 +20,7 @@ RUN apt-get update \
 WORKDIR /srv/anamika-build-server
 
 COPY requirements.txt .
-RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
