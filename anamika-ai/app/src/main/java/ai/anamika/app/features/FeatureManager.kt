@@ -39,7 +39,11 @@ class FeatureManager(
         if (ownerMode) {
             isMasterEnabled() && prefs.getBoolean(ownerKey(feature), true)
         } else {
-            publicEntitlement.enabled(feature) ?: publicDefault(feature)
+            if (!PUBLIC_CAPABLE_FEATURES.contains(feature)) {
+                false
+            } else {
+                publicEntitlement.enabled(feature) ?: publicDefault(feature)
+            }
         }
 
     fun setEnabled(feature: FeatureId, enabled: Boolean) {
@@ -93,6 +97,17 @@ class FeatureManager(
             FeatureId.CHAT,
             FeatureId.VOICE_INPUT,
             FeatureId.VOICE_REPLY
+        )
+
+        private val PUBLIC_CAPABLE_FEATURES = setOf(
+            FeatureId.CHAT,
+            FeatureId.VOICE_INPUT,
+            FeatureId.VOICE_REPLY,
+            FeatureId.MEMORY,
+            FeatureId.SEARCH,
+            FeatureId.INTERNET,
+            FeatureId.LINK_ANALYSIS,
+            FeatureId.LOCAL_CODING
         )
     }
 }
