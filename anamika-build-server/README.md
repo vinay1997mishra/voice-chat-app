@@ -1,57 +1,39 @@
-# Anamika Build Server
+# Anamika APK Build Server
 
-This server gives the Anamika Android app two build modes:
+This server has one job only: **compile a completed Android project into an APK**.
 
-1. **Project build**: Anamika uploads an existing Android/Gradle project ZIP.
-2. **AI agent build**: Anamika sends an app goal, a server-side coding agent generates the Android project, then the server tests, lints and builds the APK.
+Coding, project generation, file editing and Git work stay on the Anamika phone app. The server is contacted only after the local project is ready and the owner requests an APK build.
+
+## Flow
+
+1. Anamika creates/edits source code in the phone's local workspace.
+2. The owner approves `build apk`.
+3. Anamika packages the completed project as ZIP.
+4. The ZIP is uploaded to this build server.
+5. The server runs:
+   - `testDebugUnitTest`
+   - `lintDebug`
+   - `assembleDebug`
+6. The resulting APK is returned to Anamika.
+7. Anamika downloads it and can open Android's install screen after owner approval.
 
 ## API
+
 - `GET /health`
-- `POST /v1/builds` — multipart `project` ZIP + `build_type=debug`
-- `POST /v1/agent-builds` — JSON: `{"goal":"create a notes app"}`
-- `GET /v1/builds/{id}`
-- `GET /v1/builds/{id}/artifact`
-- `GET /v1/builds/{id}/log`
+- `POST /v1/builds` — completed project ZIP
+- `GET /v1/builds/{id}` — build status
+- `GET /v1/builds/{id}/artifact` — APK
+- `GET /v1/builds/{id}/log` — build log
 
-## AI coding agent contract
-
-Set `ANAMIKA_GENERATOR_CMD` to an approved coding-agent command installed on the server.
-
-The process receives:
-- `ANAMIKA_APP_GOAL` — user's app request
-- `ANAMIKA_PROJECT_OUTPUT` — directory where the complete Gradle Android project must be written
-- `ANAMIKA_JOB_ID` — build job identifier
-
-The generator must finish with exit code 0 and leave a valid Android Gradle project in `ANAMIKA_PROJECT_OUTPUT`.
-
-After generation the server automatically runs:
-- `testDebugUnitTest`
-- `lintDebug`
-- `assembleDebug`
-
-If all pass, the installable APK becomes available from the artifact endpoint.
+There is intentionally **no AI/code-generation endpoint** on this server.
 
 ## Run with Docker
 
 ```bash
-docker build -t anamika-build-server .
-docker run --rm -p 8080:8080 \
-  -e ANAMIKA_GENERATOR_CMD="/opt/anamika/generate-project" \
-  anamika-build-server
+docker build -t anamika-apk-builder .
+docker run --rm -p 8080:8080 anamika-apk-builder
 ```
 
-For a private test server, authentication can be omitted. For public internet deployment, use TLS and authentication. If `ANAMIKA_BUILD_TOKEN` is set, the API expects `Authorization: Bearer <token>`.
+For public deployment, enable TLS, authentication, rate limits and isolated/disposable build sandboxes.
 
-## Security
-
-Android/Gradle builds can execute code. Production deployments should run every job inside a disposable sandbox/container or VM with:
-- no host filesystem access
-- no cloud metadata access
-- restricted outbound network
-- CPU/RAM/disk/time limits
-- short-lived workspaces
-- TLS
-- authentication and rate limiting
-- server-side signing keys/secrets only
-
-The reference server creates an installable **debug APK**. Production release signing requires a protected server-side keystore/HSM or secret store. Never put signing keys or permanent API secrets inside the Anamika APK.
+The current reference server builds installable **debug APKs**. Production signed APK/AAB support should keep signing keys only on the protected build server or secure signing service.
