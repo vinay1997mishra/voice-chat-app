@@ -28,6 +28,8 @@ void main() {
   }
 
   setUp(() {
+    roomRegistryV08.clear();
+    demoEconomy.userIdAliases.clear();
     demoEconomy.currentUserId = '10000050';
     demoEconomy.byName('Owner').id = '10000000';
     demoEconomy.byName('Admin').id = '10000001';
@@ -860,6 +862,94 @@ void main() {
     expect(demoEconomy.changeUserId(aisha, admin.id), isFalse);
     expect(demoEconomy.changeUserId(aisha, 'ABC12345'), isFalse);
     expect(aisha.id, '10000011');
+  });
+
+
+  test('old and new user IDs both resolve to the same user and room', () {
+    final user = demoEconomy.byName('Aisha');
+    final oldId = user.id;
+    final room = RoomData(
+      'Aisha Search Room',
+      oldId,
+      '🌸',
+      false,
+      ownerUserId: oldId,
+    );
+
+    expect(demoEconomy.changeUserId(user, '20000011'), isTrue);
+    expect(demoEconomy.findUserByAnyId(oldId), same(user));
+    expect(demoEconomy.findUserByAnyId('20000011'), same(user));
+    expect(demoEconomy.resolveUserId(oldId), '20000011');
+    expect(demoEconomy.findOwnedRoomByAnyUserId(oldId), same(room));
+    expect(demoEconomy.findOwnedRoomByAnyUserId('20000011'), same(room));
+    expect(room.id, '20000011');
+    expect(demoEconomy.isHistoricalUserId(oldId), isTrue);
+    expect(demoEconomy.isUserIdAvailable(oldId), isFalse);
+  });
+
+  testWidgets('Popular tab opens and ID search exposes Room and User results',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('popular-user-search-v08')), findsOneWidget);
+    expect(find.text('Popular Rooms'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('popular-user-search-v08')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('popular-user-id-search-input-v08')),
+      '10000000',
+    );
+    await tester.tap(
+      find.byKey(const Key('popular-user-id-search-submit-v08')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('popular-id-search-results-v08')), findsOneWidget);
+    expect(find.byKey(const Key('popular-search-room-result-v08')), findsOneWidget);
+    expect(find.byKey(const Key('popular-search-user-result-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('popular-search-user-result-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('searched-user-id-card-v08')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('searched-user-id-card-v08')));
+    await tester.pumpAndSettle();
+    expect(find.text('User Profile'), findsOneWidget);
+  });
+
+  testWidgets('Popular search accepts an old ID after user ID is changed',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    final owner = demoEconomy.byName('Owner');
+    expect(demoEconomy.changeUserId(owner, '20000000'), isTrue);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('popular-user-search-v08')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('popular-user-id-search-input-v08')),
+      '10000000',
+    );
+    await tester.tap(
+      find.byKey(const Key('popular-user-id-search-submit-v08')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Old ID 10000000'), findsOneWidget);
+    expect(find.textContaining('Current ID 20000000'), findsOneWidget);
+    expect(find.textContaining('Room ID 20000000'), findsOneWidget);
+    expect(find.textContaining('Owner • ID 20000000'), findsOneWidget);
   });
 
 }
