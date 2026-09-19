@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -34,6 +35,8 @@ import ai.anamika.app.features.FeatureId
 import ai.anamika.app.features.FeatureManager
 import ai.anamika.app.features.LearnedModuleRegistry
 import ai.anamika.app.distribution.PublicDeviceIdentity
+import ai.anamika.app.distribution.FunctionAccessItem
+import ai.anamika.app.distribution.OwnerConsoleGateway
 import ai.anamika.app.distribution.PublicEntitlementCache
 import ai.anamika.app.distribution.SignedOwnerPolicyGateway
 import ai.anamika.app.network.InternetPolicyManager
@@ -50,6 +53,7 @@ import ai.anamika.app.update.SelfUpdateStager
 import ai.anamika.app.voice.VoiceAssistant
 import ai.anamika.app.workspace.WorkspaceFileManager
 import java.net.URLEncoder
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : Activity() {
     private val router = CommandRouter()
@@ -77,6 +81,7 @@ class MainActivity : Activity() {
     private lateinit var learnedModules: LearnedModuleRegistry
     private lateinit var publicSession: PublicSessionStore
     private lateinit var googleAuth: GooglePublicAuth
+    private lateinit var ownerConsoleGateway: OwnerConsoleGateway
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -103,6 +108,7 @@ class MainActivity : Activity() {
         learnedModules = LearnedModuleRegistry(this)
         publicSession = PublicSessionStore(this)
         googleAuth = GooglePublicAuth(this)
+        ownerConsoleGateway = OwnerConsoleGateway(BuildConfig.ANAMIKA_POLICY_BASE_URL)
 
         voice = VoiceAssistant(
             activity = this,
@@ -114,6 +120,8 @@ class MainActivity : Activity() {
                 buildOwnerUi()
             } else if (publicSession.current() == null) {
                 buildPublicLoginUi()
+            } else if (publicSession.current()?.isOwner() == true) {
+                buildOwnerConsoleUi()
             } else {
                 buildPublicUserUi()
             }
@@ -173,6 +181,18 @@ class MainActivity : Activity() {
             setOnClickListener { showFeatureControlDialog() }
         }
 
+        val functionControl = Button(this).apply {
+            text = "Function Control"
+            setOnClickListener {
+                val session = publicSession.current()
+                if (session?.isOwner() == true) {
+                    setContentView(buildOwnerConsoleUi())
+                } else {
+                    startPublicGoogleLogin()
+                }
+            }
+        }
+
         root.addView(title)
         root.addView(status)
         root.addView(speak)
@@ -182,6 +202,7 @@ class MainActivity : Activity() {
         root.addView(buildApk)
         if (features.isOwnerMode()) {
             root.addView(featureControl)
+            root.addView(functionControl)
         }
 
         return ScrollView(this).apply { addView(root) }
@@ -245,8 +266,12 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             verified.onSuccess { session ->
                                 publicSession.save(session)
-                                setContentView(buildPublicUserUi())
-                                syncPublicEntitlementsIfNeeded()
+                                if (session.isOwner()) {
+                                    setContentView(buildOwnerConsoleUi())
+                                } else {
+                                    setContentView(buildPublicUserUi())
+                                    syncPublicEntitlementsIfNeeded()
+                                }
                             }.onFailure {
                                 android.widget.Toast.makeText(
                                     this,
