@@ -32,6 +32,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private final Handler handler=new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
+    private PowerManager.WakeLock wakeLock;
     private boolean awaitingCommand=false;
     private boolean ttsReady=false;
 
@@ -39,14 +40,31 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         super.onCreate();
         running=true;
         createChannel();
+        try{
+            PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+            if(pm!=null){
+                wakeLock=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"AnamikaAI:BackgroundWake");
+                wakeLock.setReferenceCounted(false);
+            }
+        }catch(Throwable ignored){}
         tts=new TextToSpeech(this,this);
     }
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?ACTION_START:intent.getAction();
+        boolean enabled=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false);
+        if(intent==null && !enabled){
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        if(!OwnerSession.isTrusted(this) && !ACTION_STOP.equals(action)){
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         if(ACTION_STOP.equals(action)){
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",false).apply();
             stopListening();
+            releaseWakeLock();
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
@@ -63,6 +81,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             return START_STICKY;
         }
         getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
+        acquireWakeLock();
         startForeground(NOTIFICATION_ID,notification("Listening for Hello Mika / Hello Anamika"));
         handler.postDelayed(this::startListening,500L);
         return START_STICKY;
@@ -271,6 +290,18 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         return false;
     }
 
+    private void acquireWakeLock(){
+        try{
+            if(wakeLock!=null && !wakeLock.isHeld()) wakeLock.acquire();
+        }catch(Throwable ignored){}
+    }
+
+    private void releaseWakeLock(){
+        try{
+            if(wakeLock!=null && wakeLock.isHeld()) wakeLock.release();
+        }catch(Throwable ignored){}
+    }
+
     @Override public void onInit(int status){
         ttsReady=status==TextToSpeech.SUCCESS;
         if(ttsReady){
@@ -286,6 +317,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         running=false;
         handler.removeCallbacksAndMessages(null);
         stopListening();
+        releaseWakeLock();
         if(tts!=null){ try{tts.stop();tts.shutdown();}catch(Throwable ignored){} }
         super.onDestroy();
     }
