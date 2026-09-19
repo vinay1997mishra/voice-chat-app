@@ -66,6 +66,10 @@ sealed class Command {
 
     data class SelfUpdateStage(val changes: String) : Command()
 
+    data object ModuleList : Command()
+    data class ModuleOn(val id: String) : Command()
+    data class ModuleOff(val id: String) : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -95,6 +99,9 @@ class CommandRouter {
             lower == "public id" || lower == "installation id" -> Command.PublicInstallationId
 
             lower.startsWith("self update stage ") -> Command.SelfUpdateStage(text.drop(18).trim())
+            lower == "module list" || lower == "modules" -> Command.ModuleList
+            lower.startsWith("module on ") -> Command.ModuleOn(text.drop(10).trim())
+            lower.startsWith("module off ") -> Command.ModuleOff(text.drop(11).trim())
 
             lower == "internet on" || lower == "internet chalu" -> Command.InternetOn
             lower == "internet off" || lower == "internet band" -> Command.InternetOff
