@@ -1088,6 +1088,13 @@ class _V07HomeState extends State<V07Home> {
   ];
   bool _showPopular = false;
 
+  RoomData? get _myRoom {
+    for (final room in rooms) {
+      if (room.ownedByMe && !room.closed) return room;
+    }
+    return null;
+  }
+
   Future<void> _createRoom() async {
     if (!appOwnerControlsV08.roomCreationEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1296,6 +1303,7 @@ class _V07HomeState extends State<V07Home> {
 
   @override
   Widget build(BuildContext context) {
+    final myRoom = _myRoom;
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -1359,14 +1367,26 @@ class _V07HomeState extends State<V07Home> {
                     key: Key(
                       _showPopular
                           ? 'popular-user-search-v08'
-                          : 'create-room-v06',
+                          : myRoom == null
+                              ? 'create-room-v06'
+                              : 'my-room-home-v08',
                     ),
-                    tooltip: _showPopular ? 'Search User ID' : 'Create Room',
-                    onPressed: _showPopular ? _searchUserId : _createRoom,
+                    tooltip: _showPopular
+                        ? 'Search User ID'
+                        : myRoom == null
+                            ? 'Create Room'
+                            : 'Enter My Room',
+                    onPressed: _showPopular
+                        ? _searchUserId
+                        : myRoom == null
+                            ? _createRoom
+                            : () => _openRoom(myRoom),
                     icon: Icon(
                       _showPopular
                           ? Icons.manage_search_rounded
-                          : Icons.add_circle_rounded,
+                          : myRoom == null
+                              ? Icons.add_circle_rounded
+                              : Icons.home_rounded,
                       size: 30,
                     ),
                   ),
