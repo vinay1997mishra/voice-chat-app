@@ -711,8 +711,8 @@ class MainActivity : Activity() {
         Command.ModuleList,
         is Command.ModuleOn,
         is Command.ModuleOff,
-        is Command.RequestUpgrade,
-        is Command.CheckUpdate -> true
+        Command.RequestUpgrade,
+        Command.CheckUpdate -> true
 
         else -> false
     }
