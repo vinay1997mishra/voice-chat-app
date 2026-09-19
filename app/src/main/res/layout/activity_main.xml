@@ -111,13 +111,13 @@
             android:id="@+id/wakeListenButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="24×7 Hello Mika / Hello Anamika: OFF" />
+            android:text="24×7 Hello Mika / Hello Anamika: ALWAYS ON" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Start 24×7 Background Wake once and it stays enabled until YOU turn it OFF. Anamika uses an ongoing foreground-service notification and resumes best-effort after app reopen/reboot. Say “Hello Mika” or “Hello Anamika” without touching Mic. Android/OEM battery controls or Force Stop can still interrupt it."
+            android:text="After the first Owner setup, 24×7 Background Wake stays enabled automatically. You do not need to open Anamika first—say “Hello Mika” or “Hello Anamika”. The foreground service resumes best-effort after app reopen, reboot and app update. Android Force Stop or some OEM battery controls can still interrupt it."
             android:textSize="13sp" />
 
         <Button
