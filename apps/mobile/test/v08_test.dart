@@ -1240,4 +1240,172 @@ void main() {
     expect(find.byType(MainOwnerPanelV08), findsNothing);
   });
 
+
+  testWidgets('Discover cards all navigate to active destinations',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: DiscoverV06()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-voice-rooms-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(V07Home), findsOneWidget);
+    expect(find.text('Popular Rooms'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-game-center-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(GamesCenterV08), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-music-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MusicCenterV08), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-vip-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(VipCenterV07), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-events-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(EventsCenterV08), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discover-official-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(V07Home), findsOneWidget);
+    expect(find.text('Official Rooms'), findsOneWidget);
+  });
+
+  testWidgets('Music and Events controls are interactive',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: MusicCenterV08()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('music-track-0-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('music-selected-track-v08')), findsOneWidget);
+    expect(find.text('Chill Room'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('music-stop-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('music-selected-track-v08')), findsNothing);
+
+    await tester.pumpWidget(const MaterialApp(home: EventsCenterV08()));
+    await tester.pumpAndSettle();
+    final join = find.byKey(const Key('event-join-0-v08'));
+    await tester.tap(join);
+    await tester.pumpAndSettle();
+    expect(find.text('Leave'), findsOneWidget);
+    await tester.tap(join);
+    await tester.pumpAndSettle();
+    expect(find.text('Join'), findsWidgets);
+  });
+
+  testWidgets('Room Invite More Report Info and Music tools all respond',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Interaction Room',
+      '88888001',
+      '🎧',
+      false,
+      onlineUsers: 2,
+      description: 'Interaction smoke test room',
+    );
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Invite'));
+    await tester.pumpAndSettle();
+    expect(find.text('Room invite copied'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    final musicTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('Music'),
+    );
+    await tester.tap(musicTool);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-music-sheet-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-music-chill-room-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-selected-music-v08')), findsOneWidget);
+    expect(find.textContaining('Chill Room'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    final moreTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('More'),
+    );
+    await tester.tap(moreTool);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-more-tools-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-share-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-report-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-info-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-info-v08')));
+    await tester.pumpAndSettle();
+    expect(find.text('Room Info'), findsOneWidget);
+    expect(find.textContaining('88888001'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('v07-tools-grid')),
+        matching: find.text('More'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('room-report-v08')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('report-room-input-v08')),
+      'Test report reason',
+    );
+    await tester.tap(find.byKey(const Key('report-room-submit-v08')));
+    await tester.pumpAndSettle();
+    expect(find.text('Room report submitted'), findsOneWidget);
+  });
+
+  testWidgets('primary visible material buttons are enabled in default screens',
+      (tester) async {
+    setPhoneViewport(tester);
+
+    Future<void> verify(Widget home) async {
+      await tester.pumpWidget(MaterialApp(home: home));
+      await tester.pumpAndSettle();
+
+      for (final element in find.byType(IconButton).evaluate()) {
+        final button = element.widget as IconButton;
+        expect(button.onPressed, isNotNull);
+      }
+      for (final element in find.byWidgetPredicate(
+        (widget) => widget is ButtonStyleButton,
+      ).evaluate()) {
+        final button = element.widget as ButtonStyleButton;
+        expect(button.onPressed, isNotNull);
+      }
+    }
+
+    await verify(const V07Home());
+    await verify(const DiscoverV06());
+    await verify(const ProfileV07());
+  });
+
 }
