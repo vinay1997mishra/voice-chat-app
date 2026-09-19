@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "version": "7.8.2",
+  "policy": "A language is FULL VERIFIED only after its real compiler/interpreter pack returns success.",
+  "packs": [
+    {
+      "language": "C",
+      "binary": "libanamika_clang.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "C++",
+      "binary": "libanamika_clangxx.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Rust",
+      "binary": "libanamika_rustc.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Go",
+      "binary": "libanamika_go.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Python",
+      "binary": "libanamika_python.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "JavaScript",
+      "binary": "libanamika_node.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "TypeScript",
+      "binary": "libanamika_tsc.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Java",
+      "binary": "libanamika_javac.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Kotlin",
+      "binary": "libanamika_kotlinc.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "C#",
+      "binary": "libanamika_csc.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Ruby",
+      "binary": "libanamika_ruby.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "PHP",
+      "binary": "libanamika_php.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Dart",
+      "binary": "libanamika_dart.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Shell",
+      "binary": "libanamika_bash.so",
+      "mode": "native APK pack"
+    },
+    {
+      "language": "Android project",
+      "binary": "libanamika_androidcheck.so",
+      "mode": "SDK/aapt2/Gradle verification pack"
+    },
+    {
+      "language": "SQL",
+      "binary": "Android SQLite",
+      "mode": "built-in in-process verifier"
+    },
+    {
+      "language": "HTML5",
+      "binary": "built-in HTML validator",
+      "mode": "markup/runtime-format validator; no traditional compiler"
+    },
+    {
+      "language": "CSS3",
+      "binary": "built-in CSS validator",
+      "mode": "stylesheet/runtime-format validator; no traditional compiler"
+    }
+  ]
+}

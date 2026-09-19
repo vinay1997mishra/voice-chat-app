@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Native App Test Lab"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Select a real built APK, let Android install it normally, then launch and test it. Anamika never bypasses Android's install confirmation."
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/pickApkButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="1. Select Built APK" />
+
+        <Button
+            android:id="@+id/installPermissionButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. Install Permission" />
+
+        <Button
+            android:id="@+id/installApkButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3. Install / Update Test App" />
+
+        <Button
+            android:id="@+id/launchTestAppButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="4. Launch Test App" />
+
+        <TextView
+            android:id="@+id/testLabStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text=""
+            android:textIsSelectable="true"
+            android:textSize="15sp" />
+    </LinearLayout>
+</ScrollView>

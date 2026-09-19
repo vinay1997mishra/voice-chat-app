@@ -1,36 +1,19 @@
-# Voice Chat App
+# Anamika AI V7.8 Evergreen — Source Project
 
-Mobile-first social voice-room project. The repository currently starts with a GitHub-only Flutter demo so an installable Android APK can be built without a backend or paid cloud server.
+V7.8 extends V7.7 Full Toolchain Strict with first-class HTML5/CSS3 validation, evergreen self-upgrade workspace support, universal installed-app discovery, Google/YouTube search launchers, explicit Research/Learn mode, and multilingual command normalization.
 
-## Phase 1 demo
+## Core rules
 
-The first APK includes:
+1. Owner lock remains mandatory.
+2. App automation is owner-enabled per app through Plugin Center.
+3. Research mode records only visible/public UI that Android Accessibility exposes while the owner explicitly starts a session.
+4. Self-upgrade code may be generated locally, but it is not silently activated. Review + compiler/build checks + owner approval remain required.
+5. `FULL VERIFIED` remains strict. Missing real compiler/runtime packs are reported as missing, not faked as passing.
+6. HTML5/CSS3 use dedicated validators instead of a fake compiler.
+7. Multilingual voice support depends on installed speech recognition/language packs; the local model can normalize text when bundled.
 
-- Demo login/onboarding
-- Home and room discovery UI
-- Voice-room style seat grid
-- Join/leave seat and mic toggle simulation
-- Local room chat
-- Local test gifts and coin deductions
-- Wallet balances and transaction history
-- Profile / Me screen
-- GitHub Actions APK build
+## Build note
 
-> This phase intentionally uses local/demo data only. Real multi-user login, live voice, server-side wallet, payments and realtime synchronization will be connected in later phases.
+This repository is prepared as an Android Studio project, but the current ChatGPT execution environment does not contain a full Android SDK/device toolchain, so a real APK/device build is still required before calling it production-ready.
 
-## Repository layout
-
-```text
-apps/
-  mobile/        Flutter Android demo
-.github/
-  workflows/     Automated APK build
-```
-
-## Build
-
-Every push to `main` triggers the Android demo workflow. When it succeeds, download the `voice-chat-demo-apk` artifact from the workflow run and install `app-debug.apk` on an Android phone.
-
-## Security
-
-Never commit API keys, passwords, tokens, payment credentials or production secrets to this repository.
+See `V7_8_EVERGREEN_FEATURES.md`, `FULL_TOOLCHAIN_STATUS.md`, and `PLUGIN_SYSTEM.md`.

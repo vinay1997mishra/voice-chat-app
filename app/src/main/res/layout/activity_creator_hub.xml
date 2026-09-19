@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Internet Cinematic Creator" android:textSize="26sp" android:textStyle="bold"/>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Prompt se premium cinematic video banane ke liye compatible online video provider endpoint connect karein. API key session-only hai; Anamika use save nahi karti."/>
+  <EditText android:id="@+id/creatorPrompt" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:minLines="4" android:gravity="top" android:hint="Example: black phoenix storm clouds se nikle, camera ke around circle kare, land kare, cinematic fire, premium animated-movie look"/>
+  <EditText android:id="@+id/creatorReference" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Optional public reference image/video/app URL" android:inputType="textUri"/>
+  <EditText android:id="@+id/creatorEndpoint" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Compatible creator API endpoint" android:inputType="textUri"/>
+  <EditText android:id="@+id/creatorModel" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Provider model name (optional)"/>
+  <EditText android:id="@+id/creatorApiKey" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="API key (not saved)" android:inputType="textPassword"/>
+  <Button android:id="@+id/creatorGenerate" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Generate + Verify Full HD"/>
+  <Button android:id="@+id/creatorLocal3d" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Open Offline Cinematic 3D Studio"/>
+  <TextView android:id="@+id/creatorStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="Ready." android:textIsSelectable="true"/>
+ </LinearLayout>
+</ScrollView>

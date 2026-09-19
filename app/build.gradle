@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.anamika.ai'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.anamika.ai'
+        minSdk 26
+        targetSdk 36
+        versionCode 17
+        versionName '7.8.2'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+
+    androidResources {
+        noCompress.add("gguf")
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+            keepDebugSymbols += ['**/*.so']
+        }
+    }
+}
+
+dependencies {
+    implementation 'dev.ffmpegkit-maintained:llama-android:0.1.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+}
+
+
+// V7.8 Evergreen Self-Upgrade: ship a read-only snapshot of Anamika's own source
+// inside the APK. The installed app can extract it to a private workspace, generate
+// owner-approved changes, validate them, and hand them to the final APK build step.
+def anamikaSelfSourceDir = layout.buildDirectory.dir("generated/anamikaSelfSource")
+tasks.register("bundleAnamikaSelfSource", Sync) {
+    into(anamikaSelfSourceDir)
+    from("src/main/java") { into("self_source/app/src/main/java") }
+    from("src/main/kotlin") { into("self_source/app/src/main/kotlin") }
+    from("src/main/res") { into("self_source/app/src/main/res") }
+    // Include configuration/toolchain metadata but do not duplicate multi-GB GGUF weights inside self_source.
+    from("src/main/assets") { into("self_source/app/src/main/assets"); exclude("**/*.gguf") }
+    from("src/main/AndroidManifest.xml") { into("self_source/app/src/main"); rename { "AndroidManifest.xml" } }
+    from("build.gradle") { into("self_source/app"); rename { "build.gradle" } }
+    from(rootProject.file("build.gradle")) { into("self_source"); rename { "build.gradle" } }
+    from(rootProject.file("settings.gradle")) { into("self_source"); rename { "settings.gradle" } }
+    from(rootProject.file("gradle.properties")) { into("self_source"); rename { "gradle.properties" } }
+    from(rootProject.file("tools")) { into("self_source/tools") }
+    from(rootProject.file(".github/workflows")) { into("self_source/.github/workflows") }
+}
+android.sourceSets.main.assets.srcDir(anamikaSelfSourceDir.get().asFile)
+tasks.named("preBuild").configure { dependsOn("bundleAnamikaSelfSource") }
