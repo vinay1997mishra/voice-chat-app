@@ -52,6 +52,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private final Set<String> autoAuditNodes = new HashSet<>();
     private final Set<String> autoAuditScreensSeen = new HashSet<>();
     private final Set<String> autoAuditScrolled = new HashSet<>();
+    private String lastAuditActionLabel = "";
 
 
     @Override public void onServiceConnected() {
@@ -125,6 +126,11 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if (normalized.isEmpty()) return;
         String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(TARGET, "");
         String lowerCommand = normalized.toLowerCase(Locale.ROOT);
+        if(normalized.startsWith("whatsapp-message|")){
+            String[] parts=normalized.split("\\|",3);
+            if(parts.length==3) performWhatsAppMessage(parts[1],parts[2]);
+            return;
+        }
         if (containsAny(lowerCommand,
                 "saare functions check kar","sare functions check kar","check all functions",
                 "is app ke saare functions check kar","is app ke sare functions check kar",
@@ -203,6 +209,11 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             AppBlueprintStore.record(this,fake,root);
             fake.recycle();
         }
+        if(!lastAuditActionLabel.isEmpty()){
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"RESULT",lastAuditActionLabel,
+                    "Observed target screen signature="+screenSig+" class="+String.valueOf(root.getClassName()));
+            lastAuditActionLabel="";
+        }
 
         List<AccessibilityNodeInfo> nodes=flatten(root);
         for(AccessibilityNodeInfo n:nodes){
@@ -224,6 +235,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TAP",label,"safe visible control");
             if(clickNodeOrParent(n)){
                 autoAuditTested++;
+                lastAuditActionLabel=label;
                 if(autoAuditDepth < AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
                 handler.postDelayed(this::auditNext,900L);
                 return;
@@ -305,6 +317,67 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 "अनुमति","खरीद","रिचार्ज","निकासी","ट्रांसफर"
         };
         for(String k:risky) if(s.contains(k)) return true;
+        return false;
+    }
+
+    private void performWhatsAppMessage(String recipient,String message){
+        if(recipient==null||message==null||recipient.trim().isEmpty()||message.trim().isEmpty()) return;
+        final String who=recipient.trim();
+        final String body=message.trim();
+        final String target=getSharedPreferences(PREFS,MODE_PRIVATE).getString(TARGET,"");
+        if(!"com.whatsapp".equals(target) || !PluginRegistry.isEnabled(this,target)) return;
+        if(!OwnerSession.isActive(this)) return;
+
+        AccessibilityNodeInfo root=getRootInActiveWindow();
+        if(root==null) return;
+        AppBlueprintStore.recordUserAction(this,target,"Explicit owner WhatsApp message to "+who);
+
+        boolean searchOpened=clickText(root,"Search") || clickText(root,"Search…") || clickText(root,"खोजें");
+        handler.postDelayed(() -> {
+            AccessibilityNodeInfo r1=getRootInActiveWindow();
+            if(r1==null) return;
+            if(!typeText(r1,who)){
+                android.widget.Toast.makeText(this,"WhatsApp search field nahi mila.",android.widget.Toast.LENGTH_LONG).show();
+                return;
+            }
+            handler.postDelayed(() -> {
+                AccessibilityNodeInfo r2=getRootInActiveWindow();
+                if(r2==null) return;
+                if(!clickExactText(r2,who)){
+                    android.widget.Toast.makeText(this,"Exact contact “"+who+"” nahi mila; message send nahi kiya.",android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                handler.postDelayed(() -> {
+                    AccessibilityNodeInfo r3=getRootInActiveWindow();
+                    if(r3==null) return;
+                    if(!typeText(r3,body)){
+                        android.widget.Toast.makeText(this,"WhatsApp message box nahi mila.",android.widget.Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    handler.postDelayed(() -> {
+                        AccessibilityNodeInfo r4=getRootInActiveWindow();
+                        if(r4==null) return;
+                        boolean sent=clickText(r4,"Send") || clickText(r4,"भेजें");
+                        android.widget.Toast.makeText(this,
+                                sent?"Message sent to "+who:"Message type hua, lekin Send button nahi mila; draft chhoda gaya.",
+                                android.widget.Toast.LENGTH_LONG).show();
+                    },650L);
+                },800L);
+            },900L);
+        },searchOpened?600L:250L);
+    }
+
+    private boolean clickExactText(AccessibilityNodeInfo root,String text){
+        if(root==null||text==null) return false;
+        String needle=text.trim();
+        for(AccessibilityNodeInfo n:flatten(root)){
+            CharSequence t=n.getText();
+            CharSequence d=n.getContentDescription();
+            if((t!=null && needle.equalsIgnoreCase(t.toString().trim())) ||
+                    (d!=null && needle.equalsIgnoreCase(d.toString().trim()))){
+                if(clickNodeOrParent(n)) return true;
+            }
+        }
         return false;
     }
 
