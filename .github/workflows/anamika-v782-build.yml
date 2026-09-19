@@ -51,6 +51,19 @@ jobs:
           grep -Fq 'OwnerSession.isActive(' app/src/main/java/com/anamika/ai/TestLabActivity.java
           grep -Fq 'OwnerSession.isActive' tools/validate_audit.py
 
+      - name: Enforce owner-only plugin selection and wake aliases
+        run: |
+          set -euo pipefail
+          matches="$(grep -R -n -F 'PluginRegistry.setEnabled' app/src/main/java app/src/main/kotlin 2>/dev/null || true)"
+          echo "$matches"
+          if [ -n "$matches" ] && echo "$matches" | grep -v 'PluginManagerActivity.java'; then
+            echo "ERROR: a non-PluginManager component can auto-enable plugins" >&2
+            exit 1
+          fi
+          grep -Fq 'anamika|mika' app/src/main/java/com/anamika/ai/MainActivity.java
+          grep -Fq 'Hello Mika / Hello Anamika' app/src/main/res/layout/activity_main.xml
+          grep -Fq 'never auto-enable an app' app/src/main/res/layout/activity_plugin_manager.xml
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
