@@ -1,4 +1,4 @@
-name: Migrate Anamika to Direct GitHub Source
+name: Migrate Anamika Source Files
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  migrate-and-verify:
+  migrate-source:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: anamika-v7.8.2-final
           fetch-depth: 0
 
-      - name: Decode existing complete source
+      - name: Decode complete Anamika source
         run: |
           set -euo pipefail
           test -f anamika_build/source.b64
@@ -30,18 +30,23 @@ jobs:
           unzip -q "$RUNNER_TEMP/anamika.zip" -d "$RUNNER_TEMP/anamika-src"
           SRC="$RUNNER_TEMP/anamika-src/AnamikaAI_V7_8_2_Final"
           test -d "$SRC/app/src/main"
-          cp -a "$SRC/." ./
+          cp -a "$SRC/app" ./
+          cp -a "$SRC/tools" ./
+          cp -a "$SRC/build.gradle" ./
+          cp -a "$SRC/settings.gradle" ./
+          cp -a "$SRC/gradle.properties" ./
+          for f in README.md CINEMATIC_ENGINE.md FULL_TOOLCHAIN_STATUS.md MODEL_BUILD.md PLUGIN_SYSTEM.md STANDALONE_ARCHITECTURE.md V7_6_ULTIMATE_FEATURES.md V7_8_2_FINAL_FOCUS.md V7_8_EVERGREEN_FEATURES.md VALIDATION_REPORT.txt; do
+            if [ -f "$SRC/$f" ]; then cp -a "$SRC/$f" ./; fi
+          done
 
       - name: Apply permanent known fixes
         run: |
           set -euo pipefail
           TEST_LAB="app/src/main/java/com/anamika/ai/TestLabActivity.java"
           AUDIT="tools/validate_audit.py"
-          test -f "$TEST_LAB"
-          test -f "$AUDIT"
           sed -i 's/OwnerSession\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
           sed -i 's/OwnerSession\.isValid/OwnerSession.isActive/g' "$AUDIT"
-          ! grep -Fq 'OwnerSession.isValid(' "$TEST_LAB"
+          ! grep -R -Fq 'OwnerSession.isValid(' app/src/main/java
           grep -Fq 'OwnerSession.isActive(' "$TEST_LAB"
           grep -Fq 'OwnerSession.isActive' "$AUDIT"
 
@@ -68,137 +73,26 @@ jobs:
         with:
           gradle-version: '9.6.1'
 
-      - name: Run same source/audit validation
+      - name: Recheck validators and actual compile
         run: |
           set -euo pipefail
           python3 tools/validate_source.py
           python3 tools/validate_v78.py
           python3 tools/validate_audit.py
-
-      - name: Build direct-source lite APK
-        run: |
-          set -euo pipefail
           gradle --no-daemon :app:assembleDebug
           test -f app/build/outputs/apk/debug/app-debug.apk
           unzip -tq app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Install direct-source CI workflow
-        run: |
-          cat > .github/workflows/anamika-v782-build.yml <<'YAML'
-          name: Build Anamika V7.8.2 Direct Source
-
-          on:
-            push:
-              branches: [ anamika-v7.8.2-final ]
-              paths:
-                - 'app/**'
-                - 'tools/**'
-                - 'build.gradle'
-                - 'settings.gradle'
-                - 'gradle.properties'
-                - '.github/workflows/anamika-v782-build.yml'
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              timeout-minutes: 90
-              env:
-                MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/38f6bab61d341b23a6c00226f32c0d6148bf9f43/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true
-                MODEL_SHA256: cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
-                MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
-
-              steps:
-                - uses: actions/checkout@v5
-
-                - uses: actions/setup-java@v5
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-
-                - name: Install Android SDK 36
-                  run: |
-                    SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-                    SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
-                    if [ ! -x "$SDKMANAGER" ]; then
-                      SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
-                    fi
-                    test -n "$SDKMANAGER"
-                    test -x "$SDKMANAGER"
-                    yes | "$SDKMANAGER" --licenses >/dev/null || true
-                    "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-                    echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
-
-                - uses: gradle/actions/setup-gradle@v4
-                  with:
-                    gradle-version: '9.6.1'
-
-                - name: Validate direct source
-                  run: |
-                    python3 tools/validate_source.py
-                    python3 tools/validate_v78.py
-                    python3 tools/validate_audit.py
-                    ! grep -R -Fq 'OwnerSession.isValid(' app/src/main/java || (echo 'ERROR: stale OwnerSession.isValid found' && exit 1)
-
-                - name: Build lite APK
-                  run: gradle --no-daemon :app:assembleDebug
-
-                - name: Verify lite APK
-                  run: |
-                    test -f app/build/outputs/apk/debug/app-debug.apk
-                    unzip -tq app/build/outputs/apk/debug/app-debug.apk
-                    mkdir -p artifacts/lite
-                    cp app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-DirectSource-Lite-debug.apk
-                    sha256sum artifacts/lite/*.apk > artifacts/LITE-SHA256SUMS.txt
-
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: AnamikaAI-V7.8.2-direct-source-lite
-                    compression-level: 0
-                    path: |
-                      artifacts/lite/
-                      artifacts/LITE-SHA256SUMS.txt
-
-                - name: Bundle verified local coding model
-                  run: |
-                    mkdir -p "$(dirname "$MODEL_PATH")"
-                    curl -L --fail --retry 4 --retry-delay 5 "$MODEL_URL" -o "$MODEL_PATH"
-                    echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
-                    test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
-
-                - name: Build full local-AI APK
-                  run: gradle --no-daemon :app:assembleDebug
-
-                - name: Verify and preserve full APK
-                  run: |
-                    test -f app/build/outputs/apk/debug/app-debug.apk
-                    unzip -tq app/build/outputs/apk/debug/app-debug.apk
-                    mkdir -p artifacts/full
-                    cp app/build/outputs/apk/debug/app-debug.apk artifacts/full/AnamikaAI-V7.8.2-DirectSource-FullLocalAI-debug.apk
-                    sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
-
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: AnamikaAI-V7.8.2-direct-source-final
-                    compression-level: 0
-                    path: artifacts/
-          YAML
-          sed -i 's/^          //' .github/workflows/anamika-v782-build.yml
-
-      - name: Remove encoded payload and migration helper
-        run: |
-          rm -rf anamika_build
-          rm -f .github/workflows/anamika-v782-migrate-source.yml
-
-      - name: Commit complete normal source tree
+      - name: Commit source only
         run: |
           set -euo pipefail
+          rm -rf app/build .gradle
+          rm -rf anamika_build
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add app tools build.gradle settings.gradle gradle.properties
+          git add README.md CINEMATIC_ENGINE.md FULL_TOOLCHAIN_STATUS.md MODEL_BUILD.md PLUGIN_SYSTEM.md STANDALONE_ARCHITECTURE.md V7_6_ULTIMATE_FEATURES.md V7_8_2_FINAL_FOCUS.md V7_8_EVERGREEN_FEATURES.md VALIDATION_REPORT.txt 2>/dev/null || true
+          git add -u anamika_build || true
           git status --short
-          git commit -m "Migrate Anamika V7.8.2 to direct GitHub Android source"
+          git commit -m "Add complete Anamika V7.8.2 direct Android source tree"
           git push origin HEAD:anamika-v7.8.2-final
