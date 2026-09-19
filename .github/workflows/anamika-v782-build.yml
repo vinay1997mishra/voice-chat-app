@@ -75,6 +75,11 @@ jobs:
           grep -Fq 'android.permission.WAKE_LOCK' app/src/main/AndroidManifest.xml
           grep -Fq 'android:stopWithTask="false"' app/src/main/AndroidManifest.xml
           grep -Fq 'OwnerSession.isTrusted' app/src/main/java/com/anamika/ai/BootWakeReceiver.java
+          grep -Fq 'ALWAYS ON' app/src/main/res/layout/activity_main.xml
+          grep -Fq 'putBoolean("wake_enabled",true)' app/src/main/java/com/anamika/ai/MainActivity.java
+          grep -Fq 'putBoolean("wake_enabled",true)' app/src/main/java/com/anamika/ai/BootWakeReceiver.java
+          grep -Fq 'onTaskRemoved' app/src/main/java/com/anamika/ai/BackgroundWakeService.java
+          grep -Fq 'MY_PACKAGE_REPLACED' app/src/main/AndroidManifest.xml
 
       - uses: actions/setup-java@v5
         with:
