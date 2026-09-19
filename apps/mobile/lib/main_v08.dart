@@ -2597,17 +2597,6 @@ class _RoomV07State extends State<RoomV07> {
                     _aiGiftAssistant();
                   },
                 ),
-                const Divider(height: 28),
-                ListTile(
-                  key: const Key('owner-close-room-v08'),
-                  leading: const Icon(Icons.delete_forever_rounded),
-                  title: const Text('Close My Room'),
-                  subtitle: const Text('Close this room so you can create another one'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _closeOwnedRoom();
-                  },
-                ),
               ],
             ),
           ),
@@ -3574,34 +3563,6 @@ class _RoomV07State extends State<RoomV07> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _closeOwnedRoom() {
-    if (!widget.room.ownedByMe) return;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Close My Room?'),
-        content: const Text(
-          'This closes the local room. After that you can create a new room.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('confirm-close-room-v08'),
-            onPressed: () {
-              widget.room.closed = true;
-              Navigator.pop(dialogContext);
-              Navigator.pop(context);
-            },
-            child: const Text('Close Room'),
-          ),
-        ],
       ),
     );
   }
