@@ -10,6 +10,8 @@ enum class RiskLevel {
 enum class OwnerAction(val risk: RiskLevel) {
     READ_LOCAL_REPO(RiskLevel.NORMAL),
     WRITE_LOCAL_REPO(RiskLevel.PROTECTED),
+    WRITE_LOCAL_FILE(RiskLevel.PROTECTED),
+    DELETE_LOCAL_FILE(RiskLevel.CRITICAL),
     CREATE_BRANCH(RiskLevel.PROTECTED),
     COMMIT_CODE(RiskLevel.PROTECTED),
     MERGE_BRANCH(RiskLevel.CRITICAL),
