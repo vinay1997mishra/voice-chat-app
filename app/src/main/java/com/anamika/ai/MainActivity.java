@@ -94,6 +94,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         result.setMovementMethod(new ScrollingMovementMethod());
 
         boolean ownerPinAlreadySet = OwnerAuth.hasPin(this);
+        unlocked = OwnerSession.isActive(this);
         unlockButton.setText(ownerPinAlreadySet ? "Unlock Owner" : "Set Owner PIN");
 
         unlockButton.setOnClickListener(v -> unlockOwner(unlockButton));
@@ -106,8 +107,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             }
         });
         wakeListenButton.setText(prefs.getBoolean("wake_enabled",true)
-                ? "Hello Mika / Hello Anamika Listening: ON"
-                : "Hello Mika / Hello Anamika Listening: OFF");
+                ? "24×7 Hello Mika / Hello Anamika: ON"
+                : "24×7 Hello Mika / Hello Anamika: OFF");
         wakeListenButton.setOnClickListener(v -> toggleWakeListening());
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
         saveProjectButton.setOnClickListener(v -> saveGeneratedProject());
@@ -141,9 +142,34 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (!ownerPinAlreadySet) {
             status.setText("First launch • Owner PIN not set");
             result.setText("Enter any 4–12 digit PIN in the Owner PIN box, then tap SET OWNER PIN. This becomes your owner unlock code.");
+        } else if(unlocked) {
+            status.setText("Owner verified • session active");
+            result.setText("Anamika owner session active. Type, speak, or say Hello Mika / Hello Anamika.");
+            handleIncomingBackgroundCommand(getIntent());
         } else {
             status.setText("Locked • enter Owner PIN");
             result.setText("Enter your existing Owner PIN, then tap UNLOCK OWNER.");
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingBackgroundCommand(intent);
+    }
+
+    private void handleIncomingBackgroundCommand(Intent intent){
+        if(intent==null) return;
+        String cmd=intent.getStringExtra("background_voice_command");
+        if(cmd==null || cmd.trim().isEmpty()) return;
+        intent.removeExtra("background_voice_command");
+        if(OwnerSession.isActive(this)){
+            unlocked=true;
+            runCommand(cmd.trim());
+        } else {
+            commandInput.setText(cmd.trim());
+            showResult("Background command mila hai. Phone-control ke liye Owner PIN unlock required hai.");
         }
     }
 
@@ -171,7 +197,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                         : "Owner unlocked. Anamika is ready.");
                 speak(firstSetup ? "Owner lock set. Anamika is ready." : "Welcome back. Anamika is ready.");
                 if(prefs.getBoolean("wake_enabled",true)){
-                    mainHandler.postDelayed(() -> enableWakeListening(false),1800L);
+                    mainHandler.postDelayed(() -> enableWakeListening(false),900L);
                 }
             } else {
                 unlocked = false;
@@ -199,6 +225,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void startListening() {
         if (!ensureUnlocked()) return;
 
+        pauseBackgroundWakeService();
         stopWakeRecognizer();
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             pendingWakePermission=false;
@@ -222,6 +249,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SPEECH) resumeBackgroundWakeService();
         if (requestCode == REQ_SPEECH && resultCode == RESULT_OK && data != null) {
             ArrayList<String> text = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (text != null && !text.isEmpty()) {
@@ -240,7 +268,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 if(pendingWakePermission){
                     pendingWakePermission=false;
-                    startWakeRecognizer();
+                    startBackgroundWakeService();
                 } else {
                     startListening();
                 }
@@ -533,16 +561,49 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         return com.anamika.ai.plugins.PluginRegistry.findPackageByLabel(this,appName);
     }
 
+    private void startBackgroundWakeService(){
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) return;
+        Intent i=new Intent(this,BackgroundWakeService.class).setAction(BackgroundWakeService.ACTION_START);
+        try{
+            if(android.os.Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+        }catch(Throwable t){
+            showResult("24×7 wake service start error: "+t.getMessage());
+        }
+    }
+
+    private void stopBackgroundWakeService(){
+        Intent i=new Intent(this,BackgroundWakeService.class).setAction(BackgroundWakeService.ACTION_STOP);
+        try{ startService(i); }catch(Throwable ignored){}
+    }
+
+    private void pauseBackgroundWakeService(){
+        if(!BackgroundWakeService.isRunning()) return;
+        Intent i=new Intent(this,BackgroundWakeService.class).setAction(BackgroundWakeService.ACTION_PAUSE);
+        try{ startService(i); }catch(Throwable ignored){}
+    }
+
+    private void resumeBackgroundWakeService(){
+        if(prefs==null || !prefs.getBoolean("wake_enabled",true)) return;
+        if(!BackgroundWakeService.isRunning()){
+            startBackgroundWakeService();
+            return;
+        }
+        Intent i=new Intent(this,BackgroundWakeService.class).setAction(BackgroundWakeService.ACTION_RESUME);
+        try{ startService(i); }catch(Throwable ignored){}
+    }
+
     private void toggleWakeListening(){
         if(!ensureUnlocked()) return;
         boolean enable=!prefs.getBoolean("wake_enabled",true);
         prefs.edit().putBoolean("wake_enabled",enable).apply();
-        wakeListenButton.setText(enable?"Hello Mika / Hello Anamika Listening: ON":"Hello Mika / Hello Anamika Listening: OFF");
-        if(enable) enableWakeListening(true);
-        else {
+        wakeListenButton.setText(enable?"24×7 Hello Mika / Hello Anamika: ON":"24×7 Hello Mika / Hello Anamika: OFF");
+        if(enable) {
+            enableWakeListening(true);
+        } else {
             wakeAwaitingCommand=false;
             stopWakeRecognizer();
-            status.setText("Owner verified • wake listening off");
+            stopBackgroundWakeService();
+            status.setText("Owner verified • 24×7 wake off");
         }
     }
 
@@ -550,7 +611,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if(!unlocked || !OwnerSession.isActive(this)) return;
         if(!prefs.getBoolean("wake_enabled",true)) return;
         if(!SpeechRecognizer.isRecognitionAvailable(this)){
-            wakeListenButton.setText("Hello Mika / Hello Anamika Listening: unavailable");
+            wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: unavailable");
             if(announce) answer("Is phone par SpeechRecognizer service available nahi hai.");
             return;
         }
@@ -559,8 +620,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
             return;
         }
-        startWakeRecognizer();
-        if(announce) answer("Hands-free listening on hai. Screen open ho to “Hello Mika” ya “Hello Anamika” boliye.");
+        startBackgroundWakeService();
+        status.setText("Owner verified • 24×7 wake active");
+        if(announce) answer("24×7 wake mode on hai. Anamika background me “Hello Mika” ya “Hello Anamika” sunegi.");
     }
 
     private void startWakeRecognizer(){
@@ -624,7 +686,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void restartWakeIfEnabled(){
         if(prefs!=null && prefs.getBoolean("wake_enabled",true) && unlocked && OwnerSession.isActive(this)){
-            startWakeRecognizer();
+            resumeBackgroundWakeService();
         }
     }
 
@@ -773,9 +835,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void speak(String text) {
         stopWakeRecognizer();
+        pauseBackgroundWakeService();
         if (tts != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "anamika_reply");
         long delay=Math.min(6500L,1800L+(text==null?0:text.length()*35L));
-        restartWakeSoon(delay);
+        mainHandler.postDelayed(this::resumeBackgroundWakeService,delay);
     }
 
     private void toast(String text) {
