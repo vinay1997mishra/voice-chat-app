@@ -11,28 +11,31 @@ class PublicEntitlementCache(context: Context) {
             .putString(KEY_SUBJECT, entitlement.subject)
             .putLong(KEY_EXPIRES, entitlement.expiresAtEpochMs ?: Long.MAX_VALUE)
 
-        FeatureId.entries.forEach { feature ->
-            entitlement.features[feature]?.let {
-                edit.putBoolean(featureKey(feature), it)
-                edit.putBoolean(presentKey(feature), true)
-            }
+        entitlement.features.forEach { (key, enabled) ->
+            edit.putBoolean(featureKey(key), enabled)
+            edit.putBoolean(presentKey(key), true)
         }
         edit.apply()
     }
 
-    fun enabled(feature: FeatureId): Boolean? {
+    fun enabled(feature: FeatureId): Boolean? = enabledKey(feature.key)
+
+    fun enabledKey(key: String): Boolean? {
         val expires = prefs.getLong(KEY_EXPIRES, 0L)
         if (expires != Long.MAX_VALUE && System.currentTimeMillis() >= expires) return null
-        if (!prefs.getBoolean(presentKey(feature), false)) return null
-        return prefs.getBoolean(featureKey(feature), false)
+        if (!prefs.getBoolean(presentKey(key), false)) return null
+        return prefs.getBoolean(featureKey(key), false)
     }
+
+    fun moduleEnabled(moduleId: String): Boolean? =
+        enabledKey("module:$moduleId")
 
     companion object {
         const val PREFS = "anamika_public_entitlement"
         private const val KEY_SUBJECT = "subject"
         private const val KEY_EXPIRES = "expires"
 
-        private fun featureKey(feature: FeatureId) = "feature.${feature.key}"
-        private fun presentKey(feature: FeatureId) = "present.${feature.key}"
+        private fun featureKey(key: String) = "feature.$key"
+        private fun presentKey(key: String) = "present.$key"
     }
 }
