@@ -1,54 +1,58 @@
-name: Build Anamika V7.8.2 Final
+name: Migrate Anamika to Direct GitHub Source
 
 on:
   push:
     branches: [ anamika-v7.8.2-final ]
     paths:
-      - 'anamika_build/**'
       - '.github/workflows/anamika-v782-build.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
+  migrate-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/38f6bab61d341b23a6c00226f32c0d6148bf9f43/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true
-      MODEL_SHA256: cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
-      MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
-
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: anamika-v7.8.2-final
+          fetch-depth: 0
 
-      - name: Decode Anamika source
+      - name: Decode existing complete source
         run: |
-          mkdir -p _anamika
-          base64 -d anamika_build/source.b64 > _anamika/source.zip
-          unzip -q _anamika/source.zip -d _anamika
-          test -d _anamika/AnamikaAI_V7_8_2_Final
-          rm -rf ./anamika_build/project
-          mkdir -p ./anamika_build/project
-          cp -a _anamika/AnamikaAI_V7_8_2_Final/. ./anamika_build/project/
+          set -euo pipefail
+          test -f anamika_build/source.b64
+          rm -rf "$RUNNER_TEMP/anamika-src"
+          mkdir -p "$RUNNER_TEMP/anamika-src"
+          base64 -d anamika_build/source.b64 > "$RUNNER_TEMP/anamika.zip"
+          unzip -q "$RUNNER_TEMP/anamika.zip" -d "$RUNNER_TEMP/anamika-src"
+          SRC="$RUNNER_TEMP/anamika-src/AnamikaAI_V7_8_2_Final"
+          test -d "$SRC/app/src/main"
+          cp -a "$SRC/." ./
 
-      - name: Apply audited compatibility fixes
+      - name: Apply permanent known fixes
         run: |
-          TEST_LAB="anamika_build/project/app/src/main/java/com/anamika/ai/TestLabActivity.java"
+          set -euo pipefail
+          TEST_LAB="app/src/main/java/com/anamika/ai/TestLabActivity.java"
+          AUDIT="tools/validate_audit.py"
           test -f "$TEST_LAB"
+          test -f "$AUDIT"
           sed -i 's/OwnerSession\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
+          sed -i 's/OwnerSession\.isValid/OwnerSession.isActive/g' "$AUDIT"
           ! grep -Fq 'OwnerSession.isValid(' "$TEST_LAB"
-          sed -i 's/OwnerSession\.isValid/OwnerSession.isActive/g' anamika_build/project/tools/validate_audit.py
+          grep -Fq 'OwnerSession.isActive(' "$TEST_LAB"
+          grep -Fq 'OwnerSession.isActive' "$AUDIT"
 
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-
       - name: Install Android SDK 36
         run: |
+          set -euo pipefail
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
@@ -56,97 +60,145 @@ jobs:
           fi
           test -n "$SDKMANAGER"
           test -x "$SDKMANAGER"
-          "$SDKMANAGER" --version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
           echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
-          echo "$SDKROOT/platform-tools" >> "$GITHUB_PATH"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.1'
 
-      - name: Validate source
-        working-directory: anamika_build/project
+      - name: Run same source/audit validation
         run: |
+          set -euo pipefail
           python3 tools/validate_source.py
           python3 tools/validate_v78.py
           python3 tools/validate_audit.py
 
-      - name: Build lite debug APK
-        working-directory: anamika_build/project
-        run: gradle --no-daemon :app:assembleDebug
-
-      - name: Preserve lite APK
+      - name: Build direct-source lite APK
         run: |
-          mkdir -p artifacts/lite
-          cp anamika_build/project/app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-Lite-debug.apk
-          sha256sum artifacts/lite/*.apk > artifacts/LITE-SHA256SUMS.txt
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          unzip -tq app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload lite APK immediately
-        uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-lite-apk
-          compression-level: 0
-          path: |
-            artifacts/lite/
-            artifacts/LITE-SHA256SUMS.txt
-
-      - name: Bundle verified local coding model
-        working-directory: anamika_build/project
+      - name: Install direct-source CI workflow
         run: |
-          mkdir -p "$(dirname "$MODEL_PATH")"
-          curl -L --fail --retry 4 --retry-delay 5 "$MODEL_URL" -o "$MODEL_PATH"
-          test -s "$MODEL_PATH"
-          echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
-          test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
+          cat > .github/workflows/anamika-v782-build.yml <<'YAML'
+          name: Build Anamika V7.8.2 Direct Source
 
-      - name: Build full debug APK with local AI
-        working-directory: anamika_build/project
-        run: gradle --no-daemon :app:assembleDebug
+          on:
+            push:
+              branches: [ anamika-v7.8.2-final ]
+              paths:
+                - 'app/**'
+                - 'tools/**'
+                - 'build.gradle'
+                - 'settings.gradle'
+                - 'gradle.properties'
+                - '.github/workflows/anamika-v782-build.yml'
+            workflow_dispatch:
 
-      - name: Preserve full APK
+          permissions:
+            contents: read
+
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              timeout-minutes: 90
+              env:
+                MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/38f6bab61d341b23a6c00226f32c0d6148bf9f43/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true
+                MODEL_SHA256: cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
+                MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
+
+              steps:
+                - uses: actions/checkout@v5
+
+                - uses: actions/setup-java@v5
+                  with:
+                    distribution: temurin
+                    java-version: '17'
+
+                - name: Install Android SDK 36
+                  run: |
+                    SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+                    SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+                    if [ ! -x "$SDKMANAGER" ]; then
+                      SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+                    fi
+                    test -n "$SDKMANAGER"
+                    test -x "$SDKMANAGER"
+                    yes | "$SDKMANAGER" --licenses >/dev/null || true
+                    "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+                    echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+
+                - uses: gradle/actions/setup-gradle@v4
+                  with:
+                    gradle-version: '9.6.1'
+
+                - name: Validate direct source
+                  run: |
+                    python3 tools/validate_source.py
+                    python3 tools/validate_v78.py
+                    python3 tools/validate_audit.py
+                    ! grep -R -Fq 'OwnerSession.isValid(' app/src/main/java || (echo 'ERROR: stale OwnerSession.isValid found' && exit 1)
+
+                - name: Build lite APK
+                  run: gradle --no-daemon :app:assembleDebug
+
+                - name: Verify lite APK
+                  run: |
+                    test -f app/build/outputs/apk/debug/app-debug.apk
+                    unzip -tq app/build/outputs/apk/debug/app-debug.apk
+                    mkdir -p artifacts/lite
+                    cp app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-DirectSource-Lite-debug.apk
+                    sha256sum artifacts/lite/*.apk > artifacts/LITE-SHA256SUMS.txt
+
+                - uses: actions/upload-artifact@v4
+                  with:
+                    name: AnamikaAI-V7.8.2-direct-source-lite
+                    compression-level: 0
+                    path: |
+                      artifacts/lite/
+                      artifacts/LITE-SHA256SUMS.txt
+
+                - name: Bundle verified local coding model
+                  run: |
+                    mkdir -p "$(dirname "$MODEL_PATH")"
+                    curl -L --fail --retry 4 --retry-delay 5 "$MODEL_URL" -o "$MODEL_PATH"
+                    echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
+                    test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
+
+                - name: Build full local-AI APK
+                  run: gradle --no-daemon :app:assembleDebug
+
+                - name: Verify and preserve full APK
+                  run: |
+                    test -f app/build/outputs/apk/debug/app-debug.apk
+                    unzip -tq app/build/outputs/apk/debug/app-debug.apk
+                    mkdir -p artifacts/full
+                    cp app/build/outputs/apk/debug/app-debug.apk artifacts/full/AnamikaAI-V7.8.2-DirectSource-FullLocalAI-debug.apk
+                    sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
+
+                - uses: actions/upload-artifact@v4
+                  with:
+                    name: AnamikaAI-V7.8.2-direct-source-final
+                    compression-level: 0
+                    path: artifacts/
+          YAML
+          sed -i 's/^          //' .github/workflows/anamika-v782-build.yml
+
+      - name: Remove encoded payload and migration helper
         run: |
-          mkdir -p artifacts/full
-          cp anamika_build/project/app/build/outputs/apk/debug/app-debug.apk artifacts/full/AnamikaAI-V7.8.2-FullLocalAI-debug.apk
-          sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
+          rm -rf anamika_build
+          rm -f .github/workflows/anamika-v782-migrate-source.yml
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-final-apks
-          compression-level: 0
-          path: artifacts/
-
-      - name: Split full APK for connector download
+      - name: Commit complete normal source tree
         run: |
-          mkdir -p artifacts/fullparts
-          split -b 300M -d -a 2 artifacts/full/AnamikaAI-V7.8.2-FullLocalAI-debug.apk artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-
-          ls -lh artifacts/fullparts/
-          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-00
-          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-01
-          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-02
-          test -f artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-03
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-full-part-00
-          compression-level: 0
-          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-00
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-full-part-01
-          compression-level: 0
-          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-01
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-full-part-02
-          compression-level: 0
-          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-02
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnamikaAI-V7.8.2-full-part-03
-          compression-level: 0
-          path: artifacts/fullparts/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-03
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "Migrate Anamika V7.8.2 to direct GitHub Android source"
+          git push origin HEAD:anamika-v7.8.2-final
