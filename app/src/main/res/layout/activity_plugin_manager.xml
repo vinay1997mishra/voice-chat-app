@@ -24,9 +24,9 @@
         <Button android:id="@+id/refreshPlugins" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Refresh App Plugins" />
         <Button android:id="@+id/startInspection" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" android:text="Start Deep App Blueprint Scan" />
+            android:layout_marginTop="8dp" android:text="Auto Check All Safe Functions + Build Blueprint" />
         <Button android:id="@+id/stopInspection" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Stop Scan + Save Blueprint" />
+            android:text="Stop Auto Audit + Save Blueprint" />
         <TextView android:id="@+id/inspectionStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="6dp" android:text="Inspection: idle" android:textIsSelectable="true" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
