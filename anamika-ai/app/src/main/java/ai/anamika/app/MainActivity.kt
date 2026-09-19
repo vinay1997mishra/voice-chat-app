@@ -30,6 +30,9 @@ import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
 import ai.anamika.app.features.FeatureId
 import ai.anamika.app.features.FeatureManager
+import ai.anamika.app.distribution.PublicDeviceIdentity
+import ai.anamika.app.distribution.PublicEntitlementCache
+import ai.anamika.app.distribution.SignedOwnerPolicyGateway
 import ai.anamika.app.network.InternetPolicyManager
 import ai.anamika.app.github.BackendGitHubGateway
 import ai.anamika.app.github.RemoteActionQueue
@@ -98,6 +101,7 @@ class MainActivity : Activity() {
             onError = { runOnUiThread { reply(it) } }
         )
         setContentView(buildUi())
+        syncPublicEntitlementsIfNeeded()
     }
 
     private fun buildUi(): View {
@@ -540,10 +544,37 @@ class MainActivity : Activity() {
                 }
             }
 
+            Command.PublicInstallationId -> {
+                reply("Installation ID: " + PublicDeviceIdentity(this).installationId())
+            }
+
             is Command.SelfUpdateStage -> stageSelfUpdate(command.changes)
 
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun syncPublicEntitlementsIfNeeded() {
+        if (features.isOwnerMode()) return
+
+        val policyUrl = BuildConfig.ANAMIKA_OWNER_POLICY_URL
+        val publicKey = BuildConfig.ANAMIKA_OWNER_POLICY_PUBLIC_KEY
+        if (policyUrl.contains("example.invalid") || publicKey.isBlank()) return
+
+        val subject = PublicDeviceIdentity(this).installationId()
+        val cache = PublicEntitlementCache(this)
+        SignedOwnerPolicyGateway(policyUrl, publicKey).fetch(subject) { result ->
+            result.onSuccess { entitlement ->
+                cache.apply(entitlement)
+                runOnUiThread {
+                    status.text = "Owner public policy synced."
+                }
+            }.onFailure {
+                runOnUiThread {
+                    status.text = "Public policy sync failed; cached/default entitlements remain active."
+                }
+            }
         }
     }
 
@@ -609,6 +640,7 @@ class MainActivity : Activity() {
         is Command.PublicFeatureOff,
         Command.PublicFeatureAllOn,
         Command.PublicFeatureAllOff,
+        Command.PublicInstallationId,
         is Command.ServerSet,
         Command.ServerShow,
         is Command.Unknown -> null
