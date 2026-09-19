@@ -1087,12 +1087,84 @@ class _V07HomeState extends State<V07Home> {
     ),
   ];
   bool _showPopular = false;
+  bool _showFollowedRooms = false;
+  final List<RoomData> _recentRooms = <RoomData>[];
+  final Set<RoomData> _followedRooms = <RoomData>{};
 
   RoomData? get _myRoom {
     for (final room in rooms) {
       if (room.ownedByMe && !room.closed) return room;
     }
     return null;
+  }
+
+  void _markRecent(RoomData room) {
+    if (room.ownedByMe) return;
+    _recentRooms.remove(room);
+    _recentRooms.insert(0, room);
+    if (_recentRooms.length > 12) _recentRooms.removeLast();
+  }
+
+  void _toggleFollow(RoomData room) {
+    setState(() {
+      if (!_followedRooms.add(room)) {
+        _followedRooms.remove(room);
+      }
+    });
+  }
+
+  Widget _roomDp(RoomData room, {double radius = 24}) {
+    return room.dpPath == null
+        ? CircleAvatar(radius: radius, child: Text(room.dp))
+        : CircleAvatar(
+            radius: radius,
+            backgroundImage: FileImage(File(room.dpPath!)),
+          );
+  }
+
+  Widget _roomListCard(
+    RoomData room, {
+    bool allowFollow = true,
+    Key? key,
+  }) {
+    final followed = _followedRooms.contains(room);
+    return Card(
+      child: ListTile(
+        key: key,
+        leading: _roomDp(room),
+        title: Text(room.name),
+        subtitle: Text(
+          (room.description.trim().isEmpty
+                  ? room.category
+                  : room.description.trim()) +
+              ' • ' +
+              room.seatCount.toString() +
+              ' seats • ID ' +
+              room.id +
+              (room.locked ? ' • Locked' : ''),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (allowFollow && !room.ownedByMe)
+              IconButton(
+                key: Key('follow-room-' + room.id + '-v08'),
+                tooltip: followed ? 'Unfollow Room' : 'Follow Room',
+                onPressed: () => _toggleFollow(room),
+                icon: Icon(
+                  followed
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                ),
+              ),
+            const Icon(Icons.chevron_right_rounded),
+          ],
+        ),
+        onTap: () => _openRoom(room),
+      ),
+    );
   }
 
   Future<void> _createRoom() async {
@@ -1163,6 +1235,9 @@ class _V07HomeState extends State<V07Home> {
         ),
       );
       if (ok != true || !mounted) return;
+    }
+    if (!room.ownedByMe) {
+      setState(() => _markRecent(room));
     }
     await Navigator.push(
       context,
@@ -1405,7 +1480,112 @@ class _V07HomeState extends State<V07Home> {
                 ),
               ),
               const SizedBox(height: 10),
-              if (_showPopular) ...[
+              if (!_showPopular) ...[
+                if (myRoom == null)
+                  Card(
+                    key: const Key('mine-create-room-card-v08'),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.add_home_rounded),
+                      ),
+                      title: const Text(
+                        'Create Room',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      subtitle: const Text(
+                        'Add Room DP, Room Name and Description',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _createRoom,
+                    ),
+                  )
+                else
+                  Card(
+                    key: const Key('mine-my-room-card-v08'),
+                    child: ListTile(
+                      leading: _roomDp(myRoom, radius: 28),
+                      title: Text(
+                        myRoom.name,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      subtitle: Text(
+                        (myRoom.description.trim().isEmpty
+                                ? 'My permanent room'
+                                : myRoom.description.trim()) +
+                            ' • Room ID ' +
+                            myRoom.id,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.home_rounded),
+                      onTap: () => _openRoom(myRoom),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        key: const Key('mine-recent-rooms-tab-v08'),
+                        onPressed: () =>
+                            setState(() => _showFollowedRooms = false),
+                        icon: const Icon(Icons.history_rounded),
+                        label: Text(
+                          'Recent Rooms (' +
+                              _recentRooms.length.toString() +
+                              ')',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        key: const Key('mine-followed-rooms-tab-v08'),
+                        onPressed: () =>
+                            setState(() => _showFollowedRooms = true),
+                        icon: const Icon(Icons.bookmark_rounded),
+                        label: Text(
+                          'Followed (' +
+                              _followedRooms.length.toString() +
+                              ')',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (!_showFollowedRooms) ...[
+                  if (_recentRooms.isEmpty)
+                    const Card(
+                      key: Key('mine-recent-empty-v08'),
+                      child: ListTile(
+                        leading: Icon(Icons.history_toggle_off_rounded),
+                        title: Text('No recent rooms yet'),
+                        subtitle: Text(
+                          'Rooms you enter will appear here automatically.',
+                        ),
+                      ),
+                    )
+                  else
+                    for (final room in _recentRooms)
+                      _roomListCard(room),
+                ] else ...[
+                  if (_followedRooms.isEmpty)
+                    const Card(
+                      key: Key('mine-followed-empty-v08'),
+                      child: ListTile(
+                        leading: Icon(Icons.bookmark_border_rounded),
+                        title: Text('No followed rooms yet'),
+                        subtitle: Text(
+                          'Follow rooms from Popular and they will appear here.',
+                        ),
+                      ),
+                    )
+                  else
+                    for (final room in _followedRooms)
+                      _roomListCard(room),
+                ],
+              ] else ...[
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.search_rounded),
@@ -1421,32 +1601,14 @@ class _V07HomeState extends State<V07Home> {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 6),
-              ],
-              for (final room in rooms)
-                Card(
-                  child: ListTile(
+                for (final room in rooms)
+                  _roomListCard(
+                    room,
                     key: room.name == 'India Official Room'
                         ? const Key('open-v07-room')
                         : null,
-                    leading: room.dpPath == null
-                        ? CircleAvatar(child: Text(room.dp))
-                        : CircleAvatar(
-                            backgroundImage: FileImage(File(room.dpPath!)),
-                          ),
-                    title: Text(room.name),
-                    subtitle: Text(
-                      room.category +
-                          ' • ' +
-                          room.seatCount.toString() +
-                          ' seats • ID ' +
-                          room.id +
-                          (room.locked ? ' • Locked' : '') +
-                          (room.ownedByMe ? ' • My Room' : ''),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _openRoom(room),
                   ),
-                ),
+              ],
             ],
           ),
         ),
@@ -1529,6 +1691,7 @@ class CreateRoomV07 extends StatefulWidget {
 
 class _CreateRoomV07State extends State<CreateRoomV07> {
   final name = TextEditingController(text: 'My Voice Room');
+  final description = TextEditingController();
   final pin = TextEditingController();
   int seats = 15;
   bool invite = true;
@@ -1541,42 +1704,12 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
   @override
   void dispose() {
     name.dispose();
+    description.dispose();
     pin.dispose();
     super.dispose();
   }
 
-  Future<void> _chooseDp() async {
-    final source = await showModalBottomSheet<ImageSource?>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_rounded),
-              title: const Text('Gallery'),
-              onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_rounded),
-              title: const Text('Camera'),
-              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.emoji_emotions_rounded),
-              title: const Text('Emoji DP'),
-              onTap: () {
-                setState(() {
-                  dpPath = null;
-                  dp = dp == '🎧' ? '👑' : dp == '👑' ? '🌙' : '🎧';
-                });
-                Navigator.pop(sheetContext);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
+  Future<void> _pickRoomDp(ImageSource source) async {
     final file = await picker.pickImage(
       source: source,
       imageQuality: 80,
@@ -1585,25 +1718,89 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
     if (file != null && mounted) setState(() => dpPath = file.path);
   }
 
+  void _useEmojiDp() {
+    setState(() {
+      dpPath = null;
+      dp = dp == '🎧' ? '👑' : dp == '👑' ? '🌙' : '🎧';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(18, 0, 18, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('Create Room v0.8', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+        const Text(
+          'Create Room v0.8',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+        ),
         const SizedBox(height: 14),
+        const Text(
+          'Room DP',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
         Center(
-          child: InkWell(
+          child: CircleAvatar(
             key: const Key('room-dp-v06'),
-            onTap: _chooseDp,
+            radius: 46,
+            backgroundImage: dpPath == null ? null : FileImage(File(dpPath!)),
             child: dpPath == null
-                ? CircleAvatar(radius: 42, child: Text(dp, style: const TextStyle(fontSize: 36)))
-                : CircleAvatar(radius: 42, backgroundImage: FileImage(File(dpPath!))),
+                ? Text(dp, style: const TextStyle(fontSize: 38))
+                : null,
           ),
         ),
-        const Center(child: Text('Tap DP • Gallery / Camera / Emoji')),
-        const SizedBox(height: 14),
-        TextField(controller: name, decoration: const InputDecoration(labelText: 'Room name', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                key: const Key('room-dp-gallery-v08'),
+                onPressed: () => _pickRoomDp(ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_rounded),
+                label: const Text('Gallery'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                key: const Key('room-dp-camera-v08'),
+                onPressed: () => _pickRoomDp(ImageSource.camera),
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: const Text('Camera'),
+              ),
+            ),
+          ],
+        ),
+        TextButton.icon(
+          onPressed: _useEmojiDp,
+          icon: const Icon(Icons.emoji_emotions_rounded),
+          label: const Text('Use Emoji DP'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          key: const Key('create-room-name-v08'),
+          controller: name,
+          maxLength: 40,
+          decoration: const InputDecoration(
+            labelText: 'Room Name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          key: const Key('create-room-description-v08'),
+          controller: description,
+          minLines: 2,
+          maxLines: 3,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            labelText: 'Room Description',
+            hintText: 'Tell users what this room is about',
+            border: OutlineInputBorder(),
+          ),
+        ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           value: category,
@@ -1655,6 +1852,7 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
                 dpPath: dpPath,
                 ownedByMe: true,
                 ownerUserId: demoEconomy.currentUserId,
+                description: description.text.trim(),
               ),
             );
           },
@@ -3985,6 +4183,7 @@ class RoomData {
     this.ownedByMe = false,
     this.currentUserIsAdmin = false,
     this.closed = false,
+    this.description = '',
     String? ownerUserId,
   }) : ownerUserId = ownerUserId ?? id {
     roomRegistryV08.add(this);
@@ -3993,6 +4192,7 @@ class RoomData {
   String name;
   String id;
   String ownerUserId;
+  String description;
   String dp;
   bool locked;
   int seatCount;
