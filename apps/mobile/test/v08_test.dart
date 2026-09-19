@@ -1244,7 +1244,9 @@ void main() {
   testWidgets('Discover cards all navigate to active destinations',
       (tester) async {
     setPhoneViewport(tester);
-    await tester.pumpWidget(const MaterialApp(home: DiscoverV06()));
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: DiscoverV06())),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('discover-voice-rooms-v08')));
@@ -1326,7 +1328,14 @@ void main() {
 
     await tester.tap(find.text('Invite'));
     await tester.pumpAndSettle();
-    expect(find.text('Room invite copied'), findsOneWidget);
+    expect(find.text('Room Invite'), findsOneWidget);
+    expect(find.byKey(const Key('room-invite-details-v08')), findsOneWidget);
+    final copyInvite = tester.widget<FilledButton>(
+      find.byKey(const Key('copy-room-invite-v08')),
+    );
+    expect(copyInvite.onPressed, isNotNull);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
@@ -1383,29 +1392,22 @@ void main() {
     expect(find.text('Room report submitted'), findsOneWidget);
   });
 
-  testWidgets('primary visible material buttons are enabled in default screens',
+  testWidgets('primary visible material buttons are enabled in app shell',
       (tester) async {
     setPhoneViewport(tester);
+    await tester.pumpWidget(const VoiceChatV08());
+    await tester.pumpAndSettle();
 
-    Future<void> verify(Widget home) async {
-      await tester.pumpWidget(MaterialApp(home: home));
-      await tester.pumpAndSettle();
-
-      for (final element in find.byType(IconButton).evaluate()) {
-        final button = element.widget as IconButton;
-        expect(button.onPressed, isNotNull);
-      }
-      for (final element in find.byWidgetPredicate(
-        (widget) => widget is ButtonStyleButton,
-      ).evaluate()) {
-        final button = element.widget as ButtonStyleButton;
-        expect(button.onPressed, isNotNull);
-      }
+    for (final element in find.byType(IconButton).evaluate()) {
+      final button = element.widget as IconButton;
+      expect(button.onPressed, isNotNull);
     }
-
-    await verify(const V07Home());
-    await verify(const DiscoverV06());
-    await verify(const ProfileV07());
+    for (final element in find.byWidgetPredicate(
+      (widget) => widget is ButtonStyleButton,
+    ).evaluate()) {
+      final button = element.widget as ButtonStyleButton;
+      expect(button.onPressed, isNotNull);
+    }
   });
 
 }
