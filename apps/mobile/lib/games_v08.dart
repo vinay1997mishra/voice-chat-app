@@ -3,6 +3,256 @@ import 'package:flutter/material.dart';
 
 enum V08GameMode { soloBot, localMulti }
 
+class GameVoicePlayerV08 {
+  const GameVoicePlayerV08({
+    required this.name,
+    required this.avatar,
+    this.userId = '',
+    this.micOn = true,
+    this.isBot = false,
+  });
+
+  final String name;
+  final String avatar;
+  final String userId;
+  final bool micOn;
+  final bool isBot;
+}
+
+List<GameVoicePlayerV08> _gamePlayersV08(
+  List<GameVoicePlayerV08> source,
+  bool botMode,
+) {
+  final result = <GameVoicePlayerV08>[];
+  if (botMode) {
+    result.add(
+      source.isNotEmpty
+          ? source.first
+          : const GameVoicePlayerV08(
+              name: 'You',
+              avatar: '🙂',
+              userId: '10000050',
+            ),
+    );
+    for (var i = 1; i < 4; i++) {
+      result.add(
+        GameVoicePlayerV08(
+          name: 'Bot $i',
+          avatar: '🤖',
+          userId: 'BOT$i',
+          micOn: false,
+          isBot: true,
+        ),
+      );
+    }
+    return result;
+  }
+
+  result.addAll(source.take(4));
+  while (result.length < 4) {
+    final seat = result.length + 1;
+    result.add(
+      GameVoicePlayerV08(
+        name: 'Player $seat',
+        avatar: '👤',
+        userId: 'LOCAL$seat',
+      ),
+    );
+  }
+  return result;
+}
+
+class _VoiceGameSeatV08 extends StatelessWidget {
+  const _VoiceGameSeatV08({
+    required this.player,
+    required this.active,
+    required this.seat,
+    required this.keyPrefix,
+  });
+
+  final GameVoicePlayerV08 player;
+  final bool active;
+  final int seat;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    const seatColors = [
+      Colors.redAccent,
+      Colors.greenAccent,
+      Colors.blueAccent,
+      Colors.amberAccent,
+    ];
+    final color = seatColors[seat];
+    return AnimatedContainer(
+      key: Key('$keyPrefix-seat-${seat + 1}-v08'),
+      duration: const Duration(milliseconds: 220),
+      width: 92,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xDD151225),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: active ? color : Colors.white24,
+          width: active ? 2.5 : 1,
+        ),
+        boxShadow: [
+          const BoxShadow(
+            color: Colors.black54,
+            blurRadius: 10,
+            offset: Offset(0, 6),
+          ),
+          if (active)
+            BoxShadow(
+              color: color.withOpacity(.45),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [color.withOpacity(.95), color.withOpacity(.35)],
+              ),
+              border: Border.all(color: Colors.white70, width: 1.5),
+            ),
+            child: Center(
+              child: Text(
+                player.avatar,
+                style: const TextStyle(fontSize: 19),
+              ),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  player.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      player.micOn
+                          ? Icons.mic_rounded
+                          : Icons.mic_off_rounded,
+                      size: 12,
+                      color: player.micOn
+                          ? Colors.greenAccent
+                          : Colors.white38,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      player.isBot
+                          ? 'BOT'
+                          : (player.micOn ? 'VOICE' : 'MUTED'),
+                      style: const TextStyle(fontSize: 7),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FourSideVoiceGameStageV08 extends StatelessWidget {
+  const FourSideVoiceGameStageV08({
+    super.key,
+    required this.players,
+    required this.activeSeat,
+    required this.center,
+    required this.keyPrefix,
+  });
+
+  final List<GameVoicePlayerV08> players;
+  final int activeSeat;
+  final Widget center;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, box) {
+          final width = box.maxWidth;
+          final boardSize = max(210.0, width - 82);
+          final height = boardSize + 98;
+          return SizedBox(
+            key: Key('$keyPrefix-four-side-stage-v08'),
+            height: height,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: (width - boardSize) / 2,
+                  top: 49,
+                  width: boardSize,
+                  height: boardSize,
+                  child: center,
+                ),
+                Positioned(
+                  top: 0,
+                  left: (width - 92) / 2,
+                  child: _VoiceGameSeatV08(
+                    player: players[2],
+                    active: activeSeat == 2,
+                    seat: 2,
+                    keyPrefix: keyPrefix,
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  top: (height - 50) / 2,
+                  child: _VoiceGameSeatV08(
+                    player: players[1],
+                    active: activeSeat == 1,
+                    seat: 1,
+                    keyPrefix: keyPrefix,
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: (width - 92) / 2,
+                  child: _VoiceGameSeatV08(
+                    player: players[0],
+                    active: activeSeat == 0,
+                    seat: 0,
+                    keyPrefix: keyPrefix,
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  top: (height - 50) / 2,
+                  child: _VoiceGameSeatV08(
+                    player: players[3],
+                    active: activeSeat == 3,
+                    seat: 3,
+                    keyPrefix: keyPrefix,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
 class _GameSceneV08 extends StatelessWidget {
   const _GameSceneV08({required this.child});
   final Widget child;
@@ -22,7 +272,8 @@ class _GameSceneV08 extends StatelessWidget {
 
 
 class GamesCenterV08 extends StatelessWidget {
-  const GamesCenterV08({super.key});
+  const GamesCenterV08({super.key, this.players = const []});
+  final List<GameVoicePlayerV08> players;
   static const games = <(String, IconData)>[
     ('Ludo', Icons.casino_rounded),
     ('UNO', Icons.style_rounded),
@@ -46,7 +297,7 @@ class GamesCenterV08 extends StatelessWidget {
         return Card(child: InkWell(
           key: Key('game-'+g.$1.toLowerCase().replaceAll(' ','-')+'-v08'),
           borderRadius: BorderRadius.circular(12),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GameLauncherV08(game:g.$1))),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GameLauncherV08(game:g.$1, players: players))),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children:[
             Icon(g.$2,size:42), const SizedBox(height:10),
             Text(g.$1,textAlign:TextAlign.center,style:const TextStyle(fontWeight:FontWeight.w900)),
@@ -58,19 +309,20 @@ class GamesCenterV08 extends StatelessWidget {
 }
 
 class GameLauncherV08 extends StatelessWidget {
-  const GameLauncherV08({super.key, required this.game});
+  const GameLauncherV08({super.key, required this.game, this.players = const []});
   final String game;
+  final List<GameVoicePlayerV08> players;
 
   void _open(BuildContext context, V08GameMode mode) {
     final Widget page = switch (game) {
-      'Ludo' => LudoGameV08(mode: mode),
-      'UNO' => UnoGameV08(mode: mode),
-      'Carrom' => CarromGameV08(mode: mode),
+      'Ludo' => LudoGameV08(mode: mode, players: players),
+      'UNO' => UnoGameV08(mode: mode, players: players),
+      'Carrom' => CarromGameV08(mode: mode, players: players),
       'Lucky Dice' => LuckyDiceGameV08(mode: mode),
       'Lucky Wheel' => LuckyWheelGameV08(mode: mode),
       'Rock Paper Scissors' => RpsGameV08(mode: mode),
       'Teen Patti' => TeenPattiGameV08(mode: mode),
-      _ => LudoGameV08(mode: mode),
+      _ => LudoGameV08(mode: mode, players: players),
     };
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
@@ -143,8 +395,9 @@ class _ModeCard extends StatelessWidget {
 // ---------------- LUDO 4 PLAYER 3D ----------------
 
 class LudoGameV08 extends StatefulWidget {
-  const LudoGameV08({super.key, required this.mode});
+  const LudoGameV08({super.key, required this.mode, this.players = const []});
   final V08GameMode mode;
+  final List<GameVoicePlayerV08> players;
   @override
   State<LudoGameV08> createState() => _LudoGameV08State();
 }
@@ -570,8 +823,9 @@ class _UnoCardData {
 }
 
 class UnoGameV08 extends StatefulWidget {
-  const UnoGameV08({super.key, required this.mode});
+  const UnoGameV08({super.key, required this.mode, this.players = const []});
   final V08GameMode mode;
+  final List<GameVoicePlayerV08> players;
   @override
   State<UnoGameV08> createState() => _UnoGameV08State();
 }
@@ -976,8 +1230,9 @@ class _CarromPiece {
 }
 
 class CarromGameV08 extends StatefulWidget {
-  const CarromGameV08({super.key, required this.mode});
+  const CarromGameV08({super.key, required this.mode, this.players = const []});
   final V08GameMode mode;
+  final List<GameVoicePlayerV08> players;
   @override
   State<CarromGameV08> createState() => _CarromGameV08State();
 }
