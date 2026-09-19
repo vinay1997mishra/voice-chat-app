@@ -32,6 +32,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private static final String TARGET = "target_package";
     private static final String COMMAND = "pending_command";
     private static final String TOKEN = "pending_token";
+    private static final String ONE_SHOT = "one_shot_owner_command";
     private static volatile AppAutomationAccessibilityService instance;
     private String lastToken = "";
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -90,6 +91,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(TARGET, "");
         String command = getSharedPreferences(PREFS, MODE_PRIVATE).getString(COMMAND, "");
         String token = getSharedPreferences(PREFS, MODE_PRIVATE).getString(TOKEN, "");
+        boolean oneShot = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(ONE_SHOT,false);
         String currentPkg = event.getPackageName().toString();
         ResearchLearningStore.capture(this, event);
         boolean currentEnabled = PluginRegistry.isEnabled(this,currentPkg);
@@ -111,7 +113,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if (target.isEmpty() || command.isEmpty() || token.isEmpty()) return;
         if (!OwnerSession.isActive(this)) { clearPending(token); return; }
         if (!target.equals(currentPkg) || token.equals(lastToken)) return;
-        if (!PluginRegistry.isEnabled(this, target)) return;
+        if (!oneShot && !PluginRegistry.isEnabled(this,target)) return;
 
         lastToken = token;
         handler.postDelayed(() -> {
@@ -341,7 +343,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         final String who=recipient.trim();
         final String body=message.trim();
         final String target=getSharedPreferences(PREFS,MODE_PRIVATE).getString(TARGET,"");
-        if(!"com.whatsapp".equals(target) || !PluginRegistry.isEnabled(this,target)) return;
+        boolean oneShot=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(ONE_SHOT,false);
+        if(!"com.whatsapp".equals(target) || (!oneShot && !PluginRegistry.isEnabled(this,target))) return;
         if(!OwnerSession.isActive(this)) return;
 
         AccessibilityNodeInfo root=getRootInActiveWindow();
@@ -397,6 +400,32 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         return false;
     }
 
+    /** Common phone-level owner commands that do not depend on any plugin. */
+    public static boolean performOwnerPhoneCommand(android.content.Context context,String command){
+        if(context==null || command==null || !OwnerSession.isActive(context)) return false;
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null) return false;
+        String lower=command.toLowerCase(Locale.ROOT).trim();
+        svc.handler.post(() -> {
+            if(containsAny(lower,"home","home screen","go home","होम")){
+                svc.performGlobalAction(GLOBAL_ACTION_HOME);
+            } else if(containsAny(lower,"back","go back","wapas","वापस")){
+                svc.performGlobalAction(GLOBAL_ACTION_BACK);
+            } else if(containsAny(lower,"recent apps","recents","recent kholo","हाल के ऐप")){
+                svc.performGlobalAction(GLOBAL_ACTION_RECENTS);
+            } else if(containsAny(lower,"notifications","notification kholo","नोटिफिकेशन")){
+                svc.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
+            } else if(containsAny(lower,"quick settings","quick setting","control center")){
+                svc.performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
+            }
+        });
+        return containsAny(lower,"home","home screen","go home","होम",
+                "back","go back","wapas","वापस",
+                "recent apps","recents","recent kholo","हाल के ऐप",
+                "notifications","notification kholo","नोटिफिकेशन",
+                "quick settings","quick setting","control center");
+    }
+
     private void executeStep(String raw) {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
@@ -420,6 +449,21 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
 
         String target = afterPrefix(raw, "tap ", "click ", "press ", "touch ", "dabao ", "दबाओ ");
         if (target != null) { clickText(root, target); return; }
+
+        java.util.regex.Matcher postfixTap=java.util.regex.Pattern.compile(
+                "(?i)^(.+?)\\s+(?:par\\s+)?(?:tap|click|press|touch|dabao|दबाओ)\\s*(?:karo|kar|do)?$"
+        ).matcher(raw.trim());
+        if(postfixTap.find()){ clickText(root,postfixTap.group(1).trim()); return; }
+
+        java.util.regex.Matcher postfixOpen=java.util.regex.Pattern.compile(
+                "(?i)^(.+?)\\s+(?:open|khol|kholo|खोलो)\\s*(?:karo|kar|do)?$"
+        ).matcher(raw.trim());
+        if(postfixOpen.find()){ clickText(root,postfixOpen.group(1).trim()); return; }
+
+        java.util.regex.Matcher postfixType=java.util.regex.Pattern.compile(
+                "(?i)^(.+?)\\s+(?:type|write|likho|लिखो)\\s*(?:karo|kar|do)?$"
+        ).matcher(raw.trim());
+        if(postfixType.find()){ typeText(root,postfixType.group(1).trim()); return; }
 
         if (lower.startsWith("search ")) {
             if (clickText(root, "Search") || clickText(root, "खोजें")) {
@@ -501,7 +545,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private void clearPending(String token){
         String current=getSharedPreferences(PREFS,MODE_PRIVATE).getString(TOKEN,"");
         if(token!=null && token.equals(current)){
-            getSharedPreferences(PREFS,MODE_PRIVATE).edit().remove(COMMAND).remove(TOKEN).apply();
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit()
+                    .remove(COMMAND).remove(TOKEN).remove(ONE_SHOT).apply();
         }
     }
 
