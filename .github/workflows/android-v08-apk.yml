@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-android-v08-${{ github.ref }}
@@ -99,3 +99,14 @@ jobs:
             /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish latest tested APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp /tmp/voice_chat_v08/build/app/outputs/flutter-apk/app-debug.apk voice-chat-v0.8-latest.apk
+          gh release delete v0.8-latest --yes --cleanup-tag || true
+          gh release create v0.8-latest voice-chat-v0.8-latest.apk \
+            --target "$GITHUB_SHA" \
+            --title "Voice Chat v0.8 Latest" \
+            --notes "Latest tested v0.8 APK with current seat mute/unmute, gift recipient selector, 8-second/12MB video gifts, 24-hour kick persistence, Mine/room updates, and Android 5+ compatibility."
