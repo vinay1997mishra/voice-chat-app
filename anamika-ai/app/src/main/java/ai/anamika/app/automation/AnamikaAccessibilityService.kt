@@ -29,9 +29,10 @@ class AnamikaAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
         val pkg = e.packageName?.toString().orEmpty()
-        if (pkg.isBlank() || pkg == packageName || !policy.isAllowed(pkg)) return
+        if (pkg.isBlank() || pkg == packageName) return
 
         lastForegroundPackage = pkg
+        if (!policy.isAllowed(pkg)) return
 
         val source = e.source
         if (source?.isPassword == true) return
