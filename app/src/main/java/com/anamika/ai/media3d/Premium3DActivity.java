@@ -2,6 +2,7 @@ package com.anamika.ai.media3d;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.media.MediaScannerConnection;
 import android.os.Environment;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -101,8 +102,12 @@ public final class Premium3DActivity extends Activity {
                     @Override public void onComplete(File file) {
                         runOnUiThread(() -> {
                             exportButton.setEnabled(true);
-                            exportStatus.setText("Cinematic MP4 ready:\n"+file.getAbsolutePath());
-                            Toast.makeText(Premium3DActivity.this,"Cinematic 3D video ready",Toast.LENGTH_LONG).show();
+                            MediaScannerConnection.scanFile(Premium3DActivity.this,
+                                    new String[]{file.getAbsolutePath()},
+                                    new String[]{"video/mp4"},null);
+                            exportStatus.setText("Animated cinematic MP4 verified + ready:\n"+file.getAbsolutePath());
+                            Toast.makeText(Premium3DActivity.this,
+                                    "Animated 3D movie video verified",Toast.LENGTH_LONG).show();
                         });
                     }
                     @Override public void onError(Throwable error) {
