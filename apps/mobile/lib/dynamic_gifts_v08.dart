@@ -155,4 +155,4 @@ class DynamicGiftStoreV08 {
 final dynamicGiftStoreV08 = DynamicGiftStoreV08();
 
 const int dynamicGiftMaxVideoBytesV08 = 12 * 1024 * 1024;
-const Duration dynamicGiftMaxVideoDurationV08 = Duration(seconds: 5);
+const Duration dynamicGiftMaxVideoDurationV08 = Duration(seconds: 8);
