@@ -21,7 +21,7 @@ jobs:
       MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Decode Anamika source
         run: |
@@ -31,12 +31,11 @@ jobs:
           test -d _anamika/AnamikaAI_V7_8_2_Final
           cp -a _anamika/AnamikaAI_V7_8_2_Final/. ./anamika_build/project/
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
 
       - name: Install Android SDK 36
         run: |
