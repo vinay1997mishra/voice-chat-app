@@ -181,8 +181,14 @@ class LocalAndroidProjectGenerator(
             .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
-    private fun escapeKotlin(value: String): String =
-        value.replace("\\", "\\\\").replace(""", "\\"").replace("\n", "\\n")
+    private fun escapeKotlin(value: String): String {
+        val slash = 92.toChar().toString()
+        val quote = 34.toChar().toString()
+        return value
+            .replace(slash, slash + slash)
+            .replace(quote, slash + quote)
+            .replace("\n", slash + "n")
+    }
 
     private fun escapeXml(value: String): String =
         value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
