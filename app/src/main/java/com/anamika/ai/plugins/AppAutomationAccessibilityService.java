@@ -16,8 +16,10 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import com.anamika.ai.research.ResearchLearningStore;
 import com.anamika.ai.OwnerSession;
 
@@ -35,6 +37,21 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager windowManager;
     private Button voiceBubble;
+
+    // Owner-commanded automatic app audit state. Bounded and intentionally skips risky actions.
+    private boolean autoAuditActive = false;
+    private String autoAuditTarget = "";
+    private long autoAuditStartedMs = 0L;
+    private int autoAuditTested = 0;
+    private int autoAuditSkipped = 0;
+    private int autoAuditScreens = 0;
+    private int autoAuditDepth = 0;
+    private static final int AUTO_AUDIT_MAX_ACTIONS = 80;
+    private static final int AUTO_AUDIT_MAX_DEPTH = 8;
+    private static final long AUTO_AUDIT_MAX_MS = 180_000L;
+    private final Set<String> autoAuditNodes = new HashSet<>();
+    private final Set<String> autoAuditScreensSeen = new HashSet<>();
+    private final Set<String> autoAuditScrolled = new HashSet<>();
 
 
     @Override public void onServiceConnected() {
@@ -61,6 +78,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
 
     @Override public void onDestroy(){
         if(instance==this) instance=null;
+        handler.removeCallbacksAndMessages(null);
+        autoAuditActive=false;
         if(windowManager!=null && voiceBubble!=null){ try{windowManager.removeView(voiceBubble);}catch(Exception ignored){} }
         super.onDestroy();
     }
@@ -106,20 +125,17 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if (normalized.isEmpty()) return;
         String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(TARGET, "");
         String lowerCommand = normalized.toLowerCase(Locale.ROOT);
-        if (containsAny(lowerCommand,"saare functions check kar","sare functions check kar","check all functions","deep inspect app","app inspect karo")) {
-            if (!target.isEmpty() && PluginRegistry.isEnabled(this,target)) {
-                AppBlueprintStore.start(this,target);
-                AccessibilityNodeInfo root=getRootInActiveWindow();
-                if(root!=null){
-                    AccessibilityEvent fake=AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-                    fake.setPackageName(target); fake.setClassName("OwnerRequestedDeepInspection");
-                    AppBlueprintStore.record(this,fake,root); fake.recycle();
-                }
-            }
+        if (containsAny(lowerCommand,
+                "saare functions check kar","sare functions check kar","check all functions",
+                "is app ke saare functions check kar","is app ke sare functions check kar",
+                "deep inspect app","app inspect karo","auto audit app","poora app check karo")) {
+            if (!target.isEmpty() && PluginRegistry.isEnabled(this,target)) startAutoAudit(target);
             return;
         }
-        if (containsAny(lowerCommand,"inspection complete","inspection stop","function check complete","scan complete")) {
-            AppBlueprintStore.stop(this); return;
+        if (containsAny(lowerCommand,"inspection complete","inspection stop","function check complete","scan complete","audit stop")) {
+            if(autoAuditActive) finishAutoAudit("Owner stopped the automatic audit.");
+            else AppBlueprintStore.stop(this);
+            return;
         }
         if (!target.isEmpty()) AppBlueprintStore.recordUserAction(this,target,normalized);
         String[] steps = normalized.split("(?i)\\s+(?:then|and then|phir|fir|uske baad|फिर)\\s+");
@@ -129,6 +145,167 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             handler.postDelayed(() -> executeStep(action), delay);
             delay += 700L;
         }
+    }
+
+    private void startAutoAudit(String target) {
+        if (target == null || target.trim().isEmpty() || !PluginRegistry.isEnabled(this,target)) return;
+        autoAuditActive = false;
+        autoAuditNodes.clear();
+        autoAuditScreensSeen.clear();
+        autoAuditScrolled.clear();
+        autoAuditTarget = target;
+        autoAuditStartedMs = System.currentTimeMillis();
+        autoAuditTested = 0;
+        autoAuditSkipped = 0;
+        autoAuditScreens = 0;
+        autoAuditDepth = 0;
+        java.io.File dir = AppBlueprintStore.start(this,target);
+        AppBlueprintStore.recordAuditResult(this,target,"START","",
+                "Owner requested automatic safe function audit. Blueprint: "+dir.getAbsolutePath());
+        autoAuditActive = true;
+        android.widget.Toast.makeText(this,
+                "Anamika Auto Audit started. Safe visible functions will be checked automatically.",
+                android.widget.Toast.LENGTH_LONG).show();
+        handler.postDelayed(this::auditNext,500L);
+    }
+
+    private void auditNext() {
+        if (!autoAuditActive) return;
+        if (!OwnerSession.isActive(this)) { finishAutoAudit("Owner session expired."); return; }
+        if (!PluginRegistry.isEnabled(this,autoAuditTarget)) { finishAutoAudit("Plugin was disabled."); return; }
+        if (System.currentTimeMillis()-autoAuditStartedMs > AUTO_AUDIT_MAX_MS) {
+            finishAutoAudit("Time limit reached."); return;
+        }
+        if (autoAuditTested >= AUTO_AUDIT_MAX_ACTIONS) {
+            finishAutoAudit("Safe-action limit reached."); return;
+        }
+
+        AccessibilityNodeInfo root=getRootInActiveWindow();
+        if(root==null){ handler.postDelayed(this::auditNext,500L); return; }
+        CharSequence pkgCs=root.getPackageName();
+        String currentPkg=pkgCs==null?"":pkgCs.toString();
+
+        if(!autoAuditTarget.equals(currentPkg)){
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SKIP_EXTERNAL","",currentPkg);
+            autoAuditSkipped++;
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            if(autoAuditDepth>0) autoAuditDepth--;
+            handler.postDelayed(this::auditNext,800L);
+            return;
+        }
+
+        String screenSig=screenSignature(root);
+        if(autoAuditScreensSeen.add(screenSig)) {
+            autoAuditScreens++;
+            AccessibilityEvent fake=AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            fake.setPackageName(autoAuditTarget);
+            fake.setClassName("AnamikaAutoAudit");
+            AppBlueprintStore.record(this,fake,root);
+            fake.recycle();
+        }
+
+        List<AccessibilityNodeInfo> nodes=flatten(root);
+        for(AccessibilityNodeInfo n:nodes){
+            if(n==null || !n.isVisibleToUser() || !n.isEnabled() || !n.isClickable()) continue;
+            String label=nodeLabel(n);
+            String sig=screenSig+"|"+nodeSignature(n,label);
+            if(autoAuditNodes.contains(sig)) continue;
+            autoAuditNodes.add(sig);
+
+            if(n.isPassword() || n.isEditable() || label.trim().isEmpty() || isRiskyAuditAction(label)){
+                autoAuditSkipped++;
+                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SKIPPED",label,
+                        n.isPassword()?"password":
+                                n.isEditable()?"editable/input field":
+                                label.trim().isEmpty()?"unlabelled control":"sensitive/destructive/real-world action");
+                continue;
+            }
+
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TAP",label,"safe visible control");
+            if(clickNodeOrParent(n)){
+                autoAuditTested++;
+                if(autoAuditDepth < AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
+                handler.postDelayed(this::auditNext,900L);
+                return;
+            } else {
+                autoAuditSkipped++;
+                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"FAILED_TAP",label,"control did not accept ACTION_CLICK");
+            }
+        }
+
+        if(!autoAuditScrolled.contains(screenSig) && scroll(root,AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)){
+            autoAuditScrolled.add(screenSig);
+            autoAuditTested++;
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SCROLL","down","discover more visible controls");
+            handler.postDelayed(this::auditNext,800L);
+            return;
+        }
+
+        if(autoAuditDepth>0){
+            autoAuditDepth--;
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"BACK","",
+                    "No new safe controls on current screen; returning to previous screen.");
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            handler.postDelayed(this::auditNext,800L);
+            return;
+        }
+
+        finishAutoAudit("No more untested safe visible controls.");
+    }
+
+    private void finishAutoAudit(String reason){
+        if(!autoAuditActive) return;
+        autoAuditActive=false;
+        java.io.File dir=AppBlueprintStore.completeAutoAudit(
+                this,autoAuditTested,autoAuditSkipped,autoAuditScreens,reason);
+        String path=dir==null?"":dir.getAbsolutePath();
+        android.widget.Toast.makeText(this,
+                "Anamika Auto Audit complete. Blueprint ready."+ (path.isEmpty()?"":" "+path),
+                android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    private String screenSignature(AccessibilityNodeInfo root){
+        StringBuilder b=new StringBuilder();
+        b.append(String.valueOf(root.getClassName())).append('|');
+        int added=0;
+        for(AccessibilityNodeInfo n:flatten(root)){
+            if(added>=30) break;
+            String label=nodeLabel(n);
+            if(!label.isEmpty()){ b.append(label).append(';'); added++; }
+        }
+        return Integer.toHexString(b.toString().hashCode());
+    }
+
+    private String nodeSignature(AccessibilityNodeInfo n,String label){
+        android.graphics.Rect r=new android.graphics.Rect();
+        n.getBoundsInScreen(r);
+        return String.valueOf(n.getClassName())+"|"+
+                String.valueOf(n.getViewIdResourceName())+"|"+label+"|"+r.flattenToString();
+    }
+
+    private String nodeLabel(AccessibilityNodeInfo n){
+        CharSequence v=n.getText();
+        if(v==null || v.length()==0) v=n.getContentDescription();
+        if((v==null || v.length()==0) && n.getHintText()!=null) v=n.getHintText();
+        if((v==null || v.length()==0) && n.getViewIdResourceName()!=null) v=n.getViewIdResourceName();
+        return v==null?"":v.toString().trim();
+    }
+
+    private boolean isRiskyAuditAction(String raw){
+        String s=raw==null?"":raw.toLowerCase(Locale.ROOT);
+        String[] risky={
+                "delete","remove","uninstall","erase","clear data","factory reset",
+                "buy","purchase","pay","payment","checkout","order","recharge","withdraw","transfer","send money",
+                "send","message","sms","post","publish","upload","share","call","dial",
+                "logout","log out","sign out","login","log in","sign in","otp","password","pin",
+                "subscribe","unsubscribe","follow","unfollow","like","dislike","block","report",
+                "install","update app","allow","permission","grant","camera","microphone","location",
+                "confirm","submit","save changes","book","reserve",
+                "हटाएं","डिलीट","भुगतान","पेमेंट","भेजें","कॉल","लॉगआउट","लॉगिन","पासवर्ड","ओटीपी",
+                "अनुमति","खरीद","रिचार्ज","निकासी","ट्रांसफर"
+        };
+        for(String k:risky) if(s.contains(k)) return true;
+        return false;
     }
 
     private void executeStep(String raw) {
