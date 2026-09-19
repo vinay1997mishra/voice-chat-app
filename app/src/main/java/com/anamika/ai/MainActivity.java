@@ -280,6 +280,13 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         if (tryHandleWhatsAppMessage(command)) return;
 
+        if (com.anamika.ai.plugins.AppAutomationAccessibilityService.performOwnerPhoneCommand(this,command)) {
+            answer("Phone command execute kar diya.");
+            return;
+        }
+
+        if (tryHandleAnyAppVoiceCommand(command)) return;
+
         if (containsAny(lower,
                 "app banao","app bana","application banao","create app","make app",
                 "website banao","website bana","create website","code likho","code banao")) {
@@ -384,7 +391,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         if (containsAny(lower, "plugin center", "plugins", "app control", "control apps", "plugin kholo", "प्लगइन")) {
             startActivity(new Intent(this, com.anamika.ai.plugins.PluginManagerActivity.class));
-            answer("Plugin Center khol diya. Sirf owner-enabled apps par control allowed hai.");
+            answer("Plugin Center khol diya. Yahan selected apps persistent plugins bante hain. One-time voice command se non-plugin apps bhi open/control ho sakte hain bina plugin add hue.");
             return;
         }
 
@@ -463,30 +470,67 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void openKnownApp(String appName) {
-        String n = appName.toLowerCase(Locale.ROOT);
-        String pkg = null;
-        if (n.contains("whatsapp")) pkg = "com.whatsapp";
-        else if (n.contains("youtube")) pkg = "com.google.android.youtube";
-        else if (n.contains("chrome")) pkg = "com.android.chrome";
-        else if (n.contains("instagram")) pkg = "com.instagram.android";
-        else if (n.contains("telegram")) pkg = "org.telegram.messenger";
-
-        if (pkg == null) {
-            pkg = com.anamika.ai.plugins.PluginRegistry.findPackageByLabel(this, appName);
-            if (pkg == null) {
-                webSearch(appName);
-                answer("Installed app label match nahi mila, isliye search khol di.");
-                return;
-            }
+        String pkg=findInstalledPackage(appName);
+        if(pkg==null){
+            webSearch(appName);
+            answer("Installed app label match nahi mila, isliye search khol di.");
+            return;
         }
+        String r=com.anamika.ai.plugins.AppPluginEngine.openAny(this,pkg);
+        answer(appName+" khol diya. Plugin hona zaroori nahi hai. "+r);
+    }
 
-        Intent launch = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (launch != null) {
-            startActivity(launch);
-            answer(appName + " khol diya.");
+    private boolean tryHandleAnyAppVoiceCommand(String command){
+        if(command==null || command.trim().isEmpty()) return false;
+        String raw=command.trim();
+        Matcher m=Pattern.compile(
+                "(?i)^(?:open|khol|kholo|खोलो)\\s+(.+?)(?:\\s+(?:aur|then|phir|fir|uske baad|and then)\\s+(.+))?$"
+        ).matcher(raw);
+        String appName="";
+        String action="";
+        if(m.find()){
+            appName=m.group(1).trim();
+            action=m.group(2)==null?"":m.group(2).trim();
         } else {
-            answer(appName + " installed nahi mila.");
+            m=Pattern.compile(
+                    "(?i)^(.+?)\\s+(?:app\\s+)?(?:open|khol|kholo|खोलो)\\s*(?:karo|kar|do)?(?:\\s+(?:aur|then|phir|fir|uske baad|and then)\\s+(.+))?$"
+            ).matcher(raw);
+            if(!m.find()) return false;
+            appName=m.group(1).trim();
+            action=m.group(2)==null?"":m.group(2).trim();
         }
+
+        appName=appName.replaceFirst("(?i)\\s+app$","").trim();
+        String pkg=findInstalledPackage(appName);
+        if(pkg==null || pkg.isEmpty()) return false;
+
+        if(action.isEmpty()){
+            String r=com.anamika.ai.plugins.AppPluginEngine.openAny(this,pkg);
+            answer(appName+" khol diya. Plugin hona zaroori nahi tha. "+r);
+            return true;
+        }
+
+        if(!isAutomationServiceEnabled()){
+            String r=com.anamika.ai.plugins.AppPluginEngine.openAny(this,pkg);
+            answer(appName+" khol diya, lekin andar ka one-time tap/type/scroll command execute nahi hua kyunki Anamika App Control service OFF hai. "+r);
+            return true;
+        }
+
+        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRunOneShot(this,pkg,action);
+        answer(appName+" par one-time owner voice command diya: “"+action+"”. App plugin list me add nahi hua. "+r);
+        return true;
+    }
+
+    private String findInstalledPackage(String appName){
+        if(appName==null) return null;
+        String n=appName.trim().toLowerCase(Locale.ROOT);
+        if(n.isEmpty()) return null;
+        if(n.contains("whatsapp")) return "com.whatsapp";
+        if(n.contains("youtube")) return "com.google.android.youtube";
+        if(n.contains("chrome")) return "com.android.chrome";
+        if(n.contains("instagram")) return "com.instagram.android";
+        if(n.contains("telegram")) return "org.telegram.messenger";
+        return com.anamika.ai.plugins.PluginRegistry.findPackageByLabel(this,appName);
     }
 
     private void toggleWakeListening(){
@@ -613,18 +657,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return true;
         }
         String pkg="com.whatsapp";
-        if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,pkg)){
-            answer("WhatsApp aapke owner-selected plugins me enabled nahi hai, isliye Anamika ne us par control nahi kiya.");
-            return true;
-        }
         if(!isAutomationServiceEnabled()){
-            answer("Anamika App Control service off hai, isliye WhatsApp par koi control action nahi kiya gaya.");
+            answer("WhatsApp khol sakti hoon, lekin andar message bhejne ke one-time control ke liye Anamika App Control service ON honi chahiye.");
+            com.anamika.ai.plugins.AppPluginEngine.openAny(this,pkg);
             return true;
         }
-        getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
-        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,
+        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRunOneShot(this,pkg,
                 "whatsapp-message|"+recipient+"|"+message);
-        answer("WhatsApp me "+recipient+" ko message bhejne ka command diya: “"+message+"”. "+r);
+        answer("WhatsApp me "+recipient+" ko message bhejne ka one-time owner command diya. WhatsApp plugin list me add nahi hua. "+r);
         return true;
     }
 
