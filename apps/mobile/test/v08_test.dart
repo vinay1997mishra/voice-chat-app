@@ -15,6 +15,17 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
+  Future<void> openOfficialRoom(WidgetTester tester) async {
+    final roomFinder = find.byKey(const Key('open-v07-room'));
+    await tester.scrollUntilVisible(
+      roomFinder,
+      280,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(roomFinder);
+    await tester.pumpAndSettle();
+  }
+
   setUp(() {
     demoEconomy.currentUserId = '10000050';
     demoEconomy.byName('Owner').id = '10000000';
@@ -58,8 +69,7 @@ void main() {
     setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV08());
 
-    await tester.tap(find.byKey(const Key('open-v07-room')));
-    await tester.pumpAndSettle();
+    await openOfficialRoom(tester);
 
     await tester.tap(find.text('Gift'));
     await tester.pumpAndSettle();
@@ -88,8 +98,7 @@ void main() {
       (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV08());
-    await tester.tap(find.byKey(const Key('open-v07-room')));
-    await tester.pumpAndSettle();
+    await openOfficialRoom(tester);
     await tester.tap(find.text('Gift'));
     await tester.pumpAndSettle();
 
@@ -116,8 +125,7 @@ void main() {
       (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV08());
-    await tester.tap(find.byKey(const Key('open-v07-room')));
-    await tester.pumpAndSettle();
+    await openOfficialRoom(tester);
 
     final input = find.byKey(const Key('room-message-input-v08'));
     final send = find.byKey(const Key('room-message-send-v08'));
@@ -712,14 +720,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('main-owner-dashboard-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-global-announcement-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-users-roles-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-moderation-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-feature-controls-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-game-controls-v08')), findsOneWidget);
-    expect(find.byKey(const Key('owner-economy-controls-v08')), findsOneWidget);
-    expect(find.byKey(const Key('main-owner-video-gifts-v08')), findsOneWidget);
+    final scrollable = find.byType(Scrollable).first;
+    for (final keyName in const [
+      'main-owner-dashboard-v08',
+      'owner-global-announcement-v08',
+      'owner-users-roles-v08',
+      'owner-moderation-v08',
+      'owner-feature-controls-v08',
+      'owner-game-controls-v08',
+      'owner-economy-controls-v08',
+      'main-owner-video-gifts-v08',
+    ]) {
+      final finder = find.byKey(Key(keyName));
+      await tester.scrollUntilVisible(
+        finder,
+        260,
+        scrollable: scrollable,
+      );
+      expect(finder, findsOneWidget);
+    }
   });
 
   testWidgets('owner can disable gifts and room creation',
