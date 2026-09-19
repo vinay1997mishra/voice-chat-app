@@ -39,6 +39,7 @@ jobs:
           test -f "$TEST_LAB"
           sed -i 's/OwnerSession\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
           ! grep -Fq 'OwnerSession.isValid(' "$TEST_LAB"
+          sed -i 's/OwnerSession\.isValid/OwnerSession.isActive/g' anamika_build/project/tools/validate_audit.py
 
       - uses: actions/setup-java@v5
         with:
