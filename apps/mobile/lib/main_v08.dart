@@ -372,8 +372,9 @@ class DemoEconomy extends ChangeNotifier {
   }
   bool convertDiamonds(int amount) {
     if (amount <= 0 || amount > diamonds) return false;
-    diamonds -= amount;
     final converted = amount ~/ 2;
+    if (converted <= 0) return false;
+    diamonds -= amount;
     coins += converted;
     ledger.insert(
       0,
