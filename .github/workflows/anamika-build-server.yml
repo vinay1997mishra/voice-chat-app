@@ -32,6 +32,6 @@ jobs:
       - name: Compile server
         run: python -m py_compile app.py
       - name: Import FastAPI app
-        run: python -c "import app; assert app.APP.title == 'Anamika Build Server'"
+        run: python -c "import app; assert app.APP.title == 'Anamika APK Build Server'"
       - name: Build Docker image
         run: docker build -t anamika-build-server:test .
