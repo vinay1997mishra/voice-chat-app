@@ -87,7 +87,7 @@ def ensure_catalog(data: dict) -> dict:
             {
                 "name": name,
                 "ownerEnabled": True,
-                "userEnabled": key in {"chat", "voice_input", "voice_reply"},
+                "userEnabled": False,
                 "builtin": True,
             },
         )
