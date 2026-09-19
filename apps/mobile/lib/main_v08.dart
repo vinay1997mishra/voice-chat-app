@@ -2099,10 +2099,41 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
+  List<GameVoicePlayerV08> _gameVoicePlayers() {
+    final result = <GameVoicePlayerV08>[];
+    for (var i = 0; i < seats.length && result.length < 4; i++) {
+      final name = seats[i];
+      if (name == null) continue;
+      if (name == 'You') {
+        result.add(
+          GameVoicePlayerV08(
+            name: 'You',
+            avatar: '🙂',
+            userId: '10000050',
+            micOn: !mutedSeats.contains(i),
+          ),
+        );
+        continue;
+      }
+      final user = demoEconomy.byName(name);
+      result.add(
+        GameVoicePlayerV08(
+          name: name,
+          avatar: user.avatar,
+          userId: user.id,
+          micOn: !mutedSeats.contains(i),
+        ),
+      );
+    }
+    return result;
+  }
+
   void _gameCenter() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const GamesCenterV08()),
+      MaterialPageRoute(
+        builder: (_) => GamesCenterV08(players: _gameVoicePlayers()),
+      ),
     );
   }
 
