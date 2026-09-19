@@ -7,6 +7,21 @@ sealed class Command {
     data object CheckUpdate : Command()
     data object RequestUpgrade : Command()
     data class Search(val query: String) : Command()
+
+    data class GitInit(val workspace: String) : Command()
+    data object GitStatus : Command()
+    data class GitBranch(val name: String) : Command()
+    data class GitCheckout(val name: String) : Command()
+    data class GitCommit(val message: String) : Command()
+    data object GitLog : Command()
+    data object GitDiff : Command()
+    data class GitTag(val name: String) : Command()
+    data class GitMerge(val name: String) : Command()
+    data object GitPush : Command()
+    data object GitPull : Command()
+    data object GitBranches : Command()
+    data object GitQueue : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -16,6 +31,20 @@ class CommandRouter {
         val lower = text.lowercase()
 
         return when {
+            lower.startsWith("git init ") -> Command.GitInit(text.drop(9).trim())
+            lower == "git status" -> Command.GitStatus
+            lower.startsWith("git branch ") -> Command.GitBranch(text.drop(11).trim())
+            lower.startsWith("git checkout ") -> Command.GitCheckout(text.drop(13).trim())
+            lower.startsWith("git commit ") -> Command.GitCommit(text.drop(11).trim())
+            lower == "git log" -> Command.GitLog
+            lower == "git diff" -> Command.GitDiff
+            lower.startsWith("git tag ") -> Command.GitTag(text.drop(8).trim())
+            lower.startsWith("git merge ") -> Command.GitMerge(text.drop(10).trim())
+            lower == "git push" || lower == "github push" -> Command.GitPush
+            lower == "git pull" || lower == "github pull" -> Command.GitPull
+            lower == "git branches" || lower == "git branch list" -> Command.GitBranches
+            lower == "github queue" || lower == "git queue" -> Command.GitQueue
+
             lower.startsWith("remember ") -> Command.Remember(text.drop(9).trim())
             lower.startsWith("yaad rakho ") -> Command.Remember(text.drop(10).trim())
             lower.contains("update check") || lower.contains("update dekho") -> Command.CheckUpdate
