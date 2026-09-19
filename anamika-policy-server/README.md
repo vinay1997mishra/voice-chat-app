@@ -1,29 +1,60 @@
 # Anamika Owner Policy Service
 
-This service exists only for **public-distribution feature control**. It does not generate code and does not build APKs.
+This service is the control plane for public-distribution access and owner recovery. It does **not** generate code and does **not** build APKs.
 
-A public Anamika install has a random installation ID. It requests an entitlement for that ID. The service signs the response with the Anamika owner's ECDSA private key. Public APKs contain only the matching public key and reject unsigned or modified policies.
+## Owner recovery
 
-## What the owner can control
+Public and owner copies use Sign in with Google. The server verifies the Google ID token and uses the immutable Google `sub` claim as the account identity.
 
-Feature keys include chat, voice input, voice reply, memory, search, internet, local coding, link analysis, Git/GitHub, app study, cross-app control, APK build and self-update.
+Initial owner binding can be configured with either:
+- `ANAMIKA_OWNER_GOOGLE_SUB` — preferred when already known, or
+- `ANAMIKA_OWNER_BOOTSTRAP_EMAIL` — used only for the first verified login; after that the server stores the Google `sub` and ownership is matched by `sub`, not by email.
 
-Use subject `*` for public defaults, or a specific installation ID for per-install overrides.
+The policy store must be on persistent storage. If the phone is lost, signing in on a new phone with the same Google account restores the OWNER role as long as the stored owner binding (or `ANAMIKA_OWNER_GOOGLE_SUB`) remains available.
 
-## Required secrets
+## Function Control
 
-- `ANAMIKA_POLICY_ADMIN_TOKEN` — protects admin changes.
-- `ANAMIKA_POLICY_PRIVATE_KEY_PEM` — ECDSA private key used only by this service.
-- `ANAMIKA_POLICY_STORE` — optional persistent JSON path.
+Only an authenticated OWNER session can access:
+- `GET /owner/catalog`
+- `PUT /owner/catalog/{feature_key}`
+- `POST /owner/catalog/register`
 
-Never put the private key or admin token in a public APK.
+Every function has:
+- `ownerEnabled`
+- `userEnabled`
+
+All public/user features default to **OFF**. A public feature becomes available only after the owner explicitly enables its `Users` switch.
+
+New learned/update modules are registered into the same catalog and also default to Owner OFF / Users OFF until the owner decides.
+
+## Public users
+
+Normal users:
+- only see Google sign-in before login,
+- never receive owner console access,
+- cannot change public entitlements,
+- receive only signed feature entitlements from this service.
+
+## Required secrets/config
+
+- `ANAMIKA_GOOGLE_CLIENT_ID` — Google OAuth Web Client ID used to verify ID tokens.
+- `ANAMIKA_SESSION_SECRET` — signs short-lived app sessions.
+- `ANAMIKA_POLICY_PRIVATE_KEY_PEM` — signs public feature entitlements.
+- `ANAMIKA_POLICY_ADMIN_TOKEN` — optional server-admin fallback.
+- `ANAMIKA_POLICY_STORE` — persistent JSON path.
+- One of:
+  - `ANAMIKA_OWNER_GOOGLE_SUB`
+  - `ANAMIKA_OWNER_BOOTSTRAP_EMAIL`
+
+Never put the private signing key, admin token, or session secret in a public APK.
 
 ## Client configuration
 
-The public Android release needs:
-- `ANAMIKA_OWNER_POLICY_URL` pointing to this service's HTTPS `/entitlements` endpoint.
-- `ANAMIKA_OWNER_POLICY_PUBLIC_KEY` containing the Base64 DER/X.509 public key.
+Android builds need:
+- `GOOGLE_WEB_CLIENT_ID`
+- `ANAMIKA_PUBLIC_AUTH_URL`
+- `ANAMIKA_POLICY_BASE_URL`
+- `ANAMIKA_OWNER_POLICY_URL`
+- `ANAMIKA_OWNER_POLICY_PUBLIC_KEY`
 
-## Important
-
-This is a separate control-plane service. The Anamika APK build server remains compile-only.
+The APK build server remains compile-only and separate from this service.
