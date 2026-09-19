@@ -1392,9 +1392,12 @@ class _V07HomeState extends State<V07Home> {
 
   @override
   Widget build(BuildContext context) {
-    final myRoom = _myRoom;
-    return Scaffold(
-      body: Container(
+    return AnimatedBuilder(
+      animation: roomActivityV08,
+      builder: (context, _) {
+        final myRoom = _myRoom;
+        return Scaffold(
+          body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF4A1477), Color(0xFF21052C), Color(0xFF0F0213)],
@@ -1627,6 +1630,8 @@ class _V07HomeState extends State<V07Home> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 }
@@ -4198,6 +4203,11 @@ class DemoUserProfileV07 extends StatelessWidget {
 }
 
 
+class RoomActivityV08 extends ChangeNotifier {
+  void refresh() => notifyListeners();
+}
+
+final roomActivityV08 = RoomActivityV08();
 final Set<RoomData> roomRegistryV08 = <RoomData>{};
 
 class RoomData {
@@ -4215,9 +4225,10 @@ class RoomData {
     this.currentUserIsAdmin = false,
     this.closed = false,
     this.description = '',
-    this.onlineUsers = 0,
+    int onlineUsers = 0,
     String? ownerUserId,
-  }) : ownerUserId = ownerUserId ?? id {
+  })  : _onlineUsers = onlineUsers,
+        ownerUserId = ownerUserId ?? id {
     roomRegistryV08.add(this);
   }
 
@@ -4225,8 +4236,16 @@ class RoomData {
   String id;
   String ownerUserId;
   String description;
-  int onlineUsers;
-  bool get isOnline => onlineUsers > 0;
+  int _onlineUsers;
+  int get onlineUsers => _onlineUsers;
+  set onlineUsers(int value) {
+    final normalized = value < 0 ? 0 : value;
+    if (_onlineUsers == normalized) return;
+    _onlineUsers = normalized;
+    roomActivityV08.refresh();
+  }
+
+  bool get isOnline => _onlineUsers > 0;
   String dp;
   bool locked;
   int seatCount;
