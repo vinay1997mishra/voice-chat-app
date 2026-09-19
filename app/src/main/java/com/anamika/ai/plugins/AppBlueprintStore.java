@@ -13,7 +13,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedWriter;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.nio.charset.StandardCharsets;
@@ -119,8 +121,49 @@ public final class AppBlueprintStore {
                     "Reason: "+(reason==null?"completed":reason)+"\n"+
                     "Note: passwords, payment, messaging, account changes, destructive actions and OS permission grants are not auto-executed.\n";
             writeText(new File(path,"AUTO_AUDIT_REPORT.txt"),text);
+            writeFunctionBlueprint(new File(path));
         }
         return stop(c);
+    }
+
+    private static void writeFunctionBlueprint(File root){
+        File audit=new File(root,"auto_audit.jsonl");
+        if(!audit.isFile()) return;
+        StringBuilder out=new StringBuilder();
+        out.append("ANAMIKA APP BLUEPRINT — FUNCTION BY FUNCTION\n");
+        out.append("Generated from owner-authorized observable UI audit.\n");
+        out.append("This explains observed controls/screens; private server logic or hidden source code cannot be inferred.\n\n");
+        int n=0;
+        try(BufferedReader r=new BufferedReader(new FileReader(audit))){
+            String line;
+            while((line=r.readLine())!=null){
+                try{
+                    JSONObject o=new JSONObject(line);
+                    String state=o.optString("state","");
+                    String label=o.optString("label","");
+                    String detail=o.optString("detail","");
+                    if("TRY_TAP".equals(state)){
+                        n++;
+                        out.append("FUNCTION ").append(n).append(": ")
+                                .append(label.isEmpty()?"<unlabelled>":label).append("\n");
+                        out.append("  Test: Anamika tapped this visible safe control.\n");
+                    } else if("RESULT".equals(state)){
+                        out.append("  Observed result: ").append(detail).append("\n\n");
+                    } else if("SCROLL".equals(state)){
+                        out.append("NAVIGATION: Scroll ").append(label).append(" — ").append(detail).append("\n");
+                    } else if("BACK".equals(state)){
+                        out.append("NAVIGATION: Back — ").append(detail).append("\n");
+                    } else if("SKIPPED".equals(state) || "SKIP_EXTERNAL".equals(state)){
+                        out.append("SKIPPED CONTROL: ").append(label.isEmpty()?"<unknown>":label)
+                                .append(" — ").append(detail).append("\n");
+                    } else if("FAILED_TAP".equals(state)){
+                        out.append("FAILED CONTROL: ").append(label).append(" — ").append(detail).append("\n");
+                    }
+                }catch(Exception ignored){}
+            }
+        }catch(Exception ignored){ return; }
+        out.append("\nTotal safe functions attempted: ").append(n).append("\n");
+        writeText(new File(root,"BLUEPRINT_FUNCTIONS.txt"),out.toString());
     }
 
     public static boolean shouldCaptureScreenshot(Context c){
