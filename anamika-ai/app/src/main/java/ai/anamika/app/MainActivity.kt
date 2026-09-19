@@ -13,11 +13,13 @@ import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import ai.anamika.app.ai.DeviceAiGateway
 import ai.anamika.app.auth.GooglePublicAuth
+import ai.anamika.app.auth.IdPublicAuth
 import ai.anamika.app.auth.PublicSessionStore
 import ai.anamika.app.automation.AnamikaAccessibilityService
 import ai.anamika.app.automation.AppAccessPolicy
@@ -81,6 +83,7 @@ class MainActivity : Activity() {
     private lateinit var learnedModules: LearnedModuleRegistry
     private lateinit var publicSession: PublicSessionStore
     private lateinit var googleAuth: GooglePublicAuth
+    private lateinit var idAuth: IdPublicAuth
     private lateinit var ownerConsoleGateway: OwnerConsoleGateway
     private lateinit var status: TextView
 
@@ -108,6 +111,7 @@ class MainActivity : Activity() {
         learnedModules = LearnedModuleRegistry(this)
         publicSession = PublicSessionStore(this)
         googleAuth = GooglePublicAuth(this)
+        idAuth = IdPublicAuth()
         ownerConsoleGateway = OwnerConsoleGateway(BuildConfig.ANAMIKA_POLICY_BASE_URL)
 
         voice = VoiceAssistant(
@@ -219,7 +223,32 @@ class MainActivity : Activity() {
             setOnClickListener { startPublicGoogleLogin() }
         }
 
+        val idField = EditText(this).apply {
+            hint = "ID"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+
+        val passwordField = EditText(this).apply {
+            hint = "Password"
+            inputType =
+                android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val idLogin = Button(this).apply {
+            text = "Login with ID"
+            setOnClickListener {
+                startPublicIdLogin(
+                    idField.text?.toString().orEmpty(),
+                    passwordField.text?.toString().orEmpty()
+                )
+            }
+        }
+
         root.addView(google)
+        root.addView(idField)
+        root.addView(passwordField)
+        root.addView(idLogin)
         return root
     }
 
@@ -439,6 +468,32 @@ class MainActivity : Activity() {
         })
 
         return root
+    }
+
+    private fun startPublicIdLogin(userId: String, password: String) {
+        idAuth.signIn(
+            BuildConfig.ANAMIKA_POLICY_BASE_URL,
+            userId,
+            password
+        ) { result ->
+            runOnUiThread {
+                result.onSuccess { session ->
+                    publicSession.save(session)
+                    if (session.isOwner()) {
+                        setContentView(buildOwnerConsoleUi())
+                    } else {
+                        setContentView(buildPublicUserUi())
+                        syncPublicEntitlementsIfNeeded()
+                    }
+                }.onFailure {
+                    android.widget.Toast.makeText(
+                        this,
+                        "ID ya password sahi nahi hai.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun startPublicGoogleLogin() {
