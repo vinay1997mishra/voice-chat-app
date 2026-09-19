@@ -46,9 +46,9 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private int autoAuditSkipped = 0;
     private int autoAuditScreens = 0;
     private int autoAuditDepth = 0;
-    private static final int AUTO_AUDIT_MAX_ACTIONS = 80;
-    private static final int AUTO_AUDIT_MAX_DEPTH = 8;
-    private static final long AUTO_AUDIT_MAX_MS = 180_000L;
+    private static final int AUTO_AUDIT_MAX_ACTIONS = 250;
+    private static final int AUTO_AUDIT_MAX_DEPTH = 20;
+    private static final long AUTO_AUDIT_MAX_MS = 480_000L;
     private final Set<String> autoAuditNodes = new HashSet<>();
     private final Set<String> autoAuditScreensSeen = new HashSet<>();
     private final Set<String> autoAuditScrolled = new HashSet<>();
@@ -211,7 +211,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         }
         if(!lastAuditActionLabel.isEmpty()){
             AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"RESULT",lastAuditActionLabel,
-                    "Observed target screen signature="+screenSig+" class="+String.valueOf(root.getClassName()));
+                    "screen="+screenSig+" class="+String.valueOf(root.getClassName())+
+                            " visible="+screenSummary(root));
             lastAuditActionLabel="";
         }
 
@@ -232,7 +233,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 continue;
             }
 
-            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TAP",label,"safe visible control");
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TAP",label,
+                    "class="+String.valueOf(n.getClassName())+" viewId="+String.valueOf(n.getViewIdResourceName()));
             if(clickNodeOrParent(n)){
                 autoAuditTested++;
                 lastAuditActionLabel=label;
@@ -286,6 +288,20 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             if(!label.isEmpty()){ b.append(label).append(';'); added++; }
         }
         return Integer.toHexString(b.toString().hashCode());
+    }
+
+    private String screenSummary(AccessibilityNodeInfo root){
+        StringBuilder b=new StringBuilder();
+        int count=0;
+        for(AccessibilityNodeInfo n:flatten(root)){
+            String label=nodeLabel(n);
+            if(label.isEmpty()) continue;
+            if(count++>0) b.append(" | ");
+            b.append(label.replace("\n"," "));
+            if(count>=12) break;
+        }
+        String s=b.toString();
+        return s.length()>700?s.substring(0,700):s;
     }
 
     private String nodeSignature(AccessibilityNodeInfo n,String label){
