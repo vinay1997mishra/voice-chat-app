@@ -26,19 +26,27 @@
             android:text="Locked"
             android:textSize="16sp" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="First time: choose any 4–12 digit Owner PIN. After setup, use the same PIN to unlock Anamika."
+            android:textSize="14sp" />
+
         <EditText
             android:id="@+id/pinInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:hint="Owner PIN"
-            android:inputType="numberPassword" />
+            android:layout_marginTop="8dp"
+            android:hint="Enter 4–12 digit Owner PIN"
+            android:inputType="numberPassword"
+            android:maxLength="12" />
 
         <Button
             android:id="@+id/unlockButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Unlock / Set Owner PIN" />
+            android:text="Set Owner PIN" />
 
         <Button
             android:id="@+id/listenButton"
