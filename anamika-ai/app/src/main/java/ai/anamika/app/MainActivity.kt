@@ -782,6 +782,7 @@ class MainActivity : Activity() {
                     OwnerAction.CHANGE_FEATURE_POLICY,
                     "Apply Anamika feature switches"
                 ) {
+                    features.setMasterEnabled(checked.any { it })
                     items.forEachIndexed { index, feature ->
                         features.setEnabled(feature, checked[index])
                     }
