@@ -1,0 +1,57 @@
+name: Anamika V7.8.1 APK Compile Test
+
+on:
+  push:
+    branches:
+      - anamika-v7-8-1-apk-build
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Anamika source
+        run: |
+          rm -rf anamika-build
+          mkdir anamika-build
+          unzip -q anamika-source.zip -d anamika-build
+          test -f anamika-build/AnamikaAI_V7_8_1_AuditFixed/settings.gradle
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Validate source
+        working-directory: anamika-build/AnamikaAI_V7_8_1_AuditFixed
+        run: |
+          python3 tools/validate_source.py
+          python3 tools/validate_v78.py
+          python3 tools/validate_audit.py
+
+      - name: Compile debug APK
+        working-directory: anamika-build/AnamikaAI_V7_8_1_AuditFixed
+        run: gradle --no-daemon :app:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AnamikaAI-V7.8.1-compile-test
+          path: |
+            anamika-build/AnamikaAI_V7_8_1_AuditFixed/app/build/outputs/apk/debug/app-debug.apk
+            anamika-build/AnamikaAI_V7_8_1_AuditFixed/app/build/reports/**
+          if-no-files-found: warn
