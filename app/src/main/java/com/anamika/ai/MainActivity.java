@@ -77,7 +77,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
 
-        unlockButton.setOnClickListener(v -> unlockOwner());
+        boolean ownerPinAlreadySet = OwnerAuth.hasPin(this);
+        unlockButton.setText(ownerPinAlreadySet ? "Unlock Owner" : "Set Owner PIN");
+
+        unlockButton.setOnClickListener(v -> unlockOwner(unlockButton));
         listenButton.setOnClickListener(v -> startListening());
         runButton.setOnClickListener(v -> runCommand(commandInput.getText().toString()));
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
@@ -109,13 +112,16 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             if (ensureUnlocked()) answer(UniversalLanguageRouter.capability(this));
         });
 
-        if (!OwnerAuth.hasPin(this)) {
-            status.setText("First launch: set an Owner PIN");
-            result.setText("Set a 4–12 digit PIN first. Only a salted hash will be stored; voice commands remain locked until owner verification.");
+        if (!ownerPinAlreadySet) {
+            status.setText("First launch • Owner PIN not set");
+            result.setText("Enter any 4–12 digit PIN in the Owner PIN box, then tap SET OWNER PIN. This becomes your owner unlock code.");
+        } else {
+            status.setText("Locked • enter Owner PIN");
+            result.setText("Enter your existing Owner PIN, then tap UNLOCK OWNER.");
         }
     }
 
-    private void unlockOwner() {
+    private void unlockOwner(Button unlockButton) {
         long now = System.currentTimeMillis();
         if (now < pinLockedUntilMs) {
             long seconds = Math.max(1L, (pinLockedUntilMs - now + 999L) / 1000L);
@@ -133,6 +139,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 pinLockedUntilMs = 0L;
                 prefs.edit().remove(PIN_FAILS).remove(PIN_LOCK_UNTIL).apply();
                 status.setText("Owner verified • unlocked");
+                unlockButton.setText("Unlock Owner");
+                result.setText(firstSetup
+                        ? "Owner PIN set successfully. Anamika is unlocked and ready."
+                        : "Owner unlocked. Anamika is ready.");
                 speak(firstSetup ? "Owner lock set. Anamika is ready." : "Welcome back. Anamika is ready.");
             } else {
                 unlocked = false;
