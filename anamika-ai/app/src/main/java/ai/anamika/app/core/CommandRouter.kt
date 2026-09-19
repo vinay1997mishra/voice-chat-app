@@ -32,6 +32,7 @@ sealed class Command {
     data object BuildApk : Command()
     data object BuildStatus : Command()
     data object BuildDownload : Command()
+    data class MakeApp(val goal: String) : Command()
 
     data class Unknown(val text: String) : Command()
 }
@@ -47,6 +48,8 @@ class CommandRouter {
             lower == "build apk" || lower == "apk build" || lower == "apk banao" -> Command.BuildApk
             lower == "build status" -> Command.BuildStatus
             lower == "build download" || lower == "apk download" -> Command.BuildDownload
+            lower.startsWith("app banao ") -> Command.MakeApp(text.drop(10).trim())
+            lower.startsWith("make app ") -> Command.MakeApp(text.drop(9).trim())
 
             lower == "file list" -> Command.FileList
             lower.startsWith("file read ") -> Command.FileRead(text.drop(10).trim())
