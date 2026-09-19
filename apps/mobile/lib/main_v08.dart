@@ -3389,9 +3389,9 @@ class _RoomV07State extends State<RoomV07> {
             ),
             for (final name in members)
               if (name == 'You')
-                const ListTile(
-                  leading: CircleAvatar(child: Text('😎')),
-                  title: Text('You'),
+                ListTile(
+                  leading: const CircleAvatar(child: Text('😎')),
+                  title: const Text('You'),
                   subtitle: Text('ID ' + demoEconomy.currentUserId),
                 )
               else
