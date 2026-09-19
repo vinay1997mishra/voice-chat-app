@@ -952,4 +952,31 @@ void main() {
     expect(find.textContaining('Owner • ID 20000000'), findsOneWidget);
   });
 
+
+  testWidgets('Mine replaces create icon with home shortcut after room creation',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('create-room-v06')), findsOneWidget);
+    expect(find.byKey(const Key('my-room-home-v08')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('create-room-v06')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('create-room-submit-v06')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('create-room-v06')), findsNothing);
+    expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('my-room-home-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RoomV07), findsOneWidget);
+    expect(find.text('My Voice Room'), findsWidgets);
+  });
+
 }
