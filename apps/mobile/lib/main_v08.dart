@@ -1240,7 +1240,10 @@ class _RoomV07State extends State<RoomV07> {
     super.initState();
     inviteMode = widget.room.inviteMode;
     seats = List<String?>.filled(widget.room.seatCount, null);
-    if (seats.isNotEmpty) seats[0] = 'Owner';
+    if (seats.isNotEmpty) {
+      seats[0] = 'Owner';
+      if (widget.room.ownedByMe) mySeat = 0;
+    }
     if (seats.length > 1) seats[1] = 'Admin';
     if (seats.length > 2) {
       seats[2] = 'Aisha';
@@ -1323,7 +1326,9 @@ class _RoomV07State extends State<RoomV07> {
                     mainAxisSpacing: 4,
                   ),
                   itemBuilder: (_, i) => GestureDetector(
-                    key: i == 0 ? const Key('v07-seat-0') : null,
+                    key: i == 0
+                        ? const Key('v07-seat-0')
+                        : Key('room-seat-$i-v08'),
                     onTap: () => _seatOptions(i),
                     child: Column(children: [
                       Expanded(child: Container(
@@ -1749,7 +1754,10 @@ class _RoomV07State extends State<RoomV07> {
                     setState(() {
                       for (var i = 0; i < seats.length; i++) {
                         final name = seats[i];
-                        if (name != null && name != 'Owner' && name != 'Admin') {
+                        if (name != null &&
+                            name != 'Owner' &&
+                            name != 'Admin' &&
+                            i != mySeat) {
                           mutedSeats.add(i);
                         }
                       }
