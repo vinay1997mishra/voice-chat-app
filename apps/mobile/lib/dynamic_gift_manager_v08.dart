@@ -416,6 +416,7 @@ class _DynamicGiftVideoEffectV08State
     extends State<DynamicGiftVideoEffectV08> {
   late final VideoPlayerController _controller;
   bool _ready = false;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -432,17 +433,22 @@ class _DynamicGiftVideoEffectV08State
       if (mounted) setState(() => _ready = true);
       _controller.addListener(_closeWhenFinished);
     } catch (_) {
-      if (mounted) Navigator.pop(context);
+      _closeSafely();
     }
   }
 
   void _closeWhenFinished() {
     if (!_controller.value.isInitialized) return;
     if (_controller.value.position >= _controller.value.duration &&
-        !_controller.value.isPlaying &&
-        mounted) {
-      Navigator.pop(context);
+        !_controller.value.isPlaying) {
+      _closeSafely();
     }
+  }
+
+  void _closeSafely() {
+    if (_closing || !mounted) return;
+    _closing = true;
+    Navigator.of(context).maybePop();
   }
 
   @override
@@ -469,7 +475,7 @@ class _DynamicGiftVideoEffectV08State
           top: 36,
           right: 16,
           child: IconButton.filledTonal(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _closeSafely,
             icon: const Icon(Icons.close_rounded),
           ),
         ),
