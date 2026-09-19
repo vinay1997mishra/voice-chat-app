@@ -263,7 +263,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         String lower = command.toLowerCase(Locale.ROOT);
         prefs.edit().putString("last_command", command).apply();
 
-        if (containsAny(lower, "hello", "hi anamika", "namaste", "नमस्ते")) {
+        if (lower.equals("hello") || lower.equals("hello anamika") || lower.equals("hi anamika") ||
+                lower.equals("namaste") || lower.equals("namaste anamika") || lower.equals("नमस्ते")) {
             answer("Namaste. Main Anamika AI V7.8.2 hoon. Kaise madad karun?");
             return;
         }
