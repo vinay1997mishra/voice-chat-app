@@ -3,6 +3,7 @@ package ai.anamika.app.automation
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.os.Bundle
+import android.widget.Toast
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -37,6 +38,24 @@ class AnamikaAccessibilityService : AccessibilityService() {
         if (!policy.isAllowed(pkg)) return
 
         val source = e.source
+        val challenge = detectHumanChallenge(source, e)
+        if (study.isActiveFor(pkg) && challenge != null) {
+            study.pauseForChallenge(pkg, challenge)
+            Toast.makeText(
+                this,
+                "Anamika study paused: $challenge complete karo, phir scan continue hoga.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        } else if (study.isActiveFor(pkg) && study.isPaused()) {
+            study.resumeAfterChallenge(pkg)
+            Toast.makeText(
+                this,
+                "Verification screen complete. Anamika study resumed.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         if (source?.isPassword == true) return
 
         val label = sanitizeLabel(
@@ -176,6 +195,31 @@ class AnamikaAccessibilityService : AccessibilityService() {
         for (i in 0 until current.childCount) {
             collectStudyNodes(current.getChild(i), out, depth + 1)
             if (out.size >= 300) break
+        }
+    }
+
+    private fun detectHumanChallenge(
+        node: AccessibilityNodeInfo?,
+        event: AccessibilityEvent
+    ): String? {
+        val raw = buildString {
+            append(event.text.joinToString(" "))
+            append(' ')
+            append(node?.text?.toString().orEmpty())
+            append(' ')
+            append(node?.contentDescription?.toString().orEmpty())
+            append(' ')
+            append(node?.hintText?.toString().orEmpty())
+        }.lowercase()
+
+        return when {
+            "captcha" in raw || "i am not a robot" in raw || "verify you are human" in raw ->
+                "CAPTCHA / human verification"
+            "two-factor" in raw || "2fa" in raw || "two factor" in raw ->
+                "two-factor authentication"
+            "one-time password" in raw || "otp" in raw || "verification code" in raw ->
+                "OTP / verification code"
+            else -> null
         }
     }
 
