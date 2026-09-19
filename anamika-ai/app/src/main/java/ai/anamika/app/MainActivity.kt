@@ -19,6 +19,7 @@ import ai.anamika.app.ai.DeviceAiGateway
 import ai.anamika.app.automation.AnamikaAccessibilityService
 import ai.anamika.app.automation.AppAccessPolicy
 import ai.anamika.app.automation.AppObservationStore
+import ai.anamika.app.automation.AppStudyStore
 import ai.anamika.app.build.ApkInstaller
 import ai.anamika.app.build.BuildServerGateway
 import ai.anamika.app.build.BuildServerSettings
@@ -61,6 +62,7 @@ class MainActivity : Activity() {
     private lateinit var internetPolicy: InternetPolicyManager
     private lateinit var appAccessPolicy: AppAccessPolicy
     private lateinit var appObservations: AppObservationStore
+    private lateinit var appStudy: AppStudyStore
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -81,6 +83,7 @@ class MainActivity : Activity() {
         internetPolicy = InternetPolicyManager(this)
         appAccessPolicy = AppAccessPolicy(this)
         appObservations = AppObservationStore(this)
+        appStudy = AppStudyStore(this)
 
         voice = VoiceAssistant(
             activity = this,
@@ -416,8 +419,96 @@ class MainActivity : Activity() {
                 }
             }
 
+            Command.AppStudyStart -> startAppStudy()
+
+            Command.AppStudyCapture -> captureAppStudyScreen()
+
+            Command.AppStudyStop -> {
+                val pkg = appStudy.currentPackage()
+                appStudy.stop()
+                reply(
+                    if (pkg.isNullOrBlank()) {
+                        "Active app study session nahi tha."
+                    } else {
+                        "App study stop ho gaya: $pkg"
+                    }
+                )
+            }
+
+            Command.AppStudyReport -> showAppStudyReport()
+
+            Command.AppStudyExport -> exportAppStudyReport()
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun startAppStudy() {
+        val pkg = AnamikaAccessibilityService.lastForegroundPackage
+        if (pkg.isNullOrBlank()) {
+            reply("Pehle target app open karo aur login complete karo, phir Anamika me wapas aao.")
+            return
+        }
+        if (!appAccessPolicy.isAllowed(pkg)) {
+            reply("Pehle owner se app authorize karo: 'app allow current'.")
+            return
+        }
+        if (AnamikaAccessibilityService.active == null) {
+            reply("Anamika Accessibility service enabled nahi hai.")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.OBSERVE_OTHER_APP,
+            "Start feature study for $pkg"
+        ) {
+            appStudy.start(pkg)
+            reply("App study ON: $pkg. Screens aur menus visit karo; Anamika feature map capture karegi.")
+            packageManager.getLaunchIntentForPackage(pkg)?.let(::startActivity)
+        }
+    }
+
+    private fun captureAppStudyScreen() {
+        val pkg = appStudy.currentPackage()
+        if (pkg.isNullOrBlank() || !appStudy.isActiveFor(pkg)) {
+            reply("App study active nahi hai.")
+            return
+        }
+
+        val ok = AnamikaAccessibilityService.active?.captureCurrentScreen(pkg) == true
+        reply(if (ok) "Current screen study map me add ho gayi." else "Current target screen capture nahi ho saki.")
+    }
+
+    private fun showAppStudyReport() {
+        val pkg = appStudy.currentPackage()
+            ?: AnamikaAccessibilityService.lastForegroundPackage
+        if (pkg.isNullOrBlank()) {
+            reply("Study report ke liye target app nahi mila.")
+            return
+        }
+        reply(appStudy.report(pkg))
+    }
+
+    private fun exportAppStudyReport() {
+        val pkg = appStudy.currentPackage()
+            ?: AnamikaAccessibilityService.lastForegroundPackage
+        if (pkg.isNullOrBlank()) {
+            reply("Export ke liye study data nahi mila.")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.WRITE_LOCAL_FILE,
+            "Export observed feature map of $pkg into local coding workspace"
+        ) {
+            runGit {
+                val report = appStudy.report(pkg)
+                val safeName = pkg.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val path = "study/$safeName-FEATURE_MAP.txt"
+                workspaceFiles.writeText(currentWorkspace, path, report)
+                "Feature map exported: $path"
+            }
         }
     }
 
