@@ -176,7 +176,15 @@ class MainActivity : Activity() {
 
     private fun handleInput(text: String) {
         status.text = "You: $text"
-        when (val command = router.parse(text)) {
+        val command = router.parse(text)
+
+        val requiredFeature = featureFor(command)
+        if (requiredFeature != null && !features.isEnabled(requiredFeature)) {
+            reply("Feature '${requiredFeature.key}' owner policy se OFF hai.")
+            return
+        }
+
+        when (command) {
             is Command.Remember -> {
                 memory.remember(command.text)
                 reply("Yaad rakh liya.")
@@ -456,9 +464,216 @@ class MainActivity : Activity() {
 
             Command.AppStudyExport -> exportAppStudyReport()
 
+            Command.FeatureList -> reply(features.ownerStatus())
+
+            is Command.FeatureOn -> changeOwnerFeature(command.name, true)
+
+            is Command.FeatureOff -> changeOwnerFeature(command.name, false)
+
+            Command.FeatureAllOn -> requestOwnerApproval(
+                OwnerAction.CHANGE_FEATURE_POLICY,
+                "Enable all Anamika owner features"
+            ) {
+                features.setAll(true)
+                reply("All owner features ON.")
+            }
+
+            Command.FeatureAllOff -> requestOwnerApproval(
+                OwnerAction.CHANGE_FEATURE_POLICY,
+                "Disable all Anamika owner features"
+            ) {
+                features.setAll(false)
+                status.text = "All owner features OFF. Owner Feature Control button remains available."
+            }
+
+            Command.PublicFeatureList -> reply(features.publicStatus())
+
+            is Command.PublicFeatureOn -> changePublicFeature(command.name, true)
+
+            is Command.PublicFeatureOff -> changePublicFeature(command.name, false)
+
+            Command.PublicFeatureAllOn -> requestOwnerApproval(
+                OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
+                "Enable all default public features"
+            ) {
+                features.setAllPublicDefaults(true)
+                reply("All public default features ON.")
+            }
+
+            Command.PublicFeatureAllOff -> requestOwnerApproval(
+                OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
+                "Disable all default public features"
+            ) {
+                features.setAllPublicDefaults(false)
+                reply("All public default features OFF.")
+            }
+
+            is Command.SelfUpdateStage -> stageSelfUpdate(command.changes)
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
         }
+    }
+
+    private fun featureFor(command: Command): FeatureId? = when (command) {
+        is Command.GenerateCode -> FeatureId.CHAT
+        is Command.Remember -> FeatureId.MEMORY
+        is Command.Search -> FeatureId.SEARCH
+        is Command.LearnFromLink -> FeatureId.LINK_ANALYSIS
+
+        is Command.GitInit,
+        Command.GitStatus,
+        is Command.GitBranch,
+        is Command.GitCheckout,
+        is Command.GitCommit,
+        Command.GitLog,
+        Command.GitDiff,
+        is Command.GitTag,
+        is Command.GitMerge,
+        Command.GitBranches -> FeatureId.LOCAL_GIT
+
+        Command.GitPush,
+        Command.GitPull,
+        Command.GitQueue -> FeatureId.GITHUB_REMOTE
+
+        Command.BuildApk,
+        Command.BuildStatus,
+        Command.BuildDownload -> FeatureId.APK_BUILD
+
+        is Command.MakeApp,
+        is Command.FileWrite,
+        is Command.FileRead,
+        is Command.FileDelete,
+        Command.FileList -> FeatureId.LOCAL_CODING
+
+        Command.AppStudyStart,
+        Command.AppStudyCapture,
+        Command.AppStudyStop,
+        Command.AppStudyReport,
+        Command.AppStudyExport,
+        Command.AppModelCurrent -> FeatureId.APP_STUDY
+
+        is Command.AppOpen,
+        is Command.AppClick,
+        is Command.AppType,
+        Command.AppAllowCurrent,
+        Command.AppDenyCurrent,
+        Command.AppControlSettings -> FeatureId.CROSS_APP_CONTROL
+
+        is Command.CheckUpdate,
+        is Command.RequestUpgrade,
+        is Command.SelfUpdateStage -> FeatureId.SELF_UPDATE
+
+        is Command.InternetOn,
+        is Command.InternetOff,
+        is Command.InternetStatus,
+        Command.FeatureList,
+        is Command.FeatureOn,
+        is Command.FeatureOff,
+        Command.FeatureAllOn,
+        Command.FeatureAllOff,
+        Command.PublicFeatureList,
+        is Command.PublicFeatureOn,
+        is Command.PublicFeatureOff,
+        Command.PublicFeatureAllOn,
+        Command.PublicFeatureAllOff,
+        is Command.ServerSet,
+        Command.ServerShow,
+        is Command.Unknown -> null
+    }
+
+    private fun changeOwnerFeature(name: String, enabled: Boolean) {
+        val feature = features.resolve(name)
+        if (feature == null) {
+            reply("Unknown feature: $name")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.CHANGE_FEATURE_POLICY,
+            "Set ${feature.key} = $enabled"
+        ) {
+            features.setEnabled(feature, enabled)
+            if (feature == FeatureId.VOICE_REPLY && !enabled) {
+                status.text = "voice_reply: OFF"
+            } else {
+                reply("${feature.key}: ${if (enabled) "ON" else "OFF"}")
+            }
+        }
+    }
+
+    private fun changePublicFeature(name: String, enabled: Boolean) {
+        val feature = features.resolve(name)
+        if (feature == null) {
+            reply("Unknown public feature: $name")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
+            "Set public default ${feature.key} = $enabled"
+        ) {
+            features.setPublicDefault(feature, enabled)
+            reply("Public ${feature.key}: ${if (enabled) "ON" else "OFF"}")
+        }
+    }
+
+    private fun stageSelfUpdate(changes: String) {
+        val pkg = appStudy.currentPackage()
+            ?: AnamikaAccessibilityService.lastForegroundPackage
+        if (pkg.isNullOrBlank()) {
+            reply("Self-update stage ke liye studied source app nahi mila.")
+            return
+        }
+        if (changes.isBlank()) {
+            reply("Update me kya change chahiye wo bolo.")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.STAGE_SELF_UPDATE,
+            "Stage learned features from $pkg into next Anamika update"
+        ) {
+            runGit {
+                val safeName = pkg.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val featureMapPath = "study/$safeName-FEATURE_MAP.txt"
+                workspaceFiles.writeText(currentWorkspace, featureMapPath, appStudy.report(pkg))
+                val staged = selfUpdateStager.stage(
+                    workspace = currentWorkspace,
+                    sourcePackage = pkg,
+                    featureMapPath = featureMapPath,
+                    requestedChanges = changes
+                )
+                "Self-update staged: ${staged.stagedPath}. Code install nahi hua; tests/build/owner approval ke baad update banega."
+            }
+        }
+    }
+
+    private fun showFeatureControlDialog() {
+        val items = FeatureId.entries.toTypedArray()
+        val labels = items.map { it.key }.toTypedArray()
+        val checked = BooleanArray(items.size) { index ->
+            features.isEnabled(items[index])
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Owner Feature Control")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Apply") { _, _ ->
+                requestOwnerApproval(
+                    OwnerAction.CHANGE_FEATURE_POLICY,
+                    "Apply Anamika feature switches"
+                ) {
+                    items.forEachIndexed { index, feature ->
+                        features.setEnabled(feature, checked[index])
+                    }
+                    status.text = "Owner feature policy updated."
+                }
+            }
+            .show()
     }
 
     private fun startAppStudy() {
@@ -530,6 +745,10 @@ class MainActivity : Activity() {
     }
 
     private fun withInternet(action: () -> Unit) {
+        if (!features.isEnabled(FeatureId.INTERNET)) {
+            reply("Internet feature owner policy se OFF hai.")
+            return
+        }
         if (!internetPolicy.isEnabled()) {
             reply("Internet owner policy se OFF hai. Local kaam available hai.")
             return
