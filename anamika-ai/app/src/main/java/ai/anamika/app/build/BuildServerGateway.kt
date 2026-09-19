@@ -22,42 +22,6 @@ class BuildServerGateway(
     private val context: Context,
     private val settings: BuildServerSettings
 ) {
-    fun agentBuild(goal: String, callback: (Result<BuildJob>) -> Unit) {
-        thread {
-            callback(runCatching {
-                val base = settings.baseUrl() ?: error("Build server configure nahi hai.")
-                val connection = (URL("$base/v1/agent-builds").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 20_000
-                    readTimeout = 120_000
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Accept", "application/json")
-                }
-
-                val payload = JSONObject().put("goal", goal).toString()
-                connection.outputStream.use {
-                    it.write(payload.toByteArray(Charsets.UTF_8))
-                }
-
-                val response = readResponse(connection)
-                if (connection.responseCode !in 200..299) {
-                    error("Server error ${connection.responseCode}: $response")
-                }
-
-                val json = JSONObject(response)
-                val job = BuildJob(
-                    id = json.getString("id"),
-                    status = json.optString("status", "queued"),
-                    message = json.optString("message").ifBlank { null },
-                    artifactReady = json.optBoolean("artifact_ready", false)
-                )
-                settings.setLastJobId(job.id)
-                job
-            })
-        }
-    }
-
     fun submit(projectZip: File, callback: (Result<BuildJob>) -> Unit) {
         thread {
             callback(runCatching {
