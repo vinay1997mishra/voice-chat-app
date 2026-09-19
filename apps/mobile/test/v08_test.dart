@@ -1457,4 +1457,150 @@ void main() {
     expect(seatLabel.data, isNot('Aisha'));
   });
 
+
+  testWidgets('seats never auto lock mute or unmute without explicit action',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Manual Seat State Room',
+      'MANUAL-SEAT-1',
+      '🎧',
+      false,
+      ownedByMe: true,
+      seatCount: 30,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(room.savedLockedSeats, isEmpty);
+    expect(room.savedMutedSeats, isEmpty);
+
+    for (final seat in <int>[2, 8, 14, 24]) {
+      expect(
+        find.descendant(
+          of: find.byKey(Key('room-seat-' + seat.toString() + '-v08')),
+          matching: find.byIcon(Icons.lock_rounded),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(Key('room-seat-' + seat.toString() + '-v08')),
+          matching: find.byIcon(Icons.mic_off_rounded),
+        ),
+        findsNothing,
+      );
+    }
+
+    await tester.tap(find.byKey(const Key('room-seat-2-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('seat-mute-action-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.savedMutedSeats, contains(2));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-2-v08')),
+        matching: find.byIcon(Icons.mic_off_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(room.savedMutedSeats, contains(2));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-2-v08')),
+        matching: find.byIcon(Icons.mic_off_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('room-seat-2-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('seat-mute-action-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.savedMutedSeats, isNot(contains(2)));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-2-v08')),
+        matching: find.byIcon(Icons.mic_off_rounded),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Unlock All clears saved locks so reopen does not relock seats',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Unlock Persistence Room',
+      'UNLOCK-SEAT-1',
+      '👑',
+      false,
+      ownedByMe: true,
+      seatCount: 30,
+    )..savedLockedSeats.add(8);
+
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-8-v08')),
+        matching: find.byIcon(Icons.lock_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    final ownerTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('Owner'),
+    );
+    await tester.tap(ownerTool);
+    await tester.pumpAndSettle();
+
+    final unlockAll = find.byKey(const Key('owner-unlock-seats-v08'));
+    await tester.scrollUntilVisible(
+      unlockAll,
+      350,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(unlockAll);
+    await tester.pumpAndSettle();
+
+    expect(room.savedLockedSeats, isEmpty);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-8-v08')),
+        matching: find.byIcon(Icons.lock_rounded),
+      ),
+      findsNothing,
+    );
+  });
+
 }
