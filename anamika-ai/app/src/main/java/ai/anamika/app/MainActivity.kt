@@ -15,7 +15,13 @@ import android.widget.TextView
 import ai.anamika.app.ai.BackendAiGateway
 import ai.anamika.app.core.Command
 import ai.anamika.app.core.CommandRouter
+import ai.anamika.app.git.LocalGitEngine
+import ai.anamika.app.github.BackendGitHubGateway
+import ai.anamika.app.github.RemoteActionQueue
+import ai.anamika.app.github.RemoteResult
+import ai.anamika.app.security.OwnerAction
 import ai.anamika.app.security.OwnerPermissionGate
+import ai.anamika.app.security.OwnerPermissionPolicy
 import ai.anamika.app.storage.MemoryStore
 import ai.anamika.app.update.AnamikaRelease
 import ai.anamika.app.update.GitHubReleaseChecker
@@ -30,12 +36,21 @@ class MainActivity : Activity() {
 
     private lateinit var voice: VoiceAssistant
     private lateinit var memory: MemoryStore
+    private lateinit var localGit: LocalGitEngine
+    private lateinit var remoteQueue: RemoteActionQueue
+    private lateinit var githubGateway: BackendGitHubGateway
     private lateinit var status: TextView
-    private var releasePendingAuthorization: AnamikaRelease? = null
+
+    private var currentWorkspace = "anamika"
+    private var pendingOwnerAction: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         memory = MemoryStore(this)
+        localGit = LocalGitEngine(this)
+        remoteQueue = RemoteActionQueue(this)
+        githubGateway = BackendGitHubGateway(remoteQueue)
+
         voice = VoiceAssistant(
             activity = this,
             onText = { runOnUiThread { handleInput(it) } },
@@ -56,7 +71,7 @@ class MainActivity : Activity() {
         }
 
         status = TextView(this).apply {
-            text = "Ready. Hindi or English me command bol sakte ho."
+            text = "Ready. Hindi/English voice commands aur local Git commands available hain."
             textSize = 17f
             setPadding(0, 24, 0, 24)
         }
@@ -79,11 +94,17 @@ class MainActivity : Activity() {
             }
         }
 
+        val queue = Button(this).apply {
+            text = "Offline GitHub Queue"
+            setOnClickListener { showRemoteQueue() }
+        }
+
         root.addView(title)
         root.addView(status)
         root.addView(speak)
         root.addView(updates)
         root.addView(memories)
+        root.addView(queue)
 
         return ScrollView(this).apply { addView(root) }
     }
@@ -103,19 +124,172 @@ class MainActivity : Activity() {
                 memory.remember(command.text)
                 reply("Yaad rakh liya.")
             }
+
             is Command.GenerateCode -> ai.generateCode(command.request) {
                 runOnUiThread { reply(it.getOrElse { e -> e.message ?: "AI error" }) }
             }
+
             is Command.LearnFromLink -> ai.learnFromLink(command.url) {
                 runOnUiThread { reply(it.getOrElse { e -> e.message ?: "Link analysis error" }) }
             }
+
             is Command.CheckUpdate -> checkForUpdate(false)
             is Command.RequestUpgrade -> checkForUpdate(true)
+
             is Command.Search -> {
                 val query = URLEncoder.encode(command.query, "UTF-8")
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query")))
             }
-            is Command.Unknown -> reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+
+            is Command.GitInit -> requestOwnerApproval(
+                OwnerAction.WRITE_LOCAL_REPO,
+                "Initialize local workspace '${command.workspace}'"
+            ) {
+                runGit {
+                    currentWorkspace = command.workspace.ifBlank { "anamika" }
+                    "Local Git workspace ready: ${localGit.init(currentWorkspace)}"
+                }
+            }
+
+            Command.GitStatus -> runGit { localGit.status(currentWorkspace) }
+
+            is Command.GitBranch -> requestOwnerApproval(
+                OwnerAction.CREATE_BRANCH,
+                "Create branch '${command.name}' in $currentWorkspace"
+            ) {
+                runGit { localGit.createBranch(currentWorkspace, command.name) }
+            }
+
+            is Command.GitCheckout -> requestOwnerApproval(
+                OwnerAction.WRITE_LOCAL_REPO,
+                "Switch to branch '${command.name}'"
+            ) {
+                runGit { localGit.checkout(currentWorkspace, command.name) }
+            }
+
+            is Command.GitCommit -> requestOwnerApproval(
+                OwnerAction.COMMIT_CODE,
+                "Commit local code: ${command.message}"
+            ) {
+                runGit {
+                    val sha = localGit.commitAll(currentWorkspace, command.message)
+                    "Committed: $sha"
+                }
+            }
+
+            Command.GitLog -> runGit { localGit.log(currentWorkspace) }
+            Command.GitDiff -> runGit { localGit.diff(currentWorkspace) }
+            Command.GitBranches -> runGit { localGit.listBranches(currentWorkspace).joinToString("\n") }
+
+            is Command.GitTag -> requestOwnerApproval(
+                OwnerAction.CREATE_TAG,
+                "Create tag '${command.name}'"
+            ) {
+                runGit { "Tag created: ${localGit.tag(currentWorkspace, command.name)}" }
+            }
+
+            is Command.GitMerge -> requestOwnerApproval(
+                OwnerAction.MERGE_BRANCH,
+                "Merge branch '${command.name}' into current branch"
+            ) {
+                runGit { localGit.merge(currentWorkspace, command.name) }
+            }
+
+            Command.GitPush -> requestOwnerApproval(
+                OwnerAction.REMOTE_PUSH,
+                "Push current branch to GitHub"
+            ) {
+                runGit {
+                    val current = localGit.currentBranch(currentWorkspace)
+                    githubGateway.push(currentWorkspace, current) { remote ->
+                        runOnUiThread { reply(remoteMessage(remote)) }
+                    }
+                    "Remote action submitted."
+                }
+            }
+
+            Command.GitPull -> requestOwnerApproval(
+                OwnerAction.REMOTE_PULL,
+                "Pull current branch from GitHub"
+            ) {
+                runGit {
+                    val current = localGit.currentBranch(currentWorkspace)
+                    githubGateway.pull(currentWorkspace, current) { remote ->
+                        runOnUiThread { reply(remoteMessage(remote)) }
+                    }
+                    "Remote action submitted."
+                }
+            }
+
+            Command.GitQueue -> showRemoteQueue()
+
+            is Command.Unknown ->
+                reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun remoteMessage(result: RemoteResult): String = when (result) {
+        is RemoteResult.Success -> result.message
+        is RemoteResult.Queued -> result.message
+        is RemoteResult.Failure -> result.message
+    }
+
+    private fun showRemoteQueue() {
+        val queued = remoteQueue.all()
+        val text = if (queued.isEmpty()) {
+            "Offline remote queue empty hai."
+        } else {
+            queued.joinToString("\n") { "• ${it.type}: ${it.payload}" }
+        }
+        reply(text)
+    }
+
+    private fun runGit(block: () -> String) {
+        Thread {
+            val result = runCatching(block)
+            runOnUiThread {
+                reply(result.getOrElse { "Git error: ${it.message}" })
+            }
+        }.start()
+    }
+
+    private fun requestOwnerApproval(
+        action: OwnerAction,
+        summary: String,
+        execute: () -> Unit
+    ) {
+        if (!OwnerPermissionPolicy.requiresDeviceCredential(action)) {
+            execute()
+            return
+        }
+
+        val startCredential: () -> Unit = {
+            pendingOwnerAction = execute
+            val started = permissionGate.request(this, action, summary)
+            if (!started) {
+                pendingOwnerAction = null
+                reply("Secure device credential configure nahi hai; protected action blocked hai.")
+            }
+        }
+
+        val showPrimary: () -> Unit = {
+            AlertDialog.Builder(this)
+                .setTitle("Owner approval required")
+                .setMessage("Action: ${action.name}\nRisk: ${action.risk}\n\n$summary")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Approve") { _, _ -> startCredential() }
+                .show()
+        }
+
+        if (OwnerPermissionPolicy.requiresSecondConfirmation(action)) {
+            AlertDialog.Builder(this)
+                .setTitle("High-risk action")
+                .setMessage("Ye action repository/security ko permanently affect kar sakta hai. Continue?")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Continue") { _, _ -> showPrimary() }
+                .show()
+        } else {
+            showPrimary()
         }
     }
 
@@ -141,22 +315,19 @@ class MainActivity : Activity() {
 
     private fun showUpgradeApproval(release: AnamikaRelease) {
         AlertDialog.Builder(this)
-            .setTitle("Owner approval required")
+            .setTitle("Update details")
             .setMessage(
                 "Update: ${release.name}\n\n" +
                     (release.notes.ifBlank { "No release notes were provided." }) +
-                    "\n\nAnamika will not install anything automatically."
+                    "\n\nInstallation will never happen silently."
             )
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Authorize") { _, _ ->
-                releasePendingAuthorization = release
-                val started = permissionGate.requestDeviceCredential(
-                    this,
-                    "Approve opening the verified GitHub release page for this Anamika update."
-                )
-                if (!started) {
-                    releasePendingAuthorization = null
-                    reply("Secure device credential is not configured.")
+            .setPositiveButton("Request owner approval") { _, _ ->
+                requestOwnerApproval(
+                    OwnerAction.SELF_UPDATE,
+                    "Open verified GitHub release page for ${release.name}"
+                ) {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
                 }
             }
             .show()
@@ -165,14 +336,16 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android API but kept for minSdk compatibility in this bootstrap.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
         if (requestCode == OwnerPermissionGate.REQUEST_OWNER_AUTH) {
-            val release = releasePendingAuthorization
-            releasePendingAuthorization = null
-            if (resultCode == RESULT_OK && release != null) {
-                reply("Owner approval confirmed. GitHub release page open ho rahi hai.")
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
+            val action = pendingOwnerAction
+            pendingOwnerAction = null
+
+            if (resultCode == RESULT_OK && action != null) {
+                reply("Owner verification successful.")
+                action()
             } else {
-                reply("Upgrade authorization cancelled.")
+                reply("Owner authorization cancelled.")
             }
         }
     }
