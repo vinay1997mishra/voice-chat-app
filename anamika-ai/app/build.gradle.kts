@@ -20,6 +20,7 @@ android {
         buildConfigField("String", "ANAMIKA_OWNER_POLICY_PUBLIC_KEY", "\"\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
         buildConfigField("String", "ANAMIKA_PUBLIC_AUTH_URL", "\"https://example.invalid/auth/google\"")
+        buildConfigField("String", "ANAMIKA_POLICY_BASE_URL", "\"https://example.invalid\"")
     }
 
     buildFeatures {
