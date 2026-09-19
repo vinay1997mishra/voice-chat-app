@@ -21,6 +21,9 @@ public final class AppPluginEngine {
         if(context==null || packageName==null || packageName.trim().isEmpty()) return "App package missing.";
         Intent launch=context.getPackageManager().getLaunchIntentForPackage(packageName);
         if(launch==null) return "App launch activity not found.";
+        // Opening an app alone must never replay a stale automation command.
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+                .remove("pending_command").remove("pending_token").remove("one_shot_owner_command").apply();
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(launch);
         return "App opened.";
