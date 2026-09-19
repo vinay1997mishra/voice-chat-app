@@ -1,0 +1,31 @@
+name: Anamika Policy Server
+
+on:
+  push:
+    branches:
+      - anamika-ai-bootstrap
+    paths:
+      - 'anamika-policy-server/**'
+      - '.github/workflows/anamika-policy-server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: anamika-policy-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile service
+        run: python -m py_compile app.py
+      - name: Import service
+        run: python -c "import app; assert app.APP.title == 'Anamika Owner Policy Service'"
