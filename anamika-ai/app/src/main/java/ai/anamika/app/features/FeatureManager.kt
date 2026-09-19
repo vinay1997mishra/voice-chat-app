@@ -93,11 +93,7 @@ class FeatureManager(
 
     companion object {
         private const val KEY_MASTER = "owner.master"
-        private val DEFAULT_PUBLIC_FEATURES = setOf(
-            FeatureId.CHAT,
-            FeatureId.VOICE_INPUT,
-            FeatureId.VOICE_REPLY
-        )
+        private val DEFAULT_PUBLIC_FEATURES = emptySet<FeatureId>()
 
         private val PUBLIC_CAPABLE_FEATURES = setOf(
             FeatureId.CHAT,
