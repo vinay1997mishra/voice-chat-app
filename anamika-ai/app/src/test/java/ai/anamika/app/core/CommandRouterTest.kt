@@ -43,4 +43,13 @@ class CommandRouterTest {
         assertTrue(router.parse("file write notes.txt :: hello") is Command.FileWrite)
         assertTrue(router.parse("file delete notes.txt") is Command.FileDelete)
     }
+
+    @Test
+    fun buildServerCommandsAreDetected() {
+        assertTrue(router.parse("server set https://build.example.com") is Command.ServerSet)
+        assertTrue(router.parse("server show") is Command.ServerShow)
+        assertTrue(router.parse("build apk") is Command.BuildApk)
+        assertTrue(router.parse("build status") is Command.BuildStatus)
+        assertTrue(router.parse("build download") is Command.BuildDownload)
+    }
 }
