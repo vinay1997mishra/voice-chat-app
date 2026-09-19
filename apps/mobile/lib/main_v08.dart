@@ -1215,6 +1215,7 @@ class _RoomV07State extends State<RoomV07> {
   late List<String?> seats;
   final lockedSeats = <int>{};
   final mutedSeats = <int>{};
+  late final Set<String> audienceMembers;
   final admins = <String>{'Admin'};
   final blocked = <String>{};
   final List<String> chat = ['System: Welcome to the room', 'Aisha: Hello everyone 👋'];
@@ -1240,18 +1241,33 @@ class _RoomV07State extends State<RoomV07> {
     super.initState();
     inviteMode = widget.room.inviteMode;
     seats = List<String?>.filled(widget.room.seatCount, null);
+    audienceMembers = widget.room.audienceMembers;
+    lockedSeats.addAll(widget.room.savedLockedSeats);
     if (seats.isNotEmpty) {
       seats[0] = 'Owner';
       if (widget.room.ownedByMe) mySeat = 0;
     }
-    if (seats.length > 1) seats[1] = 'Admin';
-    if (seats.length > 2) {
+    if (seats.length > 1 &&
+        !lockedSeats.contains(1) &&
+        !audienceMembers.contains('Admin')) {
+      seats[1] = 'Admin';
+    }
+    if (seats.length > 2 &&
+        !lockedSeats.contains(2) &&
+        !audienceMembers.contains('Aisha')) {
       seats[2] = 'Aisha';
       mutedSeats.add(2);
     }
-    if (seats.length > 6) seats[6] = 'Sam';
+    if (seats.length > 6 &&
+        !lockedSeats.contains(6) &&
+        !audienceMembers.contains('Sam')) {
+      seats[6] = 'Sam';
+    }
     for (final i in [8, 14, 24]) {
-      if (i < seats.length) lockedSeats.add(i);
+      if (i < seats.length) {
+        lockedSeats.add(i);
+        widget.room.savedLockedSeats.add(i);
+      }
     }
   }
 
@@ -1343,6 +1359,7 @@ class _RoomV07State extends State<RoomV07> {
                       const SizedBox(height: 2),
                       Text(
                         seats[i] ?? 'Seat ${i + 1}',
+                        key: Key('seat-label-$i-v08'),
                         style: const TextStyle(fontSize: 8),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1350,6 +1367,93 @@ class _RoomV07State extends State<RoomV07> {
                     ]),
                   ),
                 ),
+                if (audienceMembers.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Card(
+                    key: const Key('audience-strip-v08'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Audience',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 62,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                for (final name in audienceMembers)
+                                  Builder(
+                                    builder: (_) {
+                                      final user = name == 'You'
+                                          ? null
+                                          : demoEconomy.byName(name);
+                                      final id = name == 'You'
+                                          ? '10000050'
+                                          : user!.id;
+                                      final avatar = name == 'You'
+                                          ? '🙂'
+                                          : user!.avatar;
+                                      return Container(
+                                        key: Key('audience-id-' + id + '-v08'),
+                                        margin: const EdgeInsets.only(right: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black26,
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: Colors.white24,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 17,
+                                              child: Text(avatar),
+                                            ),
+                                            const SizedBox(width: 7),
+                                            Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'ID ' + id,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.white70,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Card(
                   child: Padding(
@@ -1460,12 +1564,35 @@ class _RoomV07State extends State<RoomV07> {
                 );
               },
             ),
-          if (widget.room.ownedByMe)
+          if (widget.room.ownedByMe && seats[i] != 'Owner')
             ListTile(
+              key: const Key('seat-lock-action-v08'),
               title: Text(isLocked ? 'Unlock Seat' : 'Lock Seat'),
               leading: Icon(isLocked ? Icons.lock_open : Icons.lock),
               onTap: () {
-                setState(() => isLocked ? lockedSeats.remove(i) : lockedSeats.add(i));
+                setState(() {
+                  if (isLocked) {
+                    lockedSeats.remove(i);
+                    widget.room.savedLockedSeats.remove(i);
+                  } else {
+                    final occupant = seats[i];
+                    if (occupant != null) {
+                      audienceMembers.add(occupant);
+                      if (occupant == 'You') mySeat = null;
+                      seats[i] = null;
+                      mutedSeats.remove(i);
+                      chat.add(
+                        'System: ' +
+                            occupant +
+                            ' moved to Audience because Seat ' +
+                            (i + 1).toString() +
+                            ' was locked.',
+                      );
+                    }
+                    lockedSeats.add(i);
+                    widget.room.savedLockedSeats.add(i);
+                  }
+                });
                 Navigator.pop(sheetContext);
               },
             ),
@@ -1487,6 +1614,7 @@ class _RoomV07State extends State<RoomV07> {
                   if (mySeat != null) seats[mySeat!] = null;
                   seats[i] = 'You';
                   mySeat = i;
+                  audienceMembers.remove('You');
                 });
                 Navigator.pop(sheetContext);
               },
@@ -1497,7 +1625,9 @@ class _RoomV07State extends State<RoomV07> {
               leading: const Icon(Icons.keyboard_arrow_down_rounded),
               onTap: () {
                 setState(() {
-                  if (seats[i] == 'You') mySeat = null;
+                  final occupant = seats[i];
+                  if (occupant == 'You') mySeat = null;
+                  if (occupant != null) audienceMembers.add(occupant);
                   seats[i] = null;
                 });
                 Navigator.pop(sheetContext);
@@ -3194,6 +3324,8 @@ class RoomData {
   String? dpPath;
   bool ownedByMe;
   bool closed;
+  final Set<int> savedLockedSeats = <int>{};
+  final Set<String> audienceMembers = <String>{};
 }
 
 class _BottomTool extends StatelessWidget {
