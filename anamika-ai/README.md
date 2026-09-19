@@ -1,70 +1,65 @@
 # Anamika AI Android Bootstrap
 
-Anamika now has two development layers:
+Anamika uses a **local-first coding architecture**.
 
-1. **Offline local development layer** — works without GitHub.
-2. **GitHub remote layer** — used for GitHub-only operations when an authenticated connection is available.
+## Core rule
 
-## Offline features
-- Local Git repository initialization
-- Status
-- Branch create/list/switch
-- Commit
-- Log/history
-- Diff
-- Tag creation
-- Merge
-- Local workspace storage inside the app
-- Offline queue for remote GitHub actions
+**Coding happens on the phone. The external build server is used only after coding is complete and an APK needs to be compiled.**
 
-Voice/text command examples:
-- `git init anamika`
-- `git status`
-- `git branch feature-x`
-- `git checkout feature-x`
-- `git commit add feature x`
-- `git log`
-- `git diff`
-- `git tag v1`
-- `git merge feature-x`
-- `git push`
-- `git pull`
-- `github queue`
+## Phone-side capabilities
+
+- Local workspace and source-file storage
+- Create/read/update/delete/list project files
+- Local Git repository
+- Status, branch, checkout, commit, log, diff, tag and merge
+- Hindi/English voice commands
+- Owner permission system
+- Local Android project generation
+- Phone-side AI/coding hook for future on-device or direct AI provider integration
+- Offline queue for GitHub remote actions
+
+Example:
+
+`app banao notes app`
+
+This generates the Android project in the phone's local workspace. It does **not** contact the APK build server.
+
+## APK build flow
+
+When source code is ready:
+
+`build apk`
+
+Then Anamika:
+1. packages the completed local workspace,
+2. asks for owner authorization,
+3. uploads only the completed project to the configured APK build server,
+4. receives build status,
+5. downloads the APK,
+6. can open Android's installer after owner approval.
+
+## Build server responsibility
+
+The build server only:
+- accepts completed project ZIPs,
+- runs unit tests,
+- runs Android lint,
+- runs Gradle APK compilation,
+- returns APK/build logs.
+
+It does not generate or edit code.
 
 ## Owner Permission System
-Risk levels:
-- NORMAL: read-only operations; no credential prompt
-- PROTECTED: local writes, commits, branch changes, pull
-- CRITICAL: merges, tags, push, PR creation, releases, workflows, self-update
-- ULTRA_CRITICAL: PR merge, repository/security setting changes, secrets, repository deletion
 
-Protected actions require Android device-owner authentication. Ultra-critical actions require an additional confirmation before device authentication.
+- NORMAL — read-only operations
+- PROTECTED — local file/repo writes
+- CRITICAL — merges, push, APK build/download/install, releases, self-update
+- ULTRA_CRITICAL — repository/security settings, secrets, repository deletion, PR merge
 
-## GitHub capability catalog
-The app models repository/file operations, commits, branches, tags, push/pull, pull requests, issues, releases, workflow runs, logs, artifacts, commit status, security scan status, collaborators, settings and secrets.
+## Important current limitation
 
-Operations that inherently live on GitHub (for example PRs, GitHub Issues, GitHub Actions and GitHub Releases) cannot exist while GitHub itself is unavailable. When remote connectivity/authentication is not configured, Anamika preserves the requested action in an offline queue instead of silently failing.
+The local project generator can create a valid Android project structure on the phone. A general-purpose AI coding model capable of implementing arbitrary complex apps still needs to be connected as either:
+- an on-device model, or
+- a phone-direct AI provider connection.
 
-## Remote authentication rule
-Do not put a personal access token, GitHub password, signing key or long-lived secret inside the APK. The production remote layer should use a GitHub App/OAuth flow and short-lived credentials from a protected backend.
-
-## Existing assistant features
-- Hindi/English speech input
-- Hindi/English text-to-speech replies
-- Local memory
-- Search command
-- GitHub release checker
-- Owner-approved self-update handoff
-- AI code-generation backend interface
-- Link/video-learning backend interface
-- GitHub Actions APK build
-- Unit tests and lint
-- CodeQL security scanning
-- Dependabot dependency updates
-
-## Still requiring external services
-- AI model backend for real code generation
-- Video/link fetch, transcription and analysis backend
-- True speaker verification model for owner voice identity
-- Authenticated GitHub App/OAuth backend for live remote GitHub actions
-- Production APK signing
+That AI connection remains separate from the APK build server.
