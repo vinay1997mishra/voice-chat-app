@@ -58,3 +58,36 @@ Android builds need:
 - `ANAMIKA_OWNER_POLICY_PUBLIC_KEY`
 
 The APK build server remains compile-only and separate from this service.
+
+
+## ID login and owner recovery
+
+The public login screen can offer both:
+- Sign in with Google
+- ID + password
+
+A normal ID account receives the USER role.
+
+The special owner ID is configured only on the policy server:
+- `ANAMIKA_OWNER_ID`
+- `ANAMIKA_OWNER_PASSWORD_HASH`
+
+Generate the password hash with:
+
+```bash
+python make_password_hash.py
+```
+
+Store the printed hash as `ANAMIKA_OWNER_PASSWORD_HASH`. Never put the owner ID password or its plaintext value in the Android APK, repository, or client configuration.
+
+A successful special ID + password login receives an OWNER session directly. No CAPTCHA/OTP/second-factor is added by Anamika after that login unless the owner later chooses to add one.
+
+Normal ID accounts are stored server-side with scrypt password hashes and can be provisioned through the owner-authenticated ID-user endpoint.
+
+## Recovery priority
+
+Ownership can be recovered on a replacement phone through either:
+1. the same verified Google account (matched by Google `sub`), or
+2. the special owner ID + password.
+
+Both methods resolve to the same hidden OWNER role and Function Control surface.
