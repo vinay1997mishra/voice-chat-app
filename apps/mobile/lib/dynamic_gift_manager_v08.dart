@@ -54,7 +54,7 @@ class _DynamicGiftManagerV08State extends State<DynamicGiftManagerV08> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 8),
-                  const Text('• Video maximum 5 seconds'),
+                  const Text('• Video maximum 8 seconds'),
                   const Text('• File maximum 12 MB'),
                   const Text('• Expired gifts automatically hide from users'),
                   if (!widget.isAppOwner) ...[
@@ -256,7 +256,7 @@ class _DynamicGiftManagerV08State extends State<DynamicGiftManagerV08> {
                   icon: const Icon(Icons.video_library_rounded),
                   label: Text(
                     selectedVideo == null
-                        ? 'Select Video (max 5 sec / 12 MB)'
+                        ? 'Select Video (max 8 sec / 12 MB)'
                         : 'Selected: ' +
                             selectedVideo!.durationLabel +
                             ' • ' +
@@ -265,7 +265,7 @@ class _DynamicGiftManagerV08State extends State<DynamicGiftManagerV08> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Videos longer than 5 seconds or larger than 12 MB are rejected.',
+                  'Videos longer than 8 seconds or larger than 12 MB are rejected.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12),
                 ),
@@ -344,7 +344,7 @@ class _DynamicGiftManagerV08State extends State<DynamicGiftManagerV08> {
           duration > dynamicGiftMaxVideoDurationV08) {
         if (feedbackContext.mounted) {
           ScaffoldMessenger.of(feedbackContext).showSnackBar(
-            const SnackBar(content: Text('Video must be 5 seconds or shorter')),
+            const SnackBar(content: Text('Video must be 8 seconds or shorter')),
           );
         }
         return null;
