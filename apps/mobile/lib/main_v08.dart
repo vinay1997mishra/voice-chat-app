@@ -1164,7 +1164,9 @@ class _V07HomeState extends State<V07Home> {
               for (final room in rooms)
                 Card(
                   child: ListTile(
-                    key: room.id == '1524843' ? const Key('open-v07-room') : null,
+                    key: room.name == 'India Official Room'
+                        ? const Key('open-v07-room')
+                        : null,
                     leading: room.dpPath == null ? CircleAvatar(child: Text(room.dp)) : CircleAvatar(backgroundImage: FileImage(File(room.dpPath!))),
                     title: Text(room.name),
                     subtitle: Text('${room.category} • ${room.seatCount} seats • ID ${room.id}${room.locked ? ' • Locked' : ''}${room.ownedByMe ? ' • My Room' : ''}'),
