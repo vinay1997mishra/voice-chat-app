@@ -271,7 +271,10 @@ void main() {
     await tester.tap(find.text('Password Lock'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('create-room-pin-v08')), '4321');
-    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    final createSubmit = find.byKey(const Key('create-room-submit-v06'));
+    await tester.ensureVisible(createSubmit);
+    await tester.pumpAndSettle();
+    await tester.tap(createSubmit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('mine-my-room-card-v08')), findsOneWidget);
@@ -410,7 +413,10 @@ void main() {
 
     await tester.tap(find.byKey(const Key('create-room-v06')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    final createSubmit = find.byKey(const Key('create-room-submit-v06'));
+    await tester.ensureVisible(createSubmit);
+    await tester.pumpAndSettle();
+    await tester.tap(createSubmit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('mine-my-room-card-v08')), findsOneWidget);
@@ -978,7 +984,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('create-room-submit-v06')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    final createSubmit = find.byKey(const Key('create-room-submit-v06'));
+    await tester.ensureVisible(createSubmit);
+    await tester.pumpAndSettle();
+    await tester.tap(createSubmit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('create-room-v06')), findsNothing);
@@ -1011,7 +1020,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('v07-four-box')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Owner'));
+    final ownerTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('Owner'),
+    );
+    expect(ownerTool, findsOneWidget);
+    await tester.tap(ownerTool);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('owner-panel-v08')), findsOneWidget);
@@ -1029,7 +1043,10 @@ void main() {
 
     await tester.tap(find.byKey(const Key('create-room-v06')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    final createSubmit = find.byKey(const Key('create-room-submit-v06'));
+    await tester.ensureVisible(createSubmit);
+    await tester.pumpAndSettle();
+    await tester.tap(createSubmit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
@@ -1038,7 +1055,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(RoomV07), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
@@ -1073,7 +1090,10 @@ void main() {
       find.byKey(const Key('create-room-description-v08')),
       'Music, friends and daily voice chat',
     );
-    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    final createSubmit = find.byKey(const Key('create-room-submit-v06'));
+    await tester.ensureVisible(createSubmit);
+    await tester.pumpAndSettle();
+    await tester.tap(createSubmit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('mine-create-room-card-v08')), findsNothing);
@@ -1097,7 +1117,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(RoomV07), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('home-mine-tab-v08')));
