@@ -27,6 +27,12 @@ sealed class Command {
     data class FileWrite(val path: String, val content: String) : Command()
     data class FileDelete(val path: String) : Command()
 
+    data class ServerSet(val url: String) : Command()
+    data object ServerShow : Command()
+    data object BuildApk : Command()
+    data object BuildStatus : Command()
+    data object BuildDownload : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -36,6 +42,12 @@ class CommandRouter {
         val lower = text.lowercase()
 
         return when {
+            lower.startsWith("server set ") -> Command.ServerSet(text.drop(11).trim())
+            lower == "server show" -> Command.ServerShow
+            lower == "build apk" || lower == "apk build" || lower == "apk banao" -> Command.BuildApk
+            lower == "build status" -> Command.BuildStatus
+            lower == "build download" || lower == "apk download" -> Command.BuildDownload
+
             lower == "file list" -> Command.FileList
             lower.startsWith("file read ") -> Command.FileRead(text.drop(10).trim())
             lower.startsWith("file delete ") -> Command.FileDelete(text.drop(12).trim())
