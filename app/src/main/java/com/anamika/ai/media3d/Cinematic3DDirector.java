@@ -30,8 +30,10 @@ public final class Cinematic3DDirector {
         fire = fire && !contains(q, "no fire", "without fire", "ice breath");
         boolean fog = !contains(q, "clear sky", "no fog");
         boolean shake = !contains(q, "no shake", "stable camera");
-        float intensity = contains(q, "extreme", "epic", "movie", "cinematic", "premium", "4d") ? 1.35f : 1.0f;
-        int duration = contains(q, "long", "20 second", "20s") ? 20 : 12;
+        boolean movieMode=contains(q,"movie","cinematic","film","epic","premium","4d","trailer");
+        float intensity = contains(q,"extreme","blockbuster","trailer") ? 1.75f : (movieMode ? 1.48f : 1.0f);
+        int duration = contains(q,"long","30 second","30s") ? 30 :
+                (contains(q,"20 second","20s") ? 20 : (movieMode ? 18 : 12));
         return new CinematicSceneConfig(preset, subject, fire, fog, shake, intensity, duration, brief);
     }
 
