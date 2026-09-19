@@ -1,6 +1,5 @@
 package ai.anamika.app.distribution
 
-import ai.anamika.app.features.FeatureId
 import android.util.Base64
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -13,7 +12,7 @@ import kotlin.concurrent.thread
 
 data class PublicEntitlement(
     val subject: String,
-    val features: Map<FeatureId, Boolean>,
+    val features: Map<String, Boolean>,
     val expiresAtEpochMs: Long?,
     val signature: String?
 )
@@ -22,10 +21,6 @@ interface PublicEntitlementProvider {
     fun fetch(subject: String, callback: (Result<PublicEntitlement>) -> Unit)
 }
 
-/**
- * Fetches a per-install entitlement and verifies it with the owner's public key.
- * The corresponding private signing key must remain outside public APKs.
- */
 class SignedOwnerPolicyGateway(
     private val policyUrl: String,
     private val ownerPublicKeyBase64: String
@@ -88,11 +83,9 @@ class SignedOwnerPolicyGateway(
         }
 
         val featureJson = json.getJSONObject("features")
-        val features = linkedMapOf<FeatureId, Boolean>()
-        FeatureId.entries.sortedBy { it.key }.forEach { feature ->
-            if (featureJson.has(feature.key)) {
-                features[feature] = featureJson.getBoolean(feature.key)
-            }
+        val features = linkedMapOf<String, Boolean>()
+        featureJson.keys().asSequence().sorted().forEach { key ->
+            features[key] = featureJson.getBoolean(key)
         }
 
         val signatureBase64 = json.getString("signature")
@@ -113,16 +106,14 @@ class SignedOwnerPolicyGateway(
     private fun canonicalPayload(
         subject: String,
         expires: Long?,
-        features: Map<FeatureId, Boolean>
+        features: Map<String, Boolean>
     ): ByteArray {
         val lines = mutableListOf(
             "subject=$subject",
             "expires=${expires ?: "none"}"
         )
-        FeatureId.entries.sortedBy { it.key }.forEach { feature ->
-            features[feature]?.let { enabled ->
-                lines += "${feature.key}=$enabled"
-            }
+        features.toSortedMap().forEach { (key, enabled) ->
+            lines += "$key=$enabled"
         }
         return lines.joinToString("\n").toByteArray(Charsets.UTF_8)
     }
