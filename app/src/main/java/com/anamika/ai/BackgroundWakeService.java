@@ -8,8 +8,6 @@ import android.os.*;
 import android.provider.Settings;
 import android.speech.*;
 import android.speech.tts.TextToSpeech;
-import androidx.annotation.Nullable;
-
 import com.anamika.ai.plugins.AppAutomationAccessibilityService;
 import com.anamika.ai.plugins.AppPluginEngine;
 import com.anamika.ai.plugins.PluginRegistry;
@@ -274,5 +272,5 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         super.onDestroy();
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent){ return null; }
+    @Override public IBinder onBind(Intent intent){ return null; }
 }
