@@ -35,6 +35,9 @@ jobs:
           cp -a "$SRC/build.gradle" ./
           cp -a "$SRC/settings.gradle" ./
           cp -a "$SRC/gradle.properties" ./
+          mkdir -p .github/workflows
+          cp -a "$SRC/.github/workflows/build-apk.yml" .github/workflows/build-apk.yml
+          test -f .github/workflows/build-apk.yml
           for f in README.md CINEMATIC_ENGINE.md FULL_TOOLCHAIN_STATUS.md MODEL_BUILD.md PLUGIN_SYSTEM.md STANDALONE_ARCHITECTURE.md V7_6_ULTIMATE_FEATURES.md V7_8_2_FINAL_FOCUS.md V7_8_EVERGREEN_FEATURES.md VALIDATION_REPORT.txt; do
             if [ -f "$SRC/$f" ]; then cp -a "$SRC/$f" ./; fi
           done
@@ -87,6 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf app/build .gradle
+          rm -f .github/workflows/build-apk.yml
           rm -rf anamika_build
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
