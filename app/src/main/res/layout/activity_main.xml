@@ -48,6 +48,13 @@
                 android:text="Set PIN" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/forgetOwnerButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="Forget Owner Login / Require PIN Again" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -110,7 +117,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="24×7 Background Wake: after Owner unlock and microphone permission, Anamika keeps a foreground listening service with an ongoing notification. Say “Hello Mika” or “Hello Anamika” without touching Mic. Android/OEM battery controls can still stop background listening; after some reboots you may need to open Anamika once."
+            android:text="Start 24×7 Background Wake once and it stays enabled until YOU turn it OFF. Anamika uses an ongoing foreground-service notification and resumes best-effort after app reopen/reboot. Say “Hello Mika” or “Hello Anamika” without touching Mic. Android/OEM battery controls or Force Stop can still interrupt it."
             android:textSize="13sp" />
 
         <Button
