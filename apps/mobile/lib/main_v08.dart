@@ -2049,12 +2049,14 @@ class _RoomV07State extends State<RoomV07> {
     }
     if (seats.length > 1 &&
         !lockedSeats.contains(1) &&
+        !_isKicked('Admin') &&
         !audienceMembers.contains('Admin') &&
         !pendingSeatRequests.containsValue('Admin')) {
       seats[1] = 'Admin';
     }
     if (seats.length > 2 &&
         !lockedSeats.contains(2) &&
+        !_isKicked('Aisha') &&
         !audienceMembers.contains('Aisha') &&
         !pendingSeatRequests.containsValue('Aisha')) {
       seats[2] = 'Aisha';
@@ -2062,6 +2064,7 @@ class _RoomV07State extends State<RoomV07> {
     }
     if (seats.length > 6 &&
         !lockedSeats.contains(6) &&
+        !_isKicked('Sam') &&
         !audienceMembers.contains('Sam') &&
         !pendingSeatRequests.containsValue('Sam')) {
       seats[6] = 'Sam';
@@ -2085,6 +2088,14 @@ class _RoomV07State extends State<RoomV07> {
       widget.room.ownedByMe ||
       widget.room.currentUserIsAdmin ||
       admins.contains('You');
+
+  bool _isKicked(String user) {
+    final until = widget.room.kickedUntil[user];
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    widget.room.kickedUntil.remove(user);
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2576,15 +2587,38 @@ class _RoomV07State extends State<RoomV07> {
                 Navigator.pop(sheetContext);
               },
             ),
-          if (widget.room.ownedByMe && seats[i] != null && seats[i] != 'Owner' && seats[i] != 'You')
+          if (widget.room.ownedByMe &&
+              seats[i] != null &&
+              seats[i] != 'Owner' &&
+              seats[i] != 'You')
             ListTile(
+              key: const Key('seat-kick-24h-v08'),
               title: const Text('Kick 24h'),
               leading: const Icon(Icons.person_off_rounded),
               onTap: () {
-                setState(() => seats[i] = null);
+                final user = seats[i]!;
+                final until = DateTime.now().add(const Duration(hours: 24));
+                setState(() {
+                  widget.room.kickedUntil[user] = until;
+                  audienceMembers.remove(user);
+                  pendingSeatRequests.removeWhere(
+                    (seat, requester) => requester == user,
+                  );
+                  widget.room.pendingSeatRequests.removeWhere(
+                    (seat, requester) => requester == user,
+                  );
+                  seats[i] = null;
+                  mutedSeats.remove(i);
+                  admins.remove(user);
+                  chat.add(
+                    'System: ' + user + ' was kicked from the room for 24 hours.',
+                  );
+                });
                 Navigator.pop(sheetContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('User kicked for 24h in local demo')),
+                  SnackBar(
+                    content: Text(user + ' kicked for 24 hours'),
+                  ),
                 );
               },
             ),
@@ -4570,6 +4604,7 @@ class RoomData {
   final Set<int> savedLockedSeats = <int>{};
   final Set<String> audienceMembers = <String>{};
   final Map<int, String> pendingSeatRequests = <int, String>{};
+  final Map<String, DateTime> kickedUntil = <String, DateTime>{};
 }
 
 class _BottomTool extends StatelessWidget {
