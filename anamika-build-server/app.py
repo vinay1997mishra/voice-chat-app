@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import shutil
 import subprocess
 import threading
@@ -14,15 +13,13 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
 
-APP = FastAPI(title="Anamika Build Server", version="1.1")
+APP = FastAPI(title="Anamika APK Build Server", version="2.0")
 
 ROOT = Path(os.environ.get("ANAMIKA_BUILD_ROOT", "/tmp/anamika-builds")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
 
 TOKEN = os.environ.get("ANAMIKA_BUILD_TOKEN", "").strip()
-GENERATOR_CMD = os.environ.get("ANAMIKA_GENERATOR_CMD", "").strip()
 TIMEOUT_SECONDS = int(os.environ.get("ANAMIKA_BUILD_TIMEOUT_SECONDS", "1200"))
 MAX_UPLOAD_BYTES = int(
     os.environ.get("ANAMIKA_MAX_UPLOAD_BYTES", str(250 * 1024 * 1024))
@@ -48,10 +45,6 @@ class Job:
         )
         data.pop("artifact_path", None)
         return data
-
-
-class AgentBuildRequest(BaseModel):
-    goal: str = Field(min_length=3, max_length=8000)
 
 
 def require_auth(authorization: Optional[str]) -> None:
@@ -132,8 +125,7 @@ def find_project_root(extracted: Path) -> Path:
 def execute_gradle_build(job_id: str, project: Path, build_type: str) -> None:
     if build_type != "debug":
         raise RuntimeError(
-            "Reference server enables installable debug APK builds only. "
-            "Production release signing must use a protected server-side keystore."
+            "Reference server currently enables installable debug APK builds only."
         )
 
     job_dir = ROOT / job_id
@@ -194,54 +186,11 @@ def run_uploaded_build(job_id: str, build_type: str) -> None:
         fail_job(job_id, exc)
 
 
-def run_agent_build(job_id: str, goal: str) -> None:
-    job_dir = ROOT / job_id
-    generated = job_dir / "generated-project"
-    generated.mkdir(parents=True, exist_ok=True)
-    log_file = job_dir / "build.log"
-
-    try:
-        if not GENERATOR_CMD:
-            raise RuntimeError(
-                "AI coding agent is not configured on this server. "
-                "Set ANAMIKA_GENERATOR_CMD."
-            )
-
-        update_job(job_id, status="running", message="AI coding agent is generating project")
-
-        env = os.environ.copy()
-        env["ANAMIKA_APP_GOAL"] = goal
-        env["ANAMIKA_PROJECT_OUTPUT"] = str(generated)
-        env["ANAMIKA_JOB_ID"] = job_id
-
-        with log_file.open("w", encoding="utf-8", errors="replace") as log:
-            result = subprocess.run(
-                shlex.split(GENERATOR_CMD),
-                cwd=job_dir,
-                env=env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                timeout=TIMEOUT_SECONDS,
-                check=False,
-            )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"AI coding agent failed with exit code {result.returncode}"
-            )
-
-        project = find_project_root(generated)
-        execute_gradle_build(job_id, project, "debug")
-
-    except Exception as exc:
-        fail_job(job_id, exc)
-
-
 @APP.get("/health")
 def health() -> dict:
     return {
         "ok": True,
-        "generator_configured": bool(GENERATOR_CMD),
+        "role": "compile-only",
         "authentication_enabled": bool(TOKEN),
     }
 
@@ -293,30 +242,6 @@ async def create_build(
     threading.Thread(
         target=run_uploaded_build,
         args=(job_id, build_type),
-        daemon=True,
-    ).start()
-
-    return JOBS[job_id].public()
-
-
-@APP.post("/v1/agent-builds")
-def create_agent_build(
-    request: AgentBuildRequest,
-    authorization: Optional[str] = Header(default=None),
-) -> dict:
-    require_auth(authorization)
-
-    if not GENERATOR_CMD:
-        raise HTTPException(
-            status_code=503,
-            detail="AI coding agent is not configured on this server",
-        )
-
-    job_id, _ = new_job("AI app generation queued")
-
-    threading.Thread(
-        target=run_agent_build,
-        args=(job_id, request.goal),
         daemon=True,
     ).start()
 
