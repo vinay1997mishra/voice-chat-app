@@ -16,6 +16,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANAMIKA_API_BASE_URL", "\"https://example.invalid\"")
         buildConfigField("String", "ANAMIKA_DISTRIBUTION_MODE", "\"OWNER\"")
+        buildConfigField("String", "ANAMIKA_OWNER_POLICY_URL", "\"https://example.invalid/entitlements\"")
+        buildConfigField("String", "ANAMIKA_OWNER_POLICY_PUBLIC_KEY", "\"\"")
     }
 
     buildFeatures {
