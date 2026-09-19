@@ -13,6 +13,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import ai.anamika.app.ai.BackendAiGateway
+import ai.anamika.app.build.ApkInstaller
+import ai.anamika.app.build.BuildServerGateway
+import ai.anamika.app.build.BuildServerSettings
+import ai.anamika.app.build.WorkspacePackager
 import ai.anamika.app.core.Command
 import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
@@ -41,6 +45,10 @@ class MainActivity : Activity() {
     private lateinit var remoteQueue: RemoteActionQueue
     private lateinit var githubGateway: BackendGitHubGateway
     private lateinit var workspaceFiles: WorkspaceFileManager
+    private lateinit var buildSettings: BuildServerSettings
+    private lateinit var buildGateway: BuildServerGateway
+    private lateinit var workspacePackager: WorkspacePackager
+    private lateinit var apkInstaller: ApkInstaller
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -53,6 +61,10 @@ class MainActivity : Activity() {
         remoteQueue = RemoteActionQueue(this)
         githubGateway = BackendGitHubGateway(remoteQueue)
         workspaceFiles = WorkspaceFileManager(this)
+        buildSettings = BuildServerSettings(this)
+        buildGateway = BuildServerGateway(this, buildSettings)
+        workspacePackager = WorkspacePackager(this)
+        apkInstaller = ApkInstaller(this)
 
         voice = VoiceAssistant(
             activity = this,
@@ -102,12 +114,18 @@ class MainActivity : Activity() {
             setOnClickListener { showRemoteQueue() }
         }
 
+        val buildApk = Button(this).apply {
+            text = "Build APK on Server"
+            setOnClickListener { handleInput("build apk") }
+        }
+
         root.addView(title)
         root.addView(status)
         root.addView(speak)
         root.addView(updates)
         root.addView(memories)
         root.addView(queue)
+        root.addView(buildApk)
 
         return ScrollView(this).apply { addView(root) }
     }
@@ -258,8 +276,120 @@ class MainActivity : Activity() {
                 }
             }
 
+            is Command.ServerSet -> requestOwnerApproval(
+                OwnerAction.CONFIGURE_BUILD_SERVER,
+                "Configure APK build server"
+            ) {
+                val result = runCatching {
+                    buildSettings.setBaseUrl(command.url)
+                    "Build server saved: " + command.url
+                }
+                reply(result.getOrElse { "Server config error: " + it.message })
+            }
+
+            Command.ServerShow -> {
+                reply(buildSettings.baseUrl() ?: "Build server configure nahi hai.")
+            }
+
+            Command.BuildApk -> requestOwnerApproval(
+                OwnerAction.BUILD_APK,
+                "Upload current workspace to build server and create APK"
+            ) {
+                startServerBuild()
+            }
+
+            Command.BuildStatus -> checkServerBuildStatus()
+
+            Command.BuildDownload -> requestOwnerApproval(
+                OwnerAction.BUILD_APK,
+                "Download completed APK from build server"
+            ) {
+                downloadBuiltApk()
+            }
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun startServerBuild() {
+        reply("Project package karke build server ko bhej rahi hoon.")
+        Thread {
+            val packaged = runCatching { workspacePackager.packageWorkspace(currentWorkspace) }
+            val archive = packaged.getOrElse {
+                runOnUiThread { reply("Project package error: " + it.message) }
+                return@Thread
+            }
+
+            buildGateway.submit(archive) { result ->
+                runOnUiThread {
+                    result.onSuccess { job ->
+                        reply(
+                            "Build submitted. Job: " + job.id +
+                                "\nStatus: " + job.status +
+                                (job.message?.let { "\n" + it } ?: "")
+                        )
+                    }.onFailure {
+                        reply("Build submit failed: " + it.message)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun checkServerBuildStatus() {
+        val jobId = buildSettings.lastJobId()
+        if (jobId.isNullOrBlank()) {
+            reply("Koi build job saved nahi hai.")
+            return
+        }
+
+        buildGateway.status(jobId) { result ->
+            runOnUiThread {
+                result.onSuccess { job ->
+                    reply(
+                        "Build " + job.id +
+                            "\nStatus: " + job.status +
+                            "\nAPK ready: " + job.artifactReady +
+                            (job.message?.let { "\n" + it } ?: "")
+                    )
+                }.onFailure {
+                    reply("Build status failed: " + it.message)
+                }
+            }
+        }
+    }
+
+    private fun downloadBuiltApk() {
+        val jobId = buildSettings.lastJobId()
+        if (jobId.isNullOrBlank()) {
+            reply("Koi build job saved nahi hai.")
+            return
+        }
+
+        reply("APK download ho rahi hai.")
+        buildGateway.downloadArtifact(jobId) { result ->
+            runOnUiThread {
+                result.onSuccess { apk ->
+                    reply("APK ready: " + apk.absolutePath)
+                    AlertDialog.Builder(this)
+                        .setTitle("APK ready")
+                        .setMessage("APK phone me save ho gayi hai. Install screen open karein?")
+                        .setNegativeButton("Later", null)
+                        .setPositiveButton("Install") { _, _ ->
+                            requestOwnerApproval(
+                                OwnerAction.INSTALL_APK,
+                                "Install downloaded APK: " + apk.name
+                            ) {
+                                runCatching { apkInstaller.openInstaller(apk) }
+                                    .onFailure { reply("Installer error: " + it.message) }
+                            }
+                        }
+                        .show()
+                }.onFailure {
+                    reply("APK download failed: " + it.message)
+                }
+            }
         }
     }
 
