@@ -1184,40 +1184,6 @@ class _UnoGameV08State extends State<UnoGameV08> {
                   ),
                 ),
               ),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _card3d(discard.last),
-                          const SizedBox(width: 16),
-                          Column(
-                            children: [
-                              Container(
-                                width: 62,
-                                height: 92,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(colors: [Color(0xFF32104F), Color(0xFF11182D)]),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.white38, width: 2),
-                                  boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 7))],
-                                ),
-                                child: Center(child: Text(deck.length.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
-                              ),
-                              const SizedBox(height: 7),
-                              FilledButton.icon(
-                                key: const Key('uno-draw-v08'),
-                                onPressed: humanCanPlay ? drawCard : null,
-                                icon: const Icon(Icons.add_box_rounded),
-                                label: const Text('Draw'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               const SizedBox(height: 10),
               Text(
                 winner != null ? _name(winner!) + ' won the match' : _name(turn) + ' hand',
