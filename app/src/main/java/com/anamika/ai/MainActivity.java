@@ -46,6 +46,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private boolean wakeAwaitingCommand = false;
     private boolean pendingWakePermission = false;
     private Button wakeListenButton;
+    private Button forgetOwnerButton;
     private boolean unlocked = false;
     private int failedPinAttempts = 0;
     private long pinLockedUntilMs = 0L;
@@ -91,7 +92,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
         wakeListenButton = findViewById(R.id.wakeListenButton);
-        Button forgetOwnerButton = findViewById(R.id.forgetOwnerButton);
+        forgetOwnerButton = findViewById(R.id.forgetOwnerButton);
         result.setMovementMethod(new ScrollingMovementMethod());
 
         boolean ownerPinAlreadySet = OwnerAuth.hasPin(this);
