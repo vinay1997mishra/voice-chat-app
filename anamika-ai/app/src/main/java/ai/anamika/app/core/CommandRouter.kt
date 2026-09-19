@@ -45,6 +45,11 @@ sealed class Command {
     data class AppClick(val text: String) : Command()
     data class AppType(val text: String) : Command()
     data object AppModelCurrent : Command()
+    data object AppStudyStart : Command()
+    data object AppStudyCapture : Command()
+    data object AppStudyStop : Command()
+    data object AppStudyReport : Command()
+    data object AppStudyExport : Command()
 
     data class Unknown(val text: String) : Command()
 }
@@ -66,6 +71,11 @@ class CommandRouter {
             lower.startsWith("app click ") -> Command.AppClick(text.drop(10).trim())
             lower.startsWith("app type ") -> Command.AppType(text.drop(9).trim())
             lower == "app model current" -> Command.AppModelCurrent
+            lower == "app study start" || lower == "scan app start" -> Command.AppStudyStart
+            lower == "app study capture" || lower == "scan current screen" -> Command.AppStudyCapture
+            lower == "app study stop" || lower == "scan app stop" -> Command.AppStudyStop
+            lower == "app study report" || lower == "scan app report" -> Command.AppStudyReport
+            lower == "app study export" || lower == "scan app export" -> Command.AppStudyExport
 
             lower.startsWith("server set ") -> Command.ServerSet(text.drop(11).trim())
             lower == "server show" -> Command.ServerShow
