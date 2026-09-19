@@ -73,4 +73,19 @@ class CommandRouterTest {
         assertTrue(router.parse("app study report") is Command.AppStudyReport)
         assertTrue(router.parse("app study export") is Command.AppStudyExport)
     }
+
+    @Test
+    fun featurePolicyCommandsAreDetected() {
+        assertTrue(router.parse("feature list") is Command.FeatureList)
+        assertTrue(router.parse("feature on app_study") is Command.FeatureOn)
+        assertTrue(router.parse("feature off app_study") is Command.FeatureOff)
+        assertTrue(router.parse("all features off") is Command.FeatureAllOff)
+        assertTrue(router.parse("all features on") is Command.FeatureAllOn)
+        assertTrue(router.parse("voice reply off") is Command.FeatureOff)
+        assertTrue(router.parse("voice input on") is Command.FeatureOn)
+        assertTrue(router.parse("public feature list") is Command.PublicFeatureList)
+        assertTrue(router.parse("public feature off voice_reply") is Command.PublicFeatureOff)
+        assertTrue(router.parse("public id") is Command.PublicInstallationId)
+        assertTrue(router.parse("self update stage add scanned chat flow") is Command.SelfUpdateStage)
+    }
 }
