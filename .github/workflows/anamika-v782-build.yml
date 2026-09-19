@@ -1,0 +1,89 @@
+name: Build Anamika V7.8.2 Final
+
+on:
+  push:
+    branches: [ anamika-v7.8.2-final ]
+    paths:
+      - 'anamika_build/**'
+      - '.github/workflows/anamika-v782-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/38f6bab61d341b23a6c00226f32c0d6148bf9f43/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true
+      MODEL_SHA256: cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
+      MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode Anamika source
+        run: |
+          mkdir -p _anamika
+          base64 -d anamika_build/source.b64 > _anamika/source.zip
+          unzip -q _anamika/source.zip -d _anamika
+          test -d _anamika/AnamikaAI_V7_8_2_Final
+          cp -a _anamika/AnamikaAI_V7_8_2_Final/. ./anamika_build/project/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.1'
+
+      - name: Validate source
+        working-directory: anamika_build/project
+        run: |
+          python3 tools/validate_source.py
+          python3 tools/validate_v78.py
+          python3 tools/validate_audit.py
+
+      - name: Build lite debug APK
+        working-directory: anamika_build/project
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Preserve lite APK
+        run: |
+          mkdir -p artifacts/lite
+          cp anamika_build/project/app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-Lite-debug.apk
+
+      - name: Bundle verified local coding model
+        working-directory: anamika_build/project
+        run: |
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          curl -L --fail --retry 4 --retry-delay 5 "$MODEL_URL" -o "$MODEL_PATH"
+          test -s "$MODEL_PATH"
+          echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
+          test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
+
+      - name: Build full debug APK with local AI
+        working-directory: anamika_build/project
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Preserve full APK
+        run: |
+          mkdir -p artifacts/full
+          cp anamika_build/project/app/build/outputs/apk/debug/app-debug.apk artifacts/full/AnamikaAI-V7.8.2-FullLocalAI-debug.apk
+          sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-final-apks
+          compression-level: 0
+          path: artifacts/
