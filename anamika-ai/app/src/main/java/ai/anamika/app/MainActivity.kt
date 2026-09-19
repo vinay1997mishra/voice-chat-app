@@ -30,6 +30,7 @@ import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
 import ai.anamika.app.features.FeatureId
 import ai.anamika.app.features.FeatureManager
+import ai.anamika.app.features.LearnedModuleRegistry
 import ai.anamika.app.distribution.PublicDeviceIdentity
 import ai.anamika.app.distribution.PublicEntitlementCache
 import ai.anamika.app.distribution.SignedOwnerPolicyGateway
@@ -71,6 +72,7 @@ class MainActivity : Activity() {
     private lateinit var appStudy: AppStudyStore
     private lateinit var features: FeatureManager
     private lateinit var selfUpdateStager: SelfUpdateStager
+    private lateinit var learnedModules: LearnedModuleRegistry
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -94,6 +96,7 @@ class MainActivity : Activity() {
         appStudy = AppStudyStore(this)
         features = FeatureManager(this, BuildConfig.ANAMIKA_DISTRIBUTION_MODE == "OWNER")
         selfUpdateStager = SelfUpdateStager(workspaceFiles)
+        learnedModules = LearnedModuleRegistry(this)
 
         voice = VoiceAssistant(
             activity = this,
@@ -550,6 +553,12 @@ class MainActivity : Activity() {
 
             is Command.SelfUpdateStage -> stageSelfUpdate(command.changes)
 
+            Command.ModuleList -> reply(learnedModules.statusText())
+
+            is Command.ModuleOn -> changeLearnedModule(command.id, true)
+
+            is Command.ModuleOff -> changeLearnedModule(command.id, false)
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
         }
@@ -641,6 +650,9 @@ class MainActivity : Activity() {
         Command.PublicFeatureAllOn,
         Command.PublicFeatureAllOff,
         Command.PublicInstallationId,
+        Command.ModuleList,
+        is Command.ModuleOn,
+        is Command.ModuleOff,
         is Command.ServerSet,
         Command.ServerShow,
         is Command.Unknown -> null
@@ -690,6 +702,19 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun changeLearnedModule(id: String, enabled: Boolean) {
+        requestOwnerApproval(
+            OwnerAction.CHANGE_FEATURE_POLICY,
+            "Set learned module $id = $enabled"
+        ) {
+            val result = runCatching {
+                learnedModules.setEnabled(id, enabled)
+                "$id: " + if (enabled) "ON" else "OFF"
+            }
+            reply(result.getOrElse { "Module control failed: " + it.message })
+        }
+    }
+
     private fun stageSelfUpdate(changes: String) {
         val pkg = appStudy.currentPackage()
             ?: AnamikaAccessibilityService.lastForegroundPackage
@@ -716,7 +741,21 @@ class MainActivity : Activity() {
                     featureMapPath = featureMapPath,
                     requestedChanges = changes
                 )
-                "Self-update staged: ${staged.stagedPath}. Code install nahi hua; tests/build/owner approval ke baad update banega."
+                val moduleId = (
+                    pkg.substringAfterLast('.') + "-" +
+                        changes.lowercase()
+                            .replace(Regex("[^a-z0-9]+"), "-")
+                            .trim('-')
+                            .take(32)
+                    ).trim('-').ifBlank { "learned-feature" }
+
+                learnedModules.registerPending(
+                    id = moduleId,
+                    name = changes.take(80),
+                    sourcePackage = pkg
+                )
+
+                "Self-update staged: ${staged.stagedPath}. Module: $moduleId (PENDING_UPDATE). Code install nahi hua; tests/build/owner approval ke baad update banega."
             }
         }
     }
