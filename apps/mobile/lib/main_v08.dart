@@ -160,7 +160,7 @@ class DemoEconomy extends ChangeNotifier {
     final clean = message.trim();
     if (clean.isEmpty) return;
     conversationFor(user.id).add('You: ' + clean);
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         user.name,
@@ -216,7 +216,7 @@ class DemoEconomy extends ChangeNotifier {
         incoming.coins,
       ),
     );
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         'Gift received from ID 10000011',
@@ -258,7 +258,7 @@ class DemoEconomy extends ChangeNotifier {
         -gift.coins,
       ),
     );
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         'Gift sent to ID ${recipient.id}',
@@ -312,7 +312,7 @@ class DemoEconomy extends ChangeNotifier {
         -gift.coins,
       ),
     );
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         'Video gift sent to ID ' + recipient.id,
@@ -359,7 +359,7 @@ class DemoEconomy extends ChangeNotifier {
         -gift.coins,
       ),
     );
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         'Gift sent to ID ' + recipient.id,
@@ -383,7 +383,7 @@ class DemoEconomy extends ChangeNotifier {
         converted,
       ),
     );
-    inbox.insert(
+    if (messageNotifications) inbox.insert(
       0,
       DemoInboxItem(
         'Wallet conversion',
@@ -396,7 +396,7 @@ class DemoEconomy extends ChangeNotifier {
   }
 
   void addInbox(String title, String subtitle, IconData icon) {
-    inbox.insert(0, DemoInboxItem(title, subtitle, icon));
+    if (messageNotifications) inbox.insert(0, DemoInboxItem(title, subtitle, icon));
     notifyListeners();
   }
 
@@ -542,7 +542,7 @@ class DiscoverV06 extends StatelessWidget {
                               Text(
                                 item.$1 == 'Game Center'
                                     ? 'Dice, Lucky Wheel and room games are active local demos.'
-                                    : 'This section is active in the v0.7 local demo.',
+                                    : 'This section is active in the v0.8 local demo.',
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 14),
@@ -1129,7 +1129,7 @@ class _CreateRoomV07State extends State<CreateRoomV07> {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(18, 0, 18, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('Create Room v0.7', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+        const Text('Create Room v0.8', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
         const SizedBox(height: 14),
         Center(
           child: InkWell(
@@ -4083,8 +4083,8 @@ class SettingsV07 extends StatelessWidget {
                 ),
                 onTap: () => showAboutDialog(
                   context: context,
-                  applicationName: 'Voice Chat v0.7',
-                  applicationVersion: '0.7.0',
+                  applicationName: 'Voice Chat v0.8',
+                  applicationVersion: '0.8.0',
                   children: const [
                     Text(
                       'Local-first build with gift, wallet, room, message, VIP and profile flows.',
