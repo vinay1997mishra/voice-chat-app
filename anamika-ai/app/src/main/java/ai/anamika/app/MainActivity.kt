@@ -17,6 +17,7 @@ import ai.anamika.app.build.ApkInstaller
 import ai.anamika.app.build.BuildServerGateway
 import ai.anamika.app.build.BuildServerSettings
 import ai.anamika.app.build.WorkspacePackager
+import ai.anamika.app.coding.LocalAndroidProjectGenerator
 import ai.anamika.app.core.Command
 import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
@@ -49,6 +50,7 @@ class MainActivity : Activity() {
     private lateinit var buildGateway: BuildServerGateway
     private lateinit var workspacePackager: WorkspacePackager
     private lateinit var apkInstaller: ApkInstaller
+    private lateinit var localProjectGenerator: LocalAndroidProjectGenerator
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -65,6 +67,7 @@ class MainActivity : Activity() {
         buildGateway = BuildServerGateway(this, buildSettings)
         workspacePackager = WorkspacePackager(this)
         apkInstaller = ApkInstaller(this)
+        localProjectGenerator = LocalAndroidProjectGenerator(workspaceFiles)
 
         voice = VoiceAssistant(
             activity = this,
@@ -308,10 +311,10 @@ class MainActivity : Activity() {
             }
 
             is Command.MakeApp -> requestOwnerApproval(
-                OwnerAction.BUILD_APK,
-                "Generate complete Android project on server and build APK"
+                OwnerAction.WRITE_LOCAL_FILE,
+                "Generate Android project locally on this phone"
             ) {
-                startAgentBuild(command.goal)
+                generateProjectLocally(command.goal)
             }
 
             is Command.Unknown ->
@@ -319,26 +322,28 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startAgentBuild(goal: String) {
-        if (goal.isBlank()) {
-            reply("App goal empty hai.")
-            return
-        }
+    private fun generateProjectLocally(goal: String) {
+        reply("Code phone ke local workspace me generate ho rahi hai.")
+        Thread {
+            val result = runCatching {
+                localGit.init(currentWorkspace)
+                localProjectGenerator.generate(currentWorkspace, goal)
+            }
 
-        reply("AI build server ko app requirement bhej rahi hoon.")
-        buildGateway.agentBuild(goal) { result ->
             runOnUiThread {
-                result.onSuccess { job ->
+                result.onSuccess { project ->
                     reply(
-                        "Agent build submitted. Job: " + job.id +
-                            "\nStatus: " + job.status +
-                            (job.message?.let { "\n" + it } ?: "")
+                        "Coding local workspace me ready hai." +
+                            "\nWorkspace: " + project.workspace +
+                            "\nFiles: " + project.filesWritten +
+                            "\nServer use nahi hua." +
+                            "\nAPK ke liye 'build apk' bolo."
                     )
                 }.onFailure {
-                    reply("Agent build failed: " + it.message)
+                    reply("Local coding failed: " + it.message)
                 }
             }
-        }
+        }.start()
     }
 
     private fun startServerBuild() {
