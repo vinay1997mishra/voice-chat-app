@@ -62,6 +62,7 @@ sealed class Command {
     data class PublicFeatureOff(val name: String) : Command()
     data object PublicFeatureAllOn : Command()
     data object PublicFeatureAllOff : Command()
+    data object PublicInstallationId : Command()
 
     data class SelfUpdateStage(val changes: String) : Command()
 
@@ -91,6 +92,7 @@ class CommandRouter {
             lower == "public feature all off" -> Command.PublicFeatureAllOff
             lower.startsWith("public feature on ") -> Command.PublicFeatureOn(text.drop(18).trim())
             lower.startsWith("public feature off ") -> Command.PublicFeatureOff(text.drop(19).trim())
+            lower == "public id" || lower == "installation id" -> Command.PublicInstallationId
 
             lower.startsWith("self update stage ") -> Command.SelfUpdateStage(text.drop(18).trim())
 
