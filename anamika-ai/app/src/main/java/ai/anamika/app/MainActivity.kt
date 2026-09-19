@@ -89,7 +89,7 @@ class MainActivity : Activity() {
         appAccessPolicy = AppAccessPolicy(this)
         appObservations = AppObservationStore(this)
         appStudy = AppStudyStore(this)
-        features = FeatureManager(this)
+        features = FeatureManager(this, BuildConfig.ANAMIKA_DISTRIBUTION_MODE == "OWNER")
         selfUpdateStager = SelfUpdateStager(workspaceFiles)
 
         voice = VoiceAssistant(
@@ -157,7 +157,9 @@ class MainActivity : Activity() {
         root.addView(memories)
         root.addView(queue)
         root.addView(buildApk)
-        root.addView(featureControl)
+        if (features.isOwnerMode()) {
+            root.addView(featureControl)
+        }
 
         return ScrollView(this).apply { addView(root) }
     }
@@ -464,48 +466,78 @@ class MainActivity : Activity() {
 
             Command.AppStudyExport -> exportAppStudyReport()
 
-            Command.FeatureList -> reply(features.ownerStatus())
+            Command.FeatureList -> {
+                if (features.isOwnerMode()) reply(features.ownerStatus())
+                else reply("Owner feature controls public build me available nahi hain.")
+            }
 
             is Command.FeatureOn -> changeOwnerFeature(command.name, true)
 
             is Command.FeatureOff -> changeOwnerFeature(command.name, false)
 
-            Command.FeatureAllOn -> requestOwnerApproval(
-                OwnerAction.CHANGE_FEATURE_POLICY,
-                "Enable all Anamika owner features"
-            ) {
-                features.setAll(true)
-                reply("All owner features ON.")
+            Command.FeatureAllOn -> {
+                if (!features.isOwnerMode()) {
+                    reply("Owner feature controls public build me available nahi hain.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.CHANGE_FEATURE_POLICY,
+                        "Enable all Anamika owner features"
+                    ) {
+                        features.setAll(true)
+                        reply("All owner features ON.")
+                    }
+                }
             }
 
-            Command.FeatureAllOff -> requestOwnerApproval(
-                OwnerAction.CHANGE_FEATURE_POLICY,
-                "Disable all Anamika owner features"
-            ) {
-                features.setAll(false)
-                status.text = "All owner features OFF. Owner Feature Control button remains available."
+            Command.FeatureAllOff -> {
+                if (!features.isOwnerMode()) {
+                    reply("Owner feature controls public build me available nahi hain.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.CHANGE_FEATURE_POLICY,
+                        "Disable all Anamika owner features"
+                    ) {
+                        features.setAll(false)
+                        status.text = "All owner features OFF. Owner Feature Control button remains available."
+                    }
+                }
             }
 
-            Command.PublicFeatureList -> reply(features.publicStatus())
+            Command.PublicFeatureList -> {
+                if (features.isOwnerMode()) reply(features.publicStatus())
+                else reply("Current public entitlements owner policy se controlled hain.")
+            }
 
             is Command.PublicFeatureOn -> changePublicFeature(command.name, true)
 
             is Command.PublicFeatureOff -> changePublicFeature(command.name, false)
 
-            Command.PublicFeatureAllOn -> requestOwnerApproval(
-                OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
-                "Enable all default public features"
-            ) {
-                features.setAllPublicDefaults(true)
-                reply("All public default features ON.")
+            Command.PublicFeatureAllOn -> {
+                if (!features.isOwnerMode()) {
+                    reply("Public entitlement editing public build me blocked hai.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
+                        "Enable all default public features"
+                    ) {
+                        features.setAllPublicDefaults(true)
+                        reply("All public default features ON.")
+                    }
+                }
             }
 
-            Command.PublicFeatureAllOff -> requestOwnerApproval(
-                OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
-                "Disable all default public features"
-            ) {
-                features.setAllPublicDefaults(false)
-                reply("All public default features OFF.")
+            Command.PublicFeatureAllOff -> {
+                if (!features.isOwnerMode()) {
+                    reply("Public entitlement editing public build me blocked hai.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.CHANGE_PUBLIC_ENTITLEMENTS,
+                        "Disable all default public features"
+                    ) {
+                        features.setAllPublicDefaults(false)
+                        reply("All public default features OFF.")
+                    }
+                }
             }
 
             is Command.SelfUpdateStage -> stageSelfUpdate(command.changes)
@@ -583,6 +615,10 @@ class MainActivity : Activity() {
     }
 
     private fun changeOwnerFeature(name: String, enabled: Boolean) {
+        if (!features.isOwnerMode()) {
+            reply("Owner feature controls public build me available nahi hain.")
+            return
+        }
         val feature = features.resolve(name)
         if (feature == null) {
             reply("Unknown feature: $name")
@@ -603,6 +639,10 @@ class MainActivity : Activity() {
     }
 
     private fun changePublicFeature(name: String, enabled: Boolean) {
+        if (!features.isOwnerMode()) {
+            reply("Public entitlement editing public build me blocked hai.")
+            return
+        }
         val feature = features.resolve(name)
         if (feature == null) {
             reply("Unknown public feature: $name")
@@ -650,6 +690,10 @@ class MainActivity : Activity() {
     }
 
     private fun showFeatureControlDialog() {
+        if (!features.isOwnerMode()) {
+            reply("Owner Feature Control public build me available nahi hai.")
+            return
+        }
         val items = FeatureId.entries.toTypedArray()
         val labels = items.map { it.key }.toTypedArray()
         val checked = BooleanArray(items.size) { index ->
