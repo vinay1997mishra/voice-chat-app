@@ -87,10 +87,10 @@ public final class PluginManagerActivity extends Activity {
         if(selectedPackage.isEmpty()){ toast("Select an app first"); return; }
         if(!PluginRegistry.isEnabled(this,selectedPackage)){ toast("Enable plugin for "+selectedLabel+" first"); return; }
         if(!isAutomationServiceEnabled()){ toast("Enable Anamika App Control in Accessibility settings first"); startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); return; }
-        java.io.File dir=AppBlueprintStore.start(this,selectedPackage);
-        inspectionStatus.setText("Inspection active for "+selectedLabel+". Open/use the app; Anamika will record observable screens and controls.\n"+dir.getAbsolutePath());
-        Intent launch=getPackageManager().getLaunchIntentForPackage(selectedPackage);
-        if(launch!=null) startActivity(launch);
+        String result=AppPluginEngine.openAndRun(this,selectedPackage,"check all functions");
+        inspectionStatus.setText("Automatic audit requested for "+selectedLabel+
+                ". Anamika will inspect visible screens and operate safe controls automatically. "+
+                "Sensitive/destructive/financial/account actions are skipped and listed in the blueprint.\n"+result);
     }
 
     private void stopInspection(){
