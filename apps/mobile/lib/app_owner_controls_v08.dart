@@ -5,6 +5,8 @@ class AppOwnerControlsV08 extends ChangeNotifier {
   bool roomCreationEnabled = true;
   bool giftsEnabled = true;
   bool videoGiftsEnabled = true;
+  bool threeDEffectsEnabled = true;
+  bool giftAnimationsEnabled = true;
   bool gamesEnabled = true;
   bool ludoEnabled = true;
   bool unoEnabled = true;
@@ -64,6 +66,16 @@ class AppOwnerControlsV08 extends ChangeNotifier {
   void setVideoGifts(bool value) {
     videoGiftsEnabled = value;
     _record('Video gifts ' + (value ? 'enabled' : 'disabled'));
+  }
+
+  void setThreeDEffects(bool value) {
+    threeDEffectsEnabled = value;
+    _record('3D gift effects ' + (value ? 'enabled' : 'disabled'));
+  }
+
+  void setGiftAnimations(bool value) {
+    giftAnimationsEnabled = value;
+    _record('Gift animations ' + (value ? 'enabled' : 'disabled'));
   }
 
   void setGames(bool value) {
