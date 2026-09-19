@@ -129,44 +129,14 @@ public final class Premium3DRenderer implements GLSurfaceView.Renderer {
     }
 
     private void configureCamera(float seconds, float u, DragonFlightPath.Pose pose, CinematicSceneConfig cfg) {
-        float cx, cy, cz;
-        if (CinematicMotionPath.isGroundSubject(cfg.subject)) {
-            float approach=1f-u;
-            cx=1.8f+pose.x*0.20f;
-            cy=1.35f+0.20f*(float)Math.sin(seconds*0.55f);
-            cz=5.4f+approach*1.3f;
-            if(cfg.impactShake&&pose.landingImpact>0f){
-                float sh=pose.landingImpact*0.055f*cfg.intensity;
-                cx+=(float)Math.sin(seconds*79f)*sh; cy+=(float)Math.sin(seconds*67f)*sh;
-            }
-            Matrix.setLookAtM(view,0,cx,cy,cz,pose.x*0.35f,0.75f,pose.z,0f,1f,0f);
-            return;
-        }
-        if (u < 0.34f) {
-            float a = seconds * 0.18f;
-            cx = (float)Math.sin(a) * 1.8f;
-            cy = 2.8f + (float)Math.sin(a * 1.7f) * 0.25f;
-            cz = 9.8f + (float)Math.cos(a) * 0.6f;
-        } else if (u < 0.76f) {
-            float p = (u - 0.34f) / 0.42f;
-            cx = pose.x * 0.28f + 1.7f * (1f - p);
-            cy = pose.y * 0.24f + 1.2f;
-            cz = 7.5f - 1.4f * p;
-        } else {
-            float p = (u - 0.76f) / 0.24f;
-            cx = 0.8f * (1f - p) + 0.25f * (float)Math.sin(seconds * 0.6f);
-            cy = 1.35f + 0.18f * p;
-            cz = 5.5f - 1.0f * p;
-        }
-        if (cfg.impactShake && pose.landingImpact > 0f) {
-            float shake = pose.landingImpact * 0.08f * cfg.intensity;
-            cx += (float)Math.sin(seconds * 83f) * shake;
-            cy += (float)Math.sin(seconds * 71f + 1.7f) * shake;
-        }
-        float tx = pose.x * 0.55f;
-        float ty = pose.y * 0.62f;
-        float tz = pose.z;
-        Matrix.setLookAtM(view, 0, cx, cy, cz, tx, ty, tz, 0f, 1f, 0f);
+        CinematicMovieTimeline.Camera camera=CinematicMovieTimeline.sample(
+                cfg.subject,pose,seconds,cfg.durationSeconds,cfg.intensity);
+        float ratio=(float)Math.max(1,width)/Math.max(1,height);
+        Matrix.perspectiveM(projection,0,camera.fov,ratio,0.06f,100f);
+        Matrix.setLookAtM(view,0,
+                camera.x,camera.y,camera.z,
+                camera.tx,camera.ty,camera.tz,
+                0f,1f,0f);
     }
 
 
