@@ -29,3 +29,5 @@ jobs:
         run: python -m py_compile app.py
       - name: Import service
         run: python -c "import app; assert app.APP.title == 'Anamika Owner Policy Service'"
+      - name: Build Docker image
+        run: docker build -t anamika-policy-server:test .
