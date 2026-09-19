@@ -229,6 +229,24 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
+        if (containsAny(lower,
+                "is app ke saare functions check kar","is app ke sare functions check kar",
+                "saare functions check kar","sare functions check kar","check all functions",
+                "poora app check karo","auto audit app")) {
+            String targetPackage=getSharedPreferences("anamika_automation",MODE_PRIVATE)
+                    .getString("target_package","");
+            if(targetPackage.isEmpty()){
+                answer("Auto App Audit ke liye pehle Plugin Center me target app ko select aur enable kijiye. Uske baad yehi command bolna hai.");
+            } else if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,targetPackage)){
+                answer("Selected app ka plugin disabled hai. Plugin Center me enable kijiye.");
+            } else {
+                String launchResult=com.anamika.ai.plugins.AppPluginEngine.openAndRun(
+                        this,targetPackage,"check all functions");
+                answer("Automatic safe app audit start kar diya. Anamika visible screens, safe buttons, scrolling aur navigation khud check karegi; payment, messaging, password, account change aur destructive actions auto-run nahi honge. "+launchResult);
+            }
+            return;
+        }
+
         if (containsAny(lower, "test lab", "test app", "apk install", "app test")) {
             startActivity(new Intent(this, TestLabActivity.class));
             answer("Native App Test Lab khol diya hai.");
