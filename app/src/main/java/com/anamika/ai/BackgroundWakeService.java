@@ -28,6 +28,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private static final String CHANNEL="anamika_wake";
     private static final int NOTIFICATION_ID=782;
     private static final String PREFS="anamika_v7";
+    private static volatile boolean running=false;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
@@ -36,6 +37,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     @Override public void onCreate(){
         super.onCreate();
+        running=true;
         createChannel();
         tts=new TextToSpeech(this,this);
     }
@@ -278,7 +280,10 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         }
     }
 
+    public static boolean isRunning(){ return running; }
+
     @Override public void onDestroy(){
+        running=false;
         handler.removeCallbacksAndMessages(null);
         stopListening();
         if(tts!=null){ try{tts.stop();tts.shutdown();}catch(Throwable ignored){} }
