@@ -12,7 +12,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import ai.anamika.app.ai.BackendAiGateway
+import ai.anamika.app.ai.DeviceAiGateway
 import ai.anamika.app.build.ApkInstaller
 import ai.anamika.app.build.BuildServerGateway
 import ai.anamika.app.build.BuildServerSettings
@@ -36,7 +36,7 @@ import java.net.URLEncoder
 
 class MainActivity : Activity() {
     private val router = CommandRouter()
-    private val ai = BackendAiGateway()
+    private val ai = DeviceAiGateway()
     private val releaseChecker = GitHubReleaseChecker()
     private val permissionGate = OwnerPermissionGate()
 
