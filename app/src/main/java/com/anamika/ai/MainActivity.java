@@ -106,8 +106,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             }
         });
         wakeListenButton.setText(prefs.getBoolean("wake_enabled",true)
-                ? "Hello Anamika Listening: ON"
-                : "Hello Anamika Listening: OFF");
+                ? "Hello Mika / Hello Anamika Listening: ON"
+                : "Hello Mika / Hello Anamika Listening: OFF");
         wakeListenButton.setOnClickListener(v -> toggleWakeListening());
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
         saveProjectButton.setOnClickListener(v -> saveGeneratedProject());
@@ -493,7 +493,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if(!ensureUnlocked()) return;
         boolean enable=!prefs.getBoolean("wake_enabled",true);
         prefs.edit().putBoolean("wake_enabled",enable).apply();
-        wakeListenButton.setText(enable?"Hello Anamika Listening: ON":"Hello Anamika Listening: OFF");
+        wakeListenButton.setText(enable?"Hello Mika / Hello Anamika Listening: ON":"Hello Mika / Hello Anamika Listening: OFF");
         if(enable) enableWakeListening(true);
         else {
             wakeAwaitingCommand=false;
@@ -506,7 +506,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if(!unlocked || !OwnerSession.isActive(this)) return;
         if(!prefs.getBoolean("wake_enabled",true)) return;
         if(!SpeechRecognizer.isRecognitionAvailable(this)){
-            wakeListenButton.setText("Hello Anamika Listening: unavailable");
+            wakeListenButton.setText("Hello Mika / Hello Anamika Listening: unavailable");
             if(announce) answer("Is phone par SpeechRecognizer service available nahi hai.");
             return;
         }
@@ -516,7 +516,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
         startWakeRecognizer();
-        if(announce) answer("Hello Anamika listening on hai. Screen open ho to “Hello Anamika” boliye.");
+        if(announce) answer("Hands-free listening on hai. Screen open ho to “Hello Mika” ya “Hello Anamika” boliye.");
     }
 
     private void startWakeRecognizer(){
@@ -524,7 +524,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         stopWakeRecognizer();
         wakeRecognizer=SpeechRecognizer.createSpeechRecognizer(this);
         wakeRecognizer.setRecognitionListener(new RecognitionListener(){
-            @Override public void onReadyForSpeech(Bundle params){ status.setText(wakeAwaitingCommand?"Listening for your command…":"Wake listening • say Hello Anamika"); }
+            @Override public void onReadyForSpeech(Bundle params){ status.setText(wakeAwaitingCommand?"Listening for your command…":"Wake listening • say Hello Mika / Hello Anamika"); }
             @Override public void onBeginningOfSpeech(){}
             @Override public void onRmsChanged(float rmsdB){}
             @Override public void onBufferReceived(byte[] buffer){}
@@ -550,7 +550,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void handleWakeSpeech(String heard){
         if(heard==null || heard.trim().isEmpty()){ restartWakeSoon(700L); return; }
         String lower=heard.toLowerCase(Locale.ROOT);
-        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+anamika").matcher(heard);
+        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(heard);
         if(wake.find()){
             appendChat("You",heard);
             String after=heard.substring(wake.end()).replaceFirst("^[\\s,.:;-]+","").trim();
@@ -612,13 +612,15 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             answer("WhatsApp command samajh aaya, lekin contact ya message clear nahi mila. Example: WhatsApp kholo aur Vinay ko message bhejo hello.");
             return true;
         }
-        if(!isAutomationServiceEnabled()){
-            answer("WhatsApp control ke liye Android Accessibility me Anamika App Control ek baar enable karna hoga. Settings khol rahi hoon.");
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        String pkg="com.whatsapp";
+        if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,pkg)){
+            answer("WhatsApp aapke owner-selected plugins me enabled nahi hai, isliye Anamika ne us par control nahi kiya.");
             return true;
         }
-        String pkg="com.whatsapp";
-        com.anamika.ai.plugins.PluginRegistry.setEnabled(this,pkg,true);
+        if(!isAutomationServiceEnabled()){
+            answer("Anamika App Control service off hai, isliye WhatsApp par koi control action nahi kiya gaya.");
+            return true;
+        }
         getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
         String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,
                 "whatsapp-message|"+recipient+"|"+message);
@@ -636,12 +638,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             answer("Jis app ka audit chahiye uska naam command me boliye, jaise: “Hika app open karke A to Z saare functions check karo aur blueprint banao.”");
             return;
         }
-        if(!isAutomationServiceEnabled()){
-            answer("Full automatic app audit ke liye Android Accessibility me Anamika App Control ek baar enable karna hoga. Settings khol rahi hoon.");
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,pkg)){
+            answer("Ye app aapke owner-selected plugins me enabled nahi hai, isliye Anamika ne audit/control start nahi kiya.");
             return;
         }
-        com.anamika.ai.plugins.PluginRegistry.setEnabled(this,pkg,true);
+        if(!isAutomationServiceEnabled()){
+            answer("Anamika App Control service off hai, isliye is app par automatic audit/control start nahi kiya gaya.");
+            return;
+        }
         getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
         String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,"check all functions");
         answer("Auto Audit start. Anamika app ke visible screens, rooms, menus, safe clickable buttons, scroll aur back-navigation ko systematically check karegi. Har tested/skipped control blueprint me record hoga. Password, payment, destructive action aur real message/send jaise side-effect actions generic audit me skip honge; unhe explicit command se chalaya ja sakta hai. "+r);
