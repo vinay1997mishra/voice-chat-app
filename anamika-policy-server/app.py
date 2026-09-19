@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import time
 from pathlib import Path
 from threading import Lock
@@ -23,6 +26,8 @@ GOOGLE_CLIENT_ID = os.environ.get("ANAMIKA_GOOGLE_CLIENT_ID", "").strip()
 SESSION_SECRET = os.environ.get("ANAMIKA_SESSION_SECRET", "").strip()
 OWNER_BOOTSTRAP_EMAIL = os.environ.get("ANAMIKA_OWNER_BOOTSTRAP_EMAIL", "").strip().lower()
 OWNER_GOOGLE_SUB = os.environ.get("ANAMIKA_OWNER_GOOGLE_SUB", "").strip()
+OWNER_ID = os.environ.get("ANAMIKA_OWNER_ID", "").strip()
+OWNER_PASSWORD_HASH = os.environ.get("ANAMIKA_OWNER_PASSWORD_HASH", "").strip()
 STORE = Path(os.environ.get("ANAMIKA_POLICY_STORE", "/tmp/anamika-entitlements.json"))
 LOCK = Lock()
 
@@ -51,6 +56,17 @@ class EntitlementUpdate(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     idToken: str = Field(min_length=20)
+
+
+class IdAuthRequest(BaseModel):
+    userId: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=6, max_length=256)
+
+
+class IdUserUpsertRequest(BaseModel):
+    userId: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=6, max_length=256)
+    enabled: bool = True
 
 
 class OwnerFeatureUpdate(BaseModel):
@@ -122,6 +138,50 @@ def sign_payload(payload: bytes) -> str:
     return base64.b64encode(signature).decode("ascii")
 
 
+
+def normalize_id(value: str) -> str:
+    return value.strip().lower()
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    derived = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=2**15,
+        r=8,
+        p=1,
+        dklen=32,
+    )
+    return "scrypt$32768$8$1$" + base64.b64encode(salt).decode("ascii") + "$" + base64.b64encode(derived).decode("ascii")
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        scheme, n, r, p, salt_b64, hash_b64 = encoded.split("$", 5)
+        if scheme != "scrypt":
+            return False
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(hash_b64)
+        actual = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=int(n),
+            r=int(r),
+            p=int(p),
+            dklen=len(expected),
+        )
+        return hmac.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
+def owner_id_matches(user_id: str, password: str) -> bool:
+    if not OWNER_ID or not OWNER_PASSWORD_HASH:
+        return False
+    return normalize_id(user_id) == normalize_id(OWNER_ID) and verify_password(password, OWNER_PASSWORD_HASH)
+
+
 def resolve_role(subject: str, email: str) -> str:
     with LOCK:
         data = read_store()
@@ -186,6 +246,7 @@ def health() -> dict:
         "google_client_id_configured": bool(GOOGLE_CLIENT_ID),
         "session_secret_configured": bool(SESSION_SECRET),
         "owner_bootstrap_configured": bool(OWNER_BOOTSTRAP_EMAIL or OWNER_GOOGLE_SUB),
+        "owner_id_configured": bool(OWNER_ID and OWNER_PASSWORD_HASH),
     }
 
 
@@ -221,6 +282,66 @@ def auth_google(request: GoogleAuthRequest) -> dict:
         "role": role,
         "sessionToken": session_token,
     }
+
+
+
+@APP.post("/auth/id")
+def auth_id(request: IdAuthRequest) -> dict:
+    user_id = normalize_id(request.userId)
+
+    if owner_id_matches(user_id, request.password):
+        return {
+            "subject": "owner-id:" + user_id,
+            "email": "",
+            "displayName": "Anamika",
+            "role": "OWNER",
+            "sessionToken": issue_session("owner-id:" + user_id, "OWNER"),
+        }
+
+    with LOCK:
+        data = read_store()
+        users = data.get("_id_users", {})
+        account = users.get(user_id)
+
+    if not account or not bool(account.get("enabled", True)):
+        raise HTTPException(status_code=401, detail="Invalid ID or password")
+
+    if not verify_password(request.password, str(account.get("passwordHash", ""))):
+        raise HTTPException(status_code=401, detail="Invalid ID or password")
+
+    subject = "id:" + user_id
+    return {
+        "subject": subject,
+        "email": "",
+        "displayName": str(account.get("displayName", "")).strip() or None,
+        "role": "USER",
+        "sessionToken": issue_session(subject, "USER"),
+    }
+
+
+@APP.put("/owner/id-users/{user_id}")
+def upsert_id_user(
+    user_id: str,
+    request: IdUserUpsertRequest,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    require_session(authorization, owner_only=True)
+
+    normalized = normalize_id(user_id)
+    if not normalized or normalized == normalize_id(OWNER_ID):
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    with LOCK:
+        data = read_store()
+        users = data.setdefault("_id_users", {})
+        users[normalized] = {
+            "passwordHash": hash_password(request.password),
+            "enabled": request.enabled,
+            "displayName": request.userId.strip(),
+        }
+        write_store(data)
+
+    return {"ok": True, "userId": normalized}
 
 
 @APP.get("/entitlements")
