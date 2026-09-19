@@ -950,11 +950,18 @@ class MainActivity : Activity() {
             result.onSuccess { entitlement ->
                 cache.apply(entitlement)
                 runOnUiThread {
-                    status.text = "Owner public policy synced."
+                    val session = publicSession.current()
+                    if (session != null && !session.isOwner() && !features.isOwnerMode()) {
+                        setContentView(buildPublicUserUi())
+                    } else if (::status.isInitialized) {
+                        status.text = "Policy synced."
+                    }
                 }
             }.onFailure {
                 runOnUiThread {
-                    status.text = "Public policy sync failed; cached/default entitlements remain active."
+                    if (::status.isInitialized) {
+                        status.text = "Settings sync unavailable; current access remains active."
+                    }
                 }
             }
         }
@@ -1521,6 +1528,18 @@ class MainActivity : Activity() {
         status.text = text
         if (::features.isInitialized && features.isEnabled(FeatureId.VOICE_REPLY)) {
             voice.speak(text)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (
+            ::features.isInitialized &&
+            !features.isOwnerMode() &&
+            publicSession.current() != null &&
+            publicSession.current()?.isOwner() != true
+        ) {
+            syncPublicEntitlementsIfNeeded()
         }
     }
 
