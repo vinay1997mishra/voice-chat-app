@@ -22,6 +22,11 @@ sealed class Command {
     data object GitBranches : Command()
     data object GitQueue : Command()
 
+    data object FileList : Command()
+    data class FileRead(val path: String) : Command()
+    data class FileWrite(val path: String, val content: String) : Command()
+    data class FileDelete(val path: String) : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -31,6 +36,16 @@ class CommandRouter {
         val lower = text.lowercase()
 
         return when {
+            lower == "file list" -> Command.FileList
+            lower.startsWith("file read ") -> Command.FileRead(text.drop(10).trim())
+            lower.startsWith("file delete ") -> Command.FileDelete(text.drop(12).trim())
+            lower.startsWith("file write ") -> {
+                val payload = text.drop(11)
+                val parts = payload.split("::", limit = 2)
+                if (parts.size == 2) Command.FileWrite(parts[0].trim(), parts[1].trim())
+                else Command.Unknown(text)
+            }
+
             lower.startsWith("git init ") -> Command.GitInit(text.drop(9).trim())
             lower == "git status" -> Command.GitStatus
             lower.startsWith("git branch ") -> Command.GitBranch(text.drop(11).trim())
