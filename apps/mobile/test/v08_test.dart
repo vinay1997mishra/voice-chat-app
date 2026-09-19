@@ -482,4 +482,55 @@ void main() {
     expect(flagEmojiV08('IN'), '🇮🇳');
     expect(flagEmojiV08('US'), '🇺🇸');
   });
+  testWidgets('locking occupied seat moves user to audience and keeps them there on reopen',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Seat lock room',
+      'LOCK-SEAT-1',
+      '🎧',
+      false,
+      ownedByMe: true,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    expect(find.text('Aisha'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-seat-2-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('seat-lock-action-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('audience-strip-v08')), findsOneWidget);
+    expect(find.byKey(const Key('audience-id-10000011-v08')), findsOneWidget);
+    expect(room.savedLockedSeats, contains(2));
+    expect(room.audienceMembers, contains('Aisha'));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-2-v08')),
+        matching: find.byIcon(Icons.lock_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('audience-id-10000011-v08')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-2-v08')),
+        matching: find.byIcon(Icons.lock_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('seat-label-2-v08'))).data,
+      'Seat 3',
+    );
+  });
+
+
 }
