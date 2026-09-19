@@ -33,8 +33,32 @@ class AppStudyStore(context: Context) {
     }
 
     fun stop() {
-        prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
+        prefs.edit()
+            .putBoolean(KEY_ACTIVE, false)
+            .putBoolean(KEY_PAUSED, false)
+            .remove(KEY_CHALLENGE)
+            .apply()
     }
+
+    fun pauseForChallenge(packageName: String, reason: String) {
+        if (!isActiveFor(packageName)) return
+        prefs.edit()
+            .putBoolean(KEY_PAUSED, true)
+            .putString(KEY_CHALLENGE, reason.take(200))
+            .apply()
+    }
+
+    fun resumeAfterChallenge(packageName: String) {
+        if (!isActiveFor(packageName)) return
+        prefs.edit()
+            .putBoolean(KEY_PAUSED, false)
+            .remove(KEY_CHALLENGE)
+            .apply()
+    }
+
+    fun isPaused(): Boolean = prefs.getBoolean(KEY_PAUSED, false)
+
+    fun challengeReason(): String? = prefs.getString(KEY_CHALLENGE, null)
 
     fun isActiveFor(packageName: String): Boolean =
         prefs.getBoolean(KEY_ACTIVE, false) &&
@@ -43,7 +67,7 @@ class AppStudyStore(context: Context) {
     fun currentPackage(): String? = prefs.getString(KEY_PACKAGE, null)
 
     fun add(screen: StudyScreen) {
-        if (!isActiveFor(screen.packageName)) return
+        if (!isActiveFor(screen.packageName) || isPaused()) return
 
         val array = readArray()
         val signature = signature(screen)
@@ -145,6 +169,8 @@ class AppStudyStore(context: Context) {
         private const val KEY_ACTIVE = "study_active"
         private const val KEY_PACKAGE = "study_package"
         private const val KEY_SCREENS = "study_screens"
+        private const val KEY_PAUSED = "study_paused"
+        private const val KEY_CHALLENGE = "study_challenge"
         private const val MAX_SCREENS = 250
         private const val MAX_NODES_PER_SCREEN = 300
     }
