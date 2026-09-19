@@ -3659,6 +3659,17 @@ class ProfileV07 extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _ProfileTile(
+                icon: Icons.admin_panel_settings_rounded,
+                title: 'Main Owner Panel',
+                subtitle: 'Global gift videos and app-owner controls',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MainOwnerPanelV08(),
+                  ),
+                ),
+              ),
+              _ProfileTile(
                 icon: Icons.account_balance_wallet_rounded,
                 title: 'Wallet',
                 subtitle: 'Balances, conversion and transaction history',
@@ -3723,6 +3734,68 @@ class ProfileV07 extends StatelessWidget {
     );
   }
 
+}
+
+class MainOwnerPanelV08 extends StatelessWidget {
+  const MainOwnerPanelV08({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = dynamicGiftStoreV08.gifts
+        .where((gift) => gift.activeAt(DateTime.now()))
+        .length;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Main Owner Panel')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                child: Icon(Icons.shield_rounded),
+              ),
+              title: Text('App Owner Controls'),
+              subtitle: Text(
+                'This local v0.8 panel represents the future secure main-owner role.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              key: const Key('main-owner-video-gifts-v08'),
+              leading: const Icon(Icons.video_collection_rounded),
+              title: const Text('Global Video Gifts'),
+              subtitle: Text(
+                active.toString() +
+                    ' active • add / disable / preview / remove videos',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DynamicGiftManagerV08(
+                    title: 'Main Owner • Video Gifts',
+                    vipLevel: 11,
+                    isAppOwner: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.rule_rounded),
+              title: Text('Video limits'),
+              subtitle: Text(
+                'Maximum 5 seconds and 12 MB per gift video. App Owner can use 15d, 1m, 3m, 6m or Lifetime.',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class StoreV07 extends StatelessWidget {
