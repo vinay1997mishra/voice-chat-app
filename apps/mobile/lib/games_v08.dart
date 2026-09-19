@@ -404,6 +404,7 @@ class LudoGameV08 extends StatefulWidget {
 
 class _LudoGameV08State extends State<LudoGameV08> {
   final rng = Random();
+  late final List<GameVoicePlayerV08> gamePlayers;
   final tokens = List<List<int>>.generate(4, (_) => List<int>.filled(4, -1));
   int current = 0;
   int? dice;
@@ -414,10 +415,15 @@ class _LudoGameV08State extends State<LudoGameV08> {
   bool get botMode => widget.mode == V08GameMode.soloBot;
   bool get botTurn => botMode && current != 0;
 
+  @override
+  void initState() {
+    super.initState();
+    gamePlayers = _gamePlayersV08(widget.players, botMode);
+  }
+
   String _name(int seat) {
     const colors = ['Red', 'Green', 'Blue', 'Yellow'];
-    if (!botMode) return 'P' + (seat + 1).toString() + ' / ' + colors[seat];
-    return seat == 0 ? 'You / Red' : 'Bot ' + seat.toString() + ' / ' + colors[seat];
+    return gamePlayers[seat].name + ' / ' + colors[seat];
   }
 
   List<int> movable(int roll) {
@@ -832,6 +838,7 @@ class UnoGameV08 extends StatefulWidget {
 
 class _UnoGameV08State extends State<UnoGameV08> {
   final rng = Random();
+  late final List<GameVoicePlayerV08> gamePlayers;
   final deck = <_UnoCardData>[];
   final discard = <_UnoCardData>[];
   final hands = List<List<_UnoCardData>>.generate(4, (_) => <_UnoCardData>[]);
@@ -847,13 +854,11 @@ class _UnoGameV08State extends State<UnoGameV08> {
   @override
   void initState() {
     super.initState();
+    gamePlayers = _gamePlayersV08(widget.players, botMode);
     _newGame();
   }
 
-  String _name(int seat) {
-    if (!botMode) return 'Player ' + (seat + 1).toString();
-    return seat == 0 ? 'You' : 'Bot ' + seat.toString();
-  }
+  String _name(int seat) => gamePlayers[seat].name;
 
   int _next([int steps = 1]) {
     var value = turn;
@@ -1240,6 +1245,7 @@ class CarromGameV08 extends StatefulWidget {
 class _CarromGameV08State extends State<CarromGameV08>
     with SingleTickerProviderStateMixin {
   final pieces = <_CarromPiece>[];
+  late final List<GameVoicePlayerV08> gamePlayers;
   final scores = List<int>.filled(4, 0);
   late final AnimationController ticker;
   int turn = 0;
@@ -1252,10 +1258,7 @@ class _CarromGameV08State extends State<CarromGameV08>
   bool get botTurn => botMode && turn != 0;
   _CarromPiece get striker => pieces.last;
 
-  String _name(int seat) {
-    if (!botMode) return 'P' + (seat + 1).toString();
-    return seat == 0 ? 'You' : 'Bot ' + seat.toString();
-  }
+  String _name(int seat) => gamePlayers[seat].name;
 
   Offset _home(int seat) {
     if (seat == 0) return const Offset(.50, .86);
@@ -1267,6 +1270,7 @@ class _CarromGameV08State extends State<CarromGameV08>
   @override
   void initState() {
     super.initState();
+    gamePlayers = _gamePlayersV08(widget.players, botMode);
     _setup();
     ticker = AnimationController(vsync: this, duration: const Duration(days: 1))
       ..addListener(_physicsTick)
