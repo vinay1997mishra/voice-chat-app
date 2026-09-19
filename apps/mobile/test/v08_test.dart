@@ -16,6 +16,11 @@ void main() {
   }
 
   Future<void> openOfficialRoom(WidgetTester tester) async {
+    final popularTab = find.byKey(const Key('home-popular-tab-v08'));
+    if (popularTab.evaluate().isNotEmpty) {
+      await tester.tap(popularTab);
+      await tester.pumpAndSettle();
+    }
     final roomFinder = find.byKey(const Key('open-v07-room'));
     final homeList = find.byType(ListView).first;
     for (var attempt = 0; attempt < 5 && roomFinder.evaluate().isEmpty; attempt++) {
@@ -234,6 +239,8 @@ void main() {
       (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const VoiceChatV08());
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Night Party'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('join-room-pin-v06')), '000000');
@@ -267,9 +274,9 @@ void main() {
     await tester.tap(find.byKey(const Key('create-room-submit-v06')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('• Locked • My Room'), findsOneWidget);
+    expect(find.byKey(const Key('mine-my-room-card-v08')), findsOneWidget);
 
-    await tester.tap(find.text('My Voice Room'));
+    await tester.tap(find.byKey(const Key('mine-my-room-card-v08')));
     await tester.pumpAndSettle();
 
     expect(find.byType(RoomV07), findsOneWidget);
@@ -406,7 +413,7 @@ void main() {
     await tester.tap(find.byKey(const Key('create-room-submit-v06')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('• My Room'), findsOneWidget);
+    expect(find.byKey(const Key('mine-my-room-card-v08')), findsOneWidget);
     expect(find.byKey(const Key('create-room-v06')), findsNothing);
     expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
     expect(find.byType(CreateRoomV07), findsNothing);
@@ -1036,6 +1043,100 @@ void main() {
 
     expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
     expect(find.byKey(const Key('create-room-v06')), findsNothing);
+  });
+
+
+  testWidgets('Mine shows permanent own room above Recent and Followed sections',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mine-create-room-card-v08')), findsOneWidget);
+    expect(find.byKey(const Key('mine-recent-rooms-tab-v08')), findsOneWidget);
+    expect(find.byKey(const Key('mine-followed-rooms-tab-v08')), findsOneWidget);
+    expect(find.byKey(const Key('mine-recent-empty-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('mine-create-room-card-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('room-dp-gallery-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-dp-camera-v08')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-name-v08')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-description-v08')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('create-room-name-v08')),
+      'My Permanent Room',
+    );
+    await tester.enterText(
+      find.byKey(const Key('create-room-description-v08')),
+      'Music, friends and daily voice chat',
+    );
+    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mine-create-room-card-v08')), findsNothing);
+    expect(find.byKey(const Key('mine-my-room-card-v08')), findsOneWidget);
+    expect(find.text('My Permanent Room'), findsOneWidget);
+    expect(
+      find.textContaining('Music, friends and daily voice chat'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('visited rooms move into Mine Recent Rooms',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-v07-room')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RoomV07), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mine-tab-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsOneWidget);
+    expect(find.byKey(const Key('mine-recent-empty-v08')), findsNothing);
+  });
+
+  testWidgets('followed Popular room appears inside Mine Followed Rooms',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('follow-room-10000000-v08')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mine-tab-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mine-followed-rooms-tab-v08')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsOneWidget);
+    expect(find.byKey(const Key('mine-followed-empty-v08')), findsNothing);
+  });
+
+  test('room description is stored on room creation model', () {
+    final room = RoomData(
+      'Description Room',
+      '55555123',
+      '🎧',
+      false,
+      description: 'A persistent room description',
+    );
+    expect(room.description, 'A persistent room description');
   });
 
 }
