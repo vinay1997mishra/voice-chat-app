@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'app_owner_controls_v08.dart';
 
 enum V08GameMode { soloBot, localMulti }
 
@@ -290,25 +291,73 @@ class GamesCenterV08 extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Game Center')),
-    body: GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, childAspectRatio: 1.15, crossAxisSpacing: 12, mainAxisSpacing: 12),
-      itemCount: games.length,
-      itemBuilder: (context, i) {
-        final g=games[i];
-        return Card(child: InkWell(
-          key: Key('game-'+g.$1.toLowerCase().replaceAll(' ','-')+'-v08'),
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GameLauncherV08(game:g.$1, players: players))),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children:[
-            Icon(g.$2,size:42), const SizedBox(height:10),
-            Text(g.$1,textAlign:TextAlign.center,style:const TextStyle(fontWeight:FontWeight.w900)),
-          ]),
-        ));
-      },
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: appOwnerControlsV08,
+    builder: (context, _) => Scaffold(
+      appBar: AppBar(title: const Text('Game Center')),
+      body: appOwnerControlsV08.gamesEnabled
+          ? GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1.15,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: games.length,
+              itemBuilder: (context, i) {
+                final g = games[i];
+                final enabled = appOwnerControlsV08.gameEnabled(g.$1);
+                return Card(
+                  child: InkWell(
+                    key: Key('game-' + g.$1.toLowerCase().replaceAll(' ', '-') + '-v08'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: enabled
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => GameLauncherV08(
+                                  game: g.$1,
+                                  players: players,
+                                ),
+                              ),
+                            )
+                        : null,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      opacity: enabled ? 1 : .35,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(g.$2, size: 42),
+                          const SizedBox(height: 10),
+                          Text(
+                            g.$1,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          if (!enabled)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 5),
+                              child: Text(
+                                'Disabled by Owner',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            )
+          : const Center(
+              key: Key('games-disabled-v08'),
+              child: Text(
+                'Game Center is disabled by App Owner',
+                textAlign: TextAlign.center,
+              ),
+            ),
     ),
   );
 }
