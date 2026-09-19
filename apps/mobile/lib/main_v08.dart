@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'games_v08.dart';
 import 'gift_catalog_v08.dart';
@@ -604,17 +605,33 @@ class _MainShellV07State extends State<MainShellV07> {
 class DiscoverV06 extends StatelessWidget {
   const DiscoverV06({super.key});
 
+  static const items = <(String, IconData, String)>[
+    ('Voice Rooms', Icons.graphic_eq_rounded, 'discover-voice-rooms-v08'),
+    ('Game Center', Icons.sports_esports_rounded, 'discover-game-center-v08'),
+    ('Music', Icons.music_note_rounded, 'discover-music-v08'),
+    ('VIP', Icons.workspace_premium_rounded, 'discover-vip-v08'),
+    ('Events', Icons.celebration_rounded, 'discover-events-v08'),
+    ('Official', Icons.verified_rounded, 'discover-official-v08'),
+  ];
+
+  void _open(BuildContext context, String title) {
+    final Widget page = switch (title) {
+      'Voice Rooms' => const V07Home(initialPopular: true),
+      'Game Center' => const GamesCenterV08(),
+      'Music' => const MusicCenterV08(),
+      'VIP' => const VipCenterV07(),
+      'Events' => const EventsCenterV08(),
+      'Official' => const V07Home(
+          initialPopular: true,
+          initialPopularCategory: 'Official',
+        ),
+      _ => const V07Home(),
+    };
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final items = const [
-      ('Voice Rooms', Icons.graphic_eq_rounded),
-      ('Game Center', Icons.sports_esports_rounded),
-      ('Music', Icons.music_note_rounded),
-      ('VIP', Icons.workspace_premium_rounded),
-      ('Events', Icons.celebration_rounded),
-      ('Official', Icons.verified_rounded),
-    ];
-
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -642,52 +659,8 @@ class DiscoverV06 extends StatelessWidget {
               children: [
                 for (final item in items)
                   InkWell(
-                    onTap: () {
-                      if (item.$1 == 'Game Center') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const GamesCenterV08(),
-                          ),
-                        );
-                        return;
-                      }
-                      showModalBottomSheet<void>(
-                      context: context,
-                      showDragHandle: true,
-                      builder: (_) => SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(item.$2, size: 46),
-                              const SizedBox(height: 10),
-                              Text(
-                                item.$1,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                item.$1 == 'Game Center'
-                                    ? 'Dice, Lucky Wheel and room games are active local demos.'
-                                    : 'This section is active in the v0.8 local demo.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 14),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Done'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                    },
+                    key: Key(item.$3),
+                    onTap: () => _open(context, item.$1),
                     borderRadius: BorderRadius.circular(18),
                     child: Card(
                       child: Column(
@@ -712,6 +685,112 @@ class DiscoverV06 extends StatelessWidget {
       ),
     );
   }
+}
+
+class MusicCenterV08 extends StatefulWidget {
+  const MusicCenterV08({super.key});
+
+  @override
+  State<MusicCenterV08> createState() => _MusicCenterV08State();
+}
+
+class _MusicCenterV08State extends State<MusicCenterV08> {
+  static const tracks = <String>[
+    'Chill Room',
+    'Party Beat',
+    'Lo-fi Night',
+    'Soft Vibes',
+  ];
+  String? selectedTrack;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Music')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (selectedTrack != null)
+              Card(
+                key: const Key('music-selected-track-v08'),
+                child: ListTile(
+                  leading: const Icon(Icons.music_note_rounded),
+                  title: const Text('Selected soundtrack'),
+                  subtitle: Text(selectedTrack!),
+                  trailing: TextButton(
+                    key: const Key('music-stop-v08'),
+                    onPressed: () => setState(() => selectedTrack = null),
+                    child: const Text('Stop'),
+                  ),
+                ),
+              ),
+            for (var i = 0; i < tracks.length; i++)
+              Card(
+                child: ListTile(
+                  key: Key('music-track-' + i.toString() + '-v08'),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.play_arrow_rounded),
+                  ),
+                  title: Text(tracks[i]),
+                  subtitle: const Text('Select for local room soundtrack'),
+                  trailing: selectedTrack == tracks[i]
+                      ? const Icon(Icons.check_circle_rounded)
+                      : const Icon(Icons.chevron_right_rounded),
+                  onTap: () => setState(() => selectedTrack = tracks[i]),
+                ),
+              ),
+          ],
+        ),
+      );
+}
+
+class EventsCenterV08 extends StatefulWidget {
+  const EventsCenterV08({super.key});
+
+  @override
+  State<EventsCenterV08> createState() => _EventsCenterV08State();
+}
+
+class _EventsCenterV08State extends State<EventsCenterV08> {
+  static const events = <String>[
+    'Weekend Voice Party',
+    'Ludo Room Challenge',
+    'VIP Gift Night',
+  ];
+  final Set<String> joined = <String>{};
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Events')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            for (var i = 0; i < events.length; i++)
+              Card(
+                child: ListTile(
+                  key: Key('event-' + i.toString() + '-v08'),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.celebration_rounded),
+                  ),
+                  title: Text(events[i]),
+                  subtitle: Text(
+                    joined.contains(events[i])
+                        ? 'Joined • event saved in this build'
+                        : 'Tap Join to participate',
+                  ),
+                  trailing: FilledButton.tonal(
+                    key: Key('event-join-' + i.toString() + '-v08'),
+                    onPressed: () {
+                      setState(() {
+                        if (!joined.add(events[i])) joined.remove(events[i]);
+                      });
+                    },
+                    child: Text(joined.contains(events[i]) ? 'Leave' : 'Join'),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
 }
 
 class MessageHubV07 extends StatelessWidget {
@@ -1057,7 +1136,15 @@ class _DemoChatV07State extends State<DemoChatV07> {
 }
 
 class V07Home extends StatefulWidget {
-  const V07Home({super.key});
+  const V07Home({
+    super.key,
+    this.initialPopular = false,
+    this.initialPopularCategory,
+  });
+
+  final bool initialPopular;
+  final String? initialPopularCategory;
+
   @override
   State<V07Home> createState() => _V07HomeState();
 }
@@ -1088,10 +1175,16 @@ class _V07HomeState extends State<V07Home> {
       onlineUsers: 3,
     ),
   ];
-  bool _showPopular = false;
+  late bool _showPopular;
   bool _showFollowedRooms = false;
   final List<RoomData> _recentRooms = <RoomData>[];
   final Set<RoomData> _followedRooms = <RoomData>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _showPopular = widget.initialPopular;
+  }
 
   RoomData? get _myRoom {
     for (final room in rooms) {
@@ -1613,12 +1706,21 @@ class _V07HomeState extends State<V07Home> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Popular Rooms',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                Text(
+                  widget.initialPopularCategory == null
+                      ? 'Popular Rooms'
+                      : widget.initialPopularCategory! + ' Rooms',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 6),
-                for (final room in rooms)
+                for (final room in rooms.where(
+                  (room) =>
+                      widget.initialPopularCategory == null ||
+                      room.category == widget.initialPopularCategory,
+                ))
                   _roomListCard(
                     room,
                     key: room.name == 'India Official Room'
@@ -1922,6 +2024,7 @@ class _RoomV07State extends State<RoomV07> {
   int backgroundIndex = 0;
   int _lpRemaining = 0;
   bool _lpClaimed = false;
+  String? selectedMusicTrack;
   final picker = ImagePicker();
   final TextEditingController _roomMessageController = TextEditingController();
   final ScrollController _roomScrollController = ScrollController();
@@ -2008,7 +2111,30 @@ class _RoomV07State extends State<RoomV07> {
                 IconButton(key: const Key('v07-four-box'), onPressed: _openTools, icon: const Icon(Icons.grid_view_rounded)),
               ]),
             ),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Align(alignment: Alignment.centerLeft, child: Text('📢 $notice', maxLines: 1, overflow: TextOverflow.ellipsis))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '📢 ' + notice,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (selectedMusicTrack != null)
+              Padding(
+                key: const Key('room-selected-music-v08'),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '🎵 ' + selectedMusicTrack!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             const SizedBox(height: 6),
             Expanded(
               child: ListView(
@@ -2229,15 +2355,9 @@ class _RoomV07State extends State<RoomV07> {
                       _BottomTool(
                         Icons.person_add_alt_1_rounded,
                         'Invite',
-                        () => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              inviteMode
-                                  ? 'Invite request created'
-                                  : 'Room link ready to share',
-                            ),
-                          ),
-                        ),
+                        () {
+                          _shareRoom();
+                        },
                       ),
                     ],
                   ),
@@ -3804,24 +3924,143 @@ class _RoomV07State extends State<RoomV07> {
   void _music() {
     showModalBottomSheet<void>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text('Music', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-            for (final track in const ['Chill Room', 'Party Beat', 'Lo-fi Night'])
-              ListTile(
-                leading: const Icon(Icons.music_note_rounded),
-                title: Text(track),
-                trailing: const Icon(Icons.play_arrow_rounded),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$track selected in local demo')),
-                  );
-                },
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setLocal) => SafeArea(
+          child: ListView(
+            key: const Key('room-music-sheet-v08'),
+            shrinkWrap: true,
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'Music',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
               ),
+              for (final track in const [
+                'Chill Room',
+                'Party Beat',
+                'Lo-fi Night',
+                'Soft Vibes',
+              ])
+                ListTile(
+                  key: Key(
+                    'room-music-' +
+                        track.toLowerCase().replaceAll(' ', '-') +
+                        '-v08',
+                  ),
+                  leading: const Icon(Icons.music_note_rounded),
+                  title: Text(track),
+                  trailing: selectedMusicTrack == track
+                      ? const Icon(Icons.check_circle_rounded)
+                      : const Icon(Icons.play_arrow_rounded),
+                  onTap: () {
+                    setState(() {
+                      selectedMusicTrack = track;
+                      chat.add('System: Room soundtrack selected: ' + track);
+                    });
+                    setLocal(() {});
+                    Navigator.pop(sheetContext);
+                  },
+                ),
+              if (selectedMusicTrack != null)
+                ListTile(
+                  key: const Key('room-music-stop-v08'),
+                  leading: const Icon(Icons.stop_circle_rounded),
+                  title: const Text('Stop Music'),
+                  onTap: () {
+                    setState(() {
+                      chat.add('System: Room soundtrack stopped');
+                      selectedMusicTrack = null;
+                    });
+                    Navigator.pop(sheetContext);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareRoom() async {
+    final details = widget.room.name +
+        ' • Room ID ' +
+        widget.room.id +
+        (widget.room.locked ? ' • Locked room' : ' • Open room');
+    await Clipboard.setData(ClipboardData(text: details));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Room invite copied')),
+    );
+  }
+
+  void _roomInfo() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Room Info'),
+        content: Text(
+          'Name: ' +
+              widget.room.name +
+              '\nRoom ID: ' +
+              widget.room.id +
+              '\nCategory: ' +
+              widget.room.category +
+              '\nOnline: ' +
+              widget.room.onlineUsers.toString() +
+              '\nDescription: ' +
+              (widget.room.description.trim().isEmpty
+                  ? 'No description'
+                  : widget.room.description.trim()),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _reportRoom() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _RouteTextEditorV08(
+        builder: (dialogContext, controller) => AlertDialog(
+          title: const Text('Report Room'),
+          content: TextField(
+            key: const Key('report-room-input-v08'),
+            controller: controller,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Reason',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('report-room-submit-v08'),
+              onPressed: () {
+                final reason = controller.text.trim();
+                if (reason.isEmpty) return;
+                demoEconomy.addInbox(
+                  'Room report submitted',
+                  widget.room.name + ' • ' + reason,
+                  Icons.flag_rounded,
+                );
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Room report submitted')),
+                );
+              },
+              child: const Text('Submit'),
+            ),
           ],
         ),
       ),
@@ -3831,17 +4070,46 @@ class _RoomV07State extends State<RoomV07> {
   void _more() {
     showModalBottomSheet<void>(
       context: context,
-      builder: (_) => const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('More Room Tools', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-              SizedBox(height: 12),
-              Text('Share Room • Report • Room Info • Local demo controls'),
-            ],
-          ),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          key: const Key('room-more-tools-v08'),
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'More Room Tools',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            ListTile(
+              key: const Key('room-share-v08'),
+              leading: const Icon(Icons.share_rounded),
+              title: const Text('Share Room'),
+              subtitle: const Text('Copy room invite details'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _shareRoom();
+              },
+            ),
+            ListTile(
+              key: const Key('room-report-v08'),
+              leading: const Icon(Icons.flag_rounded),
+              title: const Text('Report Room'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _reportRoom();
+              },
+            ),
+            ListTile(
+              key: const Key('room-info-v08'),
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text('Room Info'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _roomInfo();
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -5984,7 +6252,9 @@ class _WalletV06State extends State<WalletV06> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '$amount Diamond converted to ${amount ~/ 2} Coins',
+          '$amount Diamond converted to ' +
+              (amount ~/ appOwnerControlsV08.diamondsPerCoin).toString() +
+              ' Coins',
         ),
       ),
     );
@@ -6040,7 +6310,11 @@ class _WalletV06State extends State<WalletV06> {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const Text('Conversion rate: 50%'),
+                    Text(
+                      'Conversion rate: ' +
+                          appOwnerControlsV08.diamondsPerCoin.toString() +
+                          ' Diamond = 1 Coin',
+                    ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: conversion,
