@@ -80,6 +80,11 @@ jobs:
           grep -Fq 'putBoolean("wake_enabled",true)' app/src/main/java/com/anamika/ai/BootWakeReceiver.java
           grep -Fq 'onTaskRemoved' app/src/main/java/com/anamika/ai/BackgroundWakeService.java
           grep -Fq 'MY_PACKAGE_REPLACED' app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/com/anamika/ai/media3d/CinematicMovieTimeline.java
+          grep -Fq 'CinematicMovieTimeline.sample' app/src/main/java/com/anamika/ai/media3d/Premium3DRenderer.java
+          grep -Fq 'verifyAnimatedOutput' app/src/main/java/com/anamika/ai/media3d/Premium3DVideoExporter.java
+          grep -Fq 'appears static/frozen' app/src/main/java/com/anamika/ai/media3d/Premium3DVideoExporter.java
+          grep -Fq 'Animated cinematic MP4 verified' app/src/main/java/com/anamika/ai/media3d/Premium3DActivity.java
 
       - uses: actions/setup-java@v5
         with:
