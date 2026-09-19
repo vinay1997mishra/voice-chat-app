@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_chat_app/main_v08.dart';
 import 'package:voice_chat_app/gift_catalog_v08.dart';
+import 'package:voice_chat_app/dynamic_gifts_v08.dart';
+import 'package:voice_chat_app/dynamic_gift_manager_v08.dart';
 
 void main() {
   void setPhoneViewport(WidgetTester tester) {
@@ -287,6 +289,108 @@ void main() {
     expect(economy.giftHistory.first.toId, recipient.id);
     expect(gift.animationTier, GiftAnimationTierV08.ultraRide3d);
     expect(gift.isHumanRide, isTrue);
+  });
+
+  test('dynamic video gift limits and VIP duration rules are fixed', () {
+    expect(dynamicGiftMaxVideoBytesV08, 12 * 1024 * 1024);
+    expect(dynamicGiftMaxVideoDurationV08, const Duration(seconds: 5));
+
+    expect(roomGiftLeasesForVipV08(7), isEmpty);
+    expect(
+      roomGiftLeasesForVipV08(8),
+      const [GiftLeaseV08.days15],
+    );
+    expect(
+      roomGiftLeasesForVipV08(9),
+      const [GiftLeaseV08.days15, GiftLeaseV08.month1],
+    );
+    expect(
+      roomGiftLeasesForVipV08(10),
+      const [
+        GiftLeaseV08.days15,
+        GiftLeaseV08.month1,
+        GiftLeaseV08.months3,
+      ],
+    );
+    expect(
+      roomGiftLeasesForVipV08(11),
+      const [
+        GiftLeaseV08.days15,
+        GiftLeaseV08.month1,
+        GiftLeaseV08.months3,
+        GiftLeaseV08.months6,
+        GiftLeaseV08.lifetime,
+      ],
+    );
+  });
+
+  test('dynamic gift expiry hides expired gifts but lifetime stays active', () {
+    final now = DateTime(2026, 9, 19);
+    final store = DynamicGiftStoreV08();
+    store.add(
+      DynamicGiftV08(
+        id: 'expired',
+        name: 'Old Gift',
+        coins: 100,
+        videoPath: '/tmp/old.mp4',
+        videoBytes: 1024,
+        videoDuration: const Duration(seconds: 5),
+        lease: GiftLeaseV08.days15,
+        createdAt: now.subtract(const Duration(days: 16)),
+        createdBy: 'Room Owner',
+        roomId: 'R1',
+      ),
+    );
+    store.add(
+      DynamicGiftV08(
+        id: 'life',
+        name: 'Lifetime Gift',
+        coins: 200,
+        videoPath: '/tmp/life.mp4',
+        videoBytes: 1024,
+        videoDuration: const Duration(seconds: 5),
+        lease: GiftLeaseV08.lifetime,
+        createdAt: now.subtract(const Duration(days: 500)),
+        createdBy: 'App Owner',
+      ),
+    );
+
+    final active = store.activeForRoom('R1', now);
+    expect(active.map((gift) => gift.id), contains('life'));
+    expect(active.map((gift) => gift.id), isNot(contains('expired')));
+  });
+
+  testWidgets('VIP8 room owner can open video gift uploader while VIP7 is locked',
+      (tester) async {
+    setPhoneViewport(tester);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DynamicGiftManagerV08(
+          title: 'Room Video Gifts',
+          vipLevel: 7,
+          isAppOwner: false,
+          roomId: 'R1',
+        ),
+      ),
+    );
+    expect(find.text('VIP8+ required'), findsOneWidget);
+    expect(find.byKey(const Key('add-video-gift-v08')), findsNothing);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DynamicGiftManagerV08(
+          title: 'Room Video Gifts',
+          vipLevel: 8,
+          isAppOwner: false,
+          roomId: 'R1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('add-video-gift-v08')), findsOneWidget);
+    expect(find.textContaining('Video maximum 5 seconds'), findsOneWidget);
+    expect(find.textContaining('File maximum 12 MB'), findsOneWidget);
   });
 
   test('country flags use 21K and render regional flag emoji', () {
