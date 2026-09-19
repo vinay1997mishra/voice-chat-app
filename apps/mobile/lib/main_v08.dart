@@ -1818,6 +1818,20 @@ class _RoomV07State extends State<RoomV07> {
                     _gameCenter();
                   },
                 ),
+                ListTile(
+                  key: const Key('owner-video-gifts-v08'),
+                  leading: const Icon(Icons.video_collection_rounded),
+                  title: const Text('Video Gifts'),
+                  subtitle: Text(
+                    demoEconomy.activeVip >= 8
+                        ? 'Add/manage 5-sec room gift videos'
+                        : 'VIP8+ required to add room gift videos',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openRoomVideoGiftManager();
+                  },
+                ),
                 const Divider(height: 28),
                 const Text(
                   'AI Assistant',
@@ -1852,6 +1866,22 @@ class _RoomV07State extends State<RoomV07> {
         ),
       ),
     );
+  }
+
+  void _openRoomVideoGiftManager() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DynamicGiftManagerV08(
+          title: 'Room Video Gifts',
+          vipLevel: demoEconomy.activeVip,
+          isAppOwner: false,
+          roomId: widget.room.id,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _editRoomName() {
