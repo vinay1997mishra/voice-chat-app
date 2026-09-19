@@ -1,6 +1,7 @@
 package ai.anamika.app.features
 
 import android.content.Context
+import ai.anamika.app.distribution.PublicEntitlementCache
 
 enum class FeatureId(val key: String) {
     CHAT("chat"),
@@ -24,6 +25,7 @@ class FeatureManager(
     private val ownerMode: Boolean
 ) {
     private val prefs = context.getSharedPreferences("anamika_features", Context.MODE_PRIVATE)
+    private val publicEntitlement = PublicEntitlementCache(context)
 
     fun isOwnerMode(): Boolean = ownerMode
 
@@ -37,7 +39,7 @@ class FeatureManager(
         if (ownerMode) {
             isMasterEnabled() && prefs.getBoolean(ownerKey(feature), true)
         } else {
-            publicDefault(feature)
+            publicEntitlement.enabled(feature) ?: publicDefault(feature)
         }
 
     fun setEnabled(feature: FeatureId, enabled: Boolean) {
