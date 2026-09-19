@@ -71,6 +71,18 @@ void main() {
     expect(find.textContaining('4 seats'), findsOneWidget);
   });
 
+
+  testWidgets('unsupported games do not advertise fake four-player local mode',
+      (tester) async {
+    phone(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: GameLauncherV08(game: 'Rock Paper Scissors')),
+    );
+    expect(find.text('Solo / Practice'), findsOneWidget);
+    expect(find.text('Single-phone practice mode.'), findsOneWidget);
+    expect(find.text('Local Multiplayer'), findsNothing);
+  });
+
   testWidgets('Ludo UNO Carrom show room DPs and mic states on four sides',
       (tester) async {
     phone(tester);
