@@ -1077,10 +1077,21 @@ void main() {
     await tester.tap(find.byKey(const Key('mine-create-room-card-v08')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('room-dp-gallery-v08')), findsOneWidget);
-    expect(find.byKey(const Key('room-dp-camera-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-dp-gallery-v08')), findsNothing);
+    expect(find.byKey(const Key('room-dp-camera-v08')), findsNothing);
     expect(find.byKey(const Key('create-room-name-v08')), findsOneWidget);
     expect(find.byKey(const Key('create-room-description-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-dp-v06')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('room-dp-source-sheet-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-dp-gallery-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-dp-camera-v08')), findsOneWidget);
+    expect(find.byKey(const Key('room-dp-emoji-v08')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const Key('create-room-name-v08')),
@@ -1105,7 +1116,7 @@ void main() {
     );
   });
 
-  testWidgets('visited rooms move into Mine Recent Rooms',
+  testWidgets('visited rooms enter Recent only while room has online users',
       (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const MaterialApp(home: V07Home()));
@@ -1125,9 +1136,26 @@ void main() {
 
     expect(find.text('India Official Room'), findsOneWidget);
     expect(find.byKey(const Key('mine-recent-empty-v08')), findsNothing);
+    expect(find.textContaining('Recent Rooms (1)'), findsOneWidget);
+
+    final officialRoom = roomRegistryV08.firstWhere(
+      (room) => room.name == 'India Official Room',
+    );
+    officialRoom.onlineUsers = 0;
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsNothing);
+    expect(find.byKey(const Key('mine-recent-empty-v08')), findsOneWidget);
+    expect(find.textContaining('Recent Rooms (0)'), findsOneWidget);
+
+    officialRoom.onlineUsers = 2;
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsOneWidget);
+    expect(find.textContaining('Recent Rooms (1)'), findsOneWidget);
   });
 
-  testWidgets('followed Popular room appears inside Mine Followed Rooms',
+  testWidgets('Followed Rooms shows only followed rooms with online users',
       (tester) async {
     setPhoneViewport(tester);
     await tester.pumpWidget(const MaterialApp(home: V07Home()));
@@ -1146,6 +1174,23 @@ void main() {
 
     expect(find.text('India Official Room'), findsOneWidget);
     expect(find.byKey(const Key('mine-followed-empty-v08')), findsNothing);
+    expect(find.textContaining('Followed (1)'), findsOneWidget);
+
+    final officialRoom = roomRegistryV08.firstWhere(
+      (room) => room.name == 'India Official Room',
+    );
+    officialRoom.onlineUsers = 0;
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsNothing);
+    expect(find.byKey(const Key('mine-followed-empty-v08')), findsOneWidget);
+    expect(find.textContaining('Followed (0)'), findsOneWidget);
+
+    officialRoom.onlineUsers = 4;
+    await tester.pumpAndSettle();
+
+    expect(find.text('India Official Room'), findsOneWidget);
+    expect(find.textContaining('Followed (1)'), findsOneWidget);
   });
 
   test('room description is stored on room creation model', () {
@@ -1157,6 +1202,21 @@ void main() {
       description: 'A persistent room description',
     );
     expect(room.description, 'A persistent room description');
+  });
+
+
+  test('RoomData online state reflects whether any user is present', () {
+    final room = RoomData(
+      'Online State Room',
+      '77777123',
+      '🎧',
+      false,
+      onlineUsers: 0,
+    );
+    expect(room.isOnline, isFalse);
+
+    room.onlineUsers = 1;
+    expect(room.isOnline, isTrue);
   });
 
 }
