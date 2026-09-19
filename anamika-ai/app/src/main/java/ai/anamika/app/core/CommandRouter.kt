@@ -34,6 +34,18 @@ sealed class Command {
     data object BuildDownload : Command()
     data class MakeApp(val goal: String) : Command()
 
+    data object InternetOn : Command()
+    data object InternetOff : Command()
+    data object InternetStatus : Command()
+
+    data object AppControlSettings : Command()
+    data object AppAllowCurrent : Command()
+    data object AppDenyCurrent : Command()
+    data class AppOpen(val packageName: String) : Command()
+    data class AppClick(val text: String) : Command()
+    data class AppType(val text: String) : Command()
+    data object AppModelCurrent : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -43,6 +55,18 @@ class CommandRouter {
         val lower = text.lowercase()
 
         return when {
+            lower == "internet on" || lower == "internet chalu" -> Command.InternetOn
+            lower == "internet off" || lower == "internet band" -> Command.InternetOff
+            lower == "internet status" -> Command.InternetStatus
+
+            lower == "app control settings" || lower == "accessibility settings" -> Command.AppControlSettings
+            lower == "app allow current" -> Command.AppAllowCurrent
+            lower == "app deny current" -> Command.AppDenyCurrent
+            lower.startsWith("app open ") -> Command.AppOpen(text.drop(9).trim())
+            lower.startsWith("app click ") -> Command.AppClick(text.drop(10).trim())
+            lower.startsWith("app type ") -> Command.AppType(text.drop(9).trim())
+            lower == "app model current" -> Command.AppModelCurrent
+
             lower.startsWith("server set ") -> Command.ServerSet(text.drop(11).trim())
             lower == "server show" -> Command.ServerShow
             lower == "build apk" || lower == "apk build" || lower == "apk banao" -> Command.BuildApk
