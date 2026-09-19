@@ -65,6 +65,63 @@ void main() {
     }
   });
 
+  testWidgets('owner moves seats without duplication and is excluded from mute-all',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Owner seat room',
+      'OWN-SEAT',
+      '👑',
+      false,
+      ownedByMe: true,
+    );
+    await tester.pumpWidget(MaterialApp(home: RoomV07(room: room)));
+
+    expect(find.text('Owner'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('room-seat-3-v08')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Go to Seat'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Owner'), findsNothing);
+    expect(find.text('You'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-3-v08')),
+        matching: find.byIcon(Icons.mic_off_rounded),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    final ownerTool = find.descendant(
+      of: find.byKey(const Key('v07-tools-grid')),
+      matching: find.text('Owner'),
+    );
+    await tester.tap(ownerTool);
+    await tester.pumpAndSettle();
+
+    final muteAll = find.text('Mute All Guests');
+    await tester.scrollUntilVisible(
+      muteAll,
+      350,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(muteAll);
+    await tester.pumpAndSettle();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('room-seat-3-v08')),
+        matching: find.byIcon(Icons.mic_off_rounded),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('owner Lucky Bag becomes visible and can be claimed',
       (tester) async {
     setPhoneViewport(tester);
