@@ -91,11 +91,16 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
         wakeListenButton = findViewById(R.id.wakeListenButton);
+        Button forgetOwnerButton = findViewById(R.id.forgetOwnerButton);
         result.setMovementMethod(new ScrollingMovementMethod());
 
         boolean ownerPinAlreadySet = OwnerAuth.hasPin(this);
+        boolean ownerRemembered = OwnerSession.isTrusted(this);
         unlocked = OwnerSession.isActive(this);
         unlockButton.setText(ownerPinAlreadySet ? "Unlock Owner" : "Set Owner PIN");
+        pinInput.setVisibility(ownerRemembered ? View.GONE : View.VISIBLE);
+        unlockButton.setVisibility(ownerRemembered ? View.GONE : View.VISIBLE);
+        forgetOwnerButton.setVisibility(ownerRemembered ? View.VISIBLE : View.GONE);
 
         unlockButton.setOnClickListener(v -> unlockOwner(unlockButton));
         listenButton.setOnClickListener(v -> startListening());
@@ -106,10 +111,21 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 commandInput.setText("");
             }
         });
-        wakeListenButton.setText(prefs.getBoolean("wake_enabled",true)
+        wakeListenButton.setText(prefs.getBoolean("wake_enabled",false)
                 ? "24×7 Hello Mika / Hello Anamika: ON"
                 : "24×7 Hello Mika / Hello Anamika: OFF");
         wakeListenButton.setOnClickListener(v -> toggleWakeListening());
+        forgetOwnerButton.setOnClickListener(v -> {
+            OwnerSession.revoke(this);
+            unlocked=false;
+            prefs.edit().putBoolean("wake_enabled",false).apply();
+            stopBackgroundWakeService();
+            pinInput.setVisibility(View.VISIBLE);
+            unlockButton.setVisibility(View.VISIBLE);
+            forgetOwnerButton.setVisibility(View.GONE);
+            status.setText("Owner login forgotten • PIN required");
+            result.setText("Owner login is no longer remembered on this device. Enter your existing PIN to verify again.");
+        });
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
         saveProjectButton.setOnClickListener(v -> saveGeneratedProject());
         premium3dButton.setOnClickListener(v -> {
@@ -143,8 +159,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             status.setText("First launch • Owner PIN not set");
             result.setText("Enter any 4–12 digit PIN in the Owner PIN box, then tap SET OWNER PIN. This becomes your owner unlock code.");
         } else if(unlocked) {
-            status.setText("Owner verified • session active");
-            result.setText("Anamika owner session active. Type, speak, or say Hello Mika / Hello Anamika.");
+            status.setText("Owner remembered • no login required");
+            result.setText("Owner login remembered on this phone. Type, speak, or say Hello Mika / Hello Anamika.");
+            if(prefs.getBoolean("wake_enabled",false)){
+                mainHandler.postDelayed(() -> enableWakeListening(false),500L);
+            }
             handleIncomingBackgroundCommand(getIntent());
         } else {
             status.setText("Locked • enter Owner PIN");
@@ -190,13 +209,16 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 failedPinAttempts = 0;
                 pinLockedUntilMs = 0L;
                 prefs.edit().remove(PIN_FAILS).remove(PIN_LOCK_UNTIL).apply();
-                status.setText("Owner verified • unlocked");
+                status.setText("Owner remembered • no login required");
                 unlockButton.setText("Unlock Owner");
+                pinInput.setVisibility(View.GONE);
+                unlockButton.setVisibility(View.GONE);
+                forgetOwnerButton.setVisibility(View.VISIBLE);
                 result.setText(firstSetup
-                        ? "Owner PIN set successfully. Anamika is unlocked and ready."
-                        : "Owner unlocked. Anamika is ready.");
+                        ? "Owner PIN set successfully. This phone is now remembered; repeated login is not required."
+                        : "Owner verified. This phone is now remembered; repeated login is not required.");
                 speak(firstSetup ? "Owner lock set. Anamika is ready." : "Welcome back. Anamika is ready.");
-                if(prefs.getBoolean("wake_enabled",true)){
+                if(prefs.getBoolean("wake_enabled",false)){
                     mainHandler.postDelayed(() -> enableWakeListening(false),900L);
                 }
             } else {
@@ -594,7 +616,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void toggleWakeListening(){
         if(!ensureUnlocked()) return;
-        boolean enable=!prefs.getBoolean("wake_enabled",true);
+        boolean enable=!prefs.getBoolean("wake_enabled",false);
         prefs.edit().putBoolean("wake_enabled",enable).apply();
         wakeListenButton.setText(enable?"24×7 Hello Mika / Hello Anamika: ON":"24×7 Hello Mika / Hello Anamika: OFF");
         if(enable) {
@@ -609,7 +631,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void enableWakeListening(boolean announce){
         if(!unlocked || !OwnerSession.isActive(this)) return;
-        if(!prefs.getBoolean("wake_enabled",true)) return;
+        if(!prefs.getBoolean("wake_enabled",false)) return;
         if(!SpeechRecognizer.isRecognitionAvailable(this)){
             wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: unavailable");
             if(announce) answer("Is phone par SpeechRecognizer service available nahi hai.");
@@ -626,7 +648,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void startWakeRecognizer(){
-        if(!prefs.getBoolean("wake_enabled",true) || !unlocked || !OwnerSession.isActive(this)) return;
+        if(!prefs.getBoolean("wake_enabled",false) || !unlocked || !OwnerSession.isActive(this)) return;
         stopWakeRecognizer();
         wakeRecognizer=SpeechRecognizer.createSpeechRecognizer(this);
         wakeRecognizer.setRecognitionListener(new RecognitionListener(){
@@ -685,7 +707,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void restartWakeIfEnabled(){
-        if(prefs!=null && prefs.getBoolean("wake_enabled",true) && unlocked && OwnerSession.isActive(this)){
+        if(prefs!=null && prefs.getBoolean("wake_enabled",false) && unlocked && OwnerSession.isActive(this)){
             resumeBackgroundWakeService();
         }
     }
@@ -853,6 +875,17 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
                 r = tts.setLanguage(new Locale("hi", "IN"));
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
+            }
+        }
+    }
+
+    @Override
+    protected void onResume(){
+        super.onResume();
+        if(prefs!=null && OwnerSession.isTrusted(this)){
+            unlocked=OwnerSession.isActive(this);
+            if(unlocked && prefs.getBoolean("wake_enabled",false) && !BackgroundWakeService.isRunning()){
+                mainHandler.postDelayed(this::startBackgroundWakeService,300L);
             }
         }
     }
