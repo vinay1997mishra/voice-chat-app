@@ -113,7 +113,9 @@ class GooglePublicAuth(
                     PublicUserSession(
                         googleSubject = json.getString("subject"),
                         email = json.getString("email"),
-                        displayName = json.optString("displayName").ifBlank { null }
+                        displayName = json.optString("displayName").ifBlank { null },
+                        role = json.getString("role"),
+                        sessionToken = json.getString("sessionToken")
                     )
                 }
             )
