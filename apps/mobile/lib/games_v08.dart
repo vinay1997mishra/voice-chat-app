@@ -151,17 +151,21 @@ class _VoiceGameSeatV08 extends StatelessWidget {
                       player.micOn
                           ? Icons.mic_rounded
                           : Icons.mic_off_rounded,
-                      size: 12,
+                      size: 11,
                       color: player.micOn
                           ? Colors.greenAccent
                           : Colors.white38,
                     ),
                     const SizedBox(width: 2),
-                    Text(
-                      player.isBot
-                          ? 'BOT'
-                          : (player.micOn ? 'VOICE' : 'MUTED'),
-                      style: const TextStyle(fontSize: 7),
+                    Expanded(
+                      child: Text(
+                        player.isBot
+                            ? 'BOT'
+                            : (player.micOn ? 'VOICE' : 'MUTED'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 6.5),
+                      ),
                     ),
                   ],
                 ),
