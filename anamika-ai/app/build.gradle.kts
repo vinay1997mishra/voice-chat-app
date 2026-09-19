@@ -18,6 +18,8 @@ android {
         buildConfigField("String", "ANAMIKA_DISTRIBUTION_MODE", "\"OWNER\"")
         buildConfigField("String", "ANAMIKA_OWNER_POLICY_URL", "\"https://example.invalid/entitlements\"")
         buildConfigField("String", "ANAMIKA_OWNER_POLICY_PUBLIC_KEY", "\"\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
+        buildConfigField("String", "ANAMIKA_PUBLIC_AUTH_URL", "\"https://example.invalid/auth/google\"")
     }
 
     buildFeatures {
@@ -47,5 +49,9 @@ android {
 dependencies {
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
     implementation("androidx.core:core:1.15.0")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
 }
