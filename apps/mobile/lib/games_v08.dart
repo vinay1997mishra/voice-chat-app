@@ -252,6 +252,7 @@ class FourSideVoiceGameStageV08 extends StatelessWidget {
           );
         },
       );
+}
 
 class _GameSceneV08 extends StatelessWidget {
   const _GameSceneV08({required this.child});
