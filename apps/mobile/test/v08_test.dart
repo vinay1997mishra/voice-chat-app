@@ -405,15 +405,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('create-room-submit-v06')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('• My Room'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('create-room-v06')));
-    await tester.pumpAndSettle();
-    expect(
-      find.textContaining('One user can create only one room'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('• My Room'), findsOneWidget);
+    expect(find.byKey(const Key('create-room-v06')), findsNothing);
+    expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
     expect(find.byType(CreateRoomV07), findsNothing);
+
+    await tester.tap(find.byKey(const Key('home-popular-tab-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('popular-user-search-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home-mine-tab-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('create-room-v06')), findsNothing);
+    expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
   });
 
   test('v0.8 economy sends catalog gift to recipient and records history', () {
