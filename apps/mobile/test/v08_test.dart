@@ -1269,7 +1269,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('discover-vip-v08')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(VipCenterV07), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -1368,7 +1369,7 @@ void main() {
     await tester.tap(find.byKey(const Key('room-info-v08')));
     await tester.pumpAndSettle();
     expect(find.text('Room Info'), findsOneWidget);
-    expect(find.textContaining('88888001'), findsOneWidget);
+    expect(find.textContaining('Room ID: 88888001'), findsOneWidget);
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
