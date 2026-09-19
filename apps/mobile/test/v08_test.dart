@@ -17,11 +17,12 @@ void main() {
 
   Future<void> openOfficialRoom(WidgetTester tester) async {
     final roomFinder = find.byKey(const Key('open-v07-room'));
-    await tester.scrollUntilVisible(
-      roomFinder,
-      280,
-      scrollable: find.byType(Scrollable).first,
-    );
+    final homeList = find.byType(ListView).first;
+    for (var attempt = 0; attempt < 5 && roomFinder.evaluate().isEmpty; attempt++) {
+      await tester.drag(homeList, const Offset(0, -220));
+      await tester.pumpAndSettle();
+    }
+    expect(roomFinder, findsOneWidget);
     await tester.tap(roomFinder);
     await tester.pumpAndSettle();
   }
