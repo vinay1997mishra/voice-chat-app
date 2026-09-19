@@ -53,10 +53,6 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?ACTION_START:intent.getAction();
         boolean enabled=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false);
-        if(intent==null && !enabled){
-            stopSelf();
-            return START_NOT_STICKY;
-        }
         if(!OwnerSession.isTrusted(this) && !ACTION_STOP.equals(action)){
             stopSelf();
             return START_NOT_STICKY;
@@ -68,6 +64,10 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
+        }
+        if(!enabled && OwnerSession.isTrusted(this)){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
+            enabled=true;
         }
         if(ACTION_PAUSE.equals(action)){
             stopListening();
@@ -92,9 +92,6 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent pi=PendingIntent.getActivity(this,1,open,
                 PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Intent stop=new Intent(this,BackgroundWakeService.class).setAction(ACTION_STOP);
-        PendingIntent stopPi=PendingIntent.getService(this,2,stop,
-                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this,CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentTitle("Anamika AI • 24×7 Wake")
@@ -102,8 +99,6 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setContentIntent(pi)
-                .addAction(new Notification.Action.Builder(
-                        android.R.drawable.ic_delete,"Stop",stopPi).build())
                 .build();
     }
 
@@ -122,8 +117,11 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void startListening(){
-        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
+        if(!OwnerSession.isTrusted(this)){
             stopSelf(); return;
+        }
+        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
         }
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
             updateNotification("Microphone permission required");
@@ -312,6 +310,14 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     public static boolean isRunning(){ return running; }
+
+    @Override public void onTaskRemoved(Intent rootIntent){
+        if(OwnerSession.isTrusted(this)){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
+            handler.postDelayed(this::startListening,300L);
+        }
+        super.onTaskRemoved(rootIntent);
+    }
 
     @Override public void onDestroy(){
         running=false;
