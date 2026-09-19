@@ -7,12 +7,18 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import ai.anamika.app.ai.DeviceAiGateway
+import ai.anamika.app.automation.AnamikaAccessibilityService
+import ai.anamika.app.automation.AppAccessPolicy
+import ai.anamika.app.automation.AppObservationStore
 import ai.anamika.app.build.ApkInstaller
 import ai.anamika.app.build.BuildServerGateway
 import ai.anamika.app.build.BuildServerSettings
@@ -21,6 +27,7 @@ import ai.anamika.app.coding.LocalAndroidProjectGenerator
 import ai.anamika.app.core.Command
 import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
+import ai.anamika.app.network.InternetPolicyManager
 import ai.anamika.app.github.BackendGitHubGateway
 import ai.anamika.app.github.RemoteActionQueue
 import ai.anamika.app.github.RemoteResult
@@ -51,6 +58,9 @@ class MainActivity : Activity() {
     private lateinit var workspacePackager: WorkspacePackager
     private lateinit var apkInstaller: ApkInstaller
     private lateinit var localProjectGenerator: LocalAndroidProjectGenerator
+    private lateinit var internetPolicy: InternetPolicyManager
+    private lateinit var appAccessPolicy: AppAccessPolicy
+    private lateinit var appObservations: AppObservationStore
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -68,6 +78,9 @@ class MainActivity : Activity() {
         workspacePackager = WorkspacePackager(this)
         apkInstaller = ApkInstaller(this)
         localProjectGenerator = LocalAndroidProjectGenerator(workspaceFiles)
+        internetPolicy = InternetPolicyManager(this)
+        appAccessPolicy = AppAccessPolicy(this)
+        appObservations = AppObservationStore(this)
 
         voice = VoiceAssistant(
             activity = this,
@@ -153,14 +166,16 @@ class MainActivity : Activity() {
                 runOnUiThread { reply(it.getOrElse { e -> e.message ?: "AI error" }) }
             }
 
-            is Command.LearnFromLink -> ai.learnFromLink(command.url) {
-                runOnUiThread { reply(it.getOrElse { e -> e.message ?: "Link analysis error" }) }
+            is Command.LearnFromLink -> withInternet {
+                ai.learnFromLink(command.url) {
+                    runOnUiThread { reply(it.getOrElse { e -> e.message ?: "Link analysis error" }) }
+                }
             }
 
             is Command.CheckUpdate -> checkForUpdate(false)
             is Command.RequestUpgrade -> checkForUpdate(true)
 
-            is Command.Search -> {
+            is Command.Search -> withInternet {
                 val query = URLEncoder.encode(command.query, "UTF-8")
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query")))
             }
@@ -219,29 +234,33 @@ class MainActivity : Activity() {
                 runGit { localGit.merge(currentWorkspace, command.name) }
             }
 
-            Command.GitPush -> requestOwnerApproval(
-                OwnerAction.REMOTE_PUSH,
-                "Push current branch to GitHub"
-            ) {
-                runGit {
-                    val current = localGit.currentBranch(currentWorkspace)
-                    githubGateway.push(currentWorkspace, current) { remote ->
-                        runOnUiThread { reply(remoteMessage(remote)) }
+            Command.GitPush -> withInternet {
+                requestOwnerApproval(
+                    OwnerAction.REMOTE_PUSH,
+                    "Push current branch to GitHub"
+                ) {
+                    runGit {
+                        val current = localGit.currentBranch(currentWorkspace)
+                        githubGateway.push(currentWorkspace, current) { remote ->
+                            runOnUiThread { reply(remoteMessage(remote)) }
+                        }
+                        "Remote action submitted."
                     }
-                    "Remote action submitted."
                 }
             }
 
-            Command.GitPull -> requestOwnerApproval(
-                OwnerAction.REMOTE_PULL,
-                "Pull current branch from GitHub"
-            ) {
-                runGit {
-                    val current = localGit.currentBranch(currentWorkspace)
-                    githubGateway.pull(currentWorkspace, current) { remote ->
-                        runOnUiThread { reply(remoteMessage(remote)) }
+            Command.GitPull -> withInternet {
+                requestOwnerApproval(
+                    OwnerAction.REMOTE_PULL,
+                    "Pull current branch from GitHub"
+                ) {
+                    runGit {
+                        val current = localGit.currentBranch(currentWorkspace)
+                        githubGateway.pull(currentWorkspace, current) { remote ->
+                            runOnUiThread { reply(remoteMessage(remote)) }
+                        }
+                        "Remote action submitted."
                     }
-                    "Remote action submitted."
                 }
             }
 
@@ -294,20 +313,24 @@ class MainActivity : Activity() {
                 reply(buildSettings.baseUrl() ?: "Build server configure nahi hai.")
             }
 
-            Command.BuildApk -> requestOwnerApproval(
-                OwnerAction.BUILD_APK,
-                "Upload current workspace to build server and create APK"
-            ) {
-                startServerBuild()
+            Command.BuildApk -> withInternet {
+                requestOwnerApproval(
+                    OwnerAction.BUILD_APK,
+                    "Upload current workspace to build server and create APK"
+                ) {
+                    startServerBuild()
+                }
             }
 
-            Command.BuildStatus -> checkServerBuildStatus()
+            Command.BuildStatus -> withInternet { checkServerBuildStatus() }
 
-            Command.BuildDownload -> requestOwnerApproval(
-                OwnerAction.BUILD_APK,
-                "Download completed APK from build server"
-            ) {
-                downloadBuiltApk()
+            Command.BuildDownload -> withInternet {
+                requestOwnerApproval(
+                    OwnerAction.BUILD_APK,
+                    "Download completed APK from build server"
+                ) {
+                    downloadBuiltApk()
+                }
             }
 
             is Command.MakeApp -> requestOwnerApproval(
@@ -317,8 +340,133 @@ class MainActivity : Activity() {
                 generateProjectLocally(command.goal)
             }
 
+            Command.InternetOn -> requestOwnerApproval(
+                OwnerAction.CHANGE_INTERNET_POLICY,
+                "Allow Anamika to use this phone's internet connection"
+            ) {
+                internetPolicy.setEnabled(true)
+                reply("Anamika internet access ON hai.")
+            }
+
+            Command.InternetOff -> requestOwnerApproval(
+                OwnerAction.CHANGE_INTERNET_POLICY,
+                "Block Anamika-initiated internet requests"
+            ) {
+                internetPolicy.setEnabled(false)
+                reply("Anamika internet access OFF hai. Local coding kaam chalta rahega.")
+            }
+
+            Command.InternetStatus -> {
+                reply(if (internetPolicy.isEnabled()) "Internet policy: ON" else "Internet policy: OFF")
+            }
+
+            Command.AppControlSettings -> {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                reply("Accessibility settings khol di hain. Anamika service owner ko manually enable karni hogi.")
+            }
+
+            Command.AppAllowCurrent -> {
+                val pkg = AnamikaAccessibilityService.lastForegroundPackage
+                if (pkg.isNullOrBlank()) {
+                    reply("Pehle target app ek baar open karo, phir Anamika me wapas aakar 'app allow current' bolo.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.AUTHORIZE_OTHER_APP,
+                        "Allow Anamika to observe/control app: $pkg"
+                    ) {
+                        appAccessPolicy.allow(pkg)
+                        reply("Authorized app: $pkg")
+                    }
+                }
+            }
+
+            Command.AppDenyCurrent -> {
+                val pkg = AnamikaAccessibilityService.lastForegroundPackage
+                if (pkg.isNullOrBlank()) {
+                    reply("Recent target app nahi mila.")
+                } else {
+                    requestOwnerApproval(
+                        OwnerAction.AUTHORIZE_OTHER_APP,
+                        "Remove Anamika access for app: $pkg"
+                    ) {
+                        appAccessPolicy.deny(pkg)
+                        reply("Access removed: $pkg")
+                    }
+                }
+            }
+
+            is Command.AppOpen -> openExternalApp(command.packageName)
+
+            is Command.AppClick -> controlLastApp("click '${command.text}'") {
+                AnamikaAccessibilityService.active?.clickByText(command.text) == true
+            }
+
+            is Command.AppType -> controlLastApp("type text in focused non-sensitive field") {
+                AnamikaAccessibilityService.active?.setTextOnFocusedField(command.text) == true
+            }
+
+            Command.AppModelCurrent -> {
+                val pkg = AnamikaAccessibilityService.lastForegroundPackage
+                if (pkg.isNullOrBlank()) {
+                    reply("Recent target app nahi mila.")
+                } else if (!appAccessPolicy.isAllowed(pkg)) {
+                    reply("Ye app owner-authorized nahi hai.")
+                } else {
+                    reply(appObservations.summary(pkg))
+                }
+            }
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun withInternet(action: () -> Unit) {
+        if (!internetPolicy.isEnabled()) {
+            reply("Internet owner policy se OFF hai. Local kaam available hai.")
+            return
+        }
+        action()
+    }
+
+    private fun openExternalApp(packageName: String) {
+        val launch = packageManager.getLaunchIntentForPackage(packageName)
+        if (launch == null) {
+            reply("Installed app nahi mila: $packageName")
+            return
+        }
+        startActivity(launch)
+    }
+
+    private fun controlLastApp(summary: String, action: () -> Boolean) {
+        val pkg = AnamikaAccessibilityService.lastForegroundPackage
+        if (pkg.isNullOrBlank()) {
+            reply("Recent target app nahi mila.")
+            return
+        }
+        if (!appAccessPolicy.isAllowed(pkg)) {
+            reply("Owner ne is app ko authorize nahi kiya: $pkg")
+            return
+        }
+        if (AnamikaAccessibilityService.active == null) {
+            reply("Anamika Accessibility service enabled nahi hai.")
+            return
+        }
+
+        requestOwnerApproval(
+            OwnerAction.CONTROL_OTHER_APP,
+            "$summary in $pkg"
+        ) {
+            val launch = packageManager.getLaunchIntentForPackage(pkg)
+            if (launch == null) {
+                reply("App launch nahi ho saki: $pkg")
+                return@requestOwnerApproval
+            }
+            startActivity(launch)
+            Handler(Looper.getMainLooper()).postDelayed({
+                val ok = runCatching(action).getOrDefault(false)
+                reply(if (ok) "Cross-app action complete." else "Target control nahi mila ya secure field/action blocked hai.")
+            }, 900)
         }
     }
 
@@ -493,6 +641,10 @@ class MainActivity : Activity() {
     }
 
     private fun checkForUpdate(requestUpgrade: Boolean) {
+        if (!internetPolicy.isEnabled()) {
+            reply("Internet owner policy se OFF hai.")
+            return
+        }
         reply("GitHub release check kar rahi hoon.")
         releaseChecker.check { result ->
             runOnUiThread {
