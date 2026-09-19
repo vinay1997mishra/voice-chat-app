@@ -16,6 +16,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import ai.anamika.app.ai.DeviceAiGateway
+import ai.anamika.app.auth.GooglePublicAuth
+import ai.anamika.app.auth.PublicSessionStore
 import ai.anamika.app.automation.AnamikaAccessibilityService
 import ai.anamika.app.automation.AppAccessPolicy
 import ai.anamika.app.automation.AppObservationStore
@@ -73,6 +75,8 @@ class MainActivity : Activity() {
     private lateinit var features: FeatureManager
     private lateinit var selfUpdateStager: SelfUpdateStager
     private lateinit var learnedModules: LearnedModuleRegistry
+    private lateinit var publicSession: PublicSessionStore
+    private lateinit var googleAuth: GooglePublicAuth
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -97,17 +101,29 @@ class MainActivity : Activity() {
         features = FeatureManager(this, BuildConfig.ANAMIKA_DISTRIBUTION_MODE == "OWNER")
         selfUpdateStager = SelfUpdateStager(workspaceFiles)
         learnedModules = LearnedModuleRegistry(this)
+        publicSession = PublicSessionStore(this)
+        googleAuth = GooglePublicAuth(this)
 
         voice = VoiceAssistant(
             activity = this,
             onText = { runOnUiThread { handleInput(it) } },
             onError = { runOnUiThread { reply(it) } }
         )
-        setContentView(buildUi())
-        syncPublicEntitlementsIfNeeded()
+        setContentView(
+            if (features.isOwnerMode()) {
+                buildOwnerUi()
+            } else if (publicSession.current() == null) {
+                buildPublicLoginUi()
+            } else {
+                buildPublicUserUi()
+            }
+        )
+        if (!features.isOwnerMode() && publicSession.current() != null) {
+            syncPublicEntitlementsIfNeeded()
+        }
     }
 
-    private fun buildUi(): View {
+    private fun buildOwnerUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 48, 32, 48)
@@ -171,6 +187,86 @@ class MainActivity : Activity() {
         return ScrollView(this).apply { addView(root) }
     }
 
+    private fun buildPublicLoginUi(): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 96, 48, 96)
+        }
+
+        val google = Button(this).apply {
+            text = "Sign in with Google"
+            setOnClickListener { startPublicGoogleLogin() }
+        }
+
+        root.addView(google)
+        return root
+    }
+
+    private fun buildPublicUserUi(): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 48, 32, 48)
+        }
+
+        status = TextView(this).apply {
+            val session = publicSession.current()
+            text = session?.displayName?.let { "Hello, $it" } ?: "Anamika"
+            textSize = 20f
+            setPadding(0, 0, 0, 24)
+        }
+        root.addView(status)
+
+        if (features.isEnabled(FeatureId.VOICE_INPUT)) {
+            root.addView(Button(this).apply {
+                text = "Speak"
+                setOnClickListener { startListeningWithPermission() }
+            })
+        }
+
+        root.addView(Button(this).apply {
+            text = "Sign out"
+            setOnClickListener {
+                publicSession.clear()
+                setContentView(buildPublicLoginUi())
+            }
+        })
+
+        return root
+    }
+
+    private fun startPublicGoogleLogin() {
+        googleAuth.signIn(BuildConfig.GOOGLE_WEB_CLIENT_ID) { signInResult ->
+            runOnUiThread {
+                signInResult.onSuccess { google ->
+                    googleAuth.verifyWithServer(
+                        BuildConfig.ANAMIKA_PUBLIC_AUTH_URL,
+                        google.idToken
+                    ) { verified ->
+                        runOnUiThread {
+                            verified.onSuccess { session ->
+                                publicSession.save(session)
+                                setContentView(buildPublicUserUi())
+                                syncPublicEntitlementsIfNeeded()
+                            }.onFailure {
+                                android.widget.Toast.makeText(
+                                    this,
+                                    "Google sign-in verify nahi hua.",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }.onFailure {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Google sign-in complete nahi hua.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
     private fun startListeningWithPermission() {
         if (!features.isEnabled(FeatureId.VOICE_INPUT)) {
             reply("Voice input owner policy se OFF hai.")
@@ -186,6 +282,11 @@ class MainActivity : Activity() {
     private fun handleInput(text: String) {
         status.text = "You: $text"
         val command = router.parse(text)
+
+        if (!features.isOwnerMode() && isPrivateCommand(command)) {
+            reply("This option is not available.")
+            return
+        }
 
         val requiredFeature = featureFor(command)
         if (requiredFeature != null && !features.isEnabled(requiredFeature)) {
@@ -564,6 +665,58 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun isPrivateCommand(command: Command): Boolean = when (command) {
+        is Command.GitInit,
+        Command.GitStatus,
+        is Command.GitBranch,
+        is Command.GitCheckout,
+        is Command.GitCommit,
+        Command.GitLog,
+        Command.GitDiff,
+        is Command.GitTag,
+        is Command.GitMerge,
+        Command.GitPush,
+        Command.GitPull,
+        Command.GitBranches,
+        Command.GitQueue,
+        is Command.ServerSet,
+        Command.ServerShow,
+        Command.BuildApk,
+        Command.BuildStatus,
+        Command.BuildDownload,
+        Command.AppControlSettings,
+        Command.AppAllowCurrent,
+        Command.AppDenyCurrent,
+        is Command.AppOpen,
+        is Command.AppClick,
+        is Command.AppType,
+        Command.AppModelCurrent,
+        Command.AppStudyStart,
+        Command.AppStudyCapture,
+        Command.AppStudyStop,
+        Command.AppStudyReport,
+        Command.AppStudyExport,
+        Command.FeatureList,
+        is Command.FeatureOn,
+        is Command.FeatureOff,
+        Command.FeatureAllOn,
+        Command.FeatureAllOff,
+        Command.PublicFeatureList,
+        is Command.PublicFeatureOn,
+        is Command.PublicFeatureOff,
+        Command.PublicFeatureAllOn,
+        Command.PublicFeatureAllOff,
+        Command.PublicInstallationId,
+        is Command.SelfUpdateStage,
+        Command.ModuleList,
+        is Command.ModuleOn,
+        is Command.ModuleOff,
+        is Command.RequestUpgrade,
+        is Command.CheckUpdate -> true
+
+        else -> false
+    }
+
     private fun syncPublicEntitlementsIfNeeded() {
         if (features.isOwnerMode()) return
 
@@ -571,7 +724,7 @@ class MainActivity : Activity() {
         val publicKey = BuildConfig.ANAMIKA_OWNER_POLICY_PUBLIC_KEY
         if (policyUrl.contains("example.invalid") || publicKey.isBlank()) return
 
-        val subject = PublicDeviceIdentity(this).installationId()
+        val subject = publicSession.current()?.googleSubject ?: return
         val cache = PublicEntitlementCache(this)
         SignedOwnerPolicyGateway(policyUrl, publicKey).fetch(subject) { result ->
             result.onSuccess { entitlement ->
