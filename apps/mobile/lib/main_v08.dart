@@ -2468,6 +2468,7 @@ class _RoomV07State extends State<RoomV07> {
           ],
           if (widget.room.ownedByMe)
             ListTile(
+              key: const Key('seat-mute-action-v08'),
               title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'),
               leading: Icon(isMuted ? Icons.mic : Icons.mic_off),
               onTap: () {
