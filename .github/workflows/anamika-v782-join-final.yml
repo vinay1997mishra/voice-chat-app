@@ -1,0 +1,74 @@
+name: Join and Publish Anamika Final APK
+
+on:
+  push:
+    branches: [ anamika-v7.8.2-final ]
+    paths:
+      - '.github/workflows/anamika-v782-join-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  join-final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPECTED_SHA256: ca8bcfa7247827f7c20a94068d3ea7660bb9d1a8cd72e55a45184bf543c82ae1
+      FINAL_NAME: AnamikaAI-V7.8.2-FINAL.apk
+      RELEASE_TAG: anamika-v7.8.2
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download split APK artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p downloads parts
+          ids=(10588152183 10588332129 10588566713 10588082295)
+          for i in 0 1 2 3; do
+            id="${ids[$i]}"
+            zip="downloads/part0${i}.zip"
+            curl -L --fail --retry 4 --retry-delay 3 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" \
+              -o "$zip"
+            unzip -q "$zip" -d "parts/0${i}"
+          done
+
+      - name: Join APK entirely on GitHub runner
+        run: |
+          set -euo pipefail
+          mkdir -p final
+          cat \
+            parts/00/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-00 \
+            parts/01/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-01 \
+            parts/02/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-02 \
+            parts/03/AnamikaAI-V7.8.2-FullLocalAI-debug.apk.part-03 \
+            > "final/$FINAL_NAME"
+          test -s "final/$FINAL_NAME"
+          sha256sum "final/$FINAL_NAME"
+          echo "$EXPECTED_SHA256  final/$FINAL_NAME" | sha256sum -c -
+          unzip -tq "final/$FINAL_NAME"
+          ls -lh "final/$FINAL_NAME"
+
+      - name: Replace final release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" >/dev/null
+          gh release delete-asset "$RELEASE_TAG" "$FINAL_NAME" --yes 2>/dev/null || true
+          gh release upload "$RELEASE_TAG" "final/$FINAL_NAME" --clobber
+
+      - name: Upload joined APK proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-GitHub-Joined-FINAL
+          compression-level: 0
+          path: final/AnamikaAI-V7.8.2-FINAL.apk
