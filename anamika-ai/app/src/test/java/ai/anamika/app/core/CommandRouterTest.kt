@@ -54,4 +54,18 @@ class CommandRouterTest {
         assertTrue(router.parse("app banao video editor") is Command.MakeApp)
         assertTrue(router.parse("make app notes app") is Command.MakeApp)
     }
+
+    @Test
+    fun internetAndCrossAppCommandsAreDetected() {
+        assertTrue(router.parse("internet chalu") is Command.InternetOn)
+        assertTrue(router.parse("internet band") is Command.InternetOff)
+        assertTrue(router.parse("internet status") is Command.InternetStatus)
+        assertTrue(router.parse("app control settings") is Command.AppControlSettings)
+        assertTrue(router.parse("app allow current") is Command.AppAllowCurrent)
+        assertTrue(router.parse("app deny current") is Command.AppDenyCurrent)
+        assertTrue(router.parse("app open com.example.app") is Command.AppOpen)
+        assertTrue(router.parse("app click Login") is Command.AppClick)
+        assertTrue(router.parse("app type hello") is Command.AppType)
+        assertTrue(router.parse("app model current") is Command.AppModelCurrent)
+    }
 }
