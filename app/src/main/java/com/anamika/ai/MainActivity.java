@@ -6,11 +6,18 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.TextUtils;
+import android.text.method.ScrollingMovementMethod;
 import android.speech.RecognizerIntent;
+import android.speech.RecognitionListener;
+import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.view.View;
 import android.widget.Button;
@@ -20,6 +27,8 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.anamika.ai.language.UniversalLanguageRouter;
 import com.anamika.ai.research.AppSearchController;
@@ -32,6 +41,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private TextToSpeech tts;
     private SharedPreferences prefs;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private SpeechRecognizer wakeRecognizer;
+    private boolean wakeAwaitingCommand = false;
+    private boolean pendingWakePermission = false;
+    private Button wakeListenButton;
     private boolean unlocked = false;
     private int failedPinAttempts = 0;
     private long pinLockedUntilMs = 0L;
@@ -76,13 +90,25 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button selfUpgradeButton = findViewById(R.id.selfUpgradeButton);
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
+        wakeListenButton = findViewById(R.id.wakeListenButton);
+        result.setMovementMethod(new ScrollingMovementMethod());
 
         boolean ownerPinAlreadySet = OwnerAuth.hasPin(this);
         unlockButton.setText(ownerPinAlreadySet ? "Unlock Owner" : "Set Owner PIN");
 
         unlockButton.setOnClickListener(v -> unlockOwner(unlockButton));
         listenButton.setOnClickListener(v -> startListening());
-        runButton.setOnClickListener(v -> runCommand(commandInput.getText().toString()));
+        runButton.setOnClickListener(v -> {
+            String typed=commandInput.getText().toString().trim();
+            if(!typed.isEmpty()){
+                runCommand(typed);
+                commandInput.setText("");
+            }
+        });
+        wakeListenButton.setText(prefs.getBoolean("wake_enabled",true)
+                ? "Hello Anamika Listening: ON"
+                : "Hello Anamika Listening: OFF");
+        wakeListenButton.setOnClickListener(v -> toggleWakeListening());
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
         saveProjectButton.setOnClickListener(v -> saveGeneratedProject());
         premium3dButton.setOnClickListener(v -> {
@@ -144,6 +170,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                         ? "Owner PIN set successfully. Anamika is unlocked and ready."
                         : "Owner unlocked. Anamika is ready.");
                 speak(firstSetup ? "Owner lock set. Anamika is ready." : "Welcome back. Anamika is ready.");
+                if(prefs.getBoolean("wake_enabled",true)){
+                    mainHandler.postDelayed(() -> enableWakeListening(false),1800L);
+                }
             } else {
                 unlocked = false;
                 failedPinAttempts++;
@@ -170,7 +199,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void startListening() {
         if (!ensureUnlocked()) return;
 
+        stopWakeRecognizer();
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingWakePermission=false;
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
             return;
         }
@@ -197,6 +228,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 String command = text.get(0);
                 commandInput.setText(command);
                 runCommand(command);
+                mainHandler.postDelayed(this::restartWakeIfEnabled,1800L);
             }
         }
     }
@@ -206,7 +238,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_AUDIO) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startListening();
+                if(pendingWakePermission){
+                    pendingWakePermission=false;
+                    startWakeRecognizer();
+                } else {
+                    startListening();
+                }
             } else {
                 showResult("Microphone permission is required for voice commands. Typed commands still work.");
             }
@@ -215,7 +252,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void runCommand(String raw) {
         if (!ensureUnlocked()) return;
-        String command = UniversalLanguageRouter.normalize(this, raw == null ? "" : raw.trim());
+        String original=raw==null?"":raw.trim();
+        if(!original.isEmpty()) appendChat("You",original);
+        String command = UniversalLanguageRouter.normalize(this, original);
         if (command.isEmpty()) {
             showResult("Please speak or type a command.");
             return;
@@ -232,18 +271,20 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (containsAny(lower,
                 "is app ke saare functions check kar","is app ke sare functions check kar",
                 "saare functions check kar","sare functions check kar","check all functions",
-                "poora app check karo","auto audit app")) {
-            String targetPackage=getSharedPreferences("anamika_automation",MODE_PRIVATE)
-                    .getString("target_package","");
-            if(targetPackage.isEmpty()){
-                answer("Auto App Audit ke liye pehle Plugin Center me target app ko select aur enable kijiye. Uske baad yehi command bolna hai.");
-            } else if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,targetPackage)){
-                answer("Selected app ka plugin disabled hai. Plugin Center me enable kijiye.");
-            } else {
-                String launchResult=com.anamika.ai.plugins.AppPluginEngine.openAndRun(
-                        this,targetPackage,"check all functions");
-                answer("Automatic safe app audit start kar diya. Anamika visible screens, safe buttons, scrolling aur navigation khud check karegi; payment, messaging, password, account change aur destructive actions auto-run nahi honge. "+launchResult);
-            }
+                "a to z","atoz","poora app check","pura app check","full app check",
+                "blueprint bana","blueprint banao","auto audit app")) {
+            startNamedOrSelectedAutoAudit(command);
+            return;
+        }
+
+        if (tryHandleWhatsAppMessage(command)) return;
+
+        if (containsAny(lower,
+                "app banao","app bana","application banao","create app","make app",
+                "website banao","website bana","create website","code likho","code banao")) {
+            developerPrompt.setText(command);
+            answer("Main isi command se Developer Mode me project generation aur validation start kar rahi hoon.");
+            generateDeveloperProject();
             return;
         }
 
@@ -447,6 +488,182 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }
     }
 
+    private void toggleWakeListening(){
+        if(!ensureUnlocked()) return;
+        boolean enable=!prefs.getBoolean("wake_enabled",true);
+        prefs.edit().putBoolean("wake_enabled",enable).apply();
+        wakeListenButton.setText(enable?"Hello Anamika Listening: ON":"Hello Anamika Listening: OFF");
+        if(enable) enableWakeListening(true);
+        else {
+            wakeAwaitingCommand=false;
+            stopWakeRecognizer();
+            status.setText("Owner verified • wake listening off");
+        }
+    }
+
+    private void enableWakeListening(boolean announce){
+        if(!unlocked || !OwnerSession.isActive(this)) return;
+        if(!prefs.getBoolean("wake_enabled",true)) return;
+        if(!SpeechRecognizer.isRecognitionAvailable(this)){
+            wakeListenButton.setText("Hello Anamika Listening: unavailable");
+            if(announce) answer("Is phone par SpeechRecognizer service available nahi hai.");
+            return;
+        }
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            pendingWakePermission=true;
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
+            return;
+        }
+        startWakeRecognizer();
+        if(announce) answer("Hello Anamika listening on hai. Screen open ho to “Hello Anamika” boliye.");
+    }
+
+    private void startWakeRecognizer(){
+        if(!prefs.getBoolean("wake_enabled",true) || !unlocked || !OwnerSession.isActive(this)) return;
+        stopWakeRecognizer();
+        wakeRecognizer=SpeechRecognizer.createSpeechRecognizer(this);
+        wakeRecognizer.setRecognitionListener(new RecognitionListener(){
+            @Override public void onReadyForSpeech(Bundle params){ status.setText(wakeAwaitingCommand?"Listening for your command…":"Wake listening • say Hello Anamika"); }
+            @Override public void onBeginningOfSpeech(){}
+            @Override public void onRmsChanged(float rmsdB){}
+            @Override public void onBufferReceived(byte[] buffer){}
+            @Override public void onEndOfSpeech(){}
+            @Override public void onError(int error){ restartWakeSoon(900L); }
+            @Override public void onResults(Bundle results){
+                ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                String heard=(list==null||list.isEmpty())?"":list.get(0).trim();
+                handleWakeSpeech(heard);
+            }
+            @Override public void onPartialResults(Bundle partialResults){}
+            @Override public void onEvent(int eventType,Bundle params){}
+        });
+        Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
+        i.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION",true);
+        i.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH",true);
+        try{ wakeRecognizer.startListening(i); }
+        catch(Exception e){ restartWakeSoon(1200L); }
+    }
+
+    private void handleWakeSpeech(String heard){
+        if(heard==null || heard.trim().isEmpty()){ restartWakeSoon(700L); return; }
+        String lower=heard.toLowerCase(Locale.ROOT);
+        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+anamika").matcher(heard);
+        if(wake.find()){
+            appendChat("You",heard);
+            String after=heard.substring(wake.end()).replaceFirst("^[\\s,.:;-]+","").trim();
+            if(!after.isEmpty()){
+                wakeAwaitingCommand=false;
+                runCommand(after);
+            } else {
+                wakeAwaitingCommand=true;
+                answer("Ji, boliye.");
+                restartWakeSoon(1800L);
+            }
+            return;
+        }
+        if(wakeAwaitingCommand){
+            wakeAwaitingCommand=false;
+            commandInput.setText(heard);
+            runCommand(heard);
+            restartWakeSoon(1800L);
+            return;
+        }
+        restartWakeSoon(600L);
+    }
+
+    private void restartWakeSoon(long delay){
+        mainHandler.postDelayed(this::restartWakeIfEnabled,delay);
+    }
+
+    private void restartWakeIfEnabled(){
+        if(prefs!=null && prefs.getBoolean("wake_enabled",true) && unlocked && OwnerSession.isActive(this)){
+            startWakeRecognizer();
+        }
+    }
+
+    private void stopWakeRecognizer(){
+        if(wakeRecognizer!=null){
+            try{ wakeRecognizer.cancel(); }catch(Exception ignored){}
+            try{ wakeRecognizer.destroy(); }catch(Exception ignored){}
+            wakeRecognizer=null;
+        }
+    }
+
+    private boolean tryHandleWhatsAppMessage(String command){
+        if(command==null) return false;
+        String lower=command.toLowerCase(Locale.ROOT);
+        if(!lower.contains("whatsapp") || !containsAny(lower," msg "," message ","bhejo","send ")) return false;
+
+        String recipient="";
+        String message="";
+        Matcher hi=Pattern.compile("(?i)([\\p{L}\\p{N}._ -]{1,45})\\s+ko\\s+(?:msg|message)\\s+(?:kar|karo|bhejo|send)?\\s*(.+)$").matcher(command);
+        if(hi.find()){
+            recipient=hi.group(1).trim().replaceFirst("(?i)^.*(?:waha|wahaan|aur|then)\\s+","");
+            message=hi.group(2).trim();
+        } else {
+            Matcher en=Pattern.compile("(?i)(?:send|message)\\s+(.+?)\\s+to\\s+([\\p{L}\\p{N}._ -]{1,40})(?:\\s+on\\s+whatsapp)?$").matcher(command);
+            if(en.find()){ message=en.group(1).trim(); recipient=en.group(2).trim(); }
+        }
+        recipient=recipient.replaceFirst("(?i)^whatsapp\\s+(?:open|khol|kholo)\\s*(?:kar|karo)?\\s*","");
+        if(recipient.isEmpty() || message.isEmpty()){
+            answer("WhatsApp command samajh aaya, lekin contact ya message clear nahi mila. Example: WhatsApp kholo aur Vinay ko message bhejo hello.");
+            return true;
+        }
+        if(!isAutomationServiceEnabled()){
+            answer("WhatsApp control ke liye Android Accessibility me Anamika App Control ek baar enable karna hoga. Settings khol rahi hoon.");
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return true;
+        }
+        String pkg="com.whatsapp";
+        com.anamika.ai.plugins.PluginRegistry.setEnabled(this,pkg,true);
+        getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
+        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,
+                "whatsapp-message|"+recipient+"|"+message);
+        answer("WhatsApp me "+recipient+" ko message bhejne ka command diya: “"+message+"”. "+r);
+        return true;
+    }
+
+    private void startNamedOrSelectedAutoAudit(String command){
+        String appName=extractAuditAppName(command);
+        String pkg="";
+        if(!appName.isEmpty()) pkg=com.anamika.ai.plugins.PluginRegistry.findPackageByLabel(this,appName);
+        if(pkg==null) pkg="";
+        if(pkg.isEmpty()) pkg=getSharedPreferences("anamika_automation",MODE_PRIVATE).getString("target_package","");
+        if(pkg.isEmpty()){
+            answer("Jis app ka audit chahiye uska naam command me boliye, jaise: “Hika app open karke A to Z saare functions check karo aur blueprint banao.”");
+            return;
+        }
+        if(!isAutomationServiceEnabled()){
+            answer("Full automatic app audit ke liye Android Accessibility me Anamika App Control ek baar enable karna hoga. Settings khol rahi hoon.");
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return;
+        }
+        com.anamika.ai.plugins.PluginRegistry.setEnabled(this,pkg,true);
+        getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
+        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,"check all functions");
+        answer("Auto Audit start. Anamika app ke visible screens, rooms, menus, safe clickable buttons, scroll aur back-navigation ko systematically check karegi. Har tested/skipped control blueprint me record hoga. Password, payment, destructive action aur real message/send jaise side-effect actions generic audit me skip honge; unhe explicit command se chalaya ja sakta hai. "+r);
+    }
+
+    private String extractAuditAppName(String command){
+        if(command==null) return "";
+        Matcher m=Pattern.compile("(?i)^\\s*([\\p{L}\\p{N}._-]{2,30})\\s+app\\s+(?:open|khol|kholo|check|dekho|dekh)").matcher(command.trim());
+        if(m.find()) return m.group(1).trim();
+        m=Pattern.compile("(?i)(?:open|khol|kholo)\\s+([\\p{L}\\p{N}._-]{2,30})\\s+app").matcher(command);
+        return m.find()?m.group(1).trim():"";
+    }
+
+    private boolean isAutomationServiceEnabled(){
+        String enabled=Settings.Secure.getString(getContentResolver(),Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if(TextUtils.isEmpty(enabled)) return false;
+        String expected=new ComponentName(this,com.anamika.ai.plugins.AppAutomationAccessibilityService.class).flattenToString();
+        TextUtils.SimpleStringSplitter splitter=new TextUtils.SimpleStringSplitter(':');
+        splitter.setString(enabled);
+        while(splitter.hasNext()) if(expected.equalsIgnoreCase(splitter.next())) return true;
+        return false;
+    }
+
     private void webSearch(String query) {
         Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query)));
         try {
@@ -494,12 +711,26 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         speak(text);
     }
 
+    private void appendChat(String who,String text){
+        if(result==null || text==null || text.trim().isEmpty()) return;
+        String existing=result.getText()==null?"":result.getText().toString();
+        String line=(existing.trim().isEmpty()?"":"\n\n")+who+": "+text.trim();
+        result.append(line);
+        result.post(() -> {
+            int offset=result.getLayout()==null?0:result.getLayout().getLineTop(result.getLineCount())-result.getHeight();
+            result.scrollTo(0,Math.max(0,offset));
+        });
+    }
+
     private void showResult(String text) {
-        result.setText(text);
+        appendChat("Anamika",text);
     }
 
     private void speak(String text) {
+        stopWakeRecognizer();
         if (tts != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "anamika_reply");
+        long delay=Math.min(6500L,1800L+(text==null?0:text.length()*35L));
+        restartWakeSoon(delay);
     }
 
     private void toast(String text) {
@@ -520,6 +751,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     @Override
     protected void onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null);
+        stopWakeRecognizer();
         if (tts != null) {
             tts.stop();
             tts.shutdown();
