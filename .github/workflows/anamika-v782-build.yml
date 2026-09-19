@@ -1,57 +1,55 @@
-name: Migrate Anamika Source Files
+name: Build Anamika V7.8.2 Direct Source
 
 on:
   push:
     branches: [ anamika-v7.8.2-final ]
     paths:
+      - 'app/**'
+      - 'tools/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
       - '.github/workflows/anamika-v782-build.yml'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  migrate-source:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
+    env:
+      MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/38f6bab61d341b23a6c00226f32c0d6148bf9f43/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true
+      MODEL_SHA256: cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
+      MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
+      RELEASE_TAG: anamika-v7.8.2
+      FINAL_NAME: AnamikaAI-V7.8.2-DirectSource-FINAL.apk
+
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: anamika-v7.8.2-final
-          fetch-depth: 0
 
-      - name: Decode complete Anamika source
+      - name: Verify direct-source layout
         run: |
           set -euo pipefail
-          test -f anamika_build/source.b64
-          rm -rf "$RUNNER_TEMP/anamika-src"
-          mkdir -p "$RUNNER_TEMP/anamika-src"
-          base64 -d anamika_build/source.b64 > "$RUNNER_TEMP/anamika.zip"
-          unzip -q "$RUNNER_TEMP/anamika.zip" -d "$RUNNER_TEMP/anamika-src"
-          SRC="$RUNNER_TEMP/anamika-src/AnamikaAI_V7_8_2_Final"
-          test -d "$SRC/app/src/main"
-          cp -a "$SRC/app" ./
-          cp -a "$SRC/tools" ./
-          cp -a "$SRC/build.gradle" ./
-          cp -a "$SRC/settings.gradle" ./
-          cp -a "$SRC/gradle.properties" ./
-          mkdir -p .github/workflows
-          cp -a "$SRC/.github/workflows/build-apk.yml" .github/workflows/build-apk.yml
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/com/anamika/ai/MainActivity.java
+          test -f app/src/main/java/com/anamika/ai/TestLabActivity.java
+          test -f app/src/main/kotlin/com/anamika/ai/KotlinLlamaRunner.kt
+          test -f app/build.gradle
+          test -f tools/validate_source.py
+          test -f tools/validate_v78.py
+          test -f tools/validate_audit.py
           test -f .github/workflows/build-apk.yml
-          for f in README.md CINEMATIC_ENGINE.md FULL_TOOLCHAIN_STATUS.md MODEL_BUILD.md PLUGIN_SYSTEM.md STANDALONE_ARCHITECTURE.md V7_6_ULTIMATE_FEATURES.md V7_8_2_FINAL_FOCUS.md V7_8_EVERGREEN_FEATURES.md VALIDATION_REPORT.txt; do
-            if [ -f "$SRC/$f" ]; then cp -a "$SRC/$f" ./; fi
-          done
+          test ! -e anamika_build/source.b64
 
-      - name: Apply permanent known fixes
+      - name: Recheck known OwnerSession error
         run: |
           set -euo pipefail
-          TEST_LAB="app/src/main/java/com/anamika/ai/TestLabActivity.java"
-          AUDIT="tools/validate_audit.py"
-          sed -i 's/OwnerSession\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
-          sed -i 's/OwnerSession\.isValid/OwnerSession.isActive/g' "$AUDIT"
           ! grep -R -Fq 'OwnerSession.isValid(' app/src/main/java
-          grep -Fq 'OwnerSession.isActive(' "$TEST_LAB"
-          grep -Fq 'OwnerSession.isActive' "$AUDIT"
+          grep -Fq 'OwnerSession.isActive(' app/src/main/java/com/anamika/ai/TestLabActivity.java
+          grep -Fq 'OwnerSession.isActive' tools/validate_audit.py
 
       - uses: actions/setup-java@v5
         with:
@@ -76,27 +74,70 @@ jobs:
         with:
           gradle-version: '9.6.1'
 
-      - name: Recheck validators and actual compile
+      - name: Validate direct source
         run: |
           set -euo pipefail
           python3 tools/validate_source.py
           python3 tools/validate_v78.py
           python3 tools/validate_audit.py
+
+      - name: Build lite APK directly from GitHub source
+        run: |
+          set -euo pipefail
           gradle --no-daemon :app:assembleDebug
           test -f app/build/outputs/apk/debug/app-debug.apk
           unzip -tq app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Commit source only
+      - name: Preserve lite APK
+        run: |
+          mkdir -p artifacts/lite
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/lite/AnamikaAI-V7.8.2-DirectSource-Lite-debug.apk
+          sha256sum artifacts/lite/*.apk > artifacts/LITE-SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-direct-source-lite
+          compression-level: 0
+          path: |
+            artifacts/lite/
+            artifacts/LITE-SHA256SUMS.txt
+
+      - name: Bundle verified local coding model
         run: |
           set -euo pipefail
-          rm -rf app/build .gradle
-          rm -f .github/workflows/build-apk.yml
-          rm -rf anamika_build
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app tools build.gradle settings.gradle gradle.properties
-          git add README.md CINEMATIC_ENGINE.md FULL_TOOLCHAIN_STATUS.md MODEL_BUILD.md PLUGIN_SYSTEM.md STANDALONE_ARCHITECTURE.md V7_6_ULTIMATE_FEATURES.md V7_8_2_FINAL_FOCUS.md V7_8_EVERGREEN_FEATURES.md VALIDATION_REPORT.txt 2>/dev/null || true
-          git add -u anamika_build || true
-          git status --short
-          git commit -m "Add complete Anamika V7.8.2 direct Android source tree"
-          git push origin HEAD:anamika-v7.8.2-final
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          curl -L --fail --retry 4 --retry-delay 5 "$MODEL_URL" -o "$MODEL_PATH"
+          test -s "$MODEL_PATH"
+          echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
+          test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
+
+      - name: Build full local-AI APK directly from GitHub source
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          unzip -tq app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Preserve and verify full APK
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/full
+          cp app/build/outputs/apk/debug/app-debug.apk "artifacts/full/$FINAL_NAME"
+          sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'assets/models/anamika-coder.gguf'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama.so'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama_jni.so'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-V7.8.2-direct-source-final
+          compression-level: 0
+          path: artifacts/
+
+      - name: Publish direct-source final APK to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" >/dev/null
+          gh release upload "$RELEASE_TAG" "artifacts/full/$FINAL_NAME" --clobber
