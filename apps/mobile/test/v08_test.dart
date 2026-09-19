@@ -984,4 +984,58 @@ void main() {
     expect(find.text('My Voice Room'), findsWidgets);
   });
 
+
+  testWidgets('room owner cannot permanently close or delete room',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Permanent Room',
+      demoEconomy.currentUserId,
+      '👑',
+      false,
+      ownedByMe: true,
+      ownerUserId: demoEconomy.currentUserId,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('v07-four-box')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Owner'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('owner-panel-v08')), findsOneWidget);
+    expect(find.text('Close My Room'), findsNothing);
+    expect(find.text('Delete Room'), findsNothing);
+    expect(find.byKey(const Key('confirm-close-room-v08')), findsNothing);
+    expect(room.closed, isFalse);
+  });
+
+  testWidgets('leaving owned room keeps Mine home shortcut',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const MaterialApp(home: V07Home()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('create-room-v06')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('create-room-submit-v06')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('my-room-home-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byType(RoomV07), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('my-room-home-v08')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-v06')), findsNothing);
+  });
+
 }
