@@ -26,6 +26,7 @@ import ai.anamika.app.storage.MemoryStore
 import ai.anamika.app.update.AnamikaRelease
 import ai.anamika.app.update.GitHubReleaseChecker
 import ai.anamika.app.voice.VoiceAssistant
+import ai.anamika.app.workspace.WorkspaceFileManager
 import java.net.URLEncoder
 
 class MainActivity : Activity() {
@@ -39,6 +40,7 @@ class MainActivity : Activity() {
     private lateinit var localGit: LocalGitEngine
     private lateinit var remoteQueue: RemoteActionQueue
     private lateinit var githubGateway: BackendGitHubGateway
+    private lateinit var workspaceFiles: WorkspaceFileManager
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -50,6 +52,7 @@ class MainActivity : Activity() {
         localGit = LocalGitEngine(this)
         remoteQueue = RemoteActionQueue(this)
         githubGateway = BackendGitHubGateway(remoteQueue)
+        workspaceFiles = WorkspaceFileManager(this)
 
         voice = VoiceAssistant(
             activity = this,
@@ -222,6 +225,38 @@ class MainActivity : Activity() {
             }
 
             Command.GitQueue -> showRemoteQueue()
+
+            Command.FileList -> runGit {
+                val files = workspaceFiles.list(currentWorkspace)
+                if (files.isEmpty()) "Workspace me koi source file nahi hai."
+                else files.joinToString("\n")
+            }
+
+            is Command.FileRead -> runGit {
+                workspaceFiles.readText(currentWorkspace, command.path)
+            }
+
+            is Command.FileWrite -> requestOwnerApproval(
+                OwnerAction.WRITE_LOCAL_FILE,
+                "Write local file: ${command.path}"
+            ) {
+                runGit {
+                    "Saved: ${workspaceFiles.writeText(currentWorkspace, command.path, command.content)}"
+                }
+            }
+
+            is Command.FileDelete -> requestOwnerApproval(
+                OwnerAction.DELETE_LOCAL_FILE,
+                "Delete local file: ${command.path}"
+            ) {
+                runGit {
+                    if (workspaceFiles.delete(currentWorkspace, command.path)) {
+                        "Deleted: ${command.path}"
+                    } else {
+                        "File not found: ${command.path}"
+                    }
+                }
+            }
 
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
