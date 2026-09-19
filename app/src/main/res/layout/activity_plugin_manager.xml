@@ -7,10 +7,10 @@
             android:text="Anamika Plugin Center" android:textSize="26sp" android:textStyle="bold" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Enable only the apps you want Anamika to control. Generic UI control works only after you manually enable Anamika App Control in Android Accessibility settings." />
+            android:text="Only apps YOU check here become plugins. Anamika will never auto-enable an app, never force a plugin choice, and never add another app without your selection." />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Disclosure: App Control can read the visible UI structure of apps you explicitly enable and can perform taps, typing, scrolling and navigation only after your command. Blueprint records stay on-device. Internet Creator is separate and only runs when you explicitly configure/use it." />
+            android:text="Disclosure: App Control works only on owner-enabled plugins. If an app is not enabled here, Anamika skips control/audit for it. Visible UI actions and blueprint records remain owner-commanded." />
         <CheckBox android:id="@+id/accessibilityConsent" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="I understand and want to enable App Control" />
         <Button android:id="@+id/accessibilityButton" android:layout_width="match_parent" android:layout_height="wrap_content"
