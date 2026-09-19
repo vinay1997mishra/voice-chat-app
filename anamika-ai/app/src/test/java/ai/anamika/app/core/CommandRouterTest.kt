@@ -87,5 +87,8 @@ class CommandRouterTest {
         assertTrue(router.parse("public feature off voice_reply") is Command.PublicFeatureOff)
         assertTrue(router.parse("public id") is Command.PublicInstallationId)
         assertTrue(router.parse("self update stage add scanned chat flow") is Command.SelfUpdateStage)
+        assertTrue(router.parse("module list") is Command.ModuleList)
+        assertTrue(router.parse("module on learned-chat") is Command.ModuleOn)
+        assertTrue(router.parse("module off learned-chat") is Command.ModuleOff)
     }
 }
