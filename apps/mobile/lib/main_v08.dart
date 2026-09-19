@@ -2042,6 +2042,7 @@ class _RoomV07State extends State<RoomV07> {
     seats = List<String?>.filled(widget.room.seatCount, null);
     audienceMembers = widget.room.audienceMembers;
     lockedSeats.addAll(widget.room.savedLockedSeats);
+    mutedSeats.addAll(widget.room.savedMutedSeats);
     pendingSeatRequests.addAll(widget.room.pendingSeatRequests);
     if (seats.isNotEmpty) {
       seats[0] = 'Owner';
@@ -2426,7 +2427,6 @@ class _RoomV07State extends State<RoomV07> {
                       audienceMembers.add(occupant);
                       if (occupant == 'You') mySeat = null;
                       seats[i] = null;
-                      mutedSeats.remove(i);
                       chat.add(
                         'System: ' +
                             occupant +
@@ -2472,7 +2472,15 @@ class _RoomV07State extends State<RoomV07> {
               title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'),
               leading: Icon(isMuted ? Icons.mic : Icons.mic_off),
               onTap: () {
-                setState(() => isMuted ? mutedSeats.remove(i) : mutedSeats.add(i));
+                setState(() {
+                  if (isMuted) {
+                    mutedSeats.remove(i);
+                    widget.room.savedMutedSeats.remove(i);
+                  } else {
+                    mutedSeats.add(i);
+                    widget.room.savedMutedSeats.add(i);
+                  }
+                });
                 Navigator.pop(sheetContext);
               },
             ),
@@ -2527,7 +2535,6 @@ class _RoomV07State extends State<RoomV07> {
                 setState(() {
                   if (mySeat != null && mySeat != i) {
                     seats[mySeat!] = null;
-                    mutedSeats.remove(mySeat!);
                   }
                   seats[i] = 'You';
                   mySeat = i;
@@ -2602,7 +2609,6 @@ class _RoomV07State extends State<RoomV07> {
                     (seat, requester) => requester == user,
                   );
                   seats[i] = null;
-                  mutedSeats.remove(i);
                   admins.remove(user);
                   chat.add(
                     'System: ' + user + ' was kicked from the room for 24 hours.',
@@ -2670,7 +2676,6 @@ class _RoomV07State extends State<RoomV07> {
       final previousSeat = seats.indexOf(requester);
       if (previousSeat >= 0 && previousSeat != i) {
         seats[previousSeat] = null;
-        mutedSeats.remove(previousSeat);
       }
       seats[i] = requester;
       if (requester == 'You') {
@@ -2863,11 +2868,15 @@ class _RoomV07State extends State<RoomV07> {
                   title: const Text('Unlock All Seats'),
                   subtitle: Text(lockedSeats.length.toString() + ' seat(s) locked'),
                   onTap: () {
-                    setState(() => lockedSeats.clear());
+                    setState(() {
+                      lockedSeats.clear();
+                      widget.room.savedLockedSeats.clear();
+                    });
                     setLocal(() {});
                   },
                 ),
                 ListTile(
+                  key: const Key('owner-mute-all-seats-v08'),
                   leading: const Icon(Icons.mic_off_rounded),
                   title: const Text('Mute All Guests'),
                   subtitle: const Text('Owner/Admin seats stay unchanged'),
@@ -2880,8 +2889,22 @@ class _RoomV07State extends State<RoomV07> {
                             name != 'Admin' &&
                             i != mySeat) {
                           mutedSeats.add(i);
+                          widget.room.savedMutedSeats.add(i);
                         }
                       }
+                    });
+                    setLocal(() {});
+                  },
+                ),
+                ListTile(
+                  key: const Key('owner-unmute-all-seats-v08'),
+                  leading: const Icon(Icons.mic_rounded),
+                  title: const Text('Unmute All Seats'),
+                  subtitle: Text(mutedSeats.length.toString() + ' seat(s) muted'),
+                  onTap: () {
+                    setState(() {
+                      mutedSeats.clear();
+                      widget.room.savedMutedSeats.clear();
                     });
                     setLocal(() {});
                   },
@@ -4596,6 +4619,7 @@ class RoomData {
   final bool currentUserIsAdmin;
   bool closed;
   final Set<int> savedLockedSeats = <int>{};
+  final Set<int> savedMutedSeats = <int>{};
   final Set<String> audienceMembers = <String>{};
   final Map<int, String> pendingSeatRequests = <int, String>{};
   final Map<String, DateTime> kickedUntil = <String, DateTime>{};
