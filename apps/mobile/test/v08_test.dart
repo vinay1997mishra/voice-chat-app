@@ -5,6 +5,7 @@ import 'package:voice_chat_app/gift_catalog_v08.dart';
 import 'package:voice_chat_app/dynamic_gifts_v08.dart';
 import 'package:voice_chat_app/dynamic_gift_manager_v08.dart';
 import 'package:voice_chat_app/app_owner_controls_v08.dart';
+import 'package:voice_chat_app/games_v08.dart';
 
 void main() {
   void setPhoneViewport(WidgetTester tester) {
@@ -15,6 +16,11 @@ void main() {
   }
 
   setUp(() {
+    demoEconomy.currentUserId = '10000050';
+    demoEconomy.byName('Owner').id = '10000000';
+    demoEconomy.byName('Admin').id = '10000001';
+    demoEconomy.byName('Aisha').id = '10000011';
+    demoEconomy.byName('Sam').id = '10000012';
     appOwnerControlsV08.maintenanceMode = false;
     appOwnerControlsV08.roomCreationEnabled = true;
     appOwnerControlsV08.giftsEnabled = true;
@@ -785,6 +791,55 @@ void main() {
 
     expect(economy.sendGiftV08(gift, recipient, 'ECON-OWNER'), isTrue);
     expect(owner.diamonds - before, gift.coins * 20 ~/ 100);
+  });
+
+
+  test('changing a user ID automatically changes owned Room ID', () {
+    final user = demoEconomy.byName('Aisha');
+    final oldId = user.id;
+    final room = RoomData(
+      'Aisha Room',
+      oldId,
+      '🌸',
+      false,
+      ownerUserId: oldId,
+    );
+    appOwnerControlsV08.globalAdminIds.add(oldId);
+    appOwnerControlsV08.userVipLevels[oldId] = 7;
+
+    expect(demoEconomy.changeUserId(user, '20000011'), isTrue);
+    expect(user.id, '20000011');
+    expect(room.id, '20000011');
+    expect(room.ownerUserId, '20000011');
+    expect(appOwnerControlsV08.globalAdminIds, contains('20000011'));
+    expect(appOwnerControlsV08.globalAdminIds, isNot(contains(oldId)));
+    expect(appOwnerControlsV08.userVipLevels['20000011'], 7);
+  });
+
+  test('changing main owner ID automatically changes owned Room ID', () {
+    final oldId = demoEconomy.currentUserId;
+    final room = RoomData(
+      'My Synced Room',
+      oldId,
+      '👑',
+      false,
+      ownedByMe: true,
+      ownerUserId: oldId,
+    );
+
+    expect(demoEconomy.changeCurrentUserId('20000050'), isTrue);
+    expect(demoEconomy.currentUserId, '20000050');
+    expect(room.id, '20000050');
+    expect(room.ownerUserId, '20000050');
+  });
+
+  test('duplicate and non-numeric user IDs are rejected', () {
+    final aisha = demoEconomy.byName('Aisha');
+    final admin = demoEconomy.byName('Admin');
+
+    expect(demoEconomy.changeUserId(aisha, admin.id), isFalse);
+    expect(demoEconomy.changeUserId(aisha, 'ABC12345'), isFalse);
+    expect(aisha.id, '10000011');
   });
 
 }
