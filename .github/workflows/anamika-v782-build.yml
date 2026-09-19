@@ -29,7 +29,16 @@ jobs:
           base64 -d anamika_build/source.b64 > _anamika/source.zip
           unzip -q _anamika/source.zip -d _anamika
           test -d _anamika/AnamikaAI_V7_8_2_Final
+          rm -rf ./anamika_build/project
+          mkdir -p ./anamika_build/project
           cp -a _anamika/AnamikaAI_V7_8_2_Final/. ./anamika_build/project/
+
+      - name: Apply audited compatibility fixes
+        run: |
+          TEST_LAB="anamika_build/project/app/src/main/java/com/anamika/ai/TestLabActivity.java"
+          test -f "$TEST_LAB"
+          sed -i 's/OwnerSession\\.isValid(/OwnerSession.isActive(/g' "$TEST_LAB"
+          ! grep -q 'OwnerSession\\.isValid(' "$TEST_LAB"
 
       - uses: actions/setup-java@v5
         with:
