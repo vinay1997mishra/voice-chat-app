@@ -10,12 +10,15 @@ from threading import Lock
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import FastAPI, Header, HTTPException
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, Field
 
 APP = FastAPI(title="Anamika Owner Policy Service", version="1.0")
 
 ADMIN_TOKEN = os.environ.get("ANAMIKA_POLICY_ADMIN_TOKEN", "").strip()
 PRIVATE_KEY_PEM = os.environ.get("ANAMIKA_POLICY_PRIVATE_KEY_PEM", "").encode()
+GOOGLE_CLIENT_ID = os.environ.get("ANAMIKA_GOOGLE_CLIENT_ID", "").strip()
 STORE = Path(os.environ.get("ANAMIKA_POLICY_STORE", "/tmp/anamika-entitlements.json"))
 LOCK = Lock()
 
@@ -40,6 +43,10 @@ FEATURE_KEYS = {
 class EntitlementUpdate(BaseModel):
     features: dict[str, bool] = Field(default_factory=dict)
     expiresAtEpochMs: int | None = None
+
+
+class GoogleAuthRequest(BaseModel):
+    idToken: str = Field(min_length=20)
 
 
 def require_admin(authorization: str | None) -> None:
@@ -92,6 +99,37 @@ def health() -> dict:
         "ok": True,
         "signing_key_configured": bool(PRIVATE_KEY_PEM),
         "admin_token_configured": bool(ADMIN_TOKEN),
+        "google_client_id_configured": bool(GOOGLE_CLIENT_ID),
+    }
+
+
+
+@APP.post("/auth/google")
+def auth_google(request: GoogleAuthRequest) -> dict:
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Google client ID is not configured")
+
+    try:
+        payload = google_id_token.verify_oauth2_token(
+            request.idToken,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid Google ID token") from exc
+
+    subject = str(payload.get("sub", "")).strip()
+    email = str(payload.get("email", "")).strip()
+    email_verified = bool(payload.get("email_verified", False))
+    name = str(payload.get("name", "")).strip()
+
+    if not subject or not email or not email_verified:
+        raise HTTPException(status_code=401, detail="Verified Google account required")
+
+    return {
+        "subject": subject,
+        "email": email,
+        "displayName": name or None,
     }
 
 
