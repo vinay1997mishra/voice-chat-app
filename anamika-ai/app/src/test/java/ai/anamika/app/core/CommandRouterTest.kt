@@ -51,5 +51,7 @@ class CommandRouterTest {
         assertTrue(router.parse("build apk") is Command.BuildApk)
         assertTrue(router.parse("build status") is Command.BuildStatus)
         assertTrue(router.parse("build download") is Command.BuildDownload)
+        assertTrue(router.parse("app banao video editor") is Command.MakeApp)
+        assertTrue(router.parse("make app notes app") is Command.MakeApp)
     }
 }
