@@ -1,0 +1,37 @@
+name: Anamika Build Server
+
+on:
+  push:
+    branches:
+      - anamika-ai-bootstrap
+    paths:
+      - 'anamika-build-server/**'
+      - '.github/workflows/anamika-build-server.yml'
+  pull_request:
+    paths:
+      - 'anamika-build-server/**'
+      - '.github/workflows/anamika-build-server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: anamika-build-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install server dependencies
+        run: pip install -r requirements.txt
+      - name: Compile server
+        run: python -m py_compile app.py
+      - name: Import FastAPI app
+        run: python -c "import app; assert app.APP.title == 'Anamika Build Server'"
+      - name: Build Docker image
+        run: docker build -t anamika-build-server:test .
