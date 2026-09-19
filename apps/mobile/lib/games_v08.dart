@@ -318,6 +318,9 @@ class GameLauncherV08 extends StatelessWidget {
   final String game;
   final List<GameVoicePlayerV08> players;
 
+  bool get supportsFourSeatLocal =>
+      game == 'Ludo' || game == 'UNO' || game == 'Carrom';
+
   void _open(BuildContext context, V08GameMode mode) {
     final Widget page = switch (game) {
       'Ludo' => LudoGameV08(mode: mode, players: players),
@@ -346,17 +349,20 @@ class GameLauncherV08 extends StatelessWidget {
             _ModeCard(
               key: const Key('solo-bot-mode-v08'),
               icon: Icons.smart_toy_rounded,
-              title: 'Solo vs Bot',
-              subtitle: '4-seat table: aap + 3 bots.',
+              title: supportsFourSeatLocal ? 'Solo vs Bot' : 'Solo / Practice',
+              subtitle: supportsFourSeatLocal
+                  ? '4-seat table: aap + 3 bots.'
+                  : 'Single-phone practice mode.',
               onTap: () => _open(context, V08GameMode.soloBot),
             ),
-            _ModeCard(
-              key: const Key('local-multi-mode-v08'),
-              icon: Icons.groups_rounded,
-              title: 'Local Multiplayer',
-              subtitle: 'Same phone par 4 seats turn-by-turn khel sakti hain.',
-              onTap: () => _open(context, V08GameMode.localMulti),
-            ),
+            if (supportsFourSeatLocal)
+              _ModeCard(
+                key: const Key('local-multi-mode-v08'),
+                icon: Icons.groups_rounded,
+                title: 'Local Multiplayer',
+                subtitle: 'Same phone par 4 seats turn-by-turn khel sakti hain.',
+                onTap: () => _open(context, V08GameMode.localMulti),
+              ),
             const Card(
               child: ListTile(
                 leading: Icon(Icons.public_rounded),
@@ -1312,7 +1318,7 @@ class _CarromGameV08State extends State<CarromGameV08>
   }
 
   void _physicsTick() {
-    if (!mounted) return;
+    if (!mounted || !shotActive) return;
     var moving = false;
     for (final piece in pieces) {
       if (piece.pocketed) continue;
