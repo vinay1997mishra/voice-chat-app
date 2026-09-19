@@ -104,13 +104,13 @@
             android:id="@+id/wakeListenButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hello Anamika Listening: OFF" />
+            android:text="Hello Mika / Hello Anamika Listening: OFF" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Wake listening works while Anamika is open. Say “Hello Anamika”, then speak your command."
+            android:text="Hands-free wake while Anamika is open: say “Hello Mika” or “Hello Anamika”. You do not need to touch the Mic button."
             android:textSize="13sp" />
 
         <Button
