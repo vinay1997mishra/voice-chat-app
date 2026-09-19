@@ -11,7 +11,7 @@ public final class BootWakeReceiver extends BroadcastReceiver {
         if(context==null) return;
         boolean enabled=context.getSharedPreferences("anamika_v7",Context.MODE_PRIVATE)
                 .getBoolean("wake_enabled",false);
-        if(!enabled) return;
+        if(!enabled || !OwnerSession.isTrusted(context)) return;
         try{
             Intent svc=new Intent(context,BackgroundWakeService.class)
                     .setAction(BackgroundWakeService.ACTION_START);
