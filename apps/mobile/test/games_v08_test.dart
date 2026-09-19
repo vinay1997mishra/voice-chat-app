@@ -70,4 +70,71 @@ void main() {
     expect(find.text('Local Multiplayer'), findsOneWidget);
     expect(find.textContaining('4 seats'), findsOneWidget);
   });
+
+  testWidgets('Ludo UNO Carrom show room DPs and mic states on four sides',
+      (tester) async {
+    phone(tester);
+    const players = <GameVoicePlayerV08>[
+      GameVoicePlayerV08(name: 'Owner', avatar: '👑', userId: '1'),
+      GameVoicePlayerV08(name: 'Admin', avatar: '🛡️', userId: '2'),
+      GameVoicePlayerV08(
+        name: 'Aisha',
+        avatar: '🌸',
+        userId: '3',
+        micOn: false,
+      ),
+      GameVoicePlayerV08(name: 'Sam', avatar: '🎧', userId: '4'),
+    ];
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LudoGameV08(
+          mode: V08GameMode.localMulti,
+          players: players,
+        ),
+      ),
+    );
+    expect(find.text('👑'), findsWidgets);
+    expect(find.text('🛡️'), findsWidgets);
+    expect(find.text('🌸'), findsWidgets);
+    expect(find.text('🎧'), findsWidgets);
+    expect(find.text('MUTED'), findsOneWidget);
+    expect(find.byKey(const Key('ludo-four-side-stage-v08')), findsOneWidget);
+
+    final topSeat =
+        tester.getTopLeft(find.byKey(const Key('ludo-seat-3-v08')));
+    final bottomSeat =
+        tester.getTopLeft(find.byKey(const Key('ludo-seat-1-v08')));
+    final leftSeat =
+        tester.getTopLeft(find.byKey(const Key('ludo-seat-4-v08')));
+    final rightSeat =
+        tester.getTopLeft(find.byKey(const Key('ludo-seat-2-v08')));
+    expect(topSeat.dy, lessThan(bottomSeat.dy));
+    expect(leftSeat.dx, lessThan(rightSeat.dx));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: UnoGameV08(
+          mode: V08GameMode.localMulti,
+          players: players,
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('uno-four-side-stage-v08')), findsOneWidget);
+    expect(find.text('Aisha'), findsOneWidget);
+    expect(find.text('MUTED'), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: CarromGameV08(
+          mode: V08GameMode.localMulti,
+          players: players,
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('carrom-four-side-stage-v08')), findsOneWidget);
+    expect(find.text('Owner'), findsOneWidget);
+    expect(find.text('MUTED'), findsOneWidget);
+  });
+
 }
