@@ -44,6 +44,37 @@ void main() {
   });
 
 
+  testWidgets('gift receiver avatars swipe horizontally and selection updates',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(const VoiceChatV08());
+    await tester.tap(find.byKey(const Key('open-v07-room')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gift'));
+    await tester.pumpAndSettle();
+
+    final stripFinder = find.byKey(const Key('gift-recipient-v08'));
+    expect(stripFinder, findsOneWidget);
+    final strip = tester.widget<ListView>(stripFinder);
+    expect(strip.scrollDirection, Axis.horizontal);
+
+    expect(find.byKey(const Key('gift-recipient-10000000-v08')), findsOneWidget);
+    expect(find.byKey(const Key('gift-recipient-10000011-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('gift-recipient-10000011-v08')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('gift-selected-recipient-v08')),
+        matching: find.textContaining('Aisha'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ID 10000011'), findsOneWidget);
+  });
+
+
   testWidgets('room has a persistent composer and sends visible messages',
       (tester) async {
     setPhoneViewport(tester);
