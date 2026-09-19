@@ -1219,4 +1219,25 @@ void main() {
     expect(room.isOnline, isTrue);
   });
 
+
+  testWidgets('no user profile exposes the app owner admin panel',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: ProfileV07())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Main Owner Panel'), findsNothing);
+    expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
+    expect(find.byType(MainOwnerPanelV08), findsNothing);
+
+    appOwnerControlsV08.globalAdminIds.add(demoEconomy.currentUserId);
+    appOwnerControlsV08.refresh();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Main Owner Panel'), findsNothing);
+    expect(find.byType(MainOwnerPanelV08), findsNothing);
+  });
+
 }
