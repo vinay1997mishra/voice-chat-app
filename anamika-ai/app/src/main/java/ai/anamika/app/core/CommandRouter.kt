@@ -51,6 +51,20 @@ sealed class Command {
     data object AppStudyReport : Command()
     data object AppStudyExport : Command()
 
+    data object FeatureList : Command()
+    data class FeatureOn(val name: String) : Command()
+    data class FeatureOff(val name: String) : Command()
+    data object FeatureAllOn : Command()
+    data object FeatureAllOff : Command()
+
+    data object PublicFeatureList : Command()
+    data class PublicFeatureOn(val name: String) : Command()
+    data class PublicFeatureOff(val name: String) : Command()
+    data object PublicFeatureAllOn : Command()
+    data object PublicFeatureAllOff : Command()
+
+    data class SelfUpdateStage(val changes: String) : Command()
+
     data class Unknown(val text: String) : Command()
 }
 
@@ -60,6 +74,26 @@ class CommandRouter {
         val lower = text.lowercase()
 
         return when {
+            lower == "feature list" || lower == "features" -> Command.FeatureList
+            lower == "feature all on" || lower == "all features on" -> Command.FeatureAllOn
+            lower == "feature all off" || lower == "all features off" -> Command.FeatureAllOff
+            lower.startsWith("feature on ") -> Command.FeatureOn(text.drop(11).trim())
+            lower.startsWith("feature off ") -> Command.FeatureOff(text.drop(12).trim())
+            lower == "voice reply on" -> Command.FeatureOn("voice_reply")
+            lower == "voice reply off" -> Command.FeatureOff("voice_reply")
+            lower == "voice input on" -> Command.FeatureOn("voice_input")
+            lower == "voice input off" -> Command.FeatureOff("voice_input")
+            lower == "chat on" -> Command.FeatureOn("chat")
+            lower == "chat off" -> Command.FeatureOff("chat")
+
+            lower == "public feature list" -> Command.PublicFeatureList
+            lower == "public feature all on" -> Command.PublicFeatureAllOn
+            lower == "public feature all off" -> Command.PublicFeatureAllOff
+            lower.startsWith("public feature on ") -> Command.PublicFeatureOn(text.drop(18).trim())
+            lower.startsWith("public feature off ") -> Command.PublicFeatureOff(text.drop(19).trim())
+
+            lower.startsWith("self update stage ") -> Command.SelfUpdateStage(text.drop(18).trim())
+
             lower == "internet on" || lower == "internet chalu" -> Command.InternetOn
             lower == "internet off" || lower == "internet band" -> Command.InternetOff
             lower == "internet status" -> Command.InternetStatus
