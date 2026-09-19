@@ -535,32 +535,6 @@ class _LudoGameV08State extends State<LudoGameV08> {
     _applyMove(pick, roll);
   }
 
-  Widget _seat(int seat) {
-    final active = current == seat && winner == null;
-    final colors = [Colors.redAccent, Colors.greenAccent, Colors.blueAccent, Colors.amberAccent];
-    return Expanded(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        key: Key('ludo-seat-' + (seat + 1).toString() + '-v08'),
-        margin: const EdgeInsets.all(3),
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 3),
-        decoration: BoxDecoration(
-          color: active ? colors[seat].withOpacity(.15) : Colors.black26,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
-          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.28), blurRadius: 12)] : null,
-        ),
-        child: Column(
-          children: [
-            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
-            Text(_name(seat), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
-            Text(tokens[seat].where((p) => p == 56).length.toString() + '/4 home', style: const TextStyle(fontSize: 9)),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -573,10 +547,13 @@ class _LudoGameV08State extends State<LudoGameV08> {
             children: [
               Container(
                 key: const Key('ludo-four-player-v08'),
-                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
+                child: FourSideVoiceGameStageV08(
+                  players: gamePlayers,
+                  activeSeat: current,
+                  keyPrefix: 'ludo',
+                  center: _LudoBoardV08(tokens: tokens),
+                ),
               ),
-              const SizedBox(height: 8),
-              _LudoBoardV08(tokens: tokens),
               const SizedBox(height: 10),
               Card(
                 color: Colors.white10,
@@ -1100,32 +1077,6 @@ class _UnoGameV08State extends State<UnoGameV08> {
     );
   }
 
-  Widget _seat(int seat) {
-    final active = turn == seat && winner == null;
-    final colors = [Colors.cyanAccent, Colors.pinkAccent, Colors.amberAccent, Colors.greenAccent];
-    return Expanded(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        key: Key('uno-seat-' + (seat + 1).toString() + '-v08'),
-        margin: const EdgeInsets.all(3),
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
-        decoration: BoxDecoration(
-          color: active ? colors[seat].withOpacity(.16) : Colors.black26,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
-          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.3), blurRadius: 12)] : null,
-        ),
-        child: Column(
-          children: [
-            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
-            Text(_name(seat), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
-            Text(hands[seat].length.toString() + ' cards', style: const TextStyle(fontSize: 9)),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final humanCanPlay = winner == null && !currentIsBot;
@@ -1139,18 +1090,100 @@ class _UnoGameV08State extends State<UnoGameV08> {
             children: [
               Container(
                 key: const Key('uno-four-player-v08'),
-                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
+                child: FourSideVoiceGameStageV08(
+                  players: gamePlayers,
+                  activeSeat: turn,
+                  keyPrefix: 'uno',
+                  center: Container(
+                    decoration: BoxDecoration(
+                      gradient: const RadialGradient(
+                        colors: [Color(0xFF263B65), Color(0xFF11182D)],
+                      ),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: Colors.white24, width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black54,
+                          blurRadius: 22,
+                          offset: Offset(0, 14),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          status,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'Direction: ' +
+                              (direction == 1 ? '↻' : '↺') +
+                              ' • Active: ' +
+                              activeColor,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _card3d(discard.last),
+                            const SizedBox(width: 10),
+                            Column(
+                              children: [
+                                Container(
+                                  width: 58,
+                                  height: 86,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF32104F),
+                                        Color(0xFF11182D),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Colors.white38,
+                                      width: 2,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black54,
+                                        blurRadius: 10,
+                                        offset: Offset(0, 7),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      deck.length.toString(),
+                                      style: const TextStyle(
+                                        fontSize: 21,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                FilledButton(
+                                  key: const Key('uno-draw-v08'),
+                                  onPressed: humanCanPlay ? drawCard : null,
+                                  child: const Text('Draw'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              Card(
-                color: Colors.white10,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    children: [
-                      Text(status, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                      Text('Direction: ' + (direction == 1 ? '↻' : '↺') + ' • Active: ' + activeColor),
-                      const SizedBox(height: 10),
+
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -1435,32 +1468,6 @@ class _CarromGameV08State extends State<CarromGameV08>
     return best;
   }
 
-  Widget _seat(int seat) {
-    final active = turn == seat && winner == null;
-    final colors = [Colors.cyanAccent, Colors.pinkAccent, Colors.amberAccent, Colors.greenAccent];
-    return Expanded(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        key: Key('carrom-seat-' + (seat + 1).toString() + '-v08'),
-        margin: const EdgeInsets.all(3),
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
-        decoration: BoxDecoration(
-          color: active ? colors[seat].withOpacity(.16) : Colors.black26,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: active ? colors[seat] : Colors.white24, width: active ? 2 : 1),
-          boxShadow: active ? [BoxShadow(color: colors[seat].withOpacity(.3), blurRadius: 12)] : null,
-        ),
-        child: Column(
-          children: [
-            Icon(botMode && seat != 0 ? Icons.smart_toy_rounded : Icons.person_rounded, size: 18),
-            Text(_name(seat), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
-            Text(scores[seat].toString() + ' pts', style: const TextStyle(fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final left = pieces.where((p) => p.kind != 3 && !p.pocketed).length;
@@ -1471,24 +1478,28 @@ class _CarromGameV08State extends State<CarromGameV08>
         child: SafeArea(
           child: Column(
             children: [
-              Container(
-                key: const Key('carrom-four-player-v08'),
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
-                child: Row(children: [for (var i = 0; i < 4; i++) _seat(i)]),
-              ),
-              Text(
-                winner != null
-                    ? _name(winner!) + ' wins 🎉'
-                    : _name(turn) + ' turn • ' + left.toString() + ' coins left',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  winner != null
+                      ? _name(winner!) + ' wins 🎉'
+                      : _name(turn) +
+                          ' turn • ' +
+                          left.toString() +
+                          ' coins left',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
               Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: LayoutBuilder(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Container(
+                    key: const Key('carrom-four-player-v08'),
+                    child: FourSideVoiceGameStageV08(
+                      players: gamePlayers,
+                      activeSeat: turn,
+                      keyPrefix: 'carrom',
+                      center: LayoutBuilder(
                         builder: (context, box) {
                           final size = Size(box.maxWidth, box.maxHeight);
                           return Transform(
@@ -1501,32 +1512,48 @@ class _CarromGameV08State extends State<CarromGameV08>
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(25),
                                 boxShadow: const [
-                                  BoxShadow(color: Colors.black87, blurRadius: 26, offset: Offset(0, 18)),
-                                  BoxShadow(color: Color(0x5539FFCE), blurRadius: 20, spreadRadius: 2),
+                                  BoxShadow(
+                                    color: Colors.black87,
+                                    blurRadius: 26,
+                                    offset: Offset(0, 18),
+                                  ),
+                                  BoxShadow(
+                                    color: Color(0x5539FFCE),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
                                 ],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(25),
                                 child: GestureDetector(
                                   key: const Key('carrom-board-v08'),
-                                  onPanStart: shotActive || botTurn || winner != null
-                                      ? null
-                                      : (d) => setState(() {
-                                            dragStart = d.localPosition;
-                                            dragNow = d.localPosition;
-                                          }),
-                                  onPanUpdate: shotActive || botTurn || winner != null
-                                      ? null
-                                      : (d) => setState(() => dragNow = d.localPosition),
-                                  onPanEnd: shotActive || botTurn || winner != null
-                                      ? null
-                                      : (_) {
-                                          final start = dragStart;
-                                          final end = dragNow;
-                                          dragStart = null;
-                                          dragNow = null;
-                                          if (start != null && end != null) _shoot(size, start, end);
-                                        },
+                                  onPanStart:
+                                      shotActive || botTurn || winner != null
+                                          ? null
+                                          : (d) => setState(() {
+                                                dragStart = d.localPosition;
+                                                dragNow = d.localPosition;
+                                              }),
+                                  onPanUpdate:
+                                      shotActive || botTurn || winner != null
+                                          ? null
+                                          : (d) => setState(
+                                                () => dragNow = d.localPosition,
+                                              ),
+                                  onPanEnd:
+                                      shotActive || botTurn || winner != null
+                                          ? null
+                                          : (_) {
+                                                final start = dragStart;
+                                                final end = dragNow;
+                                                dragStart = null;
+                                                dragNow = null;
+                                                if (start != null &&
+                                                    end != null) {
+                                                  _shoot(size, start, end);
+                                                }
+                                              },
                                   child: CustomPaint(
                                     painter: _Carrom3DPainterV08(
                                       pieces: pieces,
