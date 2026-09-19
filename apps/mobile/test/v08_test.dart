@@ -298,7 +298,7 @@ void main() {
 
   test('dynamic video gift limits and VIP duration rules are fixed', () {
     expect(dynamicGiftMaxVideoBytesV08, 12 * 1024 * 1024);
-    expect(dynamicGiftMaxVideoDurationV08, const Duration(seconds: 5));
+    expect(dynamicGiftMaxVideoDurationV08, const Duration(seconds: 8));
 
     expect(roomGiftLeasesForVipV08(7), isEmpty);
     expect(
@@ -339,7 +339,7 @@ void main() {
         coins: 100,
         videoPath: '/tmp/old.mp4',
         videoBytes: 1024,
-        videoDuration: const Duration(seconds: 5),
+        videoDuration: const Duration(seconds: 8),
         lease: GiftLeaseV08.days15,
         createdAt: now.subtract(const Duration(days: 16)),
         createdBy: 'Room Owner',
@@ -353,7 +353,7 @@ void main() {
         coins: 200,
         videoPath: '/tmp/life.mp4',
         videoBytes: 1024,
-        videoDuration: const Duration(seconds: 5),
+        videoDuration: const Duration(seconds: 8),
         lease: GiftLeaseV08.lifetime,
         createdAt: now.subtract(const Duration(days: 500)),
         createdBy: 'App Owner',
@@ -394,7 +394,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('add-video-gift-v08')), findsOneWidget);
-    expect(find.textContaining('Video maximum 5 seconds'), findsOneWidget);
+    expect(find.textContaining('Video maximum 8 seconds'), findsOneWidget);
     expect(find.textContaining('File maximum 12 MB'), findsOneWidget);
   });
 
