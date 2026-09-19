@@ -3982,15 +3982,58 @@ class _RoomV07State extends State<RoomV07> {
     );
   }
 
-  Future<void> _shareRoom() async {
+  void _shareRoom() {
     final details = widget.room.name +
         ' • Room ID ' +
         widget.room.id +
         (widget.room.locked ? ' • Locked room' : ' • Open room');
-    await Clipboard.setData(ClipboardData(text: details));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Room invite copied')),
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Room Invite',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                details,
+                key: const Key('room-invite-details-v08'),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                key: const Key('copy-room-invite-v08'),
+                onPressed: () async {
+                  try {
+                    await Clipboard.setData(ClipboardData(text: details));
+                    if (!mounted || !sheetContext.mounted) return;
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Room invite copied')),
+                    );
+                  } catch (_) {
+                    if (!mounted || !sheetContext.mounted) return;
+                    Navigator.pop(sheetContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Copy failed. Room details are shown above.'),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy Invite'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
