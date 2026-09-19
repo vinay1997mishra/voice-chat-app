@@ -104,13 +104,13 @@
             android:id="@+id/wakeListenButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hello Mika / Hello Anamika Listening: OFF" />
+            android:text="24×7 Hello Mika / Hello Anamika: OFF" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Hands-free wake while Anamika is open: say “Hello Mika” or “Hello Anamika”. You do not need to touch the Mic button."
+            android:text="24×7 Background Wake: after Owner unlock and microphone permission, Anamika keeps a foreground listening service with an ongoing notification. Say “Hello Mika” or “Hello Anamika” without touching Mic. Android/OEM battery controls can still stop background listening; after some reboots you may need to open Anamika once."
             android:textSize="13sp" />
 
         <Button
