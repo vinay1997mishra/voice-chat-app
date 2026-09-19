@@ -64,14 +64,11 @@ void main() {
     await tester.tap(find.byKey(const Key('gift-recipient-10000011-v08')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('gift-selected-recipient-v08')),
-        matching: find.textContaining('Aisha'),
-      ),
-      findsOneWidget,
+    final selectedRecipient = tester.widget<Text>(
+      find.byKey(const Key('gift-selected-recipient-v08')),
     );
-    expect(find.textContaining('ID 10000011'), findsOneWidget);
+    expect(selectedRecipient.data, contains('Aisha'));
+    expect(selectedRecipient.data, contains('ID 10000011'));
   });
 
 
