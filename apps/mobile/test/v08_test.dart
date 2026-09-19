@@ -296,6 +296,18 @@ void main() {
     expect(gift.isHumanRide, isTrue);
   });
 
+  test('message notifications toggle suppresses demo inbox notifications', () {
+    final economy = DemoEconomy();
+    final user = economy.users[2];
+    final beforeInbox = economy.inbox.length;
+
+    economy.messageNotifications = false;
+    economy.sendDirectMessage(user, 'hello without notification');
+
+    expect(economy.conversationFor(user.id).last, 'You: hello without notification');
+    expect(economy.inbox.length, beforeInbox);
+  });
+
   test('dynamic video gift limits and VIP duration rules are fixed', () {
     expect(dynamicGiftMaxVideoBytesV08, 12 * 1024 * 1024);
     expect(dynamicGiftMaxVideoDurationV08, const Duration(seconds: 8));
