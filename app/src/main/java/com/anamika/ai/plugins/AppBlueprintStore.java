@@ -91,6 +91,38 @@ public final class AppBlueprintStore {
         }catch(Exception ignored){}
     }
 
+    /** Records decisions/results made by the owner-authorized automatic UI audit. */
+    public static void recordAuditResult(Context c,String pkg,String state,String label,String detail){
+        if(!isActive(c,pkg)) return;
+        String dir=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(SESSION,""); if(dir.isEmpty()) return;
+        try{
+            JSONObject o=new JSONObject();
+            o.put("time",System.currentTimeMillis());
+            o.put("package",pkg==null?"":pkg);
+            o.put("state",state==null?"":state);
+            o.put("label",label==null?"":label);
+            o.put("detail",detail==null?"":detail);
+            appendLine(new File(dir,"auto_audit.jsonl"),o.toString());
+        }catch(Exception ignored){}
+    }
+
+    /** Seals the blueprint and writes a human-readable automatic audit summary. */
+    public static File completeAutoAudit(Context c,int tested,int skipped,int screens,String reason){
+        android.content.SharedPreferences p=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        String path=p.getString(SESSION,"");
+        if(!path.isEmpty()){
+            String text="Anamika Automatic App Audit\n"+
+                    "Completed: "+new Date()+"\n"+
+                    "Safe controls tested: "+tested+"\n"+
+                    "Sensitive/destructive/unknown controls skipped: "+skipped+"\n"+
+                    "Observable screens sampled: "+screens+"\n"+
+                    "Reason: "+(reason==null?"completed":reason)+"\n"+
+                    "Note: passwords, payment, messaging, account changes, destructive actions and OS permission grants are not auto-executed.\n";
+            writeText(new File(path,"AUTO_AUDIT_REPORT.txt"),text);
+        }
+        return stop(c);
+    }
+
     public static boolean shouldCaptureScreenshot(Context c){
         long now=System.currentTimeMillis(); android.content.SharedPreferences p=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         long last=p.getLong(LAST_SHOT,0L); if(now-last<1500L) return false; p.edit().putLong(LAST_SHOT,now).apply(); return true;
@@ -127,9 +159,10 @@ public final class AppBlueprintStore {
     public static String latestSummary(Context c,int maxChars){
         String path=latestPath(c); if(path.isEmpty()||maxChars<=0) return "";
         String screens=tail(new File(path,"screens.jsonl"),Math.max(1,(maxChars*3)/4));
-        String actions=tail(new File(path,"actions.jsonl"),Math.max(1,maxChars/4));
-        if(screens.isEmpty()&&actions.isEmpty()) return "";
-        String result="LATEST APP BLUEPRINT (observable UI/actions; passwords redacted):\nSCREENS:\n"+screens+"\nACTIONS:\n"+actions;
+        String actions=tail(new File(path,"actions.jsonl"),Math.max(1,maxChars/5));
+        String audit=tail(new File(path,"auto_audit.jsonl"),Math.max(1,maxChars/5));
+        if(screens.isEmpty()&&actions.isEmpty()&&audit.isEmpty()) return "";
+        String result="LATEST APP BLUEPRINT (observable UI/actions; passwords redacted):\nSCREENS:\n"+screens+"\nACTIONS:\n"+actions+"\nAUTO AUDIT:\n"+audit;
         if(result.length()>maxChars) result=result.substring(result.length()-maxChars);
         return result;
     }
