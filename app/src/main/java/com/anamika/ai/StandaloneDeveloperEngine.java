@@ -60,17 +60,71 @@ public final class StandaloneDeveloperEngine {
                     engine = "Standalone deterministic generator (local model not bundled)";
                 }
 
-                OfflineCodeValidator.Report first = OfflineCodeValidator.validateGeneratedText(output);
-                if (!first.isClean()) {
-                    output = AutoRepairEngine.repairKnownIssues(output, first);
-                }
                 OfflineCodeValidator.Report finalReport = OfflineCodeValidator.validateGeneratedText(output);
                 CompilerPackManager.Report compilerReport = CompilerPackManager.verifyGeneratedText(context, output);
+
+                // First apply deterministic low-risk fixes.
+                if (!finalReport.isClean()) {
+                    output = AutoRepairEngine.repairKnownIssues(output, finalReport);
+                    finalReport = OfflineCodeValidator.validateGeneratedText(output);
+                    compilerReport = CompilerPackManager.verifyGeneratedText(context, output);
+                }
+
+                // If a local coding model is available, feed REAL validator/compiler errors back
+                // into the model and re-run the checks. This is bounded and never fakes PASS.
+                if (status.ready) {
+                    for (int attempt = 1; attempt <= 3; attempt++) {
+                        boolean structuralOk = finalReport.isClean();
+                        boolean compilerOk = compilerReport.isFullyVerified();
+                        if (structuralOk && compilerOk) break;
+
+                        if (onlyMissingToolchains(compilerReport) && structuralOk) break;
+
+                        String repairPrompt = buildRepairPrompt(request, output, finalReport, compilerReport, attempt);
+                        String repaired = LocalModelBridge.generate(context, repairPrompt);
+                        if (repaired == null || repaired.trim().isEmpty() || repaired.trim().equals(output.trim())) break;
+
+                        output = repaired;
+                        finalReport = OfflineCodeValidator.validateGeneratedText(output);
+                        if (!finalReport.isClean()) {
+                            output = AutoRepairEngine.repairKnownIssues(output, finalReport);
+                            finalReport = OfflineCodeValidator.validateGeneratedText(output);
+                        }
+                        compilerReport = CompilerPackManager.verifyGeneratedText(context, output);
+                        engine = "On-device coding model • self-repair attempts=" + attempt;
+                    }
+                }
+
                 callback.onSuccess(new Result(output, finalReport, compilerReport, engine));
             } catch (Exception e) {
                 callback.onError(e.getMessage() == null ? e.toString() : e.getMessage());
             }
         }, "anamika-standalone-developer").start();
+    }
+
+    private static boolean onlyMissingToolchains(CompilerPackManager.Report report) {
+        if (report == null || report.checks == null || report.checks.isEmpty()) return false;
+        boolean sawMissing = false;
+        for (CompilerPackManager.Check check : report.checks) {
+            if (check.state == CompilerPackManager.State.FAIL) return false;
+            if (check.state == CompilerPackManager.State.MISSING) sawMissing = true;
+        }
+        return sawMissing;
+    }
+
+    private static String buildRepairPrompt(String request, String current,
+                                            OfflineCodeValidator.Report validation,
+                                            CompilerPackManager.Report compiler,
+                                            int attempt) {
+        return "You are Anamika AI self-repair mode. Repair the generated project using the REAL error reports below. " +
+                "Return the COMPLETE corrected project, every file as <<<FILE:path>>> ... <<<END FILE>>>. " +
+                "Do not omit unchanged required files. Do not claim success; the app will re-run validators and compilers. " +
+                "Do not add secrets, unsafe paths, or placeholders.\n\n" +
+                "OWNER REQUEST:\n" + request + "\n\n" +
+                "REPAIR ATTEMPT: " + attempt + "\n\n" +
+                "STRUCTURAL REPORT:\n" + (validation == null ? "none" : validation.details()) + "\n\n" +
+                "COMPILER REPORT:\n" + (compiler == null ? "none" : compiler.details()) + "\n\n" +
+                "CURRENT PROJECT:\n" + current;
     }
 
     private static String buildLocalModelPrompt(String request) {
