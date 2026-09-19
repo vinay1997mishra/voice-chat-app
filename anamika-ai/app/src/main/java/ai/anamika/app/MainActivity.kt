@@ -28,6 +28,8 @@ import ai.anamika.app.coding.LocalAndroidProjectGenerator
 import ai.anamika.app.core.Command
 import ai.anamika.app.core.CommandRouter
 import ai.anamika.app.git.LocalGitEngine
+import ai.anamika.app.features.FeatureId
+import ai.anamika.app.features.FeatureManager
 import ai.anamika.app.network.InternetPolicyManager
 import ai.anamika.app.github.BackendGitHubGateway
 import ai.anamika.app.github.RemoteActionQueue
@@ -38,6 +40,7 @@ import ai.anamika.app.security.OwnerPermissionPolicy
 import ai.anamika.app.storage.MemoryStore
 import ai.anamika.app.update.AnamikaRelease
 import ai.anamika.app.update.GitHubReleaseChecker
+import ai.anamika.app.update.SelfUpdateStager
 import ai.anamika.app.voice.VoiceAssistant
 import ai.anamika.app.workspace.WorkspaceFileManager
 import java.net.URLEncoder
@@ -63,6 +66,8 @@ class MainActivity : Activity() {
     private lateinit var appAccessPolicy: AppAccessPolicy
     private lateinit var appObservations: AppObservationStore
     private lateinit var appStudy: AppStudyStore
+    private lateinit var features: FeatureManager
+    private lateinit var selfUpdateStager: SelfUpdateStager
     private lateinit var status: TextView
 
     private var currentWorkspace = "anamika"
@@ -84,6 +89,8 @@ class MainActivity : Activity() {
         appAccessPolicy = AppAccessPolicy(this)
         appObservations = AppObservationStore(this)
         appStudy = AppStudyStore(this)
+        features = FeatureManager(this)
+        selfUpdateStager = SelfUpdateStager(workspaceFiles)
 
         voice = VoiceAssistant(
             activity = this,
@@ -138,6 +145,11 @@ class MainActivity : Activity() {
             setOnClickListener { handleInput("build apk") }
         }
 
+        val featureControl = Button(this).apply {
+            text = "Owner Feature Control"
+            setOnClickListener { showFeatureControlDialog() }
+        }
+
         root.addView(title)
         root.addView(status)
         root.addView(speak)
@@ -145,11 +157,16 @@ class MainActivity : Activity() {
         root.addView(memories)
         root.addView(queue)
         root.addView(buildApk)
+        root.addView(featureControl)
 
         return ScrollView(this).apply { addView(root) }
     }
 
     private fun startListeningWithPermission() {
+        if (!features.isEnabled(FeatureId.VOICE_INPUT)) {
+            reply("Voice input owner policy se OFF hai.")
+            return
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             voice.listen()
         } else {
@@ -794,7 +811,9 @@ class MainActivity : Activity() {
 
     private fun reply(text: String) {
         status.text = text
-        voice.speak(text)
+        if (::features.isInitialized && features.isEnabled(FeatureId.VOICE_REPLY)) {
+            voice.speak(text)
+        }
     }
 
     override fun onDestroy() {
