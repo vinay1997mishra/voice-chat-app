@@ -4767,17 +4767,6 @@ class ProfileV07 extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _ProfileTile(
-                icon: Icons.admin_panel_settings_rounded,
-                title: 'Main Owner Panel',
-                subtitle: 'Global gift videos and app-owner controls',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MainOwnerPanelV08(),
-                  ),
-                ),
-              ),
-              _ProfileTile(
                 icon: Icons.account_balance_wallet_rounded,
                 title: 'Wallet',
                 subtitle: 'Balances, conversion and transaction history',
