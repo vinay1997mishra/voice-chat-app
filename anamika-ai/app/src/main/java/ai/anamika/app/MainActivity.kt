@@ -223,6 +223,192 @@ class MainActivity : Activity() {
         return root
     }
 
+    private fun buildOwnerConsoleUi(): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 48, 32, 48)
+        }
+
+        val title = TextView(this).apply {
+            text = "Function Control"
+            textSize = 26f
+        }
+
+        val ownerStatus = TextView(this).apply {
+            text = "Loading functions..."
+            textSize = 16f
+            setPadding(0, 16, 0, 16)
+        }
+
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val refresh = Button(this).apply {
+            text = "Refresh"
+            setOnClickListener {
+                syncLearnedModulesAndLoadOwnerCatalog(list, ownerStatus)
+            }
+        }
+
+        val signOut = Button(this).apply {
+            text = "Sign out"
+            setOnClickListener {
+                publicSession.clear()
+                setContentView(
+                    if (features.isOwnerMode()) buildOwnerUi() else buildPublicLoginUi()
+                )
+            }
+        }
+
+        root.addView(title)
+        root.addView(ownerStatus)
+        root.addView(refresh)
+        root.addView(list)
+        root.addView(signOut)
+
+        syncLearnedModulesAndLoadOwnerCatalog(list, ownerStatus)
+
+        return ScrollView(this).apply { addView(root) }
+    }
+
+    private fun syncLearnedModulesAndLoadOwnerCatalog(
+        list: LinearLayout,
+        ownerStatus: TextView
+    ) {
+        val session = publicSession.current()
+        if (session?.isOwner() != true) {
+            setContentView(if (features.isOwnerMode()) buildOwnerUi() else buildPublicUserUi())
+            return
+        }
+
+        val modules = learnedModules.all()
+        if (modules.isEmpty()) {
+            loadOwnerCatalog(list, ownerStatus, session.sessionToken)
+            return
+        }
+
+        val remaining = AtomicInteger(modules.size)
+        modules.forEach { module ->
+            ownerConsoleGateway.registerFeature(
+                sessionToken = session.sessionToken,
+                key = "module:${module.id}",
+                name = module.name.ifBlank { module.id }
+            ) {
+                if (remaining.decrementAndGet() == 0) {
+                    runOnUiThread {
+                        loadOwnerCatalog(list, ownerStatus, session.sessionToken)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadOwnerCatalog(
+        list: LinearLayout,
+        ownerStatus: TextView,
+        sessionToken: String
+    ) {
+        ownerStatus.text = "Loading functions..."
+        ownerConsoleGateway.loadCatalog(sessionToken) { result ->
+            runOnUiThread {
+                result.onSuccess { items ->
+                    list.removeAllViews()
+                    ownerStatus.text = "All functions: ${items.size}"
+                    items.forEach { item ->
+                        list.addView(buildFunctionAccessRow(item, sessionToken, ownerStatus))
+                        applyRecoveredOwnerSetting(item)
+                    }
+                }.onFailure {
+                    ownerStatus.text = "Session expired or catalog unavailable. Sign in again."
+                }
+            }
+        }
+    }
+
+    private fun buildFunctionAccessRow(
+        item: FunctionAccessItem,
+        sessionToken: String,
+        ownerStatus: TextView
+    ): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 16, 0, 16)
+        }
+
+        val name = TextView(this).apply {
+            text = item.name
+            textSize = 18f
+        }
+
+        val toggles = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        val ownerToggle = CheckBox(this).apply {
+            text = "Owner"
+            isChecked = item.ownerEnabled
+        }
+
+        val userToggle = CheckBox(this).apply {
+            text = "Users"
+            isChecked = item.userEnabled
+        }
+
+        val save = Button(this).apply {
+            text = "Apply"
+            setOnClickListener {
+                isEnabled = false
+                ownerConsoleGateway.updateFeature(
+                    sessionToken = sessionToken,
+                    key = item.key,
+                    ownerEnabled = ownerToggle.isChecked,
+                    userEnabled = userToggle.isChecked
+                ) { result ->
+                    runOnUiThread {
+                        isEnabled = true
+                        result.onSuccess {
+                            ownerStatus.text = "${item.name} updated."
+                            applyRecoveredOwnerSetting(
+                                item.copy(
+                                    ownerEnabled = ownerToggle.isChecked,
+                                    userEnabled = userToggle.isChecked
+                                )
+                            )
+                        }.onFailure {
+                            ownerStatus.text = "Update failed. Sign in again if session expired."
+                        }
+                    }
+                }
+            }
+        }
+
+        toggles.addView(ownerToggle)
+        toggles.addView(userToggle)
+        box.addView(name)
+        box.addView(toggles)
+        box.addView(save)
+        return box
+    }
+
+    private fun applyRecoveredOwnerSetting(item: FunctionAccessItem) {
+        if (!features.isOwnerMode()) return
+
+        if (item.key.startsWith("module:")) {
+            val moduleId = item.key.removePrefix("module:")
+            val learned = learnedModules.all().firstOrNull { it.id == moduleId }
+            if (learned?.status == "INSTALLED") {
+                runCatching { learnedModules.setEnabled(moduleId, item.ownerEnabled) }
+            }
+            return
+        }
+
+        features.resolve(item.key)?.let { feature ->
+            features.setMasterEnabled(true)
+            features.setEnabled(feature, item.ownerEnabled)
+        }
+    }
+
     private fun buildPublicUserUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
