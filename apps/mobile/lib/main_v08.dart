@@ -2381,13 +2381,80 @@ class _RoomV07State extends State<RoomV07> {
             );
           }
 
+          Widget dynamicGiftList() {
+            final gifts = dynamicGiftStoreV08.activeForRoom(
+              widget.room.id,
+              DateTime.now(),
+            );
+            if (gifts.isEmpty) {
+              return const Center(
+                child: Text('No active room video gifts'),
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.only(top: 10, bottom: 14),
+              itemCount: gifts.length,
+              itemBuilder: (_, index) {
+                final gift = gifts[index];
+                return Card(
+                  child: ListTile(
+                    key: ValueKey('send-dynamic-gift-' + gift.id),
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.ondemand_video_rounded),
+                    ),
+                    title: Text(gift.name),
+                    subtitle: Text(
+                      formatGiftCoinsV08(gift.coins) +
+                          ' Coins • ' +
+                          gift.lease.label +
+                          ' • ' +
+                          gift.durationLabel,
+                    ),
+                    trailing: const Icon(Icons.send_rounded),
+                    onTap: gift.localFileExists
+                        ? () async {
+                            final ok = demoEconomy.sendDynamicGiftV08(
+                              gift,
+                              recipient,
+                              widget.room.id,
+                            );
+                            if (!ok) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Not enough Coins')),
+                              );
+                              return;
+                            }
+                            setState(() {
+                              chat.add(
+                                'You sent video gift ' +
+                                    gift.name +
+                                    ' to ' +
+                                    recipient.name +
+                                    ' • ID ' +
+                                    recipient.id,
+                              );
+                            });
+                            Navigator.pop(sheetContext);
+                            if (!mounted) return;
+                            await DynamicGiftVideoEffectV08.show(
+                              this.context,
+                              gift,
+                            );
+                          }
+                        : null,
+                  ),
+                );
+              },
+            );
+          }
+
           return SafeArea(
             child: SizedBox(
               height: MediaQuery.sizeOf(context).height * .84,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: DefaultTabController(
-                  length: 3,
+                  length: 4,
                   child: Column(
                     children: [
                       const Text(
@@ -2429,10 +2496,12 @@ class _RoomV07State extends State<RoomV07> {
                       ),
                       const SizedBox(height: 6),
                       const TabBar(
+                        isScrollable: true,
                         tabs: [
                           Tab(text: 'Normal'),
                           Tab(text: 'CP Couple'),
                           Tab(text: 'Flags'),
+                          Tab(text: 'Room Videos'),
                         ],
                       ),
                       Expanded(
@@ -2441,6 +2510,7 @@ class _RoomV07State extends State<RoomV07> {
                             giftGrid(normalGiftsV08),
                             giftGrid(coupleGiftsV08),
                             giftGrid(flagGiftsV08),
+                            dynamicGiftList(),
                           ],
                         ),
                       ),
