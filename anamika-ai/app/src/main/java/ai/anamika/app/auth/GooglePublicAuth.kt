@@ -18,9 +18,6 @@ import java.security.SecureRandom
 import kotlin.concurrent.thread
 
 data class GoogleLoginResult(
-    val googleSubject: String,
-    val email: String,
-    val displayName: String?,
     val idToken: String
 )
 
@@ -64,9 +61,6 @@ class GooglePublicAuth(
 
                     val google = GoogleIdTokenCredential.createFrom(credential.data)
                     GoogleLoginResult(
-                        googleSubject = google.uniqueId,
-                        email = google.email.orEmpty(),
-                        displayName = google.displayName,
                         idToken = google.idToken
                     )
                 }
