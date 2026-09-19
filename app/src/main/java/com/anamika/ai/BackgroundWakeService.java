@@ -23,6 +23,8 @@ import java.util.regex.*;
 public final class BackgroundWakeService extends Service implements TextToSpeech.OnInitListener {
     public static final String ACTION_START="com.anamika.ai.action.START_WAKE";
     public static final String ACTION_STOP="com.anamika.ai.action.STOP_WAKE";
+    public static final String ACTION_PAUSE="com.anamika.ai.action.PAUSE_WAKE";
+    public static final String ACTION_RESUME="com.anamika.ai.action.RESUME_WAKE";
     private static final String CHANNEL="anamika_wake";
     private static final int NOTIFICATION_ID=782;
     private static final String PREFS="anamika_v7";
@@ -46,6 +48,17 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
+        }
+        if(ACTION_PAUSE.equals(action)){
+            stopListening();
+            updateNotification("Paused while manual microphone is active");
+            return START_STICKY;
+        }
+        if(ACTION_RESUME.equals(action)){
+            if(getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
+                handler.postDelayed(this::startListening,350L);
+            }
+            return START_STICKY;
         }
         getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
         startForeground(NOTIFICATION_ID,notification("Listening for Hello Mika / Hello Anamika"));
