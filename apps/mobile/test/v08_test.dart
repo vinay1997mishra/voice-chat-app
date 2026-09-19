@@ -4,6 +4,7 @@ import 'package:voice_chat_app/main_v08.dart';
 import 'package:voice_chat_app/gift_catalog_v08.dart';
 import 'package:voice_chat_app/dynamic_gifts_v08.dart';
 import 'package:voice_chat_app/dynamic_gift_manager_v08.dart';
+import 'package:voice_chat_app/app_owner_controls_v08.dart';
 
 void main() {
   void setPhoneViewport(WidgetTester tester) {
@@ -12,6 +13,39 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   }
+
+  setUp(() {
+    appOwnerControlsV08.maintenanceMode = false;
+    appOwnerControlsV08.roomCreationEnabled = true;
+    appOwnerControlsV08.giftsEnabled = true;
+    appOwnerControlsV08.videoGiftsEnabled = true;
+    appOwnerControlsV08.threeDEffectsEnabled = true;
+    appOwnerControlsV08.giftAnimationsEnabled = true;
+    appOwnerControlsV08.gamesEnabled = true;
+    appOwnerControlsV08.ludoEnabled = true;
+    appOwnerControlsV08.unoEnabled = true;
+    appOwnerControlsV08.carromEnabled = true;
+    appOwnerControlsV08.luckyDiceEnabled = true;
+    appOwnerControlsV08.luckyWheelEnabled = true;
+    appOwnerControlsV08.privateMessagesEnabled = true;
+    appOwnerControlsV08.ownerGiftSharePercent = 10;
+    appOwnerControlsV08.diamondsPerCoin = 2;
+    appOwnerControlsV08.announcement = 'Welcome to Voice Chat v0.8';
+    appOwnerControlsV08.bannedUserIds.clear();
+    appOwnerControlsV08.globalAdminIds
+      ..clear()
+      ..add('10000001');
+    appOwnerControlsV08.openReports
+      ..clear()
+      ..addAll(<String>[
+        'Aisha • Spam report',
+        'Sam • Abusive-language report',
+      ]);
+    demoEconomy.threeDEffects = true;
+    demoEconomy.giftAnimations = true;
+    demoEconomy.allowPrivateMessages = true;
+    appOwnerControlsV08.refresh();
+  });
 
   testWidgets('v0.8 room gift center exposes normal couple and flag tabs',
       (tester) async {
@@ -662,5 +696,95 @@ void main() {
     );
   });
 
+
+
+  testWidgets('main owner panel exposes functional control sections',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: MainOwnerPanelV08()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('main-owner-dashboard-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-global-announcement-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-users-roles-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-moderation-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-feature-controls-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-game-controls-v08')), findsOneWidget);
+    expect(find.byKey(const Key('owner-economy-controls-v08')), findsOneWidget);
+    expect(find.byKey(const Key('main-owner-video-gifts-v08')), findsOneWidget);
+  });
+
+  testWidgets('owner can disable gifts and room creation',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: OwnerFeatureControlsV08()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('owner-gifts-toggle-v08')));
+    await tester.pumpAndSettle();
+    expect(appOwnerControlsV08.giftsEnabled, isFalse);
+
+    final economy = DemoEconomy();
+    final recipient = economy.users[2];
+    final gift = normalGiftsV08.first;
+    expect(economy.sendGiftV08(gift, recipient, 'OWNER-TEST'), isFalse);
+
+    await tester.tap(find.byKey(const Key('owner-room-create-toggle-v08')));
+    await tester.pumpAndSettle();
+    expect(appOwnerControlsV08.roomCreationEnabled, isFalse);
+  });
+
+  testWidgets('owner game switches disable individual games',
+      (tester) async {
+    setPhoneViewport(tester);
+    await tester.pumpWidget(
+      const MaterialApp(home: OwnerGameControlsV08()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('owner-game-ludo-v08')));
+    await tester.pumpAndSettle();
+    expect(appOwnerControlsV08.ludoEnabled, isFalse);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: GamesCenterV08()),
+    );
+    await tester.pumpAndSettle();
+
+    final ludo = tester.widget<InkWell>(
+      find.byKey(const Key('game-ludo-v08')),
+    );
+    expect(ludo.onTap, isNull);
+    expect(find.text('Disabled by Owner'), findsOneWidget);
+  });
+
+  testWidgets('owner announcement is published to home',
+      (tester) async {
+    setPhoneViewport(tester);
+    appOwnerControlsV08.setAnnouncement('Server event tonight at 9 PM');
+    await tester.pumpWidget(
+      const MaterialApp(home: V07Home()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('global-announcement-v08')), findsOneWidget);
+    expect(find.text('Server event tonight at 9 PM'), findsOneWidget);
+  });
+
+  test('owner economy share changes gift settlement', () {
+    appOwnerControlsV08.setOwnerGiftSharePercent(20);
+    final economy = DemoEconomy();
+    final recipient = economy.users[2];
+    final owner = economy.users.first;
+    final before = owner.diamonds;
+    final gift = normalGiftsV08.firstWhere((item) => item.coins >= 1000);
+
+    expect(economy.sendGiftV08(gift, recipient, 'ECON-OWNER'), isTrue);
+    expect(owner.diamonds - before, gift.coins * 20 ~/ 100);
+  });
 
 }
