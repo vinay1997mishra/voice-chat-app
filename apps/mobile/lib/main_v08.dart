@@ -1824,7 +1824,7 @@ class _RoomV07State extends State<RoomV07> {
                   title: const Text('Video Gifts'),
                   subtitle: Text(
                     demoEconomy.activeVip >= 8
-                        ? 'Add/manage 5-sec room gift videos'
+                        ? 'Add/manage 8-sec room gift videos'
                         : 'VIP8+ required to add room gift videos',
                   ),
                   onTap: () {
@@ -3788,7 +3788,7 @@ class MainOwnerPanelV08 extends StatelessWidget {
               leading: Icon(Icons.rule_rounded),
               title: Text('Video limits'),
               subtitle: Text(
-                'Maximum 5 seconds and 12 MB per gift video. App Owner can use 15d, 1m, 3m, 6m or Lifetime.',
+                'Maximum 8 seconds and 12 MB per gift video. App Owner can use 15d, 1m, 3m, 6m or Lifetime.',
               ),
             ),
           ),
