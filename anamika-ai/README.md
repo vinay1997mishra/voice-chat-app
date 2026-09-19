@@ -1,39 +1,70 @@
 # Anamika AI Android Bootstrap
 
-This folder is an isolated Android bootstrap for Anamika AI.
+Anamika now has two development layers:
 
-## Included now
-- Android Kotlin app shell
-- Hindi/English speech input through Android SpeechRecognizer
+1. **Offline local development layer** — works without GitHub.
+2. **GitHub remote layer** — used for GitHub-only operations when an authenticated connection is available.
+
+## Offline features
+- Local Git repository initialization
+- Status
+- Branch create/list/switch
+- Commit
+- Log/history
+- Diff
+- Tag creation
+- Merge
+- Local workspace storage inside the app
+- Offline queue for remote GitHub actions
+
+Voice/text command examples:
+- `git init anamika`
+- `git status`
+- `git branch feature-x`
+- `git checkout feature-x`
+- `git commit add feature x`
+- `git log`
+- `git diff`
+- `git tag v1`
+- `git merge feature-x`
+- `git push`
+- `git pull`
+- `github queue`
+
+## Owner Permission System
+Risk levels:
+- NORMAL: read-only operations; no credential prompt
+- PROTECTED: local writes, commits, branch changes, pull
+- CRITICAL: merges, tags, push, PR creation, releases, workflows, self-update
+- ULTRA_CRITICAL: PR merge, repository/security setting changes, secrets, repository deletion
+
+Protected actions require Android device-owner authentication. Ultra-critical actions require an additional confirmation before device authentication.
+
+## GitHub capability catalog
+The app models repository/file operations, commits, branches, tags, push/pull, pull requests, issues, releases, workflow runs, logs, artifacts, commit status, security scan status, collaborators, settings and secrets.
+
+Operations that inherently live on GitHub (for example PRs, GitHub Issues, GitHub Actions and GitHub Releases) cannot exist while GitHub itself is unavailable. When remote connectivity/authentication is not configured, Anamika preserves the requested action in an offline queue instead of silently failing.
+
+## Remote authentication rule
+Do not put a personal access token, GitHub password, signing key or long-lived secret inside the APK. The production remote layer should use a GitHub App/OAuth flow and short-lived credentials from a protected backend.
+
+## Existing assistant features
+- Hindi/English speech input
 - Hindi/English text-to-speech replies
-- Command router
-- Local memory using SharedPreferences
-- Web search command
-- GitHub release checker for tags beginning with `anamika-v`
-- Owner approval gate before any upgrade handoff
-- Update release notes shown before approval
-- No silent/self installation
-- AI code-generation interface
-- Link/video-learning interface
-- Unit tests for command parsing
-- GitHub Actions APK build, tests and lint
-- GitHub release artifact flow
-- Security scanning workflow
+- Local memory
+- Search command
+- GitHub release checker
+- Owner-approved self-update handoff
+- AI code-generation backend interface
+- Link/video-learning backend interface
+- GitHub Actions APK build
+- Unit tests and lint
+- CodeQL security scanning
+- Dependabot dependency updates
 
-## Security rules
-Anamika must never embed API keys in the APK. AI/code analysis and video/link learning should call a protected backend. Generated code must be reviewed/tested in a sandbox before being accepted.
-
-The current owner gate uses Android device credentials. Speech-to-text alone cannot prove speaker identity, so true owner voice verification must use a dedicated speaker-verification model/service and should remain an additional factor rather than replacing device authentication.
-
-## GitHub release convention
-Create tags such as `anamika-v0.1.0`.
-
-The workflow builds an installable debug APK for testing and can attach it to the GitHub release.
-
-## Next backend modules
-- AI chat and coding model gateway
-- URL/video fetch + transcription + analysis pipeline
-- Code sandbox/validator for multiple languages
-- Encrypted sync memory
-- Speaker verification
+## Still requiring external services
+- AI model backend for real code generation
+- Video/link fetch, transcription and analysis backend
+- True speaker verification model for owner voice identity
+- Authenticated GitHub App/OAuth backend for live remote GitHub actions
 - Production APK signing
