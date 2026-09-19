@@ -67,5 +67,10 @@ class CommandRouterTest {
         assertTrue(router.parse("app click Login") is Command.AppClick)
         assertTrue(router.parse("app type hello") is Command.AppType)
         assertTrue(router.parse("app model current") is Command.AppModelCurrent)
+        assertTrue(router.parse("app study start") is Command.AppStudyStart)
+        assertTrue(router.parse("app study capture") is Command.AppStudyCapture)
+        assertTrue(router.parse("app study stop") is Command.AppStudyStop)
+        assertTrue(router.parse("app study report") is Command.AppStudyReport)
+        assertTrue(router.parse("app study export") is Command.AppStudyExport)
     }
 }
