@@ -1,26 +1,32 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import threading
 import time
 import uuid
 import zipfile
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
-APP = FastAPI(title="Anamika Build Server", version="1.0")
+APP = FastAPI(title="Anamika Build Server", version="1.1")
 
 ROOT = Path(os.environ.get("ANAMIKA_BUILD_ROOT", "/tmp/anamika-builds")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
+
 TOKEN = os.environ.get("ANAMIKA_BUILD_TOKEN", "").strip()
+GENERATOR_CMD = os.environ.get("ANAMIKA_GENERATOR_CMD", "").strip()
 TIMEOUT_SECONDS = int(os.environ.get("ANAMIKA_BUILD_TIMEOUT_SECONDS", "1200"))
-MAX_UPLOAD_BYTES = int(os.environ.get("ANAMIKA_MAX_UPLOAD_BYTES", str(250 * 1024 * 1024)))
+MAX_UPLOAD_BYTES = int(
+    os.environ.get("ANAMIKA_MAX_UPLOAD_BYTES", str(250 * 1024 * 1024))
+)
 
 JOBS: dict[str, "Job"] = {}
 LOCK = threading.Lock()
@@ -44,12 +50,47 @@ class Job:
         return data
 
 
+class AgentBuildRequest(BaseModel):
+    goal: str = Field(min_length=3, max_length=8000)
+
+
 def require_auth(authorization: Optional[str]) -> None:
     if not TOKEN:
         return
-    expected = f"Bearer {TOKEN}"
-    if authorization != expected:
+    if authorization != f"Bearer {TOKEN}":
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def update_job(job_id: str, *, status: Optional[str] = None, message: Optional[str] = None) -> None:
+    with LOCK:
+        job = JOBS[job_id]
+        if status is not None:
+            job.status = status
+        if message is not None:
+            job.message = message
+
+
+def fail_job(job_id: str, exc: Exception) -> None:
+    with LOCK:
+        job = JOBS[job_id]
+        job.status = "failed"
+        job.message = str(exc)
+        job.finished_at = time.time()
+
+
+def new_job(message: str) -> tuple[str, Path]:
+    job_id = uuid.uuid4().hex
+    job_dir = ROOT / job_id
+    job_dir.mkdir(parents=True, exist_ok=False)
+
+    with LOCK:
+        JOBS[job_id] = Job(
+            id=job_id,
+            status="queued",
+            message=message,
+            created_at=time.time(),
+        )
+    return job_id, job_dir
 
 
 def safe_extract(zip_path: Path, destination: Path) -> None:
@@ -59,9 +100,11 @@ def safe_extract(zip_path: Path, destination: Path) -> None:
             candidate = (destination / member.filename).resolve()
             if destination not in candidate.parents and candidate != destination:
                 raise ValueError("Unsafe path in zip")
+
             if member.is_dir():
                 candidate.mkdir(parents=True, exist_ok=True)
                 continue
+
             candidate.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(member) as src, candidate.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
@@ -70,6 +113,7 @@ def safe_extract(zip_path: Path, destination: Path) -> None:
 def find_project_root(extracted: Path) -> Path:
     candidates = [extracted]
     candidates += [p for p in extracted.iterdir() if p.is_dir()]
+
     for candidate in candidates:
         has_settings = (
             (candidate / "settings.gradle").exists()
@@ -81,83 +125,125 @@ def find_project_root(extracted: Path) -> Path:
         )
         if has_settings and has_build:
             return candidate
+
     raise RuntimeError("Android/Gradle project root not found")
 
 
-def run_build(job_id: str, build_type: str) -> None:
+def execute_gradle_build(job_id: str, project: Path, build_type: str) -> None:
+    if build_type != "debug":
+        raise RuntimeError(
+            "Reference server enables installable debug APK builds only. "
+            "Production release signing must use a protected server-side keystore."
+        )
+
+    job_dir = ROOT / job_id
+    log_file = job_dir / "build.log"
+    env = os.environ.copy()
+    env.setdefault("GRADLE_USER_HOME", str(job_dir / ".gradle"))
+
+    commands = [
+        ["gradle", "--no-daemon", "testDebugUnitTest"],
+        ["gradle", "--no-daemon", "lintDebug"],
+        ["gradle", "--no-daemon", "assembleDebug"],
+    ]
+
+    with log_file.open("a", encoding="utf-8", errors="replace") as log:
+        for command in commands:
+            update_job(job_id, status="running", message="Running " + " ".join(command[2:]))
+
+            result = subprocess.run(
+                command,
+                cwd=project,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                timeout=TIMEOUT_SECONDS,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Build step failed with exit code {result.returncode}"
+                )
+
+    apks = list(project.glob("**/build/outputs/apk/debug/*-debug.apk"))
+    if not apks:
+        raise RuntimeError("Build succeeded but debug APK was not found")
+
+    artifact = job_dir / "Anamika-built.apk"
+    shutil.copy2(max(apks, key=lambda p: p.stat().st_mtime), artifact)
+
     with LOCK:
         job = JOBS[job_id]
-        job.status = "running"
-        job.message = "Preparing Android build"
+        job.status = "succeeded"
+        job.message = "APK ready"
+        job.artifact_path = str(artifact)
+        job.finished_at = time.time()
 
+
+def run_uploaded_build(job_id: str, build_type: str) -> None:
     job_dir = ROOT / job_id
     archive = job_dir / "project.zip"
     extracted = job_dir / "project"
+
+    try:
+        update_job(job_id, status="running", message="Preparing uploaded Android project")
+        safe_extract(archive, extracted)
+        project = find_project_root(extracted)
+        execute_gradle_build(job_id, project, build_type)
+    except Exception as exc:
+        fail_job(job_id, exc)
+
+
+def run_agent_build(job_id: str, goal: str) -> None:
+    job_dir = ROOT / job_id
+    generated = job_dir / "generated-project"
+    generated.mkdir(parents=True, exist_ok=True)
     log_file = job_dir / "build.log"
 
     try:
-        safe_extract(archive, extracted)
-        project = find_project_root(extracted)
-
-        if build_type != "debug":
+        if not GENERATOR_CMD:
             raise RuntimeError(
-                "This reference server enables debug APK builds only. "
-                "Production release signing must use a protected server-side keystore."
+                "AI coding agent is not configured on this server. "
+                "Set ANAMIKA_GENERATOR_CMD."
             )
 
-        commands = [
-            ["gradle", "--no-daemon", "testDebugUnitTest"],
-            ["gradle", "--no-daemon", "lintDebug"],
-            ["gradle", "--no-daemon", "assembleDebug"],
-        ]
+        update_job(job_id, status="running", message="AI coding agent is generating project")
 
         env = os.environ.copy()
-        env.setdefault("GRADLE_USER_HOME", str(job_dir / ".gradle"))
+        env["ANAMIKA_APP_GOAL"] = goal
+        env["ANAMIKA_PROJECT_OUTPUT"] = str(generated)
+        env["ANAMIKA_JOB_ID"] = job_id
 
         with log_file.open("w", encoding="utf-8", errors="replace") as log:
-            for command in commands:
-                with LOCK:
-                    JOBS[job_id].message = "Running " + " ".join(command[2:])
+            result = subprocess.run(
+                shlex.split(GENERATOR_CMD),
+                cwd=job_dir,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                timeout=TIMEOUT_SECONDS,
+                check=False,
+            )
 
-                result = subprocess.run(
-                    command,
-                    cwd=project,
-                    env=env,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    timeout=TIMEOUT_SECONDS,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(
-                        f"Build step failed with exit code {result.returncode}"
-                    )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"AI coding agent failed with exit code {result.returncode}"
+            )
 
-        apks = list(project.glob("**/build/outputs/apk/debug/*-debug.apk"))
-        if not apks:
-            raise RuntimeError("Build succeeded but debug APK was not found")
-
-        artifact = job_dir / "Anamika-built.apk"
-        shutil.copy2(max(apks, key=lambda p: p.stat().st_mtime), artifact)
-
-        with LOCK:
-            job = JOBS[job_id]
-            job.status = "succeeded"
-            job.message = "APK ready"
-            job.artifact_path = str(artifact)
-            job.finished_at = time.time()
+        project = find_project_root(generated)
+        execute_gradle_build(job_id, project, "debug")
 
     except Exception as exc:
-        with LOCK:
-            job = JOBS[job_id]
-            job.status = "failed"
-            job.message = str(exc)
-            job.finished_at = time.time()
+        fail_job(job_id, exc)
 
 
 @APP.get("/health")
 def health() -> dict:
-    return {"ok": True}
+    return {
+        "ok": True,
+        "generator_configured": bool(GENERATOR_CMD),
+        "authentication_enabled": bool(TOKEN),
+    }
 
 
 @APP.post("/v1/builds")
@@ -168,9 +254,7 @@ async def create_build(
 ) -> dict:
     require_auth(authorization)
 
-    job_id = uuid.uuid4().hex
-    job_dir = ROOT / job_id
-    job_dir.mkdir(parents=True, exist_ok=False)
+    job_id, job_dir = new_job("Upload received")
     archive = job_dir / "project.zip"
 
     total = 0
@@ -179,14 +263,20 @@ async def create_build(
             chunk = await project.read(1024 * 1024)
             if not chunk:
                 break
+
             total += len(chunk)
             if total > MAX_UPLOAD_BYTES:
                 shutil.rmtree(job_dir, ignore_errors=True)
+                with LOCK:
+                    JOBS.pop(job_id, None)
                 raise HTTPException(status_code=413, detail="Project archive too large")
+
             output.write(chunk)
 
     if total == 0:
         shutil.rmtree(job_dir, ignore_errors=True)
+        with LOCK:
+            JOBS.pop(job_id, None)
         raise HTTPException(status_code=400, detail="Empty project archive")
 
     try:
@@ -196,19 +286,37 @@ async def create_build(
                 raise ValueError(f"Corrupt zip member: {bad}")
     except Exception as exc:
         shutil.rmtree(job_dir, ignore_errors=True)
+        with LOCK:
+            JOBS.pop(job_id, None)
         raise HTTPException(status_code=400, detail=f"Invalid zip: {exc}")
 
-    with LOCK:
-        JOBS[job_id] = Job(
-            id=job_id,
-            status="queued",
-            message="Build queued",
-            created_at=time.time(),
+    threading.Thread(
+        target=run_uploaded_build,
+        args=(job_id, build_type),
+        daemon=True,
+    ).start()
+
+    return JOBS[job_id].public()
+
+
+@APP.post("/v1/agent-builds")
+def create_agent_build(
+    request: AgentBuildRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> dict:
+    require_auth(authorization)
+
+    if not GENERATOR_CMD:
+        raise HTTPException(
+            status_code=503,
+            detail="AI coding agent is not configured on this server",
         )
 
+    job_id, _ = new_job("AI app generation queued")
+
     threading.Thread(
-        target=run_build,
-        args=(job_id, build_type),
+        target=run_agent_build,
+        args=(job_id, request.goal),
         daemon=True,
     ).start()
 
@@ -234,6 +342,7 @@ def get_artifact(
     authorization: Optional[str] = Header(default=None),
 ):
     require_auth(authorization)
+
     with LOCK:
         job = JOBS.get(job_id)
         if not job:
@@ -258,7 +367,13 @@ def get_log(
     authorization: Optional[str] = Header(default=None),
 ):
     require_auth(authorization)
+
     log_file = ROOT / job_id / "build.log"
     if not log_file.exists():
         raise HTTPException(status_code=404, detail="Build log not available")
-    return FileResponse(log_file, media_type="text/plain", filename="build.log")
+
+    return FileResponse(
+        log_file,
+        media_type="text/plain",
+        filename="build.log",
+    )
