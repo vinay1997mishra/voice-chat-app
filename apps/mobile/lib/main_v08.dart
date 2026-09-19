@@ -2686,7 +2686,7 @@ class _RoomV07State extends State<RoomV07> {
                               ],
                             ),
                           );
-                          if (confirmed != true) return;
+                          if (confirmed != true || !mounted) return;
 
                           final ok = demoEconomy.sendGiftV08(
                             gift,
@@ -2710,7 +2710,10 @@ class _RoomV07State extends State<RoomV07> {
                                   recipient.name,
                             );
                           });
-                          Navigator.pop(sheetContext);
+                          if (sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
+                          }
+                          if (!mounted) return;
                           ScaffoldMessenger.of(this.context).showSnackBar(
                             SnackBar(content: Text(gift.name + ' sent to ' + recipient.name)),
                           );
