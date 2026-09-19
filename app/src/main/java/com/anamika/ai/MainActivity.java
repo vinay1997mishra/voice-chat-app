@@ -112,10 +112,18 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 commandInput.setText("");
             }
         });
-        wakeListenButton.setText(prefs.getBoolean("wake_enabled",false)
-                ? "24×7 Hello Mika / Hello Anamika: ON"
-                : "24×7 Hello Mika / Hello Anamika: OFF");
-        wakeListenButton.setOnClickListener(v -> toggleWakeListening());
+        if(ownerRemembered){
+            prefs.edit().putBoolean("wake_enabled",true).apply();
+        }
+        wakeListenButton.setText(ownerRemembered
+                ? "24×7 Hello Mika / Hello Anamika: ALWAYS ON"
+                : "24×7 Wake starts after first Owner setup");
+        wakeListenButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            prefs.edit().putBoolean("wake_enabled",true).apply();
+            enableWakeListening(true);
+            wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: ALWAYS ON");
+        });
         forgetOwnerButton.setOnClickListener(v -> {
             OwnerSession.revoke(this);
             unlocked=false;
@@ -162,9 +170,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         } else if(unlocked) {
             status.setText("Owner remembered • no login required");
             result.setText("Owner login remembered on this phone. Type, speak, or say Hello Mika / Hello Anamika.");
-            if(prefs.getBoolean("wake_enabled",false)){
-                mainHandler.postDelayed(() -> enableWakeListening(false),500L);
-            }
+            prefs.edit().putBoolean("wake_enabled",true).apply();
+            mainHandler.postDelayed(() -> enableWakeListening(false),500L);
             handleIncomingBackgroundCommand(getIntent());
         } else {
             status.setText("Locked • enter Owner PIN");
@@ -209,7 +216,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 OwnerSession.grant(this);
                 failedPinAttempts = 0;
                 pinLockedUntilMs = 0L;
-                prefs.edit().remove(PIN_FAILS).remove(PIN_LOCK_UNTIL).apply();
+                prefs.edit()
+                        .remove(PIN_FAILS).remove(PIN_LOCK_UNTIL)
+                        .putBoolean("wake_enabled",true)
+                        .apply();
                 status.setText("Owner remembered • no login required");
                 unlockButton.setText("Unlock Owner");
                 pinInput.setVisibility(View.GONE);
@@ -219,9 +229,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                         ? "Owner PIN set successfully. This phone is now remembered; repeated login is not required."
                         : "Owner verified. This phone is now remembered; repeated login is not required.");
                 speak(firstSetup ? "Owner lock set. Anamika is ready." : "Welcome back. Anamika is ready.");
-                if(prefs.getBoolean("wake_enabled",false)){
-                    mainHandler.postDelayed(() -> enableWakeListening(false),900L);
-                }
+                mainHandler.postDelayed(() -> enableWakeListening(false),900L);
             } else {
                 unlocked = false;
                 failedPinAttempts++;
@@ -617,22 +625,17 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void toggleWakeListening(){
         if(!ensureUnlocked()) return;
-        boolean enable=!prefs.getBoolean("wake_enabled",false);
-        prefs.edit().putBoolean("wake_enabled",enable).apply();
-        wakeListenButton.setText(enable?"24×7 Hello Mika / Hello Anamika: ON":"24×7 Hello Mika / Hello Anamika: OFF");
-        if(enable) {
-            enableWakeListening(true);
-        } else {
-            wakeAwaitingCommand=false;
-            stopWakeRecognizer();
-            stopBackgroundWakeService();
-            status.setText("Owner verified • 24×7 wake off");
-        }
+        prefs.edit().putBoolean("wake_enabled",true).apply();
+        wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: ALWAYS ON");
+        enableWakeListening(true);
     }
 
     private void enableWakeListening(boolean announce){
         if(!unlocked || !OwnerSession.isActive(this)) return;
-        if(!prefs.getBoolean("wake_enabled",false)) return;
+        if(!OwnerSession.isTrusted(this)) return;
+        if(!prefs.getBoolean("wake_enabled",true)){
+            prefs.edit().putBoolean("wake_enabled",true).apply();
+        }
         if(!SpeechRecognizer.isRecognitionAvailable(this)){
             wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: unavailable");
             if(announce) answer("Is phone par SpeechRecognizer service available nahi hai.");
@@ -649,7 +652,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void startWakeRecognizer(){
-        if(!prefs.getBoolean("wake_enabled",false) || !unlocked || !OwnerSession.isActive(this)) return;
+        if(!unlocked || !OwnerSession.isActive(this)) return;
         stopWakeRecognizer();
         wakeRecognizer=SpeechRecognizer.createSpeechRecognizer(this);
         wakeRecognizer.setRecognitionListener(new RecognitionListener(){
@@ -708,7 +711,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     }
 
     private void restartWakeIfEnabled(){
-        if(prefs!=null && prefs.getBoolean("wake_enabled",false) && unlocked && OwnerSession.isActive(this)){
+        if(prefs!=null && unlocked && OwnerSession.isActive(this)){
             resumeBackgroundWakeService();
         }
     }
@@ -885,8 +888,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         super.onResume();
         if(prefs!=null && OwnerSession.isTrusted(this)){
             unlocked=OwnerSession.isActive(this);
-            if(unlocked && prefs.getBoolean("wake_enabled",false) && !BackgroundWakeService.isRunning()){
-                mainHandler.postDelayed(this::startBackgroundWakeService,300L);
+            if(unlocked){
+                prefs.edit().putBoolean("wake_enabled",true).apply();
+                if(!BackgroundWakeService.isRunning()){
+                    mainHandler.postDelayed(this::startBackgroundWakeService,300L);
+                }
             }
         }
     }
