@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Anamika AI</string>
+    <string name="accessibility_service_description">Owner-authorized app observation and control for Anamika AI.</string>
 </resources>
