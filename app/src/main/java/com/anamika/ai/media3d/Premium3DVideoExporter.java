@@ -1,8 +1,10 @@
 package com.anamika.ai.media3d;
 
+import android.graphics.Bitmap;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
 import android.view.Surface;
 
@@ -28,6 +30,7 @@ public final class Premium3DVideoExporter {
         new Thread(() -> {
             try {
                 export(file,scene,width,height,fps,callback);
+                verifyAnimatedOutput(file,scene.durationSeconds);
                 callback.onComplete(file);
             } catch(Throwable t) {
                 if(file!=null && file.exists()) try{file.delete();}catch(Exception ignored){}
@@ -111,6 +114,75 @@ public final class Premium3DVideoExporter {
                 muxer.release();
             }
         }
+    }
+
+    private static void verifyAnimatedOutput(File file,int expectedSeconds) throws IOException {
+        if(file==null || !file.isFile() || file.length()<64L*1024L)
+            throw new IOException("Exported MP4 is missing or unexpectedly small.");
+
+        MediaMetadataRetriever r=new MediaMetadataRetriever();
+        try {
+            r.setDataSource(file.getAbsolutePath());
+            long duration=parseLong(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+            long minExpected=Math.max(1500L,expectedSeconds*1000L*7L/10L);
+            if(duration<minExpected)
+                throw new IOException("Exported MP4 duration is incomplete: "+duration+" ms.");
+
+            long dUs=duration*1000L;
+            long t1=Math.max(100_000L,(long)(dUs*0.16));
+            long t2=Math.max(t1+100_000L,(long)(dUs*0.50));
+            long t3=Math.max(t2+100_000L,(long)(dUs*0.84));
+
+            Bitmap a=null,b=null,c=null;
+            try {
+                a=r.getFrameAtTime(t1,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                b=r.getFrameAtTime(t2,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                if(a==null||b==null) throw new IOException("Could not decode exported animation frames.");
+                double diff12=frameDifference(a,b);
+                a.recycle(); a=null;
+                if(diff12<2.0){
+                    c=r.getFrameAtTime(t3,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                    if(c==null) throw new IOException("Could not decode final animation frame.");
+                    double diff23=frameDifference(b,c);
+                    if(diff23<2.0)
+                        throw new IOException("Exported MP4 appears static/frozen; animation verification failed.");
+                }
+            } finally {
+                if(a!=null&&!a.isRecycled()) a.recycle();
+                if(b!=null&&!b.isRecycled()) b.recycle();
+                if(c!=null&&!c.isRecycled()) c.recycle();
+            }
+        } catch(IOException e) {
+            throw e;
+        } catch(Exception e) {
+            throw new IOException("Video verification failed: "+e.getMessage(),e);
+        } finally {
+            try { r.release(); } catch(Exception ignored) { }
+        }
+    }
+
+    private static double frameDifference(Bitmap a,Bitmap b) {
+        int w=Math.min(a.getWidth(),b.getWidth());
+        int h=Math.min(a.getHeight(),b.getHeight());
+        if(w<=0||h<=0) return 0.0;
+        int cols=12, rows=12;
+        long total=0; int count=0;
+        for(int iy=1;iy<=rows;iy++){
+            int y=Math.min(h-1,(iy*h)/(rows+1));
+            for(int ix=1;ix<=cols;ix++){
+                int x=Math.min(w-1,(ix*w)/(cols+1));
+                int p=a.getPixel(x,y), q=b.getPixel(x,y);
+                total+=Math.abs(((p>>16)&255)-((q>>16)&255));
+                total+=Math.abs(((p>>8)&255)-((q>>8)&255));
+                total+=Math.abs((p&255)-(q&255));
+                count+=3;
+            }
+        }
+        return count==0?0.0:(double)total/count;
+    }
+
+    private static long parseLong(String s) {
+        try { return Long.parseLong(s); } catch(Exception e) { return 0L; }
     }
 
     private static DrainResult drainEncoder(MediaCodec encoder,MediaMuxer muxer,
