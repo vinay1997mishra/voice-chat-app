@@ -19,8 +19,13 @@ enum class FeatureId(val key: String) {
     SELF_UPDATE("self_update")
 }
 
-class FeatureManager(context: Context) {
+class FeatureManager(
+    context: Context,
+    private val ownerMode: Boolean
+) {
     private val prefs = context.getSharedPreferences("anamika_features", Context.MODE_PRIVATE)
+
+    fun isOwnerMode(): Boolean = ownerMode
 
     fun isMasterEnabled(): Boolean = prefs.getBoolean(KEY_MASTER, true)
 
@@ -29,13 +34,19 @@ class FeatureManager(context: Context) {
     }
 
     fun isEnabled(feature: FeatureId): Boolean =
-        isMasterEnabled() && prefs.getBoolean(ownerKey(feature), true)
+        if (ownerMode) {
+            isMasterEnabled() && prefs.getBoolean(ownerKey(feature), true)
+        } else {
+            publicDefault(feature)
+        }
 
     fun setEnabled(feature: FeatureId, enabled: Boolean) {
+        check(ownerMode) { "Owner feature policy is unavailable in public mode" }
         prefs.edit().putBoolean(ownerKey(feature), enabled).apply()
     }
 
     fun setAll(enabled: Boolean) {
+        check(ownerMode) { "Owner feature policy is unavailable in public mode" }
         val edit = prefs.edit().putBoolean(KEY_MASTER, enabled)
         FeatureId.entries.forEach { edit.putBoolean(ownerKey(it), enabled) }
         edit.apply()
@@ -46,6 +57,7 @@ class FeatureManager(context: Context) {
     }
 
     fun setPublicDefault(feature: FeatureId, enabled: Boolean) {
+        check(ownerMode) { "Public defaults can only be changed from owner mode" }
         prefs.edit().putBoolean(publicKey(feature), enabled).apply()
     }
 
@@ -53,6 +65,7 @@ class FeatureManager(context: Context) {
         prefs.getBoolean(publicKey(feature), DEFAULT_PUBLIC_FEATURES.contains(feature))
 
     fun setAllPublicDefaults(enabled: Boolean) {
+        check(ownerMode) { "Public defaults can only be changed from owner mode" }
         val edit = prefs.edit()
         FeatureId.entries.forEach { edit.putBoolean(publicKey(it), enabled) }
         edit.apply()
