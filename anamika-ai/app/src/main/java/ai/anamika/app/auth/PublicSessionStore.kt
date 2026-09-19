@@ -30,7 +30,7 @@ class PublicSessionStore(context: Context) {
         val email = prefs.getString(KEY_EMAIL, null).orEmpty()
         val role = prefs.getString(KEY_ROLE, null).orEmpty()
         val token = prefs.getString(KEY_TOKEN, null).orEmpty()
-        if (subject.isBlank() || email.isBlank() || role.isBlank() || token.isBlank()) return null
+        if (subject.isBlank() || role.isBlank() || token.isBlank()) return null
         return PublicUserSession(
             googleSubject = subject,
             email = email,
