@@ -6,6 +6,7 @@ import 'gift_catalog_v08.dart';
 import 'gift_effects_v08.dart';
 import 'dynamic_gifts_v08.dart';
 import 'dynamic_gift_manager_v08.dart';
+import 'app_owner_controls_v08.dart';
 
 void main() => runApp(const VoiceChatV08());
 
@@ -158,7 +159,7 @@ class DemoEconomy extends ChangeNotifier {
 
   void sendDirectMessage(DemoUser user, String message) {
     final clean = message.trim();
-    if (clean.isEmpty) return;
+    if (clean.isEmpty || !appOwnerControlsV08.privateMessagesEnabled) return;
     conversationFor(user.id).add('You: ' + clean);
     if (messageNotifications) inbox.insert(
       0,
@@ -228,11 +229,12 @@ class DemoEconomy extends ChangeNotifier {
   }
 
   bool sendGift(DemoGift gift, DemoUser recipient, String roomId) {
-    if (coins < gift.coins) return false;
+    if (!appOwnerControlsV08.giftsEnabled || coins < gift.coins) return false;
     coins -= gift.coins;
     recipient.diamonds += gift.coins;
     final owner = users.first;
-    final ownerShare = gift.coins ~/ 10;
+    final ownerShare =
+        gift.coins * appOwnerControlsV08.ownerGiftSharePercent ~/ 100;
     owner.diamonds += ownerShare;
     wealthXp += gift.coins ~/ 100;
 
@@ -275,11 +277,16 @@ class DemoEconomy extends ChangeNotifier {
     DemoUser recipient,
     String roomId,
   ) {
-    if (coins < gift.coins) return false;
+    if (!appOwnerControlsV08.giftsEnabled ||
+        !appOwnerControlsV08.videoGiftsEnabled ||
+        coins < gift.coins) {
+      return false;
+    }
     coins -= gift.coins;
     recipient.diamonds += gift.coins;
     final owner = users.first;
-    final ownerShare = gift.coins ~/ 10;
+    final ownerShare =
+        gift.coins * appOwnerControlsV08.ownerGiftSharePercent ~/ 100;
     owner.diamonds += ownerShare;
     wealthXp += gift.coins ~/ 100;
 
@@ -330,11 +337,12 @@ class DemoEconomy extends ChangeNotifier {
   }
 
   bool sendGiftV08(GiftV08 gift, DemoUser recipient, String roomId) {
-    if (coins < gift.coins) return false;
+    if (!appOwnerControlsV08.giftsEnabled || coins < gift.coins) return false;
     coins -= gift.coins;
     recipient.diamonds += gift.coins;
     final owner = users.first;
-    final ownerShare = gift.coins ~/ 10;
+    final ownerShare =
+        gift.coins * appOwnerControlsV08.ownerGiftSharePercent ~/ 100;
     owner.diamonds += ownerShare;
     wealthXp += gift.coins ~/ 100;
 
@@ -372,7 +380,7 @@ class DemoEconomy extends ChangeNotifier {
   }
   bool convertDiamonds(int amount) {
     if (amount <= 0 || amount > diamonds) return false;
-    final converted = amount ~/ 2;
+    final converted = amount ~/ appOwnerControlsV08.diamondsPerCoin;
     if (converted <= 0) return false;
     diamonds -= amount;
     coins += converted;
@@ -939,6 +947,12 @@ class _V07HomeState extends State<V07Home> {
   ];
 
   Future<void> _createRoom() async {
+    if (!appOwnerControlsV08.roomCreationEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Room creation is disabled by App Owner')),
+      );
+      return;
+    }
     final existingIndex = rooms.indexWhere((room) => room.ownedByMe);
     if (existingIndex >= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1042,7 +1056,19 @@ class _V07HomeState extends State<V07Home> {
                   icon: const Icon(Icons.add_circle_rounded, size: 30),
                 ),
               ]),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
+              AnimatedBuilder(
+                animation: appOwnerControlsV08,
+                builder: (context, _) => Card(
+                  key: const Key('global-announcement-v08'),
+                  child: ListTile(
+                    leading: const Icon(Icons.campaign_rounded),
+                    title: const Text('Announcement'),
+                    subtitle: Text(appOwnerControlsV08.announcement),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               for (final room in rooms)
                 Card(
                   child: ListTile(
@@ -2417,6 +2443,12 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   void _gameCenter() {
+    if (!appOwnerControlsV08.gamesEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Game Center is disabled by App Owner')),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -2581,6 +2613,12 @@ class _RoomV07State extends State<RoomV07> {
   }
 
   Future<void> _gift() async {
+    if (!appOwnerControlsV08.giftsEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gift sending is disabled by App Owner')),
+      );
+      return;
+    }
     final activeNames = <String>{
       ...seats.whereType<String>(),
       ...audienceMembers,
@@ -2702,6 +2740,11 @@ class _RoomV07State extends State<RoomV07> {
           }
 
           Widget dynamicGiftList() {
+            if (!appOwnerControlsV08.videoGiftsEnabled) {
+              return const Center(
+                child: Text('Room video gifts are disabled by App Owner'),
+              );
+            }
             final gifts = dynamicGiftStoreV08.activeForRoom(
               widget.room.id,
               DateTime.now(),
