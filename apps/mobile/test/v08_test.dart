@@ -1410,4 +1410,47 @@ void main() {
     }
   });
 
+
+  testWidgets('Kick 24h persists across room reopen',
+      (tester) async {
+    setPhoneViewport(tester);
+    final room = RoomData(
+      'Kick Test Room',
+      demoEconomy.currentUserId,
+      '👑',
+      false,
+      ownedByMe: true,
+      ownerUserId: demoEconomy.currentUserId,
+      seatCount: 10,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-seat-2-v08')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('seat-kick-24h-v08')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('seat-kick-24h-v08')));
+    await tester.pumpAndSettle();
+
+    expect(room.kickedUntil.containsKey('Aisha'), isTrue);
+    expect(
+      room.kickedUntil['Aisha']!.isAfter(DateTime.now()),
+      isTrue,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RoomV07(key: UniqueKey(), room: room)),
+    );
+    await tester.pumpAndSettle();
+
+    final seatLabel = tester.widget<Text>(
+      find.byKey(const Key('seat-label-2-v08')),
+    );
+    expect(seatLabel.data, isNot('Aisha'));
+  });
+
 }
