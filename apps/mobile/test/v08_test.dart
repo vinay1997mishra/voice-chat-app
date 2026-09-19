@@ -35,7 +35,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('First Love'), findsOneWidget);
 
-    await tester.tap(find.text('Flags'));
+    final flagsTab = find.text('Flags');
+    await tester.ensureVisible(flagsTab);
+    await tester.pumpAndSettle();
+    await tester.tap(flagsTab);
     await tester.pumpAndSettle();
     expect(find.text('AF Flag'), findsOneWidget);
   });
@@ -200,6 +203,8 @@ void main() {
       400,
       scrollable: find.byType(Scrollable).last,
     );
+    await tester.ensureVisible(aiTile);
+    await tester.pumpAndSettle();
     await tester.tap(aiTile);
     await tester.pumpAndSettle();
 
