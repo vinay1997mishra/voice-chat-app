@@ -307,8 +307,37 @@ class MainActivity : Activity() {
                 downloadBuiltApk()
             }
 
+            is Command.MakeApp -> requestOwnerApproval(
+                OwnerAction.BUILD_APK,
+                "Generate complete Android project on server and build APK"
+            ) {
+                startAgentBuild(command.goal)
+            }
+
             is Command.Unknown ->
                 reply("Command samajh aaya, lekin is action ka module abhi connected nahi hai.")
+        }
+    }
+
+    private fun startAgentBuild(goal: String) {
+        if (goal.isBlank()) {
+            reply("App goal empty hai.")
+            return
+        }
+
+        reply("AI build server ko app requirement bhej rahi hoon.")
+        buildGateway.agentBuild(goal) { result ->
+            runOnUiThread {
+                result.onSuccess { job ->
+                    reply(
+                        "Agent build submitted. Job: " + job.id +
+                            "\nStatus: " + job.status +
+                            (job.message?.let { "\n" + it } ?: "")
+                    )
+                }.onFailure {
+                    reply("Agent build failed: " + it.message)
+                }
+            }
         }
     }
 
