@@ -15,6 +15,7 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANAMIKA_API_BASE_URL", "\"https://example.invalid\"")
+        buildConfigField("String", "ANAMIKA_DISTRIBUTION_MODE", "\"OWNER\"")
     }
 
     buildFeatures {
@@ -22,8 +23,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "ANAMIKA_DISTRIBUTION_MODE", "\"OWNER\"")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("String", "ANAMIKA_DISTRIBUTION_MODE", "\"PUBLIC\"")
         }
     }
 
