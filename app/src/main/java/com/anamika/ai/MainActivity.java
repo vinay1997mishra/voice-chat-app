@@ -31,6 +31,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.anamika.ai.language.UniversalLanguageRouter;
+import com.anamika.ai.voice.SoftVoiceProfile;
 import com.anamika.ai.phone.PhoneAssistantController;
 import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.files.FileExportManager;
@@ -1520,14 +1521,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         stopWakeRecognizer();
         pauseBackgroundWakeService();
         if (tts != null && text != null && !text.trim().isEmpty()) {
-            Locale desired=UniversalLanguageRouter.speechLocaleFor(text);
-            int lang=tts.setLanguage(desired);
-            if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
-                lang=tts.setLanguage(new Locale("hi","IN"));
-                if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
-                    tts.setLanguage(Locale.US);
-                }
-            }
+            SoftVoiceProfile.apply(tts,text);
             String clean=text.trim();
             int max=Math.max(800,Math.min(3400,TextToSpeech.getMaxSpeechInputLength()-100));
             int pos=0,part=0;
@@ -1558,12 +1552,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     public void onInit(int statusCode) {
         if (statusCode == TextToSpeech.SUCCESS) {
-            int r=tts.setLanguage(new Locale("hi","IN"));
-            if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED){
-                r=tts.setLanguage(Locale.getDefault());
-                if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
-            }
-            tts.setSpeechRate(0.95f);
+            SoftVoiceProfile.apply(tts,"Namaste, main Anamika hoon.");
         }
     }
 
