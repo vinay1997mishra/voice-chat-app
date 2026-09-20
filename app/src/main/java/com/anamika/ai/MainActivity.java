@@ -1180,6 +1180,22 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         });
     }
 
+    private String compactConversationHistory(String history,int maxLines,int maxChars){
+        if(history==null||history.trim().isEmpty()) return "";
+        String[] lines=history.split("\\n");
+        StringBuilder out=new StringBuilder();
+        int start=Math.max(0,lines.length-Math.max(1,maxLines));
+        for(int i=start;i<lines.length;i++){
+            String line=lines[i].trim();
+            if(line.isEmpty()) continue;
+            if(out.length()>0) out.append('\n');
+            out.append(line);
+        }
+        String s=out.toString();
+        if(s.length()>maxChars) s=s.substring(s.length()-maxChars);
+        return s;
+    }
+
     private void rememberConversationTurn(String who,String text){
         if(prefs==null || text==null || text.trim().isEmpty()) return;
         String clean=text.trim().replace("\r"," ").replace("\n"," ");
@@ -1234,21 +1250,21 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                                 :"Local AI model abhi ready nahi hai. Normal commands chalenge, lekin open conversation limited rahegi.";
                 }else{
                     String memory=prefs.getString("memory_note","");
-                    String history=prefs.getString("conversation_history","");
+                    String history=compactConversationHistory(prefs.getString("conversation_history",""),6,1800);
                     String prompt="You are Anamika AI, the owner's personal on-device assistant. "+
                             "Understand natural human language, including Hindi, Hinglish, English and mixed speech. "+
                             UniversalLanguageRouter.replyInstruction(replyStyle)+" "+
-                            "Be concise, useful and conversational. Do not mention intent parsing, keyword maps or model internals. "+
+                            "Reply fast. Keep normal conversational answers to 1-4 short sentences unless the owner asks for detail. Do not mention intent parsing, keyword maps or model internals. "+
                             "If the user asks for an action you cannot actually execute in this reply, explain the next concrete action instead of pretending it happened. "+
                             (memory.isEmpty()?"":"Relevant owner memory: "+memory+" ")+
                             (history.isEmpty()?"":"Recent conversation context:\n"+history+"\n")+
                             "User: "+userText+"\nAnamika:";
-                    reply=LocalModelBridge.generate(MainActivity.this,prompt);
+                    reply=LocalModelBridge.generateFastChat(MainActivity.this,prompt);
                     if(reply==null || reply.trim().isEmpty()) throw new IllegalStateException("empty local reply");
                     reply=reply.trim();
                     int fence=reply.indexOf("~~~");
                     if(fence>=0) reply=reply.substring(0,fence).trim();
-                    if(reply.length()>1800) reply=reply.substring(0,1800).trim();
+                    if(reply.length()>900) reply=reply.substring(0,900).trim();
                 }
             }catch(Throwable t){
                 reply=replyStyle==UniversalLanguageRouter.Style.HINDI
