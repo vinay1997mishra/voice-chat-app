@@ -60,6 +60,21 @@ public final class AnamikaVault {
         return entry;
     }
 
+    public static synchronized Entry registerGeneratedFile(Context c,File file,String mime){
+        if(c==null||file==null||!file.isFile()) throw new IllegalArgumentException("Generated file missing.");
+        String id=Long.toHexString(System.currentTimeMillis())+"_"+Integer.toHexString(file.getAbsolutePath().hashCode());
+        Entry entry=new Entry(id,file.getName(),mime==null?"application/octet-stream":mime,
+                file.getAbsolutePath(),file.length(),System.currentTimeMillis());
+        List<Entry> all=load(c);
+        all.add(entry);
+        save(c,all);
+        c.getSharedPreferences("anamika_v7",Context.MODE_PRIVATE).edit()
+                .putString("last_vault_file",file.getAbsolutePath())
+                .putString("last_vault_mime",entry.mime)
+                .apply();
+        return entry;
+    }
+
     public static synchronized List<Entry> load(Context c){
         List<Entry> out=new ArrayList<>();
         File idx=new File(root(c),INDEX);
