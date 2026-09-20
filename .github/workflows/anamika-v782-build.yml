@@ -216,7 +216,18 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" >/dev/null
-          gh release upload "$RELEASE_TAG" "artifacts/full/$FINAL_NAME" --clobber
+          # GitHub's release upload endpoint can return transient 404/5xx errors for
+          # very large APK assets. Keep the build artifact authoritative and retry
+          # release publication without rebuilding the APK.
+          for attempt in 1 2 3; do
+            if gh release upload "$RELEASE_TAG" "artifacts/full/$FINAL_NAME" --clobber; then
+              exit 0
+            fi
+            echo "Release upload attempt $attempt failed."
+            sleep $((attempt * 10))
+          done
+          echo "ERROR: APK is built and stored as an Actions artifact, but release publication failed after retries." >&2
+          exit 1
 
       - name: Publish owner-signed self-update APK
         if: steps.owner_signing.outputs.configured == 'true'
