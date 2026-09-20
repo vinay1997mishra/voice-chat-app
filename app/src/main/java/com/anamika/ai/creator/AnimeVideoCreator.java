@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever;
 import com.anamika.ai.files.AnamikaVault;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -75,8 +76,21 @@ public final class AnimeVideoCreator {
                 payload.put("auto_storyboard",true);
                 payload.put("auto_dialogue",true);
                 payload.put("auto_character_cast",true);
+                payload.put("character_age_detection",true);
+                payload.put("character_gender_presentation_detection",true);
+                payload.put("character_personality_detection",true);
                 payload.put("multi_character_voices",true);
-                payload.put("voice_assignment","one distinct generic voice per character");
+                payload.put("voice_assignment","one distinct generic voice per character; keep the same assigned voice for that character across every scene");
+                payload.put("voice_cast_profiles",defaultVoiceCastProfiles());
+                payload.put("voice_cast_rules",
+                        "Assign by story/visual character description: adult man -> adult_male; adult woman -> adult_female; "+
+                        "boy -> child_boy; girl -> child_girl; old man -> elderly_male; old woman -> elderly_female; "+
+                        "narration -> narrator. If age/gender is unclear, choose a neutral generic voice and keep it consistent.");
+                payload.put("voice_personality_matching",true);
+                payload.put("voice_emotion_matching",true);
+                payload.put("voice_consistency_across_scenes",true);
+                payload.put("speaker_separation",true);
+                payload.put("dialogue_lip_sync_per_character",true);
                 JSONObject first=postJson(base,apiKey,payload);
                 File out=waitAndDownload(context,base,apiKey,first,cb);
                 Verification v=verify(out);
@@ -87,6 +101,33 @@ public final class AnimeVideoCreator {
                 cb.onError(e.getMessage()==null?e.toString():e.getMessage());
             }
         },"anamika-story-to-anime").start();
+    }
+
+    private static JSONArray defaultVoiceCastProfiles()throws Exception{
+        JSONArray a=new JSONArray();
+        a.put(voiceProfile("adult_male","adult male","natural, warm, confident; optional deep/soft/serious/energetic variants",0.92,0.82));
+        a.put(voiceProfile("adult_female","adult female","natural, expressive, clear; optional soft/calm/energetic/serious variants",1.08,0.92));
+        a.put(voiceProfile("child_boy","young boy","child-like, bright, playful, believable; never robotic",1.22,1.02));
+        a.put(voiceProfile("child_girl","young girl","child-like, bright, expressive, believable; never robotic",1.28,1.03));
+        a.put(voiceProfile("elderly_male","elderly male","older, textured, slower, natural breath and age character",0.80,0.76));
+        a.put(voiceProfile("elderly_female","elderly female","older, warm/textured, slower, natural age character",0.94,0.78));
+        a.put(voiceProfile("narrator","narrator","cinematic, clear, emotionally controlled, natural human delivery",0.98,0.88));
+        a.put(voiceProfile("neutral","gender-neutral adult","natural neutral character voice",1.00,0.90));
+        return a;
+    }
+
+    private static JSONObject voiceProfile(String id,String ageGender,String style,double pitchHint,double rateHint)throws Exception{
+        JSONObject o=new JSONObject();
+        o.put("id",id);
+        o.put("age_gender",ageGender);
+        o.put("style",style);
+        o.put("pitch_hint",pitchHint);
+        o.put("rate_hint",rateHint);
+        o.put("human_realism","high");
+        o.put("anime_performance","natural character acting");
+        o.put("avoid_robotic_tts",true);
+        o.put("clone_real_person",false);
+        return o;
     }
 
     private static JSONObject commonFields(String workflow,String model,String prompt,int width,int height)throws Exception{
