@@ -20,11 +20,17 @@
         android:textSize="14sp" />
 
     <Button
-        android:id="@+id/pickSelfUpdateButton"
+        android:id="@+id/downloadSelfUpdateButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Select Owner-Signed Anamika APK" />
+        android:text="Check &amp; Download Latest Owner-Signed Update" />
+
+    <Button
+        android:id="@+id/pickSelfUpdateButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Or Select Owner-Signed Anamika APK Manually" />
 
     <Button
         android:id="@+id/selfUpdatePermissionButton"
