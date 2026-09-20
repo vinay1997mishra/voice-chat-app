@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.chaquo.python'
 }
 
 android {
@@ -60,6 +61,23 @@ android {
 dependencies {
     implementation 'dev.ffmpegkit-maintained:llama-android:0.1.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // Real upstream in-process language packs bundled into the APK.
+    implementation 'org.eclipse.jdt:ecj:3.46.100'
+    implementation 'org.mozilla:rhino:1.9.1'
+    implementation 'org.webjars.npm:typescript:5.9.3'
+    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.10'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10'
+}
+
+chaquopy {
+    defaultConfig {
+        version = "3.13"
+        buildPython("python3.13")
+        pyc {
+            src = false
+        }
+    }
 }
 
 
