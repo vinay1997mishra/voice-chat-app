@@ -20,6 +20,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.security.MessageDigest;
 import java.util.Arrays;
 
@@ -54,6 +56,7 @@ public final class SelfUpdateActivity extends Activity {
         setContentView(R.layout.activity_self_update);
         status=findViewById(R.id.selfUpdateStatus);
         installButton=findViewById(R.id.installSelfUpdateButton);
+        Button download=findViewById(R.id.downloadSelfUpdateButton);
         Button pick=findViewById(R.id.pickSelfUpdateButton);
         Button permission=findViewById(R.id.selfUpdatePermissionButton);
         installButton.setEnabled(false);
@@ -61,6 +64,7 @@ public final class SelfUpdateActivity extends Activity {
         File dir=new File(getFilesDir(),"self_update");
         staged=new File(dir,"owner_update.apk");
 
+        download.setOnClickListener(v->downloadLatestOwnerSigned());
         pick.setOnClickListener(v->pickApk());
         permission.setOnClickListener(v->openInstallPermission());
         installButton.setOnClickListener(v->installVerifiedUpdate());
@@ -91,6 +95,49 @@ public final class SelfUpdateActivity extends Activity {
         }
     }
 
+    private void downloadLatestOwnerSigned(){
+        installButton.setEnabled(false);
+        status.setText("Checking latest owner-signed Anamika update…");
+        new Thread(() -> {
+            File dir=staged.getParentFile();
+            File partial=new File(dir,"owner_update.apk.partial");
+            try{
+                if(dir!=null && !dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Cannot create self-update folder.");
+                URL url=new URL("https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-v7.8.2/AnamikaAI-V7.8.2-OwnerSigned.apk");
+                HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+                conn.setConnectTimeout(20000);
+                conn.setReadTimeout(180000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent","AnamikaAI-SecureUpdater");
+                int code=conn.getResponseCode();
+                if(code<200 || code>=300) throw new IllegalStateException(
+                        code==404
+                                ?"Owner-signed release is not available yet. GitHub signing secrets must be configured first."
+                                :"Update download failed: HTTP "+code);
+                long declared=conn.getContentLengthLong();
+                if(declared>4L*1024L*1024L*1024L) throw new IllegalStateException("Update APK exceeds 4 GB safety limit.");
+                try(InputStream in=conn.getInputStream(); OutputStream out=new FileOutputStream(partial)){
+                    byte[] buf=new byte[256*1024];
+                    long total=0; int n;
+                    while((n=in.read(buf))>=0){
+                        if(n==0) continue;
+                        total+=n;
+                        if(total>4L*1024L*1024L*1024L) throw new IllegalStateException("Update APK exceeds 4 GB safety limit.");
+                        out.write(buf,0,n);
+                    }
+                    out.flush();
+                    if(total<1024) throw new IllegalStateException("Downloaded update is empty or invalid.");
+                } finally {
+                    conn.disconnect();
+                }
+                runOnUiThread(() -> verifyPartialFile(partial));
+            }catch(Exception e){
+                partial.delete();
+                runOnUiThread(() -> status.setText("Update check failed: "+safe(e)));
+            }
+        },"anamika-self-update-download").start();
+    }
+
     private void stageAndVerify(Uri source){
         installButton.setEnabled(false);
         File dir=staged.getParentFile();
@@ -119,6 +166,10 @@ public final class SelfUpdateActivity extends Activity {
             return;
         }
 
+        verifyPartialFile(partial);
+    }
+
+    private void verifyPartialFile(File partial){
         try{
             PackageManager pm=getPackageManager();
             PackageInfo current=getInstalledInfo(pm,getPackageName());
