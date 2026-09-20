@@ -42,7 +42,7 @@
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
-        android:label="Anamika AI V7.8.2"
+        android:label="Anamika AI 13"
         android:theme="@style/AppTheme">
         <activity android:name=".TestLabActivity" android:screenOrientation="portrait" android:launchMode="singleTop" />
         <activity android:name=".SelfUpdateActivity" android:screenOrientation="portrait" android:launchMode="singleTop" />
