@@ -1,0 +1,91 @@
+name: Verify Anamika Generated Project
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_path:
+        description: Relative path of generated Android/web project in repository
+        required: true
+        default: generated/anamika-project
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.1'
+
+      - name: Install Android SDK 36
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Verify requested project path
+        env:
+          PROJECT_PATH: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+          case "$PROJECT_PATH" in
+            /*|*".."*) echo "Unsafe project path"; exit 2;;
+          esac
+          test -d "$PROJECT_PATH"
+
+      - name: Detect and verify Android project
+        env:
+          PROJECT_PATH: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_PATH"
+          if [ -f gradlew ]; then chmod +x gradlew; ./gradlew --no-daemon assembleDebug
+          elif [ -f settings.gradle ] || [ -f settings.gradle.kts ]; then gradle --no-daemon assembleDebug
+          else echo "No Android/Gradle project detected; skipping Android build."
+          fi
+
+      - name: Detect and verify web project
+        env:
+          PROJECT_PATH: ${{ inputs.project_path }}
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_PATH"
+          if [ -f package.json ]; then
+            node --version
+            npm --version
+            npm ci || npm install
+            npm run build --if-present
+            npm test --if-present
+            if npm pkg get scripts.typecheck | grep -vq '^{}$'; then npm run typecheck; fi
+          else
+            python3 - <<'PY'
+from pathlib import Path
+import html.parser
+root=Path(".")
+html=list(root.rglob("*.html"))+list(root.rglob("*.htm"))
+if not html:
+    print("No package.json or HTML project detected.")
+else:
+    class P(html.parser.HTMLParser): pass
+    for f in html:
+        P().feed(f.read_text(encoding="utf-8"))
+    print(f"HTML parse OK: {len(html)} file(s)")
+PY
+          fi
