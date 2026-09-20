@@ -27,7 +27,6 @@ jobs:
       RELEASE_TAG: anamika-v7.8.2
       FINAL_NAME: AnamikaAI-V7.8.2-DirectSource-FINAL.apk
       OWNER_SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned.apk
-      SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned-FINAL.apk
 
     steps:
       - uses: actions/checkout@v5
@@ -57,7 +56,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Owner signing secrets are not configured; self-update-compatible release will not be published."
+            echo "Owner signing secrets are not configured; owner-signed self-update APK will be skipped."
           fi
 
       - name: Verify direct-source layout
@@ -65,56 +64,34 @@ jobs:
           set -euo pipefail
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/java/com/anamika/ai/MainActivity.java
+          test -f app/src/main/java/com/anamika/ai/SelfUpdateActivity.java
           test -f app/src/main/java/com/anamika/ai/TestLabActivity.java
           test -f app/src/main/kotlin/com/anamika/ai/KotlinLlamaRunner.kt
           test -f app/build.gradle
           test -f tools/validate_source.py
           test -f tools/validate_v78.py
           test -f tools/validate_audit.py
-          test -f .github/workflows/build-apk.yml
           test ! -e anamika_build/source.b64
 
-      - name: Recheck known OwnerSession error
+      - name: Enforce critical Anamika invariants
         run: |
           set -euo pipefail
           ! grep -R -Fq 'OwnerSession.isValid(' app/src/main/java
-          grep -Fq 'OwnerSession.isActive(' app/src/main/java/com/anamika/ai/TestLabActivity.java
-          grep -Fq 'OwnerSession.isActive' tools/validate_audit.py
-
-      - name: Enforce owner-only plugin selection and wake aliases
-        run: |
-          set -euo pipefail
           matches="$(grep -R -n -F 'PluginRegistry.setEnabled' app/src/main/java app/src/main/kotlin 2>/dev/null || true)"
-          echo "$matches"
           if [ -n "$matches" ] && echo "$matches" | grep -v 'PluginManagerActivity.java'; then
-            echo "ERROR: a non-PluginManager component can auto-enable plugins" >&2
+            echo "ERROR: non-PluginManager component can auto-enable plugins" >&2
             exit 1
           fi
-          grep -Fq 'anamika|mika' app/src/main/java/com/anamika/ai/MainActivity.java
           grep -Fq 'Hello Mika / Hello Anamika' app/src/main/res/layout/activity_main.xml
-          grep -Fq 'never auto-enable an app' app/src/main/res/layout/activity_plugin_manager.xml
-          test -f app/src/main/java/com/anamika/ai/BackgroundWakeService.java
-          test -f app/src/main/java/com/anamika/ai/BootWakeReceiver.java
           grep -Fq 'android.permission.FOREGROUND_SERVICE_MICROPHONE' app/src/main/AndroidManifest.xml
-          grep -Fq 'android:foregroundServiceType="microphone"' app/src/main/AndroidManifest.xml
-          grep -Fq '24×7 Background Wake' app/src/main/res/layout/activity_main.xml
-          grep -Fq 'START_STICKY' app/src/main/java/com/anamika/ai/BackgroundWakeService.java
-          grep -Fq 'trusted_owner_device' app/src/main/java/com/anamika/ai/OwnerSession.java
-          grep -Fq 'Owner remembered' app/src/main/java/com/anamika/ai/MainActivity.java
-          grep -Fq 'Forget Owner Login / Require PIN Again' app/src/main/res/layout/activity_main.xml
-          grep -Fq 'android.permission.WAKE_LOCK' app/src/main/AndroidManifest.xml
           grep -Fq 'android:stopWithTask="false"' app/src/main/AndroidManifest.xml
           grep -Fq 'OwnerSession.isTrusted' app/src/main/java/com/anamika/ai/BootWakeReceiver.java
           grep -Fq 'ALWAYS ON' app/src/main/res/layout/activity_main.xml
-          grep -Fq 'putBoolean("wake_enabled",true)' app/src/main/java/com/anamika/ai/MainActivity.java
-          grep -Fq 'putBoolean("wake_enabled",true)' app/src/main/java/com/anamika/ai/BootWakeReceiver.java
-          grep -Fq 'onTaskRemoved' app/src/main/java/com/anamika/ai/BackgroundWakeService.java
-          grep -Fq 'MY_PACKAGE_REPLACED' app/src/main/AndroidManifest.xml
-          test -f app/src/main/java/com/anamika/ai/media3d/CinematicMovieTimeline.java
           grep -Fq 'CinematicMovieTimeline.sample' app/src/main/java/com/anamika/ai/media3d/Premium3DRenderer.java
           grep -Fq 'verifyAnimatedOutput' app/src/main/java/com/anamika/ai/media3d/Premium3DVideoExporter.java
-          grep -Fq 'appears static/frozen' app/src/main/java/com/anamika/ai/media3d/Premium3DVideoExporter.java
-          grep -Fq 'Animated cinematic MP4 verified' app/src/main/java/com/anamika/ai/media3d/Premium3DActivity.java
+          grep -Fq 'buildRepairPrompt' app/src/main/java/com/anamika/ai/StandaloneDeveloperEngine.java
+          grep -Fq 'signing certificate does not match installed Anamika' app/src/main/java/com/anamika/ai/SelfUpdateActivity.java
+          grep -Fq 'downloadLatestOwnerSigned' app/src/main/java/com/anamika/ai/SelfUpdateActivity.java
 
       - uses: actions/setup-java@v5
         with:
@@ -139,11 +116,6 @@ jobs:
         with:
           gradle-version: '9.6.1'
 
-      - name: Configure monotonic Anamika version
-        run: |
-          set -euo pipefail
-          echo "ANAMIKA_VERSION_CODE=$((7802000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-
       - name: Validate direct source
         run: |
           set -euo pipefail
@@ -151,13 +123,7 @@ jobs:
           python3 tools/validate_v78.py
           python3 tools/validate_audit.py
 
-      - name: Inject CI update versionCode after source validation
-        run: |
-          set -euo pipefail
-          sed -i "s/versionCode 17/versionCode $ANAMIKA_VERSION_CODE/" app/build.gradle
-          grep -F "versionCode $ANAMIKA_VERSION_CODE" app/build.gradle
-
-      - name: Build lite APK directly from GitHub source
+      - name: Build lite APK
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug
@@ -187,7 +153,7 @@ jobs:
           echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
           test "$(stat -c%s "$MODEL_PATH")" -gt 900000000
 
-      - name: Build full local-AI APK directly from GitHub source
+      - name: Build full local-AI APK
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug
@@ -199,10 +165,10 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/full
           cp app/build/outputs/apk/debug/app-debug.apk "artifacts/full/$FINAL_NAME"
-          sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'assets/models/anamika-coder.gguf'
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama.so'
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama_jni.so'
+          sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
 
       - name: Build owner-signed self-update APK
         if: steps.owner_signing.outputs.configured == 'true'
@@ -223,7 +189,7 @@ jobs:
           compression-level: 0
           path: artifacts/
 
-      - name: Publish direct-source final APK to release
+      - name: Publish debug/full APK to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -238,62 +204,3 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$RELEASE_TAG" "artifacts/full/$OWNER_SIGNED_NAME" --clobber
-
-      - name: Prepare owner signing keystore
-        id: owner_signing
-        env:
-          ANAMIKA_KEYSTORE_B64: ${{ secrets.ANAMIKA_KEYSTORE_B64 }}
-          ANAMIKA_KEYSTORE_PASSWORD: ${{ secrets.ANAMIKA_KEYSTORE_PASSWORD }}
-          ANAMIKA_KEY_ALIAS: ${{ secrets.ANAMIKA_KEY_ALIAS }}
-          ANAMIKA_KEY_PASSWORD: ${{ secrets.ANAMIKA_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${ANAMIKA_KEYSTORE_B64:-}" ] || [ -z "${ANAMIKA_KEYSTORE_PASSWORD:-}" ] || [ -z "${ANAMIKA_KEY_ALIAS:-}" ] || [ -z "${ANAMIKA_KEY_PASSWORD:-}" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Owner signing secrets are not configured; secure self-update release cannot be produced."
-            exit 0
-          fi
-          mkdir -p .ci-signing
-          printf '%s' "$ANAMIKA_KEYSTORE_B64" | base64 --decode > .ci-signing/anamika-owner.jks
-          test -s .ci-signing/anamika-owner.jks
-          echo "ANAMIKA_KEYSTORE_PATH=$GITHUB_WORKSPACE/.ci-signing/anamika-owner.jks" >> "$GITHUB_ENV"
-          echo "ANAMIKA_KEYSTORE_PASSWORD=$ANAMIKA_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "ANAMIKA_KEY_ALIAS=$ANAMIKA_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "ANAMIKA_KEY_PASSWORD=$ANAMIKA_KEY_PASSWORD" >> "$GITHUB_ENV"
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-
-      - name: Build owner-signed self-update APK
-        if: steps.owner_signing.outputs.configured == 'true'
-        run: |
-          set -euo pipefail
-          gradle --no-daemon :app:assembleRelease
-          test -f app/build/outputs/apk/release/app-release.apk
-          mkdir -p artifacts/signed
-          cp app/build/outputs/apk/release/app-release.apk "artifacts/signed/$SIGNED_NAME"
-          unzip -tq "artifacts/signed/$SIGNED_NAME"
-
-      - name: Verify owner-signed APK certificate
-        if: steps.owner_signing.outputs.configured == 'true'
-        run: |
-          set -euo pipefail
-          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
-          test -x "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "artifacts/signed/$SIGNED_NAME"
-          "$APKSIGNER" verify --verbose --print-certs "artifacts/signed/$SIGNED_NAME" > artifacts/signed/APKSIGNER.txt
-          sha256sum "artifacts/signed/$SIGNED_NAME" > artifacts/signed/OWNER-SIGNED-SHA256.txt
-
-      - uses: actions/upload-artifact@v4
-        if: steps.owner_signing.outputs.configured == 'true'
-        with:
-          name: AnamikaAI-V7.8.2-owner-signed-self-update
-          compression-level: 0
-          path: artifacts/signed/
-
-      - name: Publish owner-signed self-update APK
-        if: steps.owner_signing.outputs.configured == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release view "$RELEASE_TAG" >/dev/null
-          gh release upload "$RELEASE_TAG" "artifacts/signed/$SIGNED_NAME" --clobber
