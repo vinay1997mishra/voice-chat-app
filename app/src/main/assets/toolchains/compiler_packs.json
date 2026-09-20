@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": "7.8.2",
-  "policy": "A language is FULL VERIFIED only after its real compiler/interpreter pack returns success.",
+  "policy": "FULL VERIFIED requires every detected language to pass a real bundled verifier or the authoritative Android/web build verifier. Metadata alone is never treated as proof.",
   "packs": [
     {
       "language": "C",
@@ -25,28 +25,28 @@
     },
     {
       "language": "Python",
-      "binary": "libanamika_python.so",
-      "mode": "native APK pack"
+      "binary": "Chaquopy CPython 3.13",
+      "mode": "bundled in-process Android runtime"
     },
     {
       "language": "JavaScript",
-      "binary": "libanamika_node.so",
-      "mode": "native APK pack"
+      "binary": "Mozilla Rhino 1.9.1",
+      "mode": "bundled in-process compiler/runtime"
     },
     {
       "language": "TypeScript",
-      "binary": "libanamika_tsc.so",
-      "mode": "native APK pack"
+      "binary": "Microsoft TypeScript 5.9.3 + Rhino",
+      "mode": "bundled compiler asset executed in-process"
     },
     {
       "language": "Java",
-      "binary": "libanamika_javac.so",
-      "mode": "native APK pack"
+      "binary": "Eclipse ECJ 3.46.100",
+      "mode": "bundled in-process Java compiler"
     },
     {
       "language": "Kotlin",
-      "binary": "libanamika_kotlinc.so",
-      "mode": "native APK pack"
+      "binary": "JetBrains Kotlin compiler 2.2.10",
+      "mode": "bundled compiler frontend parser; Android full build via SDK/Gradle verification"
     },
     {
       "language": "C#",
