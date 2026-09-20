@@ -89,6 +89,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button pluginCenterButton = findViewById(R.id.pluginCenterButton);
         Button researchButton = findViewById(R.id.researchButton);
         Button selfUpgradeButton = findViewById(R.id.selfUpgradeButton);
+        Button secureSelfUpdateButton = findViewById(R.id.secureSelfUpdateButton);
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
         wakeListenButton = findViewById(R.id.wakeListenButton);
@@ -159,6 +160,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         selfUpgradeButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
             prepareSelfUpgrade("Owner requested self-upgrade workspace from V7.8.2 UI.");
+        });
+        secureSelfUpdateButton.setOnClickListener(v -> {
+            if (ensureUnlocked()) startActivity(new Intent(this, SelfUpdateActivity.class));
         });
         languageStatusButton.setOnClickListener(v -> {
             if (ensureUnlocked()) answer(UniversalLanguageRouter.capability(this));
