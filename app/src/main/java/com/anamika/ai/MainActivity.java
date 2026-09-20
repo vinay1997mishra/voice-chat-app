@@ -115,12 +115,20 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
         Button attachButton = findViewById(R.id.attachButton);
-        Button toolsButton = findViewById(R.id.toolsButton);
+        Button menuButton = findViewById(R.id.menuButton);
         Button toolsCloseButton = findViewById(R.id.toolsCloseButton);
-        Button vaultButton = findViewById(R.id.vaultButton);
+        Button imageCreatorMenuButton = findViewById(R.id.imageCreatorMenuButton);
+        Button projectMenuButton = findViewById(R.id.projectMenuButton);
+        Button memoryMenuButton = findViewById(R.id.memoryMenuButton);
+        Button voiceMenuButton = findViewById(R.id.voiceMenuButton);
+        Button remoteMenuButton = findViewById(R.id.remoteMenuButton);
+        Button vaultMenuButton = findViewById(R.id.vaultMenuButton);
+        Button deviceInfoMenuButton = findViewById(R.id.deviceInfoMenuButton);
+        Button settingsMenuButton = findViewById(R.id.settingsMenuButton);
         Button permissionSetupButton = findViewById(R.id.permissionSetupButton);
         Button storageSetupButton = findViewById(R.id.storageSetupButton);
         View toolsPanel = findViewById(R.id.toolsPanel);
+        View menuDim = findViewById(R.id.menuDim);
         View ownerBar = findViewById(R.id.ownerBar);
         wakeListenButton = findViewById(R.id.wakeListenButton);
         forgetOwnerButton = findViewById(R.id.forgetOwnerButton);
@@ -145,11 +153,72 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             }
         });
         attachButton.setOnClickListener(v -> showAttachMenu());
-        toolsButton.setOnClickListener(v -> toolsPanel.setVisibility(View.VISIBLE));
-        toolsCloseButton.setOnClickListener(v -> toolsPanel.setVisibility(View.GONE));
-        vaultButton.setOnClickListener(v -> answer(AnamikaVault.summary(this)));
-        permissionSetupButton.setOnClickListener(v -> startOneTimePermissionSetup());
-        storageSetupButton.setOnClickListener(v -> pickStorageTree());
+        menuButton.setOnClickListener(v -> showFunctionDrawer(toolsPanel,menuDim));
+        toolsCloseButton.setOnClickListener(v -> hideFunctionDrawer(toolsPanel,menuDim));
+        menuDim.setOnClickListener(v -> hideFunctionDrawer(toolsPanel,menuDim));
+
+        imageCreatorMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            Intent i=new Intent(this,com.anamika.ai.creator.CreatorHubActivity.class);
+            i.putExtra("media_type","image");
+            i.putExtra("width",1024);
+            i.putExtra("height",1024);
+            startActivity(i);
+            hideFunctionDrawer(toolsPanel,menuDim);
+        });
+        projectMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            String p=lastGeneratedProject==null?"":lastGeneratedProject.trim();
+            answer(p.isEmpty()
+                    ?"Projects: abhi is session me koi generated project selected nahi hai. ☰ > App / Website / Code Builder se naya project bana sakte ho."
+                    :"Current project:\n"+p);
+        });
+        memoryMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            String note=prefs.getString("memory_note","");
+            String hist=prefs.getString("conversation_history","");
+            answer("Memory & Learning\nSaved note: "+(note.isEmpty()?"none":note)+
+                    "\nRecent conversation memory: "+(hist.isEmpty()?"empty":"available")+
+                    "\nVerified language phrases aur learned phone-functions local memory me save hote hain.");
+        });
+        voiceMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            answer(SoftVoiceProfile.summary(this)+
+                    "\nVoice command examples: ‘voice aur soft karo’, ‘deep karo’, ‘childish karo’, ‘slow bolo’, ‘normal voice’.");
+        });
+        remoteMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            answer("Remote / Phone Control\n"+DeviceProfileStore.summary(this)+"\n"+
+                    PermissionAccessManager.status(this)+
+                    "\nSettings, apps, contacts, calls, messages, screen reading aur verified device controls voice/text command se use hote hain.");
+        });
+        vaultMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            answer(AnamikaVault.summary(this)+"\n"+StorageLibrary.summary(this));
+        });
+        deviceInfoMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            answer(DeviceProfileStore.summary(this));
+        });
+        settingsMenuButton.setOnClickListener(v -> {
+            if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        });
+        permissionSetupButton.setOnClickListener(v -> {
+            hideFunctionDrawer(toolsPanel,menuDim);
+            startOneTimePermissionSetup();
+        });
+        storageSetupButton.setOnClickListener(v -> {
+            hideFunctionDrawer(toolsPanel,menuDim);
+            pickStorageTree();
+        });
         if(ownerRemembered){
             prefs.edit().putBoolean("wake_enabled",true).apply();
         }
@@ -177,13 +246,22 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         generateCodeButton.setOnClickListener(v -> generateDeveloperProject());
         saveProjectButton.setOnClickListener(v -> saveGeneratedProject());
         premium3dButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) startActivity(new Intent(this, com.anamika.ai.media3d.Premium3DActivity.class));
+            if (ensureUnlocked()) {
+                hideFunctionDrawer(toolsPanel,menuDim);
+                startActivity(new Intent(this, com.anamika.ai.media3d.Premium3DActivity.class));
+            }
         });
         internetCreatorButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) startActivity(new Intent(this, com.anamika.ai.creator.CreatorHubActivity.class));
+            if (ensureUnlocked()) {
+                hideFunctionDrawer(toolsPanel,menuDim);
+                startActivity(new Intent(this, com.anamika.ai.creator.CreatorHubActivity.class));
+            }
         });
         pluginCenterButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) startActivity(new Intent(this, com.anamika.ai.plugins.PluginManagerActivity.class));
+            if (ensureUnlocked()) {
+                hideFunctionDrawer(toolsPanel,menuDim);
+                startActivity(new Intent(this, com.anamika.ai.plugins.PluginManagerActivity.class));
+            }
         });
         researchButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
@@ -193,14 +271,21 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             answer("Research mode started. Visible/public screens you open can be saved to local knowledge: " + path);
         });
         testLabButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) startActivity(new Intent(this, TestLabActivity.class));
+            if (ensureUnlocked()) {
+                hideFunctionDrawer(toolsPanel,menuDim);
+                startActivity(new Intent(this, TestLabActivity.class));
+            }
         });
         selfUpgradeButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
             prepareSelfUpgrade("Owner requested self-upgrade workspace from V7.8.2 UI.");
         });
         secureSelfUpdateButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) startActivity(new Intent(this, SelfUpdateActivity.class));
+            if (ensureUnlocked()) {
+                hideFunctionDrawer(toolsPanel,menuDim);
+                startActivity(new Intent(this, SelfUpdateActivity.class));
+            }
         });
         languageStatusButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
@@ -228,6 +313,28 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         super.onNewIntent(intent);
         setIntent(intent);
         handleIncomingBackgroundCommand(intent);
+    }
+
+    private void showFunctionDrawer(View drawer,View dim){
+        if(drawer==null||dim==null)return;
+        dim.setVisibility(View.VISIBLE);
+        drawer.setVisibility(View.VISIBLE);
+        drawer.setTranslationX(-drawer.getWidth());
+        drawer.animate().translationX(0f).setDuration(180L).start();
+    }
+
+    private void hideFunctionDrawer(View drawer,View dim){
+        if(drawer==null||dim==null)return;
+        if(drawer.getVisibility()!=View.VISIBLE){
+            dim.setVisibility(View.GONE);
+            return;
+        }
+        float width=drawer.getWidth()>0?drawer.getWidth():330f;
+        drawer.animate().translationX(-width).setDuration(160L).withEndAction(() -> {
+            drawer.setVisibility(View.GONE);
+            drawer.setTranslationX(0f);
+            dim.setVisibility(View.GONE);
+        }).start();
     }
 
     private void handleIncomingBackgroundCommand(Intent intent){
