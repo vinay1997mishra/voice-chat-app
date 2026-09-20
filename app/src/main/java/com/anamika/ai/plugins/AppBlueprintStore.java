@@ -125,6 +125,7 @@ public final class AppBlueprintStore {
                     "Protected data fields are never read or auto-filled. Risky real-world actions require owner confirmation.\n";
             writeText(new File(path,"AUTO_AUDIT_REPORT.txt"),text);
             writeFunctionBlueprint(new File(path));
+            writeStructuredBlueprint(new File(path), target, tested, skipped, screens, reason);
         }
         return stop(c);
     }
@@ -177,6 +178,57 @@ public final class AppBlueprintStore {
         }catch(Exception ignored){ return; }
         out.append("\nTotal safe functions attempted: ").append(n).append("\n");
         writeText(new File(root,"BLUEPRINT_FUNCTIONS.txt"),out.toString());
+    }
+
+    /** Writes a stable summary for the UI and later local model learning. */
+    private static void writeStructuredBlueprint(File root, String target, int tested, int skipped,
+                                                 int screens, String reason) {
+        JSONObject out = new JSONObject();
+        JSONArray gaps = new JSONArray();
+        JSONArray attempts = new JSONArray();
+        int gapCount = 0;
+        int attemptCount = 0;
+        File audit = new File(root, "auto_audit.jsonl");
+        if (audit.isFile()) {
+            try (BufferedReader r = new BufferedReader(new FileReader(audit))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    try {
+                        JSONObject item = new JSONObject(line);
+                        String state = item.optString("state", "");
+                        if (state.startsWith("TRY_") || state.startsWith("FAILED_")) {
+                            attempts.put(item); attemptCount++;
+                        }
+                        if (state.equals("SKIPPED") || state.equals("SKIP_EXTERNAL")
+                                || state.equals("RISK_SKIPPED") || state.equals("FAILED_TAP")
+                                || state.equals("FAILED_TOUCH")) {
+                            gaps.put(item); gapCount++;
+                        }
+                    } catch (Exception ignored) { }
+                }
+            } catch (Exception ignored) { }
+        }
+        try {
+            out.put("schema", "anamika.app-blueprint.v1");
+            out.put("package", target == null ? "" : target);
+            out.put("generated_at_ms", System.currentTimeMillis());
+            out.put("observable_screens", screens);
+            out.put("tested_safe_controls_or_touch_zones", tested);
+            out.put("skipped_or_unverified_items", skipped);
+            out.put("audit_attempt_records", attemptCount);
+            out.put("coverage_gap_records", gapCount);
+            out.put("completion_reason", reason == null ? "completed" : reason);
+            out.put("scope", "Android-accessible and observable UI only");
+            out.put("owner_confirmation_required_for_risky_actions", true);
+            out.put("credentials_and_passwords_captured", false);
+            out.put("attempts", attempts);
+            out.put("coverage_gaps", gaps);
+            out.put("limitations", new JSONArray()
+                    .put("Hidden server-side behavior is not proven by UI discovery")
+                    .put("Screens blocked by login, permission, network, or owner-skipped risk remain unverified")
+                    .put("Canvas or custom touch surfaces are sampled only within bounded safe probes"));
+            writeText(new File(root, "BLUEPRINT.json"), out.toString(2));
+        } catch (Exception ignored) { }
     }
 
     public static boolean shouldCaptureScreenshot(Context c){
