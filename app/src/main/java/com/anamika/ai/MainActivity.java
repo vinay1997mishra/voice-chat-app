@@ -43,6 +43,7 @@ import com.anamika.ai.files.AnamikaVault;
 import com.anamika.ai.phone.PermissionAccessManager;
 import com.anamika.ai.phone.DeviceFunctionDiscovery;
 import com.anamika.ai.phone.DeviceProfileStore;
+import com.anamika.ai.phone.VerifiedFunctionMemory;
 import com.anamika.ai.research.AppSearchController;
 import com.anamika.ai.research.BackgroundKnowledgeLookup;
 import com.anamika.ai.research.ResearchLearningStore;
