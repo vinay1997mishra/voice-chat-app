@@ -36,39 +36,77 @@ abstract interface class CodingModel {
 }
 
 class LocalCodeDoctor {
-  LocalCodeDoctor({required this.runner, required this.model, this.maxAttempts = 3});
+  LocalCodeDoctor({required this.runner, required this.model, this.maxAttempts = 3})
+      : assert(maxAttempts > 0);
+
   final CodeRunner runner;
   final CodingModel model;
   final int maxAttempts;
 
   Future<RepairSession> repair(Map<String, String> original) async {
-    var workspace = Map<String, String>.from(original);
+    final originalSnapshot = Map<String, String>.unmodifiable(original);
+    var workspace = Map<String, String>.from(originalSnapshot);
     final attempts = <RepairAttempt>[];
 
     for (var i = 1; i <= maxAttempts; i++) {
-      final diagnostics = await runner.check(workspace);
+      final diagnostics = await runner.check(Map<String, String>.unmodifiable(workspace));
       if (diagnostics.isEmpty) {
-        return RepairSession(original: original, candidate: workspace, attempts: attempts, passed: true);
+        return RepairSession(
+          original: originalSnapshot,
+          candidate: Map<String, String>.unmodifiable(workspace),
+          attempts: attempts,
+          passed: true,
+        );
       }
-      final patches = await model.proposeRepair(workspace: workspace, diagnostics: diagnostics);
+
+      final patches = await model.proposeRepair(
+        workspace: Map<String, String>.unmodifiable(workspace),
+        diagnostics: List<CodeDiagnostic>.unmodifiable(diagnostics),
+      );
       if (patches.isEmpty) break;
+
+      final paths = <String>{};
       for (final patch in patches) {
-        if (!_safePath(patch.path) || !workspace.containsKey(patch.path)) {
-          throw StateError('Unsafe or unknown repair path: ${patch.path}');
+        final path = UpgradePolicy.normalizePath(patch.path);
+        if (!_safePath(path) || !workspace.containsKey(path)) {
+          throw StateError('Unsafe or unknown repair path: $path');
         }
-        workspace[patch.path] = patch.replacement;
+        if (!paths.add(path)) {
+          throw StateError('Duplicate repair path: $path');
+        }
+        final expectedHash = contentFingerprint(workspace[path]!);
+        if (patch.beforeHash != expectedHash) {
+          throw StateError('Stale repair patch for $path');
+        }
+        workspace[path] = patch.replacement;
       }
       attempts.add(RepairAttempt(number: i, diagnostics: diagnostics, patches: patches));
     }
 
-    final remaining = await runner.check(workspace);
-    return RepairSession(original: original, candidate: workspace, attempts: attempts, passed: remaining.isEmpty, remaining: remaining);
+    final remaining = await runner.check(Map<String, String>.unmodifiable(workspace));
+    return RepairSession(
+      original: originalSnapshot,
+      candidate: Map<String, String>.unmodifiable(workspace),
+      attempts: attempts,
+      passed: remaining.isEmpty,
+      remaining: List<CodeDiagnostic>.unmodifiable(remaining),
+    );
   }
 
   bool _safePath(String path) =>
+      path.isNotEmpty &&
       !path.startsWith('/') &&
       !path.contains('..') &&
-      !UpgradePolicy.forbiddenPaths.contains(path);
+      !UpgradePolicy.isProtectedPath(path);
+
+  static String contentFingerprint(String value) {
+    var hash = 2166136261;
+    for (final unit in value.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 16777619) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
 }
 
 class RepairSession {
@@ -85,5 +123,13 @@ class RepairSession {
   final bool passed;
   final List<CodeDiagnostic> remaining;
 
-  bool get changed => candidate.toString() != original.toString();
+  bool get changed => !_sameWorkspace(original, candidate);
+
+  static bool _sameWorkspace(Map<String, String> left, Map<String, String> right) {
+    if (left.length != right.length) return false;
+    for (final entry in left.entries) {
+      if (right[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
 }
