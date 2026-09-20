@@ -49,7 +49,7 @@ public final class UniversalLanguageRouter {
                 String prompt=
                         "You are Anamika's multilingual intent parser. Understand Hindi, Hinglish, English and any human language.\\n"+
                         "Return exactly four lines and nothing else:\\n"+
-                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\\n"+
+                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|FILE_SEARCH|VAULT_STATUS|FILE_EXPORT|FILE_DELETE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\\n"+
                         "ARG=<main target/query/message; preserve names, URLs, quoted text, numbers and filenames>\\n"+
                         "NORMALIZED=<one concise English command preserving meaning>\\n"+
                         "STYLE=<HINDI|HINGLISH|ENGLISH|OTHER>\\n"+
@@ -153,6 +153,20 @@ public final class UniversalLanguageRouter {
 
         if(containsAny(s,"message bhejo","msg bhejo","sms bhejo","send message","मैसेज भेजो","संदेश भेजो"))
             return new Interpretation(original,original,"MESSAGE",original,style,false);
+
+        if(containsAny(s,"personal space kitna","vault status","vault kitna","meri files kitni","kitni files save",
+                "पर्सनल स्पेस","कितनी फाइल","फाइल काउंट"))
+            return new Interpretation(original,original,"VAULT_STATUS",original,style,false);
+
+        if(containsAny(s,"last file download","download last","export last","last file export","डाउनलोड करो","एक्सपोर्ट करो"))
+            return new Interpretation(original,original,"FILE_EXPORT",original,style,false);
+
+        if(containsAny(s,"file delete","file hata","file hta","trash file","delete file","फाइल डिलीट","फाइल हटाओ"))
+            return new Interpretation(original,original,"FILE_DELETE",original,style,false);
+
+        if((containsAny(s,"file","photo","pic","image","video","pdf","document","audio","फाइल","फोटो","वीडियो","पीडीएफ") &&
+                containsAny(s,"dhundo","dhoondo","search","find","khojo","ढूंढो","खोजो","सर्च")))
+            return new Interpretation(original,original,"FILE_SEARCH",original,style,false);
 
         if(containsAny(s,"brightness","volume","wifi","wi-fi","bluetooth","hotspot","mobile data","dark mode",
                 "battery saver","location","airplane","screen timeout","ringtone","notification setting",
