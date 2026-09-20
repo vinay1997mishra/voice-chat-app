@@ -74,6 +74,7 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.21'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.21'
     implementation 'io.xberg.tslp.android:tree-sitter-language-pack-android:1.15.12'
+    implementation 'androidx.documentfile:documentfile:1.0.1'
 }
 
 chaquopy {
