@@ -2,7 +2,7 @@ package com.anamika.ai.phone;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
+import android.content.pm.ApplicationInfo;\nimport android.os.Build;
 import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
@@ -23,7 +23,9 @@ public final class AppLauncher {
         String q=requested==null?"":requested.trim().toLowerCase(Locale.ROOT);
         if(q.isEmpty()) return new Result(false,"App name missing.");
         PackageManager pm=c.getPackageManager();
-        List<ApplicationInfo> apps=pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0));
+        List<ApplicationInfo> apps;
+        if(Build.VERSION.SDK_INT>=33) apps=pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0));
+        else apps=pm.getInstalledApplications(0);
         List<ApplicationInfo> candidates=new ArrayList<>();
         for(ApplicationInfo a:apps){
             Intent launch=pm.getLaunchIntentForPackage(a.packageName);
