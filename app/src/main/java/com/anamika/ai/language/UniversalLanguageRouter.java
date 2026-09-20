@@ -49,7 +49,7 @@ public final class UniversalLanguageRouter {
                 String prompt=
                         "You are Anamika's multilingual intent parser. Understand Hindi, Hinglish, English and any human language.\\n"+
                         "Return exactly four lines and nothing else:\\n"+
-                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|OPEN_APP|PHONE_CONTROL|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN>\\n"+
+                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\\n"+
                         "ARG=<main target/query/message; preserve names, URLs, quoted text, numbers and filenames>\\n"+
                         "NORMALIZED=<one concise English command preserving meaning>\\n"+
                         "STYLE=<HINDI|HINGLISH|ENGLISH|OTHER>\\n"+
@@ -124,6 +124,36 @@ public final class UniversalLanguageRouter {
         String s=original.toLowerCase(Locale.ROOT).trim();
         if(matchesAny(s,"नमस्ते","नमस्कार","hello","hi anamika","hello anamika","hey anamika","namaste"))
             return new Interpretation(original,original,"CHAT",original,style,false);
+
+        if(containsAny(s,"youtube se sikho","youtube se seekho","youtube par seekho","youtube pe seekho",
+                "यूट्यूब से सीखो","यूट्यूब पर सीखो","video se sikho","video se seekho"))
+            return new Interpretation(original,original,"YOUTUBE_LEARN",original,style,false);
+
+        if(containsAny(s,"screen padh","screen padho","padh ke suna","padhkar suna","read screen","read this screen",
+                "यह स्क्रीन पढ़","स्क्रीन पढ़","पढ़कर सुनाओ","jo likha hai padh"))
+            return new Interpretation(original,original,"READ_SCREEN",original,style,false);
+
+        if(containsAny(s,"screen samjha","screen explain","samjha kya hai","explain this screen",
+                "यह स्क्रीन समझा","स्क्रीन समझाओ"))
+            return new Interpretation(original,original,"EXPLAIN_SCREEN",original,style,false);
+
+        if(containsAny(s,"calculate","hisaab","hisab","kitna hoga","गणना","हिसाब","कैलकुलेट"))
+            return new Interpretation(original,original,"CALCULATE",original,style,false);
+
+        if(containsAny(s," ko call","call karo","call kar","phone lagao","dial ","कॉल करो","फोन लगाओ"))
+            return new Interpretation(original,original,"CALL",original,style,false);
+
+        if(containsAny(s,"contact search","contact dhundo","number dhundo","number search","name search","naam dhundo",
+                "कॉन्टैक्ट खोजो","नंबर ढूंढो","नाम ढूंढो"))
+            return new Interpretation(original,original,"CONTACT_SEARCH",original,style,false);
+
+        if(containsAny(s,"message bhejo","msg bhejo","sms bhejo","send message","मैसेज भेजो","संदेश भेजो"))
+            return new Interpretation(original,original,"MESSAGE",original,style,false);
+
+        if(containsAny(s,"brightness","volume","wifi","wi-fi","bluetooth","hotspot","mobile data","dark mode",
+                "battery saver","location","airplane","screen timeout","ringtone","notification setting",
+                "ब्राइटनेस","वॉल्यूम","वाईफाई","ब्लूटूथ","हॉटस्पॉट","मोबाइल डेटा","लोकेशन"))
+            return new Interpretation(original,original,"SYSTEM_SETTING",original,style,false);
 
         String y=extractYouTubeSearch(original);
         if(y!=null) return new Interpretation(original,"youtube search "+y,"YOUTUBE_SEARCH",y,style,false);
