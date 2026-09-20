@@ -36,7 +36,7 @@
         android:id="@+id/installSelfUpdateButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Approve & Install Verified Update" />
+        android:text="Approve &amp; Install Verified Update" />
 
     <TextView
         android:id="@+id/selfUpdateStatus"
