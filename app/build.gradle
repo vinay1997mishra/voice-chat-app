@@ -47,7 +47,7 @@ android {
         resources {
             // kotlin-compiler-embeddable and kotlin-stdlib both carry this canonical
             // compiler resource. They are byte-for-byte equivalent for 2.2.10.
-            pickFirsts += ['kotlin/reflect/reflect.kotlin_builtins']
+            pickFirsts += ['kotlin/**/*.kotlin_builtins', 'kotlin/*.kotlin_builtins']
         }
     }
 
