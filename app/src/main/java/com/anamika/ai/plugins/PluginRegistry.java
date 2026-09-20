@@ -18,6 +18,7 @@ import java.util.Set;
 public final class PluginRegistry {
     private static final String PREFS = "anamika_plugins";
     private static final String ENABLED = "enabled_packages";
+    private static final String DEEP_AUDIT_TRUSTED = "deep_audit_trusted_packages";
 
     public static final class AppPlugin {
         public final String label;
@@ -70,7 +71,31 @@ public final class PluginRegistry {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         Set<String> next = new HashSet<>(prefs.getStringSet(ENABLED, Collections.emptySet()));
         if (enabled) next.add(packageName); else next.remove(packageName);
-        prefs.edit().putStringSet(ENABLED, next).apply();
+        SharedPreferences.Editor edit=prefs.edit().putStringSet(ENABLED, next);
+        if(!enabled){
+            Set<String> trusted=new HashSet<>(prefs.getStringSet(DEEP_AUDIT_TRUSTED, Collections.emptySet()));
+            trusted.remove(packageName);
+            edit.putStringSet(DEEP_AUDIT_TRUSTED,trusted);
+        }
+        edit.apply();
+    }
+
+    /**
+     * Persistent owner grant for repeated deep audits of one app. This is set only
+     * after an explicit owner audit command on an enabled plugin and is revoked when
+     * the plugin is disabled. It avoids asking again for ordinary safe touches.
+     */
+    public static boolean isDeepAuditTrusted(Context context,String packageName){
+        return new HashSet<>(context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+                .getStringSet(DEEP_AUDIT_TRUSTED,Collections.emptySet())).contains(packageName);
+    }
+
+    public static void setDeepAuditTrusted(Context context,String packageName,boolean trusted){
+        if(packageName==null || packageName.trim().isEmpty()) return;
+        SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        Set<String> next=new HashSet<>(prefs.getStringSet(DEEP_AUDIT_TRUSTED,Collections.emptySet()));
+        if(trusted) next.add(packageName); else next.remove(packageName);
+        prefs.edit().putStringSet(DEEP_AUDIT_TRUSTED,next).apply();
     }
 
     private static Set<String> enabledSet(Context context) {
