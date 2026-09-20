@@ -153,7 +153,11 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 "saare functions check kar","sare functions check kar","check all functions",
                 "is app ke saare functions check kar","is app ke sare functions check kar",
                 "deep inspect app","app inspect karo","auto audit app","poora app check karo")) {
-            if (!target.isEmpty() && PluginRegistry.isEnabled(this,target)) startAutoAudit(target);
+            String oneShotAudit=getSharedPreferences(PREFS,MODE_PRIVATE)
+                    .getString("one_shot_deep_audit_package","");
+            boolean authorized = !target.isEmpty() &&
+                    (PluginRegistry.isEnabled(this,target) || target.equals(oneShotAudit));
+            if (authorized) startAutoAudit(target);
             return;
         }
         if (containsAny(lowerCommand,"inspection complete","inspection stop","function check complete","scan complete","audit stop")) {
@@ -172,7 +176,12 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     }
 
     private void startAutoAudit(String target) {
-        if (target == null || target.trim().isEmpty() || !PluginRegistry.isEnabled(this,target)) return;
+        if (target == null || target.trim().isEmpty()) return;
+        String oneShotAudit=getSharedPreferences(PREFS,MODE_PRIVATE)
+                .getString("one_shot_deep_audit_package","");
+        boolean persistentPlugin=PluginRegistry.isEnabled(this,target);
+        boolean oneShotAuthorized=target.equals(oneShotAudit);
+        if(!persistentPlugin && !oneShotAuthorized) return;
         autoAuditActive = false;
         autoAuditNodes.clear();
         autoAuditScreensSeen.clear();
@@ -187,8 +196,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         autoAuditDepth = 0;
         lastAuditSourceScreenSig = "";
         java.io.File dir = AppBlueprintStore.start(this,target);
-        boolean learnedAlready = PluginRegistry.isDeepAuditTrusted(this,target);
-        PluginRegistry.setDeepAuditTrusted(this,target,true);
+        boolean learnedAlready = persistentPlugin && PluginRegistry.isDeepAuditTrusted(this,target);
+        if(persistentPlugin) PluginRegistry.setDeepAuditTrusted(this,target,true);
         AppBlueprintStore.recordAuditResult(this,target,"START","",
                 "Owner requested automatic deep function audit. Persistent safe-touch trust="+
                         (learnedAlready?"reused":"granted")+". Blueprint: "+dir.getAbsolutePath());
@@ -207,7 +216,11 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if (!autoAuditActive) return;
         if (waitingRiskConfirmation) return;
         if (!OwnerSession.isActive(this)) { finishAutoAudit("Owner session expired."); return; }
-        if (!PluginRegistry.isEnabled(this,autoAuditTarget)) { finishAutoAudit("Plugin was disabled."); return; }
+        String oneShotAudit=getSharedPreferences(PREFS,MODE_PRIVATE)
+                .getString("one_shot_deep_audit_package","");
+        if (!PluginRegistry.isEnabled(this,autoAuditTarget) && !autoAuditTarget.equals(oneShotAudit)) {
+            finishAutoAudit("Owner authorization ended."); return;
+        }
         if (System.currentTimeMillis()-autoAuditStartedMs > AUTO_AUDIT_MAX_MS) {
             finishAutoAudit("Time limit reached."); return;
         }
@@ -346,6 +359,12 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 "Screens "+autoAuditScreens+" • tested "+autoAuditTested+" • skipped "+autoAuditSkipped);
         java.io.File dir=AppBlueprintStore.completeAutoAudit(
                 this,autoAuditTested,autoAuditSkipped,autoAuditScreens,reason);
+        // One-shot deep audit never turns the app into a persistent plugin.
+        if(autoAuditTarget.equals(getSharedPreferences(PREFS,MODE_PRIVATE)
+                .getString("one_shot_deep_audit_package",""))){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit()
+                    .remove("one_shot_deep_audit_package").apply();
+        }
         String path=dir==null?"":dir.getAbsolutePath();
         android.widget.Toast.makeText(this,
                 "Anamika Auto Audit complete. Blueprint ready."+ (path.isEmpty()?"":" "+path),
