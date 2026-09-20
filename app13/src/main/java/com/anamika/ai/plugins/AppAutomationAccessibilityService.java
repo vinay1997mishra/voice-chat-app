@@ -6,13 +6,14 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.anamika.ai.core.OwnerStore;
+import com.anamika.ai.research.ResearchStore;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * V13 accessibility bridge. It can act only on the current UI of packages explicitly enabled by the owner.
- * It never enables plugins automatically.
+ * Owner-controlled Accessibility bridge for V13.
+ * Automation works only on the active UI of packages explicitly enabled by the owner.
  */
 public final class AppAutomationAccessibilityService extends AccessibilityService {
     private static volatile AppAutomationAccessibilityService instance;
@@ -26,8 +27,10 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if(pkg.isEmpty())return;
         AccessibilityNodeInfo root=getRootInActiveWindow();
         if(root!=null){
-            try{BlueprintStore.recordWindow(this,pkg,root,String.valueOf(event.getEventType()));}
-            finally{root.recycle();}
+            try{
+                BlueprintStore.recordWindow(this,pkg,root,String.valueOf(event.getEventType()));
+                ResearchStore.recordWindow(this,pkg,root);
+            }finally{root.recycle();}
         }
     }
 
@@ -46,7 +49,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if(root==null)return "No active app window.";
         try{
             String pkg=root.getPackageName()==null?"":root.getPackageName().toString();
-            if(!AppPluginRegistry.isEnabled(s,pkg))return "Automation is disabled for "+pkg+". Enable it in Plugin Center first.";
+            if(!AppPluginRegistry.isEnabled(s,pkg))
+                return "Automation is disabled for "+pkg+". Enable it in Plugin Center first.";
             AccessibilityNodeInfo target=findText(root,text);
             if(target==null)return "Visible control not found: "+text;
             try{
@@ -78,7 +82,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             try{
                 Bundle b=new Bundle();
                 b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,text);
-                return focus.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,b)?"Text entered.":"Android rejected text entry.";
+                return focus.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,b)
+                        ?"Text entered.":"Android rejected text entry.";
             }finally{focus.recycle();}
         }finally{root.recycle();}
     }
@@ -86,6 +91,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     public static String back(){
         AppAutomationAccessibilityService s=instance;
         if(s==null)return "Accessibility service is not connected.";
+        if(!OwnerStore.isTrusted(s))return "Owner verification required.";
         return s.performGlobalAction(GLOBAL_ACTION_BACK)?"Back performed.":"Android rejected Back.";
     }
 

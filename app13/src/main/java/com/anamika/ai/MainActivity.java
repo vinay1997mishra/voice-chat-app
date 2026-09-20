@@ -7,7 +7,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -17,6 +16,8 @@ import android.widget.Toast;
 
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.OwnerStore;
+import com.anamika.ai.memory.MemoryStore;
+import com.anamika.ai.runtime.RuntimeWatchdog;
 import com.anamika.ai.voice.VoiceController;
 import com.anamika.ai.voice.WakeService;
 
@@ -33,8 +34,10 @@ public final class MainActivity extends Activity implements VoiceController.List
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
         CrashJournal.install(this);
+        RuntimeWatchdog.recordLaunch(this);
         voice=new VoiceController(this,this);
         showEntry();
+        getWindow().getDecorView().postDelayed(()->RuntimeWatchdog.markHealthy(this),4000);
         handleWakeCommand();
     }
 
@@ -51,8 +54,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     private void showOwnerGate(){
         root=baseRoot();
-        TextView title=title("Anamika AI 13");
-        root.addView(title);
+        root.addView(title("Anamika AI 13"));
 
         TextView info=new TextView(this);
         info.setText(OwnerStore.hasPin(this)
@@ -89,7 +91,9 @@ public final class MainActivity extends Activity implements VoiceController.List
         root.addView(title("Anamika AI 13"));
 
         status=new TextView(this);
-        status.setText("Owner verified • clean V13 core");
+        status.setText(RuntimeWatchdog.recoverySuggested(this)
+                ?"Owner verified • recovery check recommended"
+                :"Owner verified • clean V13 core");
         status.setTextSize(14);
         root.addView(status);
 
@@ -164,13 +168,15 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private void requestNotificationPermission(){
-        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+        if(Build.VERSION.SDK_INT>=33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},REQ_NOTIFY);
     }
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
-        if(requestCode==REQ_AUDIO && results.length>0 && results[0]==PackageManager.PERMISSION_GRANTED) voice.listen();
+        if(requestCode==REQ_AUDIO && results.length>0 &&
+                results[0]==PackageManager.PERMISSION_GRANTED) voice.listen();
     }
 
     private void runInput(){
@@ -182,8 +188,10 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     private void runCommand(String text){
         append("You",text);
+        MemoryStore.appendTurn(this,"owner",text);
         String reply=CommandRouter.run(this,text);
         append("Anamika",reply);
+        MemoryStore.appendTurn(this,"anamika",reply);
         voice.speak(reply);
     }
 
@@ -213,14 +221,27 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private TextView title(String text){
-        TextView t=new TextView(this);t.setText(text);t.setTextSize(25);t.setPadding(0,0,0,dp(14));return t;
+        TextView t=new TextView(this);
+        t.setText(text);
+        t.setTextSize(25);
+        t.setPadding(0,0,0,dp(14));
+        return t;
     }
-    private Button button(String text){Button b=new Button(this);b.setText(text);return b;}
-    private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
+
+    private Button button(String text){
+        Button b=new Button(this);
+        b.setText(text);
+        return b;
+    }
+
+    private int dp(int v){
+        return (int)(v*getResources().getDisplayMetrics().density+0.5f);
+    }
 
     @Override public void onVoiceText(String text){
         runOnUiThread(()->runCommand(text));
     }
+
     @Override public void onVoiceState(String state){
         runOnUiThread(()->{if(status!=null)status.setText(state);});
     }
