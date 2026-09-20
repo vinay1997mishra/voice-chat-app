@@ -588,6 +588,91 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         return false;
     }
 
+    public static String readVisibleScreenText(){
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null) return "";
+        AccessibilityNodeInfo root=svc.getRootInActiveWindow();
+        if(root==null) return "";
+        java.util.LinkedHashSet<String> lines=new java.util.LinkedHashSet<>();
+        for(AccessibilityNodeInfo n:svc.flatten(root)){
+            if(n==null || !n.isVisibleToUser()) continue;
+            if(n.isPassword()){
+                lines.add("<password hidden>");
+                continue;
+            }
+            String label=svc.nodeLabel(n);
+            if(label==null || label.trim().isEmpty()) continue;
+            String low=label.toLowerCase(Locale.ROOT);
+            if(low.matches(".*\\b(otp|pin|cvv|password|passcode)\\b.*")) {
+                lines.add("<sensitive field hidden>");
+                continue;
+            }
+            String clean=label.replace("\n"," ").trim();
+            if(clean.length()>240) clean=clean.substring(0,240);
+            lines.add(clean);
+            if(lines.size()>=180) break;
+        }
+        StringBuilder out=new StringBuilder();
+        for(String line:lines){
+            if(out.length()>0) out.append("\n");
+            out.append(line);
+            if(out.length()>10000) break;
+        }
+        return out.toString();
+    }
+
+    public static boolean queueVisibleAction(String raw,long delayMs){
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null || raw==null || raw.trim().isEmpty()) return false;
+        svc.handler.postDelayed(() -> svc.executeStep(raw),Math.max(0L,delayMs));
+        return true;
+    }
+
+    public static boolean queueSettingsSearch(String query,long delayMs){
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null || query==null || query.trim().isEmpty()) return false;
+        final String q=query.trim();
+        svc.handler.postDelayed(() -> {
+            AccessibilityNodeInfo root=svc.getRootInActiveWindow();
+            if(root==null) return;
+            boolean opened=svc.clickText(root,"Search settings") || svc.clickText(root,"Search") ||
+                    svc.clickText(root,"खोजें") || svc.clickText(root,"सेटिंग खोजें");
+            svc.handler.postDelayed(() -> {
+                AccessibilityNodeInfo fresh=svc.getRootInActiveWindow();
+                if(fresh!=null) svc.typeText(fresh,q);
+            },opened?550L:200L);
+        },Math.max(0L,delayMs));
+        return true;
+    }
+
+    public static boolean queueFirstSeekBarPercent(int percent,long delayMs){
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null) return false;
+        final int p=Math.max(0,Math.min(100,percent));
+        svc.handler.postDelayed(() -> {
+            AccessibilityNodeInfo root=svc.getRootInActiveWindow();
+            if(root==null) return;
+            for(AccessibilityNodeInfo n:svc.flatten(root)){
+                if(n==null || !n.isVisibleToUser() || !n.isEnabled()) continue;
+                String cls=String.valueOf(n.getClassName()).toLowerCase(Locale.ROOT);
+                if(cls.contains("seekbar") || supportsSetProgress(n)){
+                    android.os.Bundle b=new android.os.Bundle();
+                    b.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,p);
+                    if(n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),b)) return;
+                }
+            }
+        },Math.max(0L,delayMs));
+        return true;
+    }
+
+    private static boolean supportsSetProgress(AccessibilityNodeInfo node){
+        if(node==null) return false;
+        for(AccessibilityNodeInfo.AccessibilityAction a:node.getActionList()){
+            if(a!=null && a.getId()==AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId()) return true;
+        }
+        return false;
+    }
+
     /** Common phone-level owner commands that do not depend on any plugin. */
     public static boolean performOwnerPhoneCommand(android.content.Context context,String command){
         if(context==null || command==null || !OwnerSession.isActive(context)) return false;
