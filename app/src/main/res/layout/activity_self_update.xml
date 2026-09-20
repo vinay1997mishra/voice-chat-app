@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Secure Anamika Self-Update"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Only a newer APK with the same package name and the same signing certificate as the installed Anamika can be installed."
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/pickSelfUpdateButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Select Owner-Signed Anamika APK" />
+
+    <Button
+        android:id="@+id/selfUpdatePermissionButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Install Permission" />
+
+    <Button
+        android:id="@+id/installSelfUpdateButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Approve & Install Verified Update" />
+
+    <TextView
+        android:id="@+id/selfUpdateStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="Waiting for a verified owner-signed update."
+        android:textIsSelectable="true" />
+</LinearLayout>
