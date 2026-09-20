@@ -4,7 +4,7 @@ import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
 import kotlinx.coroutines.runBlocking
 
-/** Blocking bridge used only from Anamika's dedicated background developer thread. */
+/** Local llama bridge with separate fast-chat and full coding modes. */
 object KotlinLlamaRunner {
     @JvmStatic
     fun generateBlocking(modelPath: String, prompt: String): String = runBlocking {
@@ -19,6 +19,26 @@ object KotlinLlamaRunner {
                 prompt = prompt,
                 systemPrompt = "You are Anamika AI's offline coding engine. Return original buildable code using the requested <<<FILE:path>>> format. Self-review before answering.",
                 maxTokens = 4096,
+            )
+            result.text
+        } finally {
+            Llama.releaseModel(model)
+        }
+    }
+
+    @JvmStatic
+    fun generateFastChat(modelPath: String, prompt: String): String = runBlocking {
+        val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
+        val model = Llama.loadModel(
+            modelPath = modelPath,
+            config = LlamaConfig(contextSize = 1536, threads = threads),
+        )
+        try {
+            val result = Llama.complete(
+                model,
+                prompt = prompt,
+                systemPrompt = "You are Anamika, a fast personal assistant. Reply directly, naturally and briefly in the user's language. Do not output code unless explicitly asked.",
+                maxTokens = 256,
             )
             result.text
         } finally {
