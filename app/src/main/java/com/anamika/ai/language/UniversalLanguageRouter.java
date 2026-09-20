@@ -7,7 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class UniversalLanguageRouter {
-    public enum Style { HINDI, HINGLISH, ENGLISH, OTHER }
+    public enum Style { HINDI, URDU, HINGLISH, ENGLISH, OTHER }
 
     public static final class Interpretation {
         public final String original, normalized, intent, argument;
@@ -243,31 +243,36 @@ public final class UniversalLanguageRouter {
 
     public static Style detectStyle(String raw){
         if(raw==null||raw.trim().isEmpty()) return Style.OTHER;
-        int devanagari=0,latin=0;
+        int devanagari=0,urdu=0,latin=0;
         String lower=raw.toLowerCase(Locale.ROOT);
         for(int i=0;i<raw.length();i++){
             char ch=raw.charAt(i);
             if(ch>=0x0900 && ch<=0x097F) devanagari++;
+            else if((ch>=0x0600 && ch<=0x06FF)||(ch>=0x0750 && ch<=0x077F)||(ch>=0x08A0 && ch<=0x08FF)) urdu++;
             else if((ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')) latin++;
         }
+        if(urdu>0 && devanagari==0) return Style.URDU;
         if(devanagari>0) return Style.HINDI;
-        if(latin>0 && containsAny(lower,"kya","kaise","kar","karo","karna","mujhe","mera","meri","hai","ho","nahi","nhi",
-                "bata","bta","dhundo","dhoondo","khol","kholo","yaad","rakho","bolo","bol","chahiye","wala","wali","waha",
-                "yaha","isme","usme","sab","saare","sare","fir","phir","aur","abhi")) return Style.HINGLISH;
+        if(latin>0 && containsAny(lower,"kya","kaise","kahan","kahaan","kyun","kyu","kar","karo","karna","mujhe","mera","meri","hai","ho","nahi","nhi",
+                "haan","han","acha","achha","theek","thik","bata","bta","batao","samjha","samjhao","sunao","dhundo","dhoondo","khol","kholo","yaad","rakho",
+                "bolo","bol","chahiye","chahta","chahti","wala","wali","waha","yaha","isme","usme","sab","saare","sare","fir","phir","aur","abhi","zara","bilkul",
+                "matlab","jawab","sawal","sahi","galat","band","chalu","dekho","dikhao")) return Style.HINGLISH;
         if(latin>0) return Style.ENGLISH;
         return Style.OTHER;
     }
 
     public static Locale speechLocaleFor(String text){
         Style s=detectStyle(text);
+        if(s==Style.URDU) return new Locale("ur","PK");
         if(s==Style.HINDI || s==Style.HINGLISH) return new Locale("hi","IN");
         if(s==Style.ENGLISH) return Locale.US;
         return Locale.getDefault();
     }
 
     public static String replyInstruction(Style style){
-        if(style==Style.HINDI) return "Reply naturally in everyday Indian Hindi. Use simple Devanagari, normal Indian conversational phrasing, and avoid bookish/formal Hindi unless the user uses it.";
-        if(style==Style.HINGLISH) return "Reply naturally in everyday Indian Hinglish using Roman letters, matching the user's casual vocabulary and sentence style. Sound like a normal Indian conversation, not a translated script.";
+        if(style==Style.HINDI) return "Reply naturally in everyday Indian Hindi. Understand Urdu-origin words naturally. Use simple Devanagari unless the user mixes scripts, and avoid bookish/formal Hindi.";
+        if(style==Style.URDU) return "Reply naturally in everyday Urdu, using Urdu script when the user writes Urdu. Understand Hindi and English code-switching naturally and keep the tone conversational.";
+        if(style==Style.HINGLISH) return "Reply naturally in everyday Indian Hinglish/Roman Urdu using Roman letters, matching the user's casual vocabulary and sentence style. Freely understand Hindi, Urdu-origin words and English code-switching without sounding translated.";
         if(style==Style.ENGLISH) return "Reply naturally in clear Indian English unless the user's wording suggests another English style.";
         return "Reply naturally in the same human language and conversational style as the user. Preserve culturally normal phrasing for that language.";
     }
@@ -331,7 +336,7 @@ public final class UniversalLanguageRouter {
 
     public static String capability(Context context){
         boolean local=LocalModelBridge.getStatus(context).ready;
-        return "Universal human-language mode: Hindi + Hinglish + English fast routing; "+
+        return "Universal human-language mode: Hindi + Urdu + Hinglish/Roman Urdu + English mixed routing; "+
                 (local
                         ?"bundled local AI intent understanding and same-language conversation are ready. Other languages use the same local intent/reply path."
                         :"local AI model is unavailable, so deterministic Hindi/Hinglish/English commands remain available but free conversation is limited.");
