@@ -1663,9 +1663,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if(command==null) return "";
         Matcher m=Pattern.compile("(?i)^\\s*([\\p{L}\\p{N}._-]{2,30})\\s+app\\s+(?:open|khol|kholo|check|dekho|dekh)").matcher(command.trim());
         if(m.find()) return m.group(1).trim();
-        m=Pattern.compile("(?i)(?:open|khol|kholo)\s+([\p{L}\p{N}._-]{2,30})\s+app").matcher(command);
+        m=Pattern.compile("(?i)(?:open|khol|kholo)\\s+([\\p{L}\\p{N}._-]{2,30})\\s+app").matcher(command);
         if(m.find()) return m.group(1).trim();
-        m=Pattern.compile("(?i)(?:open|khol|kholo)\s+([\p{L}\p{N}._-]{2,30})(?:\s+(?:aur|and|phir|fir)|\s*$)").matcher(command.trim());
+        m=Pattern.compile("(?i)(?:open|khol|kholo)\\s+([\\p{L}\\p{N}._-]{2,30})(?:\\s+(?:aur|and|phir|fir)|\\s*$)").matcher(command.trim());
         return m.find()?m.group(1).trim():"";
     }
 
