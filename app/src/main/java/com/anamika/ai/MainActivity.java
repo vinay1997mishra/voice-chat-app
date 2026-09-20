@@ -821,8 +821,32 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void prepareSelfUpgrade(String request) {
         try {
             java.io.File workspace = SelfUpgradeWorkspace.prepare(this, request);
-            developerPrompt.setText("Upgrade Anamika itself. Owner request: " + request + "\nUse the bundled current-source snapshot from: " + workspace.getAbsolutePath() + "\nPreserve owner approval, rollback and validation gates. Generate changed files only after analysing current source.");
-            answer("Self-upgrade workspace ready. Current source snapshot extracted locally. Review the generated changes before any APK build/install: " + workspace.getAbsolutePath());
+            String upgradePrompt = "Upgrade Anamika itself. Owner request: " + request +
+                    "\nUse the bundled current-source snapshot from: " + workspace.getAbsolutePath() +
+                    "\nPreserve owner approval, rollback and validation gates. Generate the complete corrected project after analysing current source.";
+            developerPrompt.setText(upgradePrompt);
+            answer("Self-upgrade workspace ready. Anamika is generating and checking the requested upgrade locally. Nothing will be installed without owner approval.");
+            StandaloneDeveloperEngine.generate(this, upgradePrompt, new StandaloneDeveloperEngine.Callback() {
+                @Override public void onSuccess(StandaloneDeveloperEngine.Result generated) {
+                    runOnUiThread(() -> {
+                        lastGeneratedProject = generated.generatedText;
+                        boolean verified = generated.validation.isClean() && generated.compilerVerification.isFullyVerified();
+                        developerOutput.setText("SELF-UPGRADE CANDIDATE\nENGINE: " + generated.engine +
+                                "\nSTRUCTURAL: " + generated.validation.summary() +
+                                "\nCOMPILER: " + generated.compilerVerification.summary() +
+                                "\nFULL VERIFIED: " + verified +
+                                "\n\n" + generated.generatedText +
+                                "\n\n--- VALIDATION ---\n" + generated.validation.details() +
+                                "\n\n--- COMPILER ---\n" + generated.compilerVerification.details());
+                        speak(verified
+                                ? "Self upgrade candidate passed local checks. Review it and approve before installation."
+                                : "Self upgrade candidate is not fully verified. I will not mark it ready for installation.");
+                    });
+                }
+                @Override public void onError(String error) {
+                    runOnUiThread(() -> developerOutput.setText("Self-upgrade generation error: " + error));
+                }
+            });
         } catch (Exception e) {
             answer("Self-upgrade workspace error: " + e.getMessage());
         }
