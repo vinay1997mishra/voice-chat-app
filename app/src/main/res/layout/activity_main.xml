@@ -305,7 +305,7 @@
                 android:id="@+id/pluginCenterButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Plugins / App Control / Auto Audit"
+                android:text="Plugins / Deep Discover / App Control"
                 android:gravity="start|center_vertical" />
 
             <Button
