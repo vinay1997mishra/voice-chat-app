@@ -183,6 +183,11 @@ public final class UniversalLanguageRouter {
                 "poora app","pura app","saare function","sare function","blueprint bana","auto audit"))
             return new Interpretation(original,original,"APP_AUDIT",original,style,false);
 
+        if(containsAny(s,"photo edit","pic edit","image edit","photo resize","image resize","crop photo","rotate photo",
+                "video edit","video trim","video cut","video mute","photo banao","pic banao","image banao","video banao",
+                "create image","create photo","create video","फोटो एडिट","वीडियो एडिट","फोटो बनाओ","वीडियो बनाओ"))
+            return new Interpretation(original,original,"MEDIA",original,style,false);
+
         if(containsAny(s,"app banao","app bana","एप बनाओ","ऐप बनाओ","create app","make app"))
             return new Interpretation(original,original,"CREATE_APP",original,style,false);
         if(containsAny(s,"website banao","वेबसाइट बनाओ","create website","make website"))
