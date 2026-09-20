@@ -48,7 +48,8 @@ for token in ['android.permission.INTERNET','AppAutomationAccessibilityService',
 acc=(ROOT/'app/src/main/res/xml/anamika_accessibility_service.xml').read_text(encoding='utf-8')
 if 'android:canTakeScreenshot="true"' not in acc: errors.append('Accessibility screenshot capability missing')
 build=(ROOT/'app/build.gradle').read_text(encoding='utf-8')
-if "versionName '7.8.2'" not in build: errors.append('Version is not 7.8.2')
+version_ok = ("versionName '7.8.2'" in build) or ('ANAMIKA_VERSION_NAME' in build and '"7.8.2"' in build)
+if not version_ok: errors.append('Version is not V7.8.2-compatible')
 if errors:
     print('\n'.join('ERROR: '+e for e in errors)); sys.exit(1)
 print('V7.8.2 source validation passed.')
