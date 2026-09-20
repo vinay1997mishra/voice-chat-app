@@ -70,8 +70,8 @@
     },
     {
       "language": "Shell",
-      "binary": "libanamika_bash.so",
-      "mode": "native APK pack"
+      "binary": "Android /system/bin/sh",
+      "mode": "real device interpreter syntax verifier"
     },
     {
       "language": "Android project",
