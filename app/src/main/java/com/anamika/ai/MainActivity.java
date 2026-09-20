@@ -32,6 +32,7 @@ import java.util.regex.Pattern;
 
 import com.anamika.ai.language.UniversalLanguageRouter;
 import com.anamika.ai.voice.SoftVoiceProfile;
+import com.anamika.ai.behavior.RuntimeBehaviorPreferences;
 import com.anamika.ai.phone.PhoneAssistantController;
 import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.files.FileExportManager;
@@ -90,6 +91,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         prefs = getSharedPreferences("anamika_v7", MODE_PRIVATE);
         DeviceProfileStore.ensureSaved(this);
         SoftVoiceProfile.ensureDefaults(this);
+        RuntimeBehaviorPreferences.ensureDefaults(this);
         tts = new TextToSpeech(this, this);
         failedPinAttempts = prefs.getInt(PIN_FAILS, 0);
         pinLockedUntilMs = prefs.getLong(PIN_LOCK_UNTIL, 0L);
@@ -421,6 +423,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                RuntimeBehaviorPreferences.silenceMs(this));
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                RuntimeBehaviorPreferences.silenceMs(this));
         // Do not hard-code Hindi/English. Let the installed speech service use its multilingual/auto-detect capability.
         intent.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION", true);
         intent.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH", true);
@@ -509,6 +516,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             appendChat("You",original);
             rememberConversationTurn("User",original);
         }
+        String behaviorUpdate=RuntimeBehaviorPreferences.applyOwnerCommand(this,original);
+        if(!behaviorUpdate.isEmpty()){
+            answer("Theek hai, ye change bina coding ke save kar liya. "+behaviorUpdate);
+            return;
+        }
+
         UniversalLanguageRouter.Interpretation interpretation =
                 UniversalLanguageRouter.interpret(this, original);
         String command = interpretation.normalized;
@@ -1254,7 +1267,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                     String prompt="You are Anamika AI, the owner's personal on-device assistant. "+
                             "Understand natural human language, including Hindi, Hinglish, English and mixed speech. "+
                             UniversalLanguageRouter.replyInstruction(replyStyle)+" "+
-                            "Reply fast. Keep normal conversational answers to 1-4 short sentences unless the owner asks for detail. Do not mention intent parsing, keyword maps or model internals. "+
+                            (RuntimeBehaviorPreferences.fullReply(MainActivity.this)
+                                    ?"Give a complete useful answer. Do not shorten merely for speed; include all important points while staying focused. "
+                                    :"Keep the answer concise unless detail is requested. ")+
+                            "Do not mention intent parsing, keyword maps or model internals. "+
                             "If the user asks for an action you cannot actually execute in this reply, explain the next concrete action instead of pretending it happened. "+
                             (memory.isEmpty()?"":"Relevant owner memory: "+memory+" ")+
                             (history.isEmpty()?"":"Recent conversation context:\n"+history+"\n")+
@@ -1264,7 +1280,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                     reply=reply.trim();
                     int fence=reply.indexOf("~~~");
                     if(fence>=0) reply=reply.substring(0,fence).trim();
-                    if(reply.length()>900) reply=reply.substring(0,900).trim();
+                    // Full reply mode intentionally does not hard-truncate normal answers.
                 }
             }catch(Throwable t){
                 reply=replyStyle==UniversalLanguageRouter.Style.HINDI
