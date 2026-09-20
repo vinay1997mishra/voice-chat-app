@@ -213,14 +213,14 @@
                 android:id="@+id/imageCreatorMenuButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Image / Photo Create & Edit"
+                android:text="Image / Photo Create &amp; Edit"
                 android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/internetCreatorButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Video Create & Edit"
+                android:text="Video Create &amp; Edit"
                 android:gravity="start|center_vertical" />
 
             <Button
@@ -251,7 +251,7 @@
                 android:id="@+id/memoryMenuButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Memory & Learning"
+                android:text="Memory &amp; Learning"
                 android:gravity="start|center_vertical" />
 
             <Button
@@ -272,7 +272,7 @@
                 android:id="@+id/languageStatusButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Languages & Understanding"
+                android:text="Languages &amp; Understanding"
                 android:gravity="start|center_vertical" />
 
             <Button
@@ -285,7 +285,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="PHONE & APPS"
+                android:text="PHONE &amp; APPS"
                 android:textColor="#8F96A3"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -310,7 +310,7 @@
                 android:id="@+id/permissionSetupButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Phone Access & Permissions"
+                android:text="Phone Access &amp; Permissions"
                 android:gravity="start|center_vertical" />
 
             <Button
@@ -331,7 +331,7 @@
                 android:id="@+id/deviceInfoMenuButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Phone Model & Device Profile"
+                android:text="Phone Model &amp; Device Profile"
                 android:gravity="start|center_vertical" />
 
             <TextView
