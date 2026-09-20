@@ -5,6 +5,9 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.*;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
+import android.media.AudioAttributes;
 import android.provider.Settings;
 import android.speech.*;
 import android.speech.tts.TextToSpeech;
@@ -36,6 +39,10 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private PowerManager.WakeLock wakeLock;
     private boolean awaitingCommand=false;
     private boolean ttsReady=false;
+    private AudioManager audioManager;
+    private boolean mediaPlaybackActive=false;
+    private AudioManager.AudioPlaybackCallback playbackCallback;
+    private final Runnable mediaPoll=this::pollMediaPlayback;
 
     @Override public void onCreate(){
         super.onCreate();
@@ -49,6 +56,17 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             }
         }catch(Throwable ignored){}
         tts=new TextToSpeech(this,this);
+        audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
+        if(Build.VERSION.SDK_INT>=26 && audioManager!=null){
+            playbackCallback=new AudioManager.AudioPlaybackCallback(){
+                @Override public void onPlaybackConfigChanged(java.util.List<AudioPlaybackConfiguration> configs){
+                    boolean active=isMediaPlaybackActive(configs);
+                    handleMediaPlaybackState(active);
+                }
+            };
+            try{ audioManager.registerAudioPlaybackCallback(playbackCallback,handler); }catch(Throwable ignored){}
+        }
+        handler.postDelayed(mediaPoll,700L);
     }
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
@@ -118,6 +136,12 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void startListening(){
+        if(isMediaPlaybackNow()){
+            mediaPlaybackActive=true;
+            stopListening();
+            updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+            return;
+        }
         if(!OwnerSession.isTrusted(this)){
             stopSelf(); return;
         }
@@ -279,7 +303,65 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void restart(long delay){
+        if(mediaPlaybackActive || isMediaPlaybackNow()){
+            mediaPlaybackActive=true;
+            stopListening();
+            updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+            return;
+        }
         handler.postDelayed(this::startListening,delay);
+    }
+
+    private boolean isMediaPlaybackNow(){
+        try{
+            if(audioManager!=null && audioManager.isMusicActive()) return true;
+        }catch(Throwable ignored){}
+        return mediaPlaybackActive;
+    }
+
+    private boolean isMediaPlaybackActive(java.util.List<AudioPlaybackConfiguration> configs){
+        if(configs==null) return false;
+        for(AudioPlaybackConfiguration cfg:configs){
+            if(cfg==null || cfg.getPlayerState()!=AudioPlaybackConfiguration.PLAYER_STATE_STARTED) continue;
+            try{
+                AudioAttributes a=cfg.getAudioAttributes();
+                if(a==null) continue;
+                int usage=a.getUsage();
+                if(usage==AudioAttributes.USAGE_MEDIA ||
+                        usage==AudioAttributes.USAGE_GAME ||
+                        usage==AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE){
+                    return true;
+                }
+            }catch(Throwable ignored){}
+        }
+        return false;
+    }
+
+    private void handleMediaPlaybackState(boolean active){
+        if(active){
+            if(!mediaPlaybackActive){
+                mediaPlaybackActive=true;
+                stopListening();
+                updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+            }
+            return;
+        }
+        if(mediaPlaybackActive){
+            mediaPlaybackActive=false;
+            updateNotification("Media ended • resuming Hello Mika / Hello Anamika");
+            handler.postDelayed(() -> {
+                if(!mediaPlaybackActive && getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
+                    startListening();
+                }
+            },700L);
+        }
+    }
+
+    private void pollMediaPlayback(){
+        boolean active=false;
+        try{ active=audioManager!=null && audioManager.isMusicActive(); }catch(Throwable ignored){}
+        handleMediaPlaybackState(active);
+        handler.postDelayed(mediaPoll,1000L);
     }
 
     private void stopListening(){
@@ -332,6 +414,9 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     @Override public void onDestroy(){
         running=false;
         handler.removeCallbacksAndMessages(null);
+        if(Build.VERSION.SDK_INT>=26 && audioManager!=null && playbackCallback!=null){
+            try{audioManager.unregisterAudioPlaybackCallback(playbackCallback);}catch(Throwable ignored){}
+        }
         stopListening();
         releaseWakeLock();
         if(tts!=null){ try{tts.stop();tts.shutdown();}catch(Throwable ignored){} }
