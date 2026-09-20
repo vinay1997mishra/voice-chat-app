@@ -112,6 +112,16 @@ public final class PhoneAssistantController {
 
     public static String handleSystemSetting(Context c,String command){
         if(c==null || command==null) return "";
+        VerifiedFunctionMemory.Entry learned=VerifiedFunctionMemory.find(c,command);
+        if(learned!=null && !learned.action.isEmpty()){
+            try{
+                Intent remembered=new Intent(learned.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if(remembered.resolveActivity(c.getPackageManager())!=null){
+                    c.startActivity(remembered);
+                    return "Verified setting route yaad tha, direct khol diya.";
+                }
+            }catch(Throwable ignored){}
+        }
         String s=command.toLowerCase(Locale.ROOT);
         int pct=extractPercent(s);
 
@@ -133,6 +143,7 @@ public final class PhoneAssistantController {
         }
 
         if(s.contains("brightness") || s.contains("ब्राइटनेस")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_DISPLAY_SETTINGS,"Display/Brightness settings");
             open(c,Settings.ACTION_DISPLAY_SETTINGS);
             if(pct>=0) AppAutomationAccessibilityService.queueFirstSeekBarPercent(pct,1200L);
             else AppAutomationAccessibilityService.queueSettingsSearch("Brightness",900L);
@@ -141,7 +152,7 @@ public final class PhoneAssistantController {
 
         if(s.contains("wifi") || s.contains("wi-fi") || s.contains("वाईफाई")){
             if(android.os.Build.VERSION.SDK_INT>=29) open(c,Settings.Panel.ACTION_WIFI);
-            else open(c,Settings.ACTION_WIFI_SETTINGS);
+            else { VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_WIFI_SETTINGS,"Wi-Fi settings"); open(c,Settings.ACTION_WIFI_SETTINGS); }
             Boolean desired=desiredState(s);
             if(desired!=null) AppAutomationAccessibilityService.queueToggleByLabel(
                     new String[]{"Wi-Fi","Wifi","Internet","वाई-फ़ाई","वाईफाई"},desired,900L);
@@ -149,6 +160,7 @@ public final class PhoneAssistantController {
         }
 
         if(s.contains("bluetooth") || s.contains("ब्लूटूथ")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_BLUETOOTH_SETTINGS,"Bluetooth settings");
             open(c,Settings.ACTION_BLUETOOTH_SETTINGS);
             Boolean desired=desiredState(s);
             if(desired!=null) AppAutomationAccessibilityService.queueToggleByLabel(
@@ -157,18 +169,22 @@ public final class PhoneAssistantController {
         }
 
         if(s.contains("location") || s.contains("लोकेशन") || s.contains("gps")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_LOCATION_SOURCE_SETTINGS,"Location settings");
             open(c,Settings.ACTION_LOCATION_SOURCE_SETTINGS);
             return "Location settings khol di.";
         }
         if(s.contains("battery saver") || s.contains("बैटरी सेवर")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_BATTERY_SAVER_SETTINGS,"Battery Saver settings");
             open(c,Settings.ACTION_BATTERY_SAVER_SETTINGS);
             return "Battery Saver settings khol di.";
         }
         if(s.contains("notification") || s.contains("नोटिफिकेशन")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,"android.settings.NOTIFICATION_SETTINGS","Notification settings");
             open(c,"android.settings.NOTIFICATION_SETTINGS");
             return "Notification settings khol di.";
         }
         if(s.contains("ringtone") || s.contains("रिंगटोन") || s.contains("sound setting")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_SOUND_SETTINGS,"Sound settings");
             open(c,Settings.ACTION_SOUND_SETTINGS);
             return "Sound settings khol di.";
         }
@@ -189,6 +205,7 @@ public final class PhoneAssistantController {
             return "Screen timeout setting search kar rahi hoon.";
         }
         if(s.contains("airplane") || s.contains("flight mode") || s.contains("एयरप्लेन")){
+            VerifiedFunctionMemory.verifyAndSaveIntent(c,command,Settings.ACTION_AIRPLANE_MODE_SETTINGS,"Airplane mode settings");
             open(c,Settings.ACTION_AIRPLANE_MODE_SETTINGS);
             return "Airplane mode settings khol di.";
         }
