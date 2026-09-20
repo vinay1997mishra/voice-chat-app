@@ -40,6 +40,7 @@ import com.anamika.ai.media.PhotoEditEngine;
 import com.anamika.ai.files.StorageLibrary;
 import com.anamika.ai.files.AnamikaVault;
 import com.anamika.ai.phone.PermissionAccessManager;
+import com.anamika.ai.phone.DeviceFunctionDiscovery;
 import com.anamika.ai.research.AppSearchController;
 import com.anamika.ai.research.BackgroundKnowledgeLookup;
 import com.anamika.ai.research.ResearchLearningStore;
@@ -667,9 +668,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
-        // For short unknown words/phrases, try a background public-knowledge lookup
-        // and cache the meaning. Longer utterances stay in natural conversation mode.
-        if(original.length()<=120 && original.trim().split("\\s+").length<=10){
+        // Unknown phone-control/function wording gets a silent device-function discovery first.
+        // Only locally verified Android routes are persisted for next time.
+        if(looksLikePhoneFunctionQuestion(original)){
+            discoverUnknownPhoneFunction(original,interpretation.style);
+        }else if(original.length()<=120 && original.trim().split("\\s+").length<=10){
             lookupUnknownMeaning(original,interpretation.style);
         }else{
             answerWithLocalConversation(original,interpretation.style);
@@ -993,6 +996,36 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 "YouTube learning mode शुरू है। मैं खुले वीडियो के दिखाई देने वाले title, description, controls और captions/subtitles को local knowledge में सीखूँगी।",
                 "YouTube learning mode start hai. Main open video ke visible title, description, controls aur captions/subtitles ko local knowledge me learn karungi.",
                 "YouTube learning mode is active. I will learn from visible titles, descriptions, controls and captions/subtitles on opened videos.");
+    }
+
+    private boolean looksLikePhoneFunctionQuestion(String raw){
+        if(raw==null)return false;
+        String s=raw.toLowerCase(Locale.ROOT);
+        return containsAny(s,
+                "setting","settings","phone me","mobile me","control","function","feature","option",
+                "kaha hai","kahan hai","kaise on","kaise off","kaise change","kaise set",
+                "सेटिंग","फोन में","कंट्रोल","फंक्शन","फीचर","ऑप्शन","कहाँ है","कैसे ऑन","कैसे ऑफ");
+    }
+
+    private void discoverUnknownPhoneFunction(String original,UniversalLanguageRouter.Style style){
+        showResult(style==UniversalLanguageRouter.Style.HINDI
+                ?"फोन का सही फ़ंक्शन background में ढूंढ और verify कर रही हूँ…"
+                :"Phone function background me search karke verify kar rahi hoon…");
+        DeviceFunctionDiscovery.discover(this,original,r -> {
+            if(r.verified){
+                String msg=style==UniversalLanguageRouter.Style.HINDI
+                        ?"सही Android route verify हो गया और next time के लिए save कर लिया। "
+                        :"Sahi Android route verify ho gaya aur next time ke liye save kar liya. ";
+                answer(msg+r.explanation);
+            }else if(r.found){
+                String msg=style==UniversalLanguageRouter.Style.HINDI
+                        ?"Possible function मिला, लेकिन इस phone पर verify नहीं हुआ इसलिए save नहीं किया। "
+                        :"Possible function mila, lekin is phone par verify nahi hua isliye save nahi kiya. ";
+                answer(msg+r.explanation);
+            }else{
+                lookupUnknownMeaning(original,style);
+            }
+        });
     }
 
     private void lookupUnknownMeaning(String original,UniversalLanguageRouter.Style style){
