@@ -227,6 +227,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 : "24×7 Wake starts after first Owner setup");
         wakeListenButton.setOnClickListener(v -> {
             if(!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
             prefs.edit().putBoolean("wake_enabled",true).apply();
             enableWakeListening(true);
             wakeListenButton.setText("24×7 Hello Mika / Hello Anamika: ALWAYS ON");
@@ -265,6 +266,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         });
         researchButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
             String q = commandInput.getText().toString().trim();
             if (q.isEmpty()) q = "owner research session";
             String path = ResearchLearningStore.start(this, q);
@@ -289,6 +291,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         });
         languageStatusButton.setOnClickListener(v -> {
             if (!ensureUnlocked()) return;
+            hideFunctionDrawer(toolsPanel,menuDim);
             answer(UniversalLanguageRouter.capability(this) + "\n\n" +
                     CompilerPackManager.bundledInventorySummary(this));
         });
