@@ -45,7 +45,7 @@
     },
     {
       "language": "Kotlin",
-      "binary": "JetBrains Kotlin compiler 2.2.10",
+      "binary": "JetBrains Kotlin compiler 2.2.21",
       "mode": "bundled compiler frontend parser; Android full build via SDK/Gradle verification"
     },
     {
