@@ -53,6 +53,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private final Set<String> autoAuditNodes = new HashSet<>();
     private final Set<String> autoAuditScreensSeen = new HashSet<>();
     private final Set<String> autoAuditScrolled = new HashSet<>();
+    private final Set<String> autoAuditTouchZones = new HashSet<>();
+    private int autoAuditGestureTaps = 0;
     private String lastAuditActionLabel = "";
 
 
@@ -161,6 +163,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         autoAuditNodes.clear();
         autoAuditScreensSeen.clear();
         autoAuditScrolled.clear();
+        autoAuditTouchZones.clear();
+        autoAuditGestureTaps = 0;
         autoAuditTarget = target;
         autoAuditStartedMs = System.currentTimeMillis();
         autoAuditTested = 0;
@@ -219,34 +223,53 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         }
 
         List<AccessibilityNodeInfo> nodes=flatten(root);
+        String currentScreenSummary=screenSummary(root);
         for(AccessibilityNodeInfo n:nodes){
-            if(n==null || !n.isVisibleToUser() || !n.isEnabled() || !n.isClickable()) continue;
+            if(n==null || !n.isVisibleToUser() || !n.isEnabled()) continue;
             String label=nodeLabel(n);
             String sig=screenSig+"|"+nodeSignature(n,label);
             if(autoAuditNodes.contains(sig)) continue;
+
+            boolean semanticClick = n.isClickable() || supportsAction(n,AccessibilityNodeInfo.ACTION_CLICK);
+            boolean touchOnly = !semanticClick && isSafeTouchOnlyCandidate(n,currentScreenSummary);
+            if(!semanticClick && !touchOnly) continue;
             autoAuditNodes.add(sig);
 
-            if(n.isPassword() || n.isEditable() || label.trim().isEmpty() || isRiskyAuditAction(label)){
+            if(n.isPassword() || n.isEditable() || (!label.trim().isEmpty() && isRiskyAuditAction(label))){
                 autoAuditSkipped++;
                 AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SKIPPED",label,
                         n.isPassword()?"password":
-                                n.isEditable()?"editable/input field":
-                                label.trim().isEmpty()?"unlabelled control":"sensitive/destructive/real-world action");
+                                n.isEditable()?"editable/input field":"sensitive/destructive/real-world action");
                 continue;
             }
 
-            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TAP",label,
-                    "class="+String.valueOf(n.getClassName())+" viewId="+String.valueOf(n.getViewIdResourceName()));
-            if(clickNodeOrParent(n)){
+            String auditLabel=label.trim().isEmpty()?touchZoneLabel(n):label;
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,touchOnly?"TRY_TOUCH":"TRY_TAP",auditLabel,
+                    "class="+String.valueOf(n.getClassName())+" viewId="+String.valueOf(n.getViewIdResourceName())+
+                            (touchOnly?" mode=gesture-center":" mode=accessibility-click"));
+
+            boolean acted = semanticClick ? clickNodeOrParent(n) : gestureTapNode(n);
+            if(acted){
                 autoAuditTested++;
-                lastAuditActionLabel=label;
+                if(touchOnly) autoAuditGestureTaps++;
+                lastAuditActionLabel=auditLabel;
                 if(autoAuditDepth < AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
-                handler.postDelayed(this::auditNext,900L);
+                handler.postDelayed(this::auditNext,touchOnly?1100L:900L);
                 return;
             } else {
                 autoAuditSkipped++;
-                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"FAILED_TAP",label,"control did not accept ACTION_CLICK");
+                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,
+                        touchOnly?"FAILED_TOUCH":"FAILED_TAP",auditLabel,
+                        touchOnly?"gesture dispatch was rejected":"control did not accept ACTION_CLICK");
             }
+        }
+
+        // Some custom Canvas/Surface/Texture/Compose UIs expose one large view rather than
+        // individual clickable Accessibility nodes. Probe a bounded, reversible grid only
+        // on non-sensitive screens, and record every coordinate in the blueprint.
+        if(!containsRiskyScreenText(currentScreenSummary) && probeCustomSurface(root,screenSig)){
+            handler.postDelayed(this::auditNext,1200L);
+            return;
         }
 
         if(!autoAuditScrolled.contains(screenSig) && scroll(root,AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)){
@@ -272,6 +295,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private void finishAutoAudit(String reason){
         if(!autoAuditActive) return;
         autoAuditActive=false;
+        AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SUMMARY","gesture_touch_zones",
+                "Direct gesture touch tests="+autoAuditGestureTaps);
         java.io.File dir=AppBlueprintStore.completeAutoAudit(
                 this,autoAuditTested,autoAuditSkipped,autoAuditScreens,reason);
         String path=dir==null?"":dir.getAbsolutePath();
@@ -488,6 +513,120 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             CharSequence label = n.getText() != null ? n.getText() : n.getContentDescription();
             if (label != null && label.toString().toLowerCase(Locale.ROOT).contains(needle)) {
                 if (clickNodeOrParent(n)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean supportsAction(AccessibilityNodeInfo node,int actionId){
+        if(node==null) return false;
+        for(AccessibilityNodeInfo.AccessibilityAction a:node.getActionList()){
+            if(a!=null && a.getId()==actionId) return true;
+        }
+        return false;
+    }
+
+    private boolean gestureTapNode(AccessibilityNodeInfo node){
+        if(node==null || Build.VERSION.SDK_INT<24) return false;
+        android.graphics.Rect b=new android.graphics.Rect();
+        node.getBoundsInScreen(b);
+        if(b.isEmpty()) return false;
+        float x=b.exactCenterX(), y=b.exactCenterY();
+        return dispatchTap(x,y);
+    }
+
+    private boolean dispatchTap(float x,float y){
+        if(Build.VERSION.SDK_INT<24) return false;
+        android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
+        if(x<1 || y<1 || x>=dm.widthPixels-1 || y>=dm.heightPixels-1) return false;
+        android.graphics.Path p=new android.graphics.Path();
+        p.moveTo(x,y);
+        android.accessibilityservice.GestureDescription.StrokeDescription stroke=
+                new android.accessibilityservice.GestureDescription.StrokeDescription(p,0,90);
+        return dispatchGesture(new android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(stroke).build(),null,null);
+    }
+
+    private boolean isSafeTouchOnlyCandidate(AccessibilityNodeInfo n,String screenText){
+        if(n==null || n.isPassword() || n.isEditable() || n.isScrollable()) return false;
+        if(containsRiskyScreenText(screenText)) return false;
+        android.graphics.Rect b=new android.graphics.Rect();
+        n.getBoundsInScreen(b);
+        if(b.isEmpty() || b.width()<dp(20) || b.height()<dp(20)) return false;
+        android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
+        float area=(float)b.width()*(float)b.height();
+        float screenArea=(float)dm.widthPixels*(float)dm.heightPixels;
+        if(area>screenArea*0.60f) return false;
+        float cy=b.exactCenterY();
+        if(cy<dm.heightPixels*0.06f || cy>dm.heightPixels*0.94f) return false;
+
+        String label=nodeLabel(n);
+        if(!label.isEmpty()) return !isRiskyAuditAction(label);
+
+        String cls=String.valueOf(n.getClassName()).toLowerCase(Locale.ROOT);
+        boolean custom=cls.contains("image") || cls.contains("canvas") || cls.contains("surface") ||
+                cls.contains("texture") || cls.contains("compose") || cls.endsWith(".view");
+        return custom && n.getChildCount()==0;
+    }
+
+    private String touchZoneLabel(AccessibilityNodeInfo n){
+        android.graphics.Rect b=new android.graphics.Rect();
+        n.getBoundsInScreen(b);
+        String cls=String.valueOf(n.getClassName());
+        return "<touch-zone "+cls+" "+b.flattenToString()+">";
+    }
+
+    private boolean containsRiskyScreenText(String raw){
+        if(raw==null || raw.trim().isEmpty()) return false;
+        String s=raw.toLowerCase(Locale.ROOT);
+        String[] riskyScreen={
+                "payment","pay","purchase","checkout","order","recharge","withdraw","transfer",
+                "send money","delete","remove account","factory reset","password","otp","pin",
+                "login","sign in","permission","allow","camera","microphone","location",
+                "भुगतान","पेमेंट","रिचार्ज","निकासी","ट्रांसफर","पासवर्ड","ओटीपी","लॉगिन","अनुमति"
+        };
+        for(String k:riskyScreen) if(s.contains(k)) return true;
+        return false;
+    }
+
+    private boolean probeCustomSurface(AccessibilityNodeInfo root,String screenSig){
+        if(Build.VERSION.SDK_INT<24 || root==null) return false;
+        android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
+        for(AccessibilityNodeInfo n:flatten(root)){
+            if(n==null || !n.isVisibleToUser() || !n.isEnabled() || n.isPassword() || n.isEditable()) continue;
+            String cls=String.valueOf(n.getClassName()).toLowerCase(Locale.ROOT);
+            boolean surface=cls.contains("surfaceview") || cls.contains("textureview") ||
+                    cls.contains("canvas") || cls.contains("composeview");
+            if(!surface) continue;
+
+            android.graphics.Rect b=new android.graphics.Rect();
+            n.getBoundsInScreen(b);
+            if(b.isEmpty() || b.width()<dm.widthPixels*0.35f || b.height()<dm.heightPixels*0.20f) continue;
+
+            // 3x3 interior grid: enough to discover common unlabeled touch zones without
+            // blindly tapping system edges. Every tested point is de-duplicated per screen.
+            float[] fractions={0.25f,0.50f,0.75f};
+            for(float fy:fractions){
+                for(float fx:fractions){
+                    float x=b.left+b.width()*fx;
+                    float y=b.top+b.height()*fy;
+                    if(y<dm.heightPixels*0.08f || y>dm.heightPixels*0.92f) continue;
+                    String zone=screenSig+"|grid|"+Math.round(x)+"|"+Math.round(y);
+                    if(!autoAuditTouchZones.add(zone)) continue;
+                    String label="<custom-touch "+Math.round(x)+","+Math.round(y)+">";
+                    AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"TRY_TOUCH",label,
+                            "class="+String.valueOf(n.getClassName())+" mode=custom-surface-grid");
+                    if(dispatchTap(x,y)){
+                        autoAuditTested++;
+                        autoAuditGestureTaps++;
+                        lastAuditActionLabel=label;
+                        if(autoAuditDepth<AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
+                        return true;
+                    }
+                    autoAuditSkipped++;
+                    AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"FAILED_TOUCH",label,
+                            "gesture dispatch was rejected");
+                }
             }
         }
         return false;
