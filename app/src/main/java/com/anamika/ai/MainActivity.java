@@ -31,13 +31,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.anamika.ai.language.UniversalLanguageRouter;
+import com.anamika.ai.phone.PhoneAssistantController;
+import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.research.AppSearchController;
+import com.anamika.ai.research.BackgroundKnowledgeLookup;
 import com.anamika.ai.research.ResearchLearningStore;
 import com.anamika.ai.upgrade.SelfUpgradeWorkspace;
 
 public class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final int REQ_SPEECH = 1001;
     private static final int REQ_AUDIO = 1002;
+    private static final int REQ_CONTACTS = 1003;
+    private static final int REQ_CALL = 1004;
 
     private TextToSpeech tts;
     private SharedPreferences prefs;
@@ -45,6 +50,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private SpeechRecognizer wakeRecognizer;
     private boolean wakeAwaitingCommand = false;
     private boolean pendingWakePermission = false;
+    private String pendingPhoneCommand = "";
+    private String pendingCallNumber = "";
+    private String pendingCallName = "";
     private Button wakeListenButton;
     private Button forgetOwnerButton;
     private boolean unlocked = false;
@@ -312,6 +320,30 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             } else {
                 showResult("Microphone permission is required for voice commands. Typed commands still work.");
             }
+        } else if(requestCode==REQ_CONTACTS){
+            String pending=pendingPhoneCommand;
+            pendingPhoneCommand="";
+            if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED){
+                if(!pending.isEmpty()) runCommand(pending);
+            }else{
+                answer("Contacts permission ke bina naam se contact/number search nahi kar sakti.");
+            }
+        } else if(requestCode==REQ_CALL){
+            String number=pendingCallNumber;
+            String name=pendingCallName;
+            pendingCallNumber="";
+            pendingCallName="";
+            if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED && !number.isEmpty()){
+                if(PhoneAssistantController.placeCall(this,number)){
+                    answer((name.isEmpty()?number:name)+" ko call laga rahi hoon.");
+                }else{
+                    PhoneAssistantController.openDialer(this,number);
+                    answer("Direct call permission unavailable thi, dialer khol diya.");
+                }
+            }else if(!number.isEmpty()){
+                PhoneAssistantController.openDialer(this,number);
+                answer("Call permission nahi mili, dialer khol diya.");
+            }
         }
     }
 
@@ -349,6 +381,62 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if ("YOUTUBE_SEARCH".equals(interpretation.intent)) {
             String q=interpretation.argument.trim().isEmpty()?original:interpretation.argument.trim();
             answer(searchReply(interpretation.style,q,AppSearchController.searchYouTube(this,q)));
+            return;
+        }
+
+        if ("YOUTUBE_LEARN".equals(interpretation.intent)) {
+            startYouTubeLearning(original,interpretation.style);
+            return;
+        }
+
+        if ("READ_SCREEN".equals(interpretation.intent)) {
+            readCurrentScreenAloud(interpretation.style);
+            return;
+        }
+
+        if ("EXPLAIN_SCREEN".equals(interpretation.intent)) {
+            explainCurrentScreen(interpretation.style);
+            return;
+        }
+
+        if ("CALCULATE".equals(interpretation.intent)) {
+            try{
+                String value=CalculatorEngine.calculate(original);
+                answerForStyle(interpretation.style,
+                        "उत्तर है "+value+".",
+                        "Answer "+value+" hai.",
+                        "The answer is "+value+".");
+            }catch(Exception e){
+                answerForStyle(interpretation.style,
+                        "हिसाब साफ़ समझ नहीं आया। संख्याएँ और ऑपरेशन दोबारा बोलिए।",
+                        "Calculation clear nahi hua. Numbers aur operation dobara boliye.",
+                        "I couldn't parse that calculation. Please say the numbers and operation again.");
+            }
+            return;
+        }
+
+        if ("SYSTEM_SETTING".equals(interpretation.intent)) {
+            answer(PhoneAssistantController.handleSystemSetting(this,original));
+            return;
+        }
+
+        if ("CONTACT_SEARCH".equals(interpretation.intent)) {
+            handleContactSearch(original,interpretation.style);
+            return;
+        }
+
+        if ("CALL".equals(interpretation.intent)) {
+            handleCallCommand(original,interpretation.style);
+            return;
+        }
+
+        if ("MESSAGE".equals(interpretation.intent) && !original.toLowerCase(Locale.ROOT).contains("whatsapp")) {
+            handleSmsCommand(original,interpretation.style);
+            return;
+        }
+
+        if ("UNKNOWN_LOOKUP".equals(interpretation.intent)) {
+            lookupUnknownMeaning(original,interpretation.style);
             return;
         }
 
@@ -501,10 +589,161 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
-        // Unknown wording is not rejected. Let the bundled local model understand
-        // it as natural conversation in the owner's language instead of exposing a
-        // keyword-command failure message.
-        answerWithLocalConversation(original,interpretation.style);
+        // For short unknown words/phrases, try a background public-knowledge lookup
+        // and cache the meaning. Longer utterances stay in natural conversation mode.
+        if(original.length()<=120 && original.trim().split("\\s+").length<=10){
+            lookupUnknownMeaning(original,interpretation.style);
+        }else{
+            answerWithLocalConversation(original,interpretation.style);
+        }
+    }
+
+    private void readCurrentScreenAloud(UniversalLanguageRouter.Style style){
+        String screen=com.anamika.ai.plugins.AppAutomationAccessibilityService.readVisibleScreenText();
+        if(screen==null || screen.trim().isEmpty()){
+            answerForStyle(style,
+                    "स्क्रीन का टेक्स्ट नहीं मिल रहा। Anamika App Control accessibility service चालू होनी चाहिए।",
+                    "Screen ka text nahi mil raha. Anamika App Control accessibility service ON honi chahiye.",
+                    "I can't read the screen text. The Anamika App Control accessibility service must be enabled.");
+            return;
+        }
+        answer(screen);
+    }
+
+    private void explainCurrentScreen(UniversalLanguageRouter.Style style){
+        String screen=com.anamika.ai.plugins.AppAutomationAccessibilityService.readVisibleScreenText();
+        if(screen==null || screen.trim().isEmpty()){
+            readCurrentScreenAloud(style);
+            return;
+        }
+        final String snapshot=screen.length()>9000?screen.substring(0,9000):screen;
+        showResult(style==UniversalLanguageRouter.Style.HINDI?"स्क्रीन समझ रही हूँ…":"Screen samajh rahi hoon…");
+        new Thread(() -> {
+            String reply;
+            try{
+                String prompt="You are Anamika AI. Explain the currently visible phone/app screen to the owner. "+
+                        UniversalLanguageRouter.replyInstruction(style)+" "+
+                        "Explain what the screen is, important controls, what can be done next, and any warning/risk. "+
+                        "Do not invent controls not present in the snapshot. Visible screen text:\n"+snapshot;
+                reply=LocalModelBridge.generate(MainActivity.this,prompt);
+                if(reply==null || reply.trim().isEmpty()) throw new IllegalStateException("empty explanation");
+                reply=reply.trim();
+            }catch(Throwable t){
+                reply=style==UniversalLanguageRouter.Style.HINDI
+                        ?"स्क्रीन पढ़ ली है, लेकिन अभी उसका AI explanation नहीं बन पाया।"
+                        :"Screen padh li hai, lekin abhi AI explanation nahi ban paya.";
+            }
+            final String out=reply;
+            runOnUiThread(() -> answer(out));
+        },"AnamikaScreenExplain").start();
+    }
+
+    private void handleContactSearch(String original,UniversalLanguageRouter.Style style){
+        if(!PhoneAssistantController.hasContactsPermission(this)){
+            pendingPhoneCommand=original;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},REQ_CONTACTS);
+            return;
+        }
+        String name=PhoneAssistantController.extractPersonName(original);
+        if(name.isEmpty()) name=original.replaceAll("(?i)(contact|name|naam|number|search|dhundo|dhoondo|khojo|karo|करो|खोजो|ढूंढो)"," ").trim();
+        PhoneAssistantController.ContactMatch m=PhoneAssistantController.findContact(this,name);
+        if(m==null){
+            answerForStyle(style,
+                    name+" नाम का कॉन्टैक्ट नहीं मिला।",
+                    name+" naam ka contact nahi mila.",
+                    "I couldn't find a contact named "+name+".");
+        }else{
+            answerForStyle(style,
+                    m.name+" का नंबर "+m.phone+" है।",
+                    m.name+" ka number "+m.phone+" hai.",
+                    m.name+"'s number is "+m.phone+".");
+        }
+    }
+
+    private void handleCallCommand(String original,UniversalLanguageRouter.Style style){
+        if(!PhoneAssistantController.hasContactsPermission(this)){
+            pendingPhoneCommand=original;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},REQ_CONTACTS);
+            return;
+        }
+        String name=PhoneAssistantController.extractPersonName(original);
+        if(name.isEmpty()){
+            answerForStyle(style,"किसे कॉल करना है?","Kise call karna hai?","Who should I call?");
+            return;
+        }
+        PhoneAssistantController.ContactMatch m=PhoneAssistantController.findContact(this,name);
+        if(m==null || m.phone.isEmpty()){
+            answerForStyle(style,name+" का नंबर नहीं मिला।",name+" ka number nahi mila.","I couldn't find a number for "+name+".");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Call "+m.name+"?")
+                .setMessage(m.phone)
+                .setNegativeButton("Cancel",(d,w)->answerForStyle(style,"कॉल रद्द कर दी।","Call cancel kar di.","Call cancelled."))
+                .setPositiveButton("Call",(d,w)->{
+                    if(PhoneAssistantController.hasCallPermission(this)){
+                        if(PhoneAssistantController.placeCall(this,m.phone)) answer(m.name+" ko call laga rahi hoon.");
+                    }else{
+                        pendingCallNumber=m.phone;
+                        pendingCallName=m.name;
+                        requestPermissions(new String[]{Manifest.permission.CALL_PHONE},REQ_CALL);
+                    }
+                }).show();
+    }
+
+    private void handleSmsCommand(String original,UniversalLanguageRouter.Style style){
+        if(!PhoneAssistantController.hasContactsPermission(this)){
+            pendingPhoneCommand=original;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},REQ_CONTACTS);
+            return;
+        }
+        String name=PhoneAssistantController.extractMessageRecipient(original);
+        String body=PhoneAssistantController.extractMessageBody(original);
+        if(name.isEmpty()){
+            answerForStyle(style,"किसे मैसेज भेजना है?","Kise message bhejna hai?","Who should I message?");
+            return;
+        }
+        PhoneAssistantController.ContactMatch m=PhoneAssistantController.findContact(this,name);
+        if(m==null || m.phone.isEmpty()){
+            answerForStyle(style,name+" का नंबर नहीं मिला।",name+" ka number nahi mila.","I couldn't find a number for "+name+".");
+            return;
+        }
+        PhoneAssistantController.composeSms(this,m.phone,body);
+        answerForStyle(style,
+                m.name+" का मैसेज ड्राफ्ट खोल दिया है। भेजने से पहले एक बार देख लें।",
+                m.name+" ka message draft khol diya hai. Send karne se pehle ek baar dekh lo.",
+                "I opened the message draft for "+m.name+". Review it before sending.");
+    }
+
+    private void startYouTubeLearning(String original,UniversalLanguageRouter.Style style){
+        String q=original.replaceAll("(?i)(youtube|यूट्यूब|se|pe|par|से|पर|video|वीडियो|sikho|seekho|learn|सीखो|सीखना)"," ")
+                .replaceAll("\\s+"," ").trim();
+        if(q.isEmpty()) q=original;
+        String path=ResearchLearningStore.start(this,"YouTube learning: "+q);
+        AppSearchController.searchYouTube(this,q);
+        answerForStyle(style,
+                "YouTube learning mode शुरू है। मैं खुले वीडियो के दिखाई देने वाले title, description, controls और captions/subtitles को local knowledge में सीखूँगी।",
+                "YouTube learning mode start hai. Main open video ke visible title, description, controls aur captions/subtitles ko local knowledge me learn karungi.",
+                "YouTube learning mode is active. I will learn from visible titles, descriptions, controls and captions/subtitles on opened videos.");
+    }
+
+    private void lookupUnknownMeaning(String original,UniversalLanguageRouter.Style style){
+        String q=original.trim();
+        if(q.isEmpty()){ answerWithLocalConversation(original,style); return; }
+        showResult(style==UniversalLanguageRouter.Style.HINDI?"मतलब खोज रही हूँ…":"Meaning background me search kar rahi hoon…");
+        boolean hi=style==UniversalLanguageRouter.Style.HINDI || style==UniversalLanguageRouter.Style.HINGLISH;
+        BackgroundKnowledgeLookup.lookup(this,q,hi,result -> {
+            if(result.found){
+                String prefix=style==UniversalLanguageRouter.Style.HINDI
+                        ?"मैंने इसका मतलब सीख लिया: "
+                        :style==UniversalLanguageRouter.Style.ENGLISH
+                            ?"I found and learned this: "
+                            :"Maine iska meaning samajh kar local memory me learn kar liya: ";
+                answer(prefix+result.title+" — "+result.summary+" ("+result.source+(result.fromCache?", saved memory":"")+")");
+            }else{
+                answerWithLocalConversation(original,style);
+            }
+        });
     }
 
     private void rememberConversationTurn(String who,String text){
@@ -1017,15 +1256,31 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             Locale desired=UniversalLanguageRouter.speechLocaleFor(text);
             int lang=tts.setLanguage(desired);
             if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
-                // Hindi/Hinglish is the owner's preferred fallback, then English.
                 lang=tts.setLanguage(new Locale("hi","IN"));
                 if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
                     tts.setLanguage(Locale.US);
                 }
             }
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "anamika_reply");
+            String clean=text.trim();
+            int max=Math.max(800,Math.min(3400,TextToSpeech.getMaxSpeechInputLength()-100));
+            int pos=0,part=0;
+            while(pos<clean.length()){
+                int end=Math.min(clean.length(),pos+max);
+                if(end<clean.length()){
+                    int cut=clean.lastIndexOf(' ',end);
+                    if(cut>pos+200) end=cut;
+                }
+                String chunk=clean.substring(pos,end).trim();
+                if(!chunk.isEmpty()){
+                    tts.speak(chunk,part==0?TextToSpeech.QUEUE_FLUSH:TextToSpeech.QUEUE_ADD,null,
+                            "anamika_reply_"+part);
+                    part++;
+                }
+                pos=end;
+                while(pos<clean.length() && Character.isWhitespace(clean.charAt(pos))) pos++;
+            }
         }
-        long delay=Math.min(9000L,1800L+(text==null?0:text.length()*38L));
+        long delay=Math.min(60000L,1800L+(text==null?0:text.length()*48L));
         mainHandler.postDelayed(this::resumeBackgroundWakeService,delay);
     }
 
