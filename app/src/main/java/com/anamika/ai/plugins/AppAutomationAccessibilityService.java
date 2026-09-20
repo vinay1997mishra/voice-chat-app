@@ -202,6 +202,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 "Owner requested automatic deep function audit. Persistent safe-touch trust="+
                         (learnedAlready?"reused":"granted")+". Blueprint: "+dir.getAbsolutePath());
         autoAuditActive = true;
+        getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("audit_one_shot",ownerOneShot).apply();
         waitingRiskConfirmation=false;
         showAuditStatus("Starting deep audit", "Opening app map and learning safe paths…");
         android.widget.Toast.makeText(this,
