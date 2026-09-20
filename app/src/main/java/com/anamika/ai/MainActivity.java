@@ -41,6 +41,7 @@ import com.anamika.ai.files.StorageLibrary;
 import com.anamika.ai.files.AnamikaVault;
 import com.anamika.ai.phone.PermissionAccessManager;
 import com.anamika.ai.phone.DeviceFunctionDiscovery;
+import com.anamika.ai.phone.DeviceProfileStore;
 import com.anamika.ai.research.AppSearchController;
 import com.anamika.ai.research.BackgroundKnowledgeLookup;
 import com.anamika.ai.research.ResearchLearningStore;
@@ -87,6 +88,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         setContentView(R.layout.activity_main);
 
         prefs = getSharedPreferences("anamika_v7", MODE_PRIVATE);
+        DeviceProfileStore.ensureSaved(this);
+        SoftVoiceProfile.ensureDefaults(this);
         tts = new TextToSpeech(this, this);
         failedPinAttempts = prefs.getInt(PIN_FAILS, 0);
         pinLockedUntilMs = prefs.getLong(PIN_LOCK_UNTIL, 0L);
@@ -659,6 +662,21 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (containsAny(lower, "plugin center", "plugins", "app control", "control apps", "plugin kholo", "प्लगइन")) {
             startActivity(new Intent(this, com.anamika.ai.plugins.PluginManagerActivity.class));
             answer("Plugin Center khol diya. Yahan selected apps persistent plugins bante hain. One-time voice command se non-plugin apps bhi open/control ho sakte hain bina plugin add hue.");
+            return;
+        }
+
+        if (containsAny(lower,"voice soft","voice softer","awaz soft","awaaz soft","voice deep","awaaz deep",
+                "voice loud","awaaz loud","voice childish","bacchi jaisi voice","childish voice","voice young",
+                "voice mature","voice slow","voice fast","voice reset","normal voice","default voice",
+                "आवाज सॉफ्ट","आवाज गहरी","आवाज धीमी","आवाज तेज")) {
+            String profile=SoftVoiceProfile.tune(this,original);
+            answer("Theek hai. "+profile);
+            return;
+        }
+
+        if (containsAny(lower,"phone model","device model","mera phone ka model","device info","phone info",
+                "फोन मॉडल","डिवाइस मॉडल","फोन की जानकारी")) {
+            answer(DeviceProfileStore.summary(this));
             return;
         }
 
@@ -1554,7 +1572,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         stopWakeRecognizer();
         pauseBackgroundWakeService();
         if (tts != null && text != null && !text.trim().isEmpty()) {
-            SoftVoiceProfile.apply(tts,text);
+            SoftVoiceProfile.apply(this,tts,text);
             String clean=text.trim();
             int max=Math.max(800,Math.min(3400,TextToSpeech.getMaxSpeechInputLength()-100));
             int pos=0,part=0;
@@ -1566,7 +1584,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 }
                 String chunk=clean.substring(pos,end).trim();
                 if(!chunk.isEmpty()){
-                    tts.speak(chunk,part==0?TextToSpeech.QUEUE_FLUSH:TextToSpeech.QUEUE_ADD,null,
+                    android.os.Bundle params=new android.os.Bundle();
+                    params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,
+                            Math.max(0.1f,Math.min(1.0f,SoftVoiceProfile.volumeHint(this))));
+                    tts.speak(chunk,part==0?TextToSpeech.QUEUE_FLUSH:TextToSpeech.QUEUE_ADD,params,
                             "anamika_reply_"+part);
                     part++;
                 }
@@ -1585,7 +1606,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     public void onInit(int statusCode) {
         if (statusCode == TextToSpeech.SUCCESS) {
-            SoftVoiceProfile.apply(tts,"Namaste, main Anamika hoon.");
+            SoftVoiceProfile.apply(this,tts,"Namaste, main Anamika hoon.");
         }
     }
 
