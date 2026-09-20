@@ -68,8 +68,14 @@ public final class PluginManagerActivity extends Activity {
                 selectedView.setText("Selected: "+app.label+" ("+app.packageName+")"); });
             row.addView(enabled); row.addView(select); pluginList.addView(row);
         }
+        TextView count=new TextView(this);
+        count.setText("Detected launchable apps: "+apps.size()+". Check an app to enable it as a plugin, then Select it.");
+        count.setPadding(8,8,8,14);
+        pluginList.addView(count,0);
         if(apps.isEmpty()) {
-            TextView empty=new TextView(this); empty.setText("No launchable apps were visible. Refresh after installing apps."); pluginList.addView(empty);
+            TextView empty=new TextView(this);
+            empty.setText("No launchable apps are visible to Android. Tap Refresh. If this remains empty, reopen Anamika after installation and verify the APK has installed-app visibility.");
+            pluginList.addView(empty);
         }
     }
 
@@ -87,10 +93,13 @@ public final class PluginManagerActivity extends Activity {
         if(selectedPackage.isEmpty()){ toast("Select an app first"); return; }
         if(!PluginRegistry.isEnabled(this,selectedPackage)){ toast(selectedLabel+" is not owner-enabled. Audit was not started."); return; }
         if(!isAutomationServiceEnabled()){ toast("Anamika App Control service is off. Audit was not started."); return; }
+        // Mark this owner-selected plugin as deep-audit trusted before launch so
+        // service event timing cannot race the persistent trust grant.
+        PluginRegistry.setDeepAuditTrusted(this,selectedPackage,true);
         String result=AppPluginEngine.openAndRun(this,selectedPackage,"check all functions");
-        inspectionStatus.setText("Automatic audit requested for "+selectedLabel+
-                ". Anamika will inspect visible screens and operate safe controls automatically. "+
-                "Sensitive/destructive/financial/account actions are skipped and listed in the blueprint.\n"+result);
+        inspectionStatus.setText("Deep audit requested for "+selectedLabel+
+                ". Anamika will map every reachable/observable screen, accessibility control, scroll path and supported custom touch surface. "+
+                "Risky real-world actions pause for owner confirmation; inaccessible/server-only behavior is reported as a coverage gap instead of being guessed.\n"+result);
     }
 
     private void stopInspection(){
