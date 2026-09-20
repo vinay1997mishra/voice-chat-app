@@ -152,6 +152,9 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         if (containsAny(lowerCommand,
                 "saare functions check kar","sare functions check kar","check all functions",
                 "is app ke saare functions check kar","is app ke sare functions check kar",
+                "khud se check karo","khud check karo","khud saare button click karo",
+                "mere touch ka wait mat karo","saare button khud click karo",
+                "har screen check karo","har screen ke functions check karo",
                 "deep inspect app","app inspect karo","auto audit app","poora app check karo")) {
             String oneShotAudit=getSharedPreferences(PREFS,MODE_PRIVATE)
                     .getString("one_shot_deep_audit_package","");
