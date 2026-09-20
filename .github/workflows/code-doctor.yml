@@ -1,0 +1,49 @@
+name: Anamika Code Doctor
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anamika-code-doctor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+          cache: true
+      - name: Create isolated project
+        run: |
+          flutter create --platforms=android --org com.voicechat.anamika --project-name voice_chat_app /tmp/anamika
+          rm -rf /tmp/anamika/lib /tmp/anamika/test
+          cp -R apps/mobile/lib /tmp/anamika/lib
+          cp -R apps/mobile/test /tmp/anamika/test
+          cp apps/mobile/pubspec.yaml /tmp/anamika/pubspec.yaml
+      - name: Dependencies
+        working-directory: /tmp/anamika
+        run: flutter pub get
+      - name: Format check
+        working-directory: /tmp/anamika
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Static analysis
+        working-directory: /tmp/anamika
+        run: flutter analyze --no-fatal-infos
+      - name: Tests
+        working-directory: /tmp/anamika
+        run: flutter test
+      - name: APK compile check
+        working-directory: /tmp/anamika
+        run: flutter build apk --debug -t lib/main_v05.dart
