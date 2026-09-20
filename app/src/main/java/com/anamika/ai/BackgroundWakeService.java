@@ -60,8 +60,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         if(Build.VERSION.SDK_INT>=26 && audioManager!=null){
             playbackCallback=new AudioManager.AudioPlaybackCallback(){
                 @Override public void onPlaybackConfigChanged(java.util.List<AudioPlaybackConfiguration> configs){
-                    boolean active=isMediaPlaybackActive(configs);
-                    handleMediaPlaybackState(active);
+                    handleMediaPlaybackState(isSystemAudioBusy());
                 }
             };
             try{ audioManager.registerAudioPlaybackCallback(playbackCallback,handler); }catch(Throwable ignored){}
@@ -312,7 +311,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         handler.postDelayed(this::startListening,delay);
     }
 
-    private boolean isMediaPlaybackNow(){
+    private boolean isSystemAudioBusy(){
         try{
             if(audioManager!=null){
                 if(audioManager.isMusicActive()) return true;
@@ -324,27 +323,11 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                 }
             }
         }catch(Throwable ignored){}
-        return mediaPlaybackActive;
+        return false;
     }
 
-    private boolean isMediaPlaybackActive(java.util.List<AudioPlaybackConfiguration> configs){
-        if(configs==null) return false;
-        for(AudioPlaybackConfiguration cfg:configs){
-            if(cfg==null || !cfg.isActive()) continue;
-            try{
-                AudioAttributes a=cfg.getAudioAttributes();
-                if(a==null) continue;
-                int usage=a.getUsage();
-                if(usage==AudioAttributes.USAGE_MEDIA ||
-                        usage==AudioAttributes.USAGE_GAME ||
-                        usage==AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE ||
-                        usage==AudioAttributes.USAGE_VOICE_COMMUNICATION ||
-                        usage==AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING){
-                    return true;
-                }
-            }catch(Throwable ignored){}
-        }
-        return false;
+    private boolean isMediaPlaybackNow(){
+        return isSystemAudioBusy();
     }
 
     private void handleMediaPlaybackState(boolean active){
@@ -368,7 +351,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void pollMediaPlayback(){
-        boolean active=isMediaPlaybackNow();
+        boolean active=isSystemAudioBusy();
         handleMediaPlaybackState(active);
         handler.postDelayed(mediaPoll,1000L);
     }
