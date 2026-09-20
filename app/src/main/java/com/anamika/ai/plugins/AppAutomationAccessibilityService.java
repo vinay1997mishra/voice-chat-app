@@ -7,6 +7,8 @@ import android.graphics.PixelFormat;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.TextView;
+import android.widget.LinearLayout;
 import android.view.View;
 import android.os.Handler;
 import android.os.Looper;
@@ -38,6 +40,14 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager windowManager;
     private Button voiceBubble;
+    private LinearLayout auditOverlay;
+    private TextView auditOverlayText;
+    private Button auditAllowOnce;
+    private Button auditSkipRisk;
+    private boolean waitingRiskConfirmation = false;
+    private String pendingRiskLabel = "";
+    private String pendingRiskFingerprint = "";
+    private final android.graphics.Rect pendingRiskBounds = new android.graphics.Rect();
 
     // Owner-commanded automatic app audit state. Bounded and intentionally skips risky actions.
     private boolean autoAuditActive = false;
@@ -78,6 +88,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         lp.gravity=Gravity.END|Gravity.CENTER_VERTICAL;
         lp.x=12;
         try{ windowManager.addView(voiceBubble,lp); }catch(Exception ignored){}
+        createAuditOverlay();
     }
 
     @Override public void onDestroy(){
@@ -85,6 +96,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         handler.removeCallbacksAndMessages(null);
         autoAuditActive=false;
         if(windowManager!=null && voiceBubble!=null){ try{windowManager.removeView(voiceBubble);}catch(Exception ignored){} }
+        if(windowManager!=null && auditOverlay!=null){ try{windowManager.removeView(auditOverlay);}catch(Exception ignored){} }
         super.onDestroy();
     }
 
@@ -172,17 +184,25 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         autoAuditScreens = 0;
         autoAuditDepth = 0;
         java.io.File dir = AppBlueprintStore.start(this,target);
+        boolean learnedAlready = PluginRegistry.isDeepAuditTrusted(this,target);
+        PluginRegistry.setDeepAuditTrusted(this,target,true);
         AppBlueprintStore.recordAuditResult(this,target,"START","",
-                "Owner requested automatic safe function audit. Blueprint: "+dir.getAbsolutePath());
+                "Owner requested automatic deep function audit. Persistent safe-touch trust="+
+                        (learnedAlready?"reused":"granted")+". Blueprint: "+dir.getAbsolutePath());
         autoAuditActive = true;
+        waitingRiskConfirmation=false;
+        showAuditStatus("Starting deep audit", "Opening app map and learning safe paths…");
         android.widget.Toast.makeText(this,
-                "Anamika Auto Audit started. Safe visible functions will be checked automatically.",
+                learnedAlready
+                        ? "Anamika Deep Audit started with learned safe-touch permission."
+                        : "Anamika Deep Audit started. Safe-touch permission will be remembered for this enabled app.",
                 android.widget.Toast.LENGTH_LONG).show();
         handler.postDelayed(this::auditNext,500L);
     }
 
     private void auditNext() {
         if (!autoAuditActive) return;
+        if (waitingRiskConfirmation) return;
         if (!OwnerSession.isActive(this)) { finishAutoAudit("Owner session expired."); return; }
         if (!PluginRegistry.isEnabled(this,autoAuditTarget)) { finishAutoAudit("Plugin was disabled."); return; }
         if (System.currentTimeMillis()-autoAuditStartedMs > AUTO_AUDIT_MAX_MS) {
@@ -207,6 +227,8 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         }
 
         String screenSig=screenSignature(root);
+        showAuditStatus("Scanning screen "+(autoAuditScreens+1),
+                "Tested "+autoAuditTested+" • skipped "+autoAuditSkipped+" • depth "+autoAuditDepth);
         if(autoAuditScreensSeen.add(screenSig)) {
             autoAuditScreens++;
             AccessibilityEvent fake=AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
@@ -235,29 +257,38 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             if(!semanticClick && !touchOnly) continue;
             autoAuditNodes.add(sig);
 
-            if(n.isPassword() || n.isEditable() || (!label.trim().isEmpty() && isRiskyAuditAction(label))){
+            if(n.isPassword() || n.isEditable()){
                 autoAuditSkipped++;
-                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SKIPPED",label,
-                        n.isPassword()?"password":
-                                n.isEditable()?"editable/input field":"sensitive/destructive/real-world action");
+                String reason=n.isPassword()?"password field":"editable/input field";
+                AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SKIPPED",label,reason);
+                AuditLearningStore.learnRisk(this,autoAuditTarget,sig,label);
+                showAuditStatus("Protected field skipped", reason);
                 continue;
             }
 
             String auditLabel=label.trim().isEmpty()?touchZoneLabel(n):label;
+            if(!label.trim().isEmpty() && isRiskyAuditAction(label)){
+                AuditLearningStore.learnRisk(this,autoAuditTarget,sig,auditLabel);
+                requestRiskConfirmation(n,auditLabel,sig);
+                return;
+            }
             AppBlueprintStore.recordAuditResult(this,autoAuditTarget,touchOnly?"TRY_TOUCH":"TRY_TAP",auditLabel,
                     "class="+String.valueOf(n.getClassName())+" viewId="+String.valueOf(n.getViewIdResourceName())+
                             (touchOnly?" mode=gesture-center":" mode=accessibility-click"));
+            showAuditStatus(touchOnly?"Touch-zone check":"Control check", auditLabel);
 
             boolean acted = semanticClick ? clickNodeOrParent(n) : gestureTapNode(n);
             if(acted){
                 autoAuditTested++;
                 if(touchOnly) autoAuditGestureTaps++;
+                AuditLearningStore.learnSafe(this,autoAuditTarget,sig,auditLabel);
                 lastAuditActionLabel=auditLabel;
                 if(autoAuditDepth < AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
                 handler.postDelayed(this::auditNext,touchOnly?1100L:900L);
                 return;
             } else {
                 autoAuditSkipped++;
+                AuditLearningStore.learnFailed(this,autoAuditTarget,sig,auditLabel);
                 AppBlueprintStore.recordAuditResult(this,autoAuditTarget,
                         touchOnly?"FAILED_TOUCH":"FAILED_TAP",auditLabel,
                         touchOnly?"gesture dispatch was rejected":"control did not accept ACTION_CLICK");
@@ -276,6 +307,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             autoAuditScrolled.add(screenSig);
             autoAuditTested++;
             AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SCROLL","down","discover more visible controls");
+            showAuditStatus("Scrolling", "Looking for more controls below");
             handler.postDelayed(this::auditNext,800L);
             return;
         }
@@ -284,6 +316,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             autoAuditDepth--;
             AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"BACK","",
                     "No new safe controls on current screen; returning to previous screen.");
+            showAuditStatus("Going back", "Current branch exhausted; checking next path");
             performGlobalAction(GLOBAL_ACTION_BACK);
             handler.postDelayed(this::auditNext,800L);
             return;
@@ -295,14 +328,132 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
     private void finishAutoAudit(String reason){
         if(!autoAuditActive) return;
         autoAuditActive=false;
+        waitingRiskConfirmation=false;
         AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SUMMARY","gesture_touch_zones",
                 "Direct gesture touch tests="+autoAuditGestureTaps);
+        AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"SUMMARY","learned_profile",
+                AuditLearningStore.summary(this,autoAuditTarget));
+        showAuditStatus("Audit complete",
+                "Screens "+autoAuditScreens+" • tested "+autoAuditTested+" • skipped "+autoAuditSkipped);
         java.io.File dir=AppBlueprintStore.completeAutoAudit(
                 this,autoAuditTested,autoAuditSkipped,autoAuditScreens,reason);
         String path=dir==null?"":dir.getAbsolutePath();
         android.widget.Toast.makeText(this,
                 "Anamika Auto Audit complete. Blueprint ready."+ (path.isEmpty()?"":" "+path),
                 android.widget.Toast.LENGTH_LONG).show();
+        handler.postDelayed(this::hideAuditOverlay,3500L);
+    }
+
+    private void createAuditOverlay(){
+        if(windowManager==null || auditOverlay!=null) return;
+        auditOverlay=new LinearLayout(this);
+        auditOverlay.setOrientation(LinearLayout.VERTICAL);
+        auditOverlay.setPadding(dp(12),dp(8),dp(12),dp(8));
+        auditOverlay.setBackgroundColor(0xDD111111);
+
+        auditOverlayText=new TextView(this);
+        auditOverlayText.setTextColor(0xFFFFFFFF);
+        auditOverlayText.setTextSize(13f);
+        auditOverlay.addView(auditOverlayText,new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout buttons=new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        auditAllowOnce=new Button(this);
+        auditAllowOnce.setText("Allow once");
+        auditSkipRisk=new Button(this);
+        auditSkipRisk.setText("Skip");
+        buttons.addView(auditAllowOnce,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f));
+        buttons.addView(auditSkipRisk,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f));
+        auditOverlay.addView(buttons);
+        auditAllowOnce.setVisibility(View.GONE);
+        auditSkipRisk.setVisibility(View.GONE);
+        auditOverlay.setVisibility(View.GONE);
+
+        auditAllowOnce.setOnClickListener(v -> allowPendingRiskOnce());
+        auditSkipRisk.setOnClickListener(v -> skipPendingRisk());
+
+        WindowManager.LayoutParams p=new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        p.gravity=Gravity.TOP;
+        p.y=dp(8);
+        try{ windowManager.addView(auditOverlay,p); }catch(Exception ignored){}
+    }
+
+    private void showAuditStatus(String title,String detail){
+        if(auditOverlay==null || auditOverlayText==null) return;
+        auditOverlay.setVisibility(View.VISIBLE);
+        auditOverlayText.setText("Anamika Deep Audit\n"+title+"\n"+detail);
+        if(!waitingRiskConfirmation){
+            auditAllowOnce.setVisibility(View.GONE);
+            auditSkipRisk.setVisibility(View.GONE);
+        }
+    }
+
+    private void hideAuditOverlay(){
+        if(auditOverlay!=null) auditOverlay.setVisibility(View.GONE);
+    }
+
+    private void requestRiskConfirmation(AccessibilityNodeInfo node,String label,String fingerprint){
+        if(node==null || waitingRiskConfirmation) return;
+        node.getBoundsInScreen(pendingRiskBounds);
+        pendingRiskLabel=label==null?"<risky control>":label;
+        pendingRiskFingerprint=fingerprint==null?"":fingerprint;
+        waitingRiskConfirmation=true;
+        AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"RISK_CONFIRM",pendingRiskLabel,
+                "Owner confirmation required before this action.");
+        showAuditStatus("Risk confirmation required",
+                pendingRiskLabel+"\nThis audit is paused until you choose.");
+        if(auditAllowOnce!=null) auditAllowOnce.setVisibility(View.VISIBLE);
+        if(auditSkipRisk!=null) auditSkipRisk.setVisibility(View.VISIBLE);
+    }
+
+    private void allowPendingRiskOnce(){
+        if(!waitingRiskConfirmation) return;
+        waitingRiskConfirmation=false;
+        if(auditAllowOnce!=null) auditAllowOnce.setVisibility(View.GONE);
+        if(auditSkipRisk!=null) auditSkipRisk.setVisibility(View.GONE);
+        String label=pendingRiskLabel;
+        android.graphics.Rect bounds=new android.graphics.Rect(pendingRiskBounds);
+        AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"RISK_ALLOWED_ONCE",label,
+                "Owner approved this risky action once.");
+        showAuditStatus("Owner approved once",label);
+        boolean dispatched=!bounds.isEmpty() && dispatchTap(bounds.exactCenterX(),bounds.exactCenterY());
+        if(dispatched){
+            autoAuditTested++;
+            lastAuditActionLabel=label;
+            if(autoAuditDepth<AUTO_AUDIT_MAX_DEPTH) autoAuditDepth++;
+        }else{
+            autoAuditSkipped++;
+            AuditLearningStore.learnFailed(this,autoAuditTarget,pendingRiskFingerprint,label);
+            AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"FAILED_TOUCH",label,
+                    "Owner approved, but gesture dispatch failed.");
+        }
+        clearPendingRisk();
+        handler.postDelayed(this::auditNext,1100L);
+    }
+
+    private void skipPendingRisk(){
+        if(!waitingRiskConfirmation) return;
+        waitingRiskConfirmation=false;
+        String label=pendingRiskLabel;
+        autoAuditSkipped++;
+        AppBlueprintStore.recordAuditResult(this,autoAuditTarget,"RISK_SKIPPED",label,
+                "Owner chose Skip for this audit.");
+        showAuditStatus("Risk skipped",label);
+        clearPendingRisk();
+        handler.postDelayed(this::auditNext,350L);
+    }
+
+    private void clearPendingRisk(){
+        pendingRiskLabel="";
+        pendingRiskFingerprint="";
+        pendingRiskBounds.setEmpty();
+        if(auditAllowOnce!=null) auditAllowOnce.setVisibility(View.GONE);
+        if(auditSkipRisk!=null) auditSkipRisk.setVisibility(View.GONE);
     }
 
     private String screenSignature(AccessibilityNodeInfo root){
