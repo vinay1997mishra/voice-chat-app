@@ -1,10 +1,16 @@
 name: Anamika Code Doctor
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/code-doctor.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/mobile/**'
+      - '.github/workflows/code-doctor.yml'
   workflow_dispatch:
 
 permissions:
