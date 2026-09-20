@@ -98,6 +98,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - name: Install Android SDK 36
         run: |
           set -euo pipefail
@@ -114,7 +118,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.6.1'
+          gradle-version: '9.4.1'
+
+      - name: Bundle Microsoft TypeScript compiler
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/toolchains
+          rm -rf "$RUNNER_TEMP/anamika-ts" && mkdir -p "$RUNNER_TEMP/anamika-ts"
+          cd "$RUNNER_TEMP/anamika-ts"
+          npm pack typescript@5.9.3 --silent
+          tar -xzf typescript-5.9.3.tgz package/lib/typescript.js
+          cp package/lib/typescript.js "$GITHUB_WORKSPACE/app/src/main/assets/toolchains/typescript.js"
+          test -s "$GITHUB_WORKSPACE/app/src/main/assets/toolchains/typescript.js"
+          test "$(stat -c%s "$GITHUB_WORKSPACE/app/src/main/assets/toolchains/typescript.js")" -gt 5000000
+          sha256sum "$GITHUB_WORKSPACE/app/src/main/assets/toolchains/typescript.js" | tee "$GITHUB_WORKSPACE/app/src/main/assets/toolchains/typescript.sha256"
 
       - name: Validate direct source
         run: |
@@ -168,6 +185,10 @@ jobs:
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'assets/models/anamika-coder.gguf'
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama.so'
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama_jni.so'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libpython3.13.so'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libchaquopy_java.so'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'assets/toolchains/typescript.js'
+          unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'classes' >/dev/null
           sha256sum artifacts/lite/*.apk artifacts/full/*.apk > artifacts/SHA256SUMS.txt
 
       - name: Build owner-signed self-update APK
