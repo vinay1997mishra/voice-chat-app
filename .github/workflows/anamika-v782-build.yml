@@ -114,7 +114,6 @@ jobs:
         run: |
           set -euo pipefail
           echo "ANAMIKA_VERSION_CODE=$((7802000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "ANAMIKA_VERSION_NAME=7.8.2.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
       - name: Validate direct source
         run: |
@@ -122,6 +121,12 @@ jobs:
           python3 tools/validate_source.py
           python3 tools/validate_v78.py
           python3 tools/validate_audit.py
+
+      - name: Inject CI update versionCode after source validation
+        run: |
+          set -euo pipefail
+          sed -i "s/versionCode 17/versionCode $ANAMIKA_VERSION_CODE/" app/build.gradle
+          grep -F "versionCode $ANAMIKA_VERSION_CODE" app/build.gradle
 
       - name: Build lite APK directly from GitHub source
         run: |
