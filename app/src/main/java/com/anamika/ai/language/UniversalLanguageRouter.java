@@ -137,6 +137,10 @@ public final class UniversalLanguageRouter {
                 "यह स्क्रीन समझा","स्क्रीन समझाओ"))
             return new Interpretation(original,original,"EXPLAIN_SCREEN",original,style,false);
 
+        if(containsAny(s,"matlab kya","meaning kya","meaning of","iska matlab","word ka matlab",
+                "का मतलब","इसका मतलब","अर्थ क्या","meaning bata","matlab bata"))
+            return new Interpretation(original,original,"UNKNOWN_LOOKUP",extractMeaningTarget(original),style,false);
+
         if(containsAny(s,"calculate","hisaab","hisab","kitna hoga","गणना","हिसाब","कैलकुलेट"))
             return new Interpretation(original,original,"CALCULATE",original,style,false);
 
@@ -239,6 +243,13 @@ public final class UniversalLanguageRouter {
         if(style==Style.HINGLISH) return "Reply naturally in easy conversational Hinglish using Roman letters, like the user.";
         if(style==Style.ENGLISH) return "Reply naturally in English.";
         return "Reply naturally in the same language as the user.";
+    }
+
+    private static String extractMeaningTarget(String raw){
+        if(raw==null) return "";
+        String q=raw.replaceAll("(?i)(iska|is|word|shabd|शब्द|इसका|का|meaning|matlab|मतलब|अर्थ|kya|क्या|hai|है|batao|bata|बताओ)"," ")
+                .replaceAll("\\s+"," ").trim();
+        return q.isEmpty()?raw.trim():q;
     }
 
     private static String extractSearch(String raw){
