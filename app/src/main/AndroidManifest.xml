@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Owner-selected Plugin Center needs visibility of installed apps.
+         QUERY_ALL_PACKAGES is intentionally used for this sideloaded owner-assistant build;
+         Plugin Center still requires explicit owner enablement before automation. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
