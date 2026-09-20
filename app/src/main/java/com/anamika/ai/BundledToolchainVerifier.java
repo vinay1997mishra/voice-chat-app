@@ -99,7 +99,7 @@ public final class BundledToolchainVerifier {
             }
             if ("Kotlin".equals(language)) {
                 Class.forName("org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment");
-                return new Outcome(true, true, "JetBrains Kotlin compiler 2.2.10", "Bundled Kotlin compiler frontend.");
+                return new Outcome(true, true, "JetBrains Kotlin compiler 2.2.21", "Bundled Kotlin compiler frontend.");
             }
             if ("Shell".equals(language)) {
                 File sh = new File("/system/bin/sh");
@@ -266,11 +266,11 @@ public final class BundledToolchainVerifier {
                 Collection<PsiErrorElement> errors = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement.class);
                 if (!errors.isEmpty()) {
                     PsiErrorElement first = errors.iterator().next();
-                    return new Outcome(true, false, "JetBrains Kotlin compiler 2.2.10",
+                    return new Outcome(true, false, "JetBrains Kotlin compiler 2.2.21",
                             rel + ": " + first.getErrorDescription());
                 }
             }
-            return new Outcome(true, true, "JetBrains Kotlin compiler 2.2.10",
+            return new Outcome(true, true, "JetBrains Kotlin compiler 2.2.21",
                     "Kotlin compiler frontend parsed all " + relFiles.size() + " file(s) without syntax errors.");
         } finally {
             Disposer.dispose(disposable);
