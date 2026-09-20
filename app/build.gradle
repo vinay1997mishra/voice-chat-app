@@ -6,6 +6,25 @@ android {
     namespace 'com.anamika.ai'
     compileSdk 36
 
+    def signingPath = System.getenv("ANAMIKA_KEYSTORE_PATH")
+    def signingStorePassword = System.getenv("ANAMIKA_KEYSTORE_PASSWORD")
+    def signingAlias = System.getenv("ANAMIKA_KEY_ALIAS")
+    def signingKeyPassword = System.getenv("ANAMIKA_KEY_PASSWORD")
+    def hasOwnerSigning = signingPath && signingStorePassword && signingAlias && signingKeyPassword
+
+    signingConfigs {
+        if (hasOwnerSigning) {
+            ownerRelease {
+                storeFile file(signingPath)
+                storePassword signingStorePassword
+                keyAlias signingAlias
+                keyPassword signingKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+
     signingConfigs {
         ownerRelease {
             def ks = System.getenv("ANAMIKA_KEYSTORE_PATH")
