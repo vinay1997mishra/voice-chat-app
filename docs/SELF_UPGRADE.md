@@ -16,7 +16,7 @@ Anamika may prepare and validate an upgrade proposal, but it must never approve 
 The self-upgrade workflow, signing configuration, and keystore are protected from self-modification by the in-app policy. Repository permissions are read-only in the upgrade workflow.
 
 ## Important boundary
-This repository does not contain an AI coding backend or a production owner-authentication backend. The controller requires a trusted owner-authenticated result supplied by the future authentication layer. It deliberately does not hard-code an owner password or signing secret.
+The online worker is implemented in tools/anamika and requires a configured model service. GitHub enforces repository-owner authorization for repair/approval workflows. The standalone Dart controller still requires a trusted owner-authenticated result from its caller; it is not itself an authentication backend. No owner password or signing secret is hard-coded.
 
 Production release signing must use protected secrets/keys and should be placed behind a GitHub Environment required-reviewer gate. Never commit private signing keys or passwords to the repository.
 

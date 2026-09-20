@@ -22,4 +22,4 @@ A passing repair remains only a candidate. The owner reviews the diff and explic
 Keep each accepted upgrade as a normal Git commit/release so a bad upgrade can be reverted. Never overwrite history to hide an upgrade.
 
 ## AI backend boundary
-CI can detect compiler, analyzer, formatting, test, and build failures. Generating a semantic repair requires a coding model/backend with authenticated GitHub access. That backend is intentionally not faked or hard-coded into the mobile APK. When connected, it should create repair branches/PRs and use these checks as its feedback loop.
+CI can detect compiler, analyzer, formatting, test, and build failures. Generating a semantic repair requires a configured coding model. The online worker in tools/anamika now orchestrates up to three attempts, isolated checks and draft repair PRs. The model job does not receive repository-write credentials, and the publishing job never executes generated code. The mobile owner console opens the authenticated GitHub workflow; no model or GitHub credential is embedded in the APK. See ANAMIKA_REPAIR_SETUP.md for deployment prerequisites.
