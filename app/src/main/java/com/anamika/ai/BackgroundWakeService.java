@@ -11,6 +11,7 @@ import android.speech.tts.TextToSpeech;
 import com.anamika.ai.plugins.AppAutomationAccessibilityService;
 import com.anamika.ai.plugins.AppPluginEngine;
 import com.anamika.ai.plugins.PluginRegistry;
+import com.anamika.ai.language.UniversalLanguageRouter;
 
 import java.util.*;
 import java.util.regex.*;
@@ -266,6 +267,12 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private void speakThen(String text,long restartDelay){
         stopListening();
         if(ttsReady && tts!=null){
+            Locale desired=UniversalLanguageRouter.speechLocaleFor(text);
+            int r=tts.setLanguage(desired);
+            if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED){
+                r=tts.setLanguage(new Locale("hi","IN"));
+                if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
+            }
             tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"bg_wake");
         }
         handler.postDelayed(this::startListening,restartDelay);
@@ -303,9 +310,12 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     @Override public void onInit(int status){
         ttsReady=status==TextToSpeech.SUCCESS;
         if(ttsReady){
-            int r=tts.setLanguage(Locale.getDefault());
-            if(r==TextToSpeech.LANG_MISSING_DATA||r==TextToSpeech.LANG_NOT_SUPPORTED)
-                tts.setLanguage(new Locale("hi","IN"));
+            int r=tts.setLanguage(new Locale("hi","IN"));
+            if(r==TextToSpeech.LANG_MISSING_DATA||r==TextToSpeech.LANG_NOT_SUPPORTED){
+                r=tts.setLanguage(Locale.getDefault());
+                if(r==TextToSpeech.LANG_MISSING_DATA||r==TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
+            }
+            tts.setSpeechRate(0.95f);
         }
     }
 
