@@ -39,6 +39,19 @@ public final class AppPluginEngine {
         return queueAndLaunch(context,packageName,command,true);
     }
 
+    /**
+     * Owner-requested deep discovery does not require persistent Plugin Center
+     * enrollment. It is a one-shot authorization for the named app only.
+     */
+    public static String openAndDeepAuditOneShot(Context context,String packageName){
+        if(!OwnerSession.isActive(context)) return "Owner session is not active.";
+        if(packageName==null || packageName.trim().isEmpty()) return "App package missing.";
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+                .putString("one_shot_deep_audit_package",packageName)
+                .apply();
+        return queueAndLaunch(context,packageName,"check all functions",true);
+    }
+
     private static String queueAndLaunch(Context context,String packageName,String command,boolean oneShot){
         Intent launch=context.getPackageManager().getLaunchIntentForPackage(packageName);
         if(launch==null) return "App launch activity not found.";
