@@ -38,6 +38,8 @@ public final class PluginRegistry {
         Set<String> enabled = enabledSet(context);
         List<AppPlugin> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+
+        // First include every app Android exposes through the launcher query.
         for (ResolveInfo info : matches) {
             if (info.activityInfo == null || info.activityInfo.packageName == null) continue;
             String pkg = info.activityInfo.packageName;
@@ -46,6 +48,24 @@ public final class PluginRegistry {
             String label = labelCs == null ? pkg : labelCs.toString();
             out.add(new AppPlugin(label, pkg, enabled.contains(pkg)));
         }
+
+        // Some OEMs/package-visibility implementations omit apps from the launcher
+        // query even though getLaunchIntentForPackage can launch them. Merge the
+        // installed-application view as a fallback so Plugin Center does not appear
+        // empty or silently hide owner-installed apps.
+        try {
+            for (android.content.pm.ApplicationInfo ai : pm.getInstalledApplications(PackageManager.MATCH_ALL)) {
+                if (ai == null || ai.packageName == null) continue;
+                String pkg=ai.packageName;
+                if(pkg.equals(context.getPackageName()) || seen.contains(pkg)) continue;
+                Intent launchIntent=pm.getLaunchIntentForPackage(pkg);
+                if(launchIntent==null) continue;
+                seen.add(pkg);
+                CharSequence labelCs=pm.getApplicationLabel(ai);
+                String label=labelCs==null?pkg:labelCs.toString();
+                out.add(new AppPlugin(label,pkg,enabled.contains(pkg)));
+            }
+        } catch (Throwable ignored) { }
         Collections.sort(out, Comparator.comparing(a -> a.label.toLowerCase(Locale.ROOT)));
         return out;
     }
