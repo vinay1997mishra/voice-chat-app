@@ -9,6 +9,7 @@ on:
       - 'build.gradle'
       - 'gradle.properties'
       - '.github/workflows/anamika-v13-build.yml'
+  pull_request:
   workflow_dispatch:
 
 permissions:
