@@ -33,7 +33,7 @@ public final class DeviceFunctionDiscovery {
 
     public static void discover(Context c,String phrase,Callback cb){
         VerifiedFunctionMemory.Entry remembered=VerifiedFunctionMemory.find(c,phrase);
-        if(remembered!=null && !remembered.action.isEmpty()){
+        if(remembered!=null && !remembered.action.isEmpty() && new Intent(remembered.action).resolveActivity(c.getPackageManager())!=null){
             cb.onResult(new Result(true,true,remembered.label,remembered.action,true));
             return;
         }
@@ -43,11 +43,11 @@ public final class DeviceFunctionDiscovery {
             String query=(phrase==null?"":phrase.trim())+" "+deviceContext+" setting";
             String web=searchWeb(query);
             String candidate=VerifiedFunctionMemory.knownActionForKeyword(
-                    (phrase==null?"":phrase)+" "+web
+                    (phrase==null?"":phrase)
             );
             boolean verified=false;
             if(!candidate.isEmpty()){
-                verified=VerifiedFunctionMemory.verifyAndSaveIntent(c,phrase,candidate,buildExplanation(c,phrase,web,candidate));
+                verified=new Intent(candidate).resolveActivity(c.getPackageManager())!=null;
             }
             String explanation=buildExplanation(c,phrase,web,candidate);
             Result out=new Result(!web.isEmpty()||!candidate.isEmpty(),verified,explanation,candidate,false);
