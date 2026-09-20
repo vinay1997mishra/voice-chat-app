@@ -16,6 +16,7 @@ import com.anamika.ai.plugins.AppPluginEngine;
 import com.anamika.ai.plugins.PluginRegistry;
 import com.anamika.ai.language.UniversalLanguageRouter;
 import com.anamika.ai.voice.SoftVoiceProfile;
+import com.anamika.ai.behavior.RuntimeBehaviorPreferences;
 
 import java.util.*;
 import java.util.regex.*;
@@ -70,6 +71,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             };
             try{ audioManager.registerAudioPlaybackCallback(playbackCallback,handler); }catch(Throwable ignored){}
         }
+        RuntimeBehaviorPreferences.ensureDefaults(this);
         handler.postDelayed(mediaPoll,700L);
     }
 
@@ -195,7 +197,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                 if(list!=null&&!list.isEmpty()){
                     pendingSpeechText=list.get(0).trim();
                     handler.removeCallbacks(finalizeSpeech);
-                    handler.postDelayed(finalizeSpeech,3000L);
+                    handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(this));
                 }
             }
             @Override public void onEvent(int eventType,Bundle params){}
@@ -203,8 +205,8 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,3000L);
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,3000L);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(this));
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(this));
         i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,1000L);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION",true);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH",true);
@@ -213,7 +215,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     private void scheduleSpeechFinalize(){
         handler.removeCallbacks(finalizeSpeech);
-        handler.postDelayed(finalizeSpeech,3000L);
+        handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(this));
     }
 
     private void finalizePendingSpeech(){
@@ -232,7 +234,8 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         String lower=clean.toLowerCase(Locale.ROOT);
 
         boolean explicitHelloWake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(clean).find();
-        boolean shortWake=lower.equals("anamika") || lower.equals("mika");
+        boolean shortWake=RuntimeBehaviorPreferences.shortWakeEnabled(this) &&
+                (lower.equals("anamika") || lower.equals("mika"));
 
         if(silencedUntilExplicitWake){
             if(!explicitHelloWake){
@@ -246,7 +249,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         if(conversationSession && isConversationStopCommand(lower)){
             conversationSession=false;
             awaitingCommand=false;
-            silencedUntilExplicitWake=true;
+            silencedUntilExplicitWake=RuntimeBehaviorPreferences.explicitWakeAfterSilence(this);
             // Owner asked for silence: do not speak any acknowledgement.
             restart(250L);
             return;
