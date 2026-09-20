@@ -208,7 +208,7 @@
                 android:id="@+id/wakeListenButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="24×7 Hello Mika / Hello Anamika" />
+                android:text="24×7 Hello Mika / Hello Anamika: ALWAYS ON" />
 
             <Button
                 android:id="@+id/pluginCenterButton"
