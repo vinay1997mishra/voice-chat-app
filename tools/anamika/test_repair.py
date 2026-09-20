@@ -37,7 +37,6 @@ class RepairTests(unittest.TestCase):
         item = json.loads(self.response())['files'][0]
         with self.assertRaises(ValueError): apply_response(self.candidate, json.dumps({'files':[item,item]}), self.base)
 
-if __name__ == '__main__': unittest.main()
 
 from approve import verify
 class ApprovalTests(unittest.TestCase):
@@ -52,3 +51,5 @@ class ApprovalTests(unittest.TestCase):
     def test_closed(self):
         self.pr['state'] = 'closed'
         with self.assertRaises(ValueError): verify(self.pr, 'a'*40, 'owner/repo')
+
+if __name__ == '__main__': unittest.main()
