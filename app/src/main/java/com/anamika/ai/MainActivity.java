@@ -34,6 +34,8 @@ import com.anamika.ai.language.UniversalLanguageRouter;
 import com.anamika.ai.phone.PhoneAssistantController;
 import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.files.FileExportManager;
+import com.anamika.ai.media.VideoEditEngine;
+import com.anamika.ai.media.PhotoEditEngine;
 import com.anamika.ai.files.StorageLibrary;
 import com.anamika.ai.files.AnamikaVault;
 import com.anamika.ai.phone.PermissionAccessManager;
@@ -490,6 +492,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
+        if ("MEDIA".equals(interpretation.intent)) {
+            handleMediaCommand(original,interpretation.style);
+            return;
+        }
+
         if ("VAULT_STATUS".equals(interpretation.intent)) {
             answer(AnamikaVault.summary(this)+"\n"+StorageLibrary.summary(this));
             return;
@@ -666,6 +673,64 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }else{
             answerWithLocalConversation(original,interpretation.style);
         }
+    }
+
+    private void handleMediaCommand(String original,UniversalLanguageRouter.Style style){
+        String lower=original.toLowerCase(Locale.ROOT);
+        boolean create=containsAny(lower,"banao","bana do","create","generate","new photo","new image","new video","बनाओ","बना दो");
+        if(create){
+            Intent i=new Intent(this,com.anamika.ai.creator.CreatorHubActivity.class);
+            i.putExtra("prompt",original);
+            i.putExtra("media_type",(lower.contains("photo")||lower.contains("pic")||lower.contains("image")||lower.contains("फोटो"))?"image":"video");
+            java.util.regex.Matcher m=java.util.regex.Pattern.compile("(\\d{2,5})\\s*[x×]\\s*(\\d{2,5})").matcher(lower);
+            if(m.find()){
+                i.putExtra("width",Integer.parseInt(m.group(1)));
+                i.putExtra("height",Integer.parseInt(m.group(2)));
+            }else if(lower.contains("9:16")){
+                i.putExtra("width",1080);i.putExtra("height",1920);
+            }else if(lower.contains("1:1")||lower.contains("square")){
+                i.putExtra("width",1080);i.putExtra("height",1080);
+            }else{
+                i.putExtra("width",1920);i.putExtra("height",1080);
+            }
+            startActivity(i);
+            answerForStyle(style,
+                    "Creator खोल दिया है। आपका prompt और size उसमें डाल दिया है।",
+                    "Creator khol diya hai. Tumhara prompt aur size usme daal diya hai.",
+                    "Creator opened with your prompt and requested size.");
+            return;
+        }
+
+        String p=prefs.getString("last_vault_file","");
+        String mime=prefs.getString("last_vault_mime","");
+        java.io.File src=new java.io.File(p);
+        if(!src.isFile()){
+            answerForStyle(style,
+                    "पहले + से photo या video upload करें। फिर edit command सीधे उसी file पर चलेगी।",
+                    "Pehle + se photo ya video upload karo. Phir edit command directly us file par chalegi.",
+                    "Upload a photo or video with + first, then the edit command will run on that file.");
+            return;
+        }
+
+        showResult("Anamika: media edit process kar rahi hoon…");
+        new Thread(() -> {
+            try{
+                if(mime.startsWith("image/")){
+                    PhotoEditEngine.Result out=PhotoEditEngine.edit(MainActivity.this,src,original);
+                    runOnUiThread(() -> answer("Photo edit complete • "+out.width+"×"+out.height+" • "+
+                            AnamikaVault.human(out.file.length())+"\nSaved in Personal Space: "+out.file.getName()));
+                }else if(mime.startsWith("video/")){
+                    VideoEditEngine.Result out=VideoEditEngine.edit(MainActivity.this,src,original);
+                    runOnUiThread(() -> answer("Video edit complete • "+out.startSec+"s to "+out.endSec+"s"+
+                            (out.muted?" • audio muted":"")+" • "+AnamikaVault.human(out.file.length())+
+                            "\nSaved in Personal Space: "+out.file.getName()));
+                }else{
+                    runOnUiThread(() -> answer("Last saved file photo/video nahi hai. + se media upload karo."));
+                }
+            }catch(Exception e){
+                runOnUiThread(() -> answer("Media edit error: "+e.getMessage()));
+            }
+        },"AnamikaMediaEdit").start();
     }
 
     private void showAttachMenu(){
