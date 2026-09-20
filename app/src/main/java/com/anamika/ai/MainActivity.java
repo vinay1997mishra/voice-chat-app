@@ -165,7 +165,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             if (ensureUnlocked()) startActivity(new Intent(this, SelfUpdateActivity.class));
         });
         languageStatusButton.setOnClickListener(v -> {
-            if (ensureUnlocked()) answer(UniversalLanguageRouter.capability(this));
+            if (!ensureUnlocked()) return;
+            answer(UniversalLanguageRouter.capability(this) + "\n\n" +
+                    CompilerPackManager.bundledInventorySummary(this));
         });
 
         if (!ownerPinAlreadySet) {
@@ -350,6 +352,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         if (tryHandleAnyAppVoiceCommand(command)) return;
 
+        if (containsAny(lower, "compiler status", "toolchain status", "coding status",
+                "compiler check", "binary status", "binaries check")) {
+            answer(CompilerPackManager.bundledInventorySummary(this));
+            return;
+        }
+
         if (containsAny(lower,
                 "app banao","app bana","application banao","create app","make app",
                 "website banao","website bana","create website","code likho","code banao")) {
@@ -493,7 +501,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                     developerOutput.setText("ENGINE: " + generated.engine + "\n" +
                             "STRUCTURAL VALIDATION: " + generated.validation.summary() + "\n" +
                             "COMPILER VERIFICATION: " + generated.compilerVerification.summary() + "\n" +
-                            "FULL VERIFIED: " + generated.compilerVerification.isFullyVerified() + "\n\n" +
+                            "FULL VERIFIED: " + (generated.validation.isClean() && generated.compilerVerification.isFullyVerified()) + "\n\n" +
                             generated.generatedText + "\n\n--- STRUCTURAL VALIDATION ---\n" +
                             generated.validation.details() + "\n\n--- REAL COMPILER REPORT ---\n" +
                             generated.compilerVerification.details());
