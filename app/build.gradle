@@ -30,8 +30,8 @@ android {
         applicationId 'com.anamika.ai'
         minSdk 26
         targetSdk 36
-        versionCode Integer.parseInt(System.getenv("ANAMIKA_VERSION_CODE") ?: "17")
-        versionName System.getenv("ANAMIKA_VERSION_NAME") ?: "7.8.2"
+        versionCode Integer.parseInt(System.getenv("ANAMIKA_VERSION_CODE") ?: "130000")
+        versionName System.getenv("ANAMIKA_VERSION_NAME") ?: "13.0.0"
         ndk { abiFilters 'arm64-v8a' }
     }
 
@@ -45,8 +45,6 @@ android {
             keepDebugSymbols += ['**/*.so']
         }
         resources {
-            // kotlin-compiler-embeddable and kotlin-stdlib both carry this canonical
-            // compiler resource. They are byte-for-byte equivalent for 2.2.10.
             pickFirsts += ['kotlin/**/*.kotlin_builtins', 'kotlin/*.kotlin_builtins']
         }
     }
@@ -66,8 +64,6 @@ android {
 dependencies {
     implementation 'dev.ffmpegkit-maintained:llama-android:0.1.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
-
-    // Real upstream in-process language packs bundled into the APK.
     implementation 'org.eclipse.jdt:ecj:3.46.100'
     implementation 'org.mozilla:rhino:1.9.1'
     implementation 'org.webjars.npm:typescript:5.9.3'
@@ -81,23 +77,18 @@ chaquopy {
     defaultConfig {
         version = "3.13"
         buildPython("python3.13")
-        pyc {
-            src = false
-        }
+        pyc { src = false }
     }
 }
 
-
-// V7.8 Evergreen Self-Upgrade: ship a read-only snapshot of Anamika's own source
-// inside the APK. The installed app can extract it to a private workspace, generate
-// owner-approved changes, validate them, and hand them to the final APK build step.
+// Anamika 13 keeps an immutable source snapshot inside the APK so the local
+// self-upgrade engine can create isolated candidates without GitHub/server access.
 def anamikaSelfSourceDir = layout.buildDirectory.dir("generated/anamikaSelfSource")
 tasks.register("bundleAnamikaSelfSource", Sync) {
     into(anamikaSelfSourceDir)
     from("src/main/java") { into("self_source/app/src/main/java") }
     from("src/main/kotlin") { into("self_source/app/src/main/kotlin") }
     from("src/main/res") { into("self_source/app/src/main/res") }
-    // Include configuration/toolchain metadata but do not duplicate multi-GB GGUF weights inside self_source.
     from("src/main/assets") { into("self_source/app/src/main/assets"); exclude("**/*.gguf") }
     from("src/main/AndroidManifest.xml") { into("self_source/app/src/main"); rename { "AndroidManifest.xml" } }
     from("build.gradle") { into("self_source/app"); rename { "build.gradle" } }
@@ -105,7 +96,6 @@ tasks.register("bundleAnamikaSelfSource", Sync) {
     from(rootProject.file("settings.gradle")) { into("self_source"); rename { "settings.gradle" } }
     from(rootProject.file("gradle.properties")) { into("self_source"); rename { "gradle.properties" } }
     from(rootProject.file("tools")) { into("self_source/tools") }
-    from(rootProject.file(".github/workflows")) { into("self_source/.github/workflows") }
 }
 android.sourceSets.main.assets.srcDir(anamikaSelfSourceDir.get().asFile)
 tasks.named("preBuild").configure { dependsOn("bundleAnamikaSelfSource") }
