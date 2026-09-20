@@ -39,7 +39,8 @@ public final class DeviceFunctionDiscovery {
         }
 
         new Thread(() -> {
-            String query=(phrase==null?"":phrase.trim())+" Android "+Build.VERSION.RELEASE+" "+Build.MANUFACTURER+" "+Build.MODEL+" setting";
+            String deviceContext=DeviceProfileStore.searchContext(c);
+            String query=(phrase==null?"":phrase.trim())+" "+deviceContext+" setting";
             String web=searchWeb(query);
             String candidate=VerifiedFunctionMemory.knownActionForKeyword(
                     (phrase==null?"":phrase)+" "+web
