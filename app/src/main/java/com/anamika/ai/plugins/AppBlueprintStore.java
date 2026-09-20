@@ -186,8 +186,10 @@ public final class AppBlueprintStore {
         JSONObject out = new JSONObject();
         JSONArray gaps = new JSONArray();
         JSONArray attempts = new JSONArray();
+        JSONArray screenInventory = new JSONArray();
         int gapCount = 0;
         int attemptCount = 0;
+        int observedControlCount = 0;
         File audit = new File(root, "auto_audit.jsonl");
         if (audit.isFile()) {
             try (BufferedReader r = new BufferedReader(new FileReader(audit))) {
@@ -208,6 +210,55 @@ public final class AppBlueprintStore {
                 }
             } catch (Exception ignored) { }
         }
+        File screensFile = new File(root, "screens.jsonl");
+        if (screensFile.isFile()) {
+            try (BufferedReader r = new BufferedReader(new FileReader(screensFile))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    try {
+                        JSONObject raw = new JSONObject(line);
+                        JSONArray nodes = raw.optJSONArray("nodes");
+                        JSONArray controls = new JSONArray();
+                        if (nodes != null) {
+                            for (int i = 0; i < nodes.length(); i++) {
+                                JSONObject node = nodes.optJSONObject(i);
+                                if (node == null) continue;
+                                boolean control = node.optBoolean("clickable", false)
+                                        || node.optBoolean("editable", false)
+                                        || node.optBoolean("scrollable", false)
+                                        || node.optJSONArray("actions") != null;
+                                if (!control) continue;
+                                JSONObject item = new JSONObject();
+                                item.put("class", node.optString("class", ""));
+                                item.put("text", node.optString("text", ""));
+                                item.put("description", node.optString("description", ""));
+                                item.put("hint", node.optString("hint", ""));
+                                item.put("view_id", node.optString("view_id", ""));
+                                item.put("clickable", node.optBoolean("clickable", false));
+                                item.put("editable", node.optBoolean("editable", false));
+                                item.put("scrollable", node.optBoolean("scrollable", false));
+                                item.put("enabled", node.optBoolean("enabled", false));
+                                item.put("bounds", node.optString("bounds", ""));
+                                item.put("actions", node.optJSONArray("actions") == null
+                                        ? new JSONArray() : node.optJSONArray("actions"));
+                                controls.put(item);
+                                observedControlCount++;
+                            }
+                        }
+                        JSONObject screen = new JSONObject();
+                        screen.put("observed_at_ms", raw.optLong("time", 0L));
+                        screen.put("event_type", raw.optString("event_type", ""));
+                        screen.put("class", raw.optString("class", ""));
+                        screen.put("source_text", raw.optJSONArray("source_text") == null
+                                ? new JSONArray() : raw.optJSONArray("source_text"));
+                        screen.put("controls_and_touch_targets", controls);
+                        screenInventory.put(screen);
+                    } catch (Exception ignored) { }
+                }
+            } catch (Exception ignored) { }
+        }
+        writeScreenInventoryText(root, screenInventory);
+
         try {
             out.put("schema", "anamika.app-blueprint.v1");
             out.put("package", target == null ? "" : target);
@@ -217,18 +268,56 @@ public final class AppBlueprintStore {
             out.put("skipped_or_unverified_items", skipped);
             out.put("audit_attempt_records", attemptCount);
             out.put("coverage_gap_records", gapCount);
+            out.put("screen_inventory_records", screenInventory.length());
+            out.put("observed_control_and_touch_target_records", observedControlCount);
             out.put("completion_reason", reason == null ? "completed" : reason);
             out.put("scope", "Android-accessible and observable UI only");
             out.put("owner_confirmation_required_for_risky_actions", true);
             out.put("credentials_and_passwords_captured", false);
             out.put("attempts", attempts);
             out.put("coverage_gaps", gaps);
+            out.put("screens", screenInventory);
             out.put("limitations", new JSONArray()
                     .put("Hidden server-side behavior is not proven by UI discovery")
                     .put("Screens blocked by login, permission, network, or owner-skipped risk remain unverified")
                     .put("Canvas or custom touch surfaces are sampled only within bounded safe probes"));
             writeText(new File(root, "BLUEPRINT.json"), out.toString(2));
         } catch (Exception ignored) { }
+    }
+
+    private static void writeScreenInventoryText(File root, JSONArray screens) {
+        StringBuilder out = new StringBuilder();
+        out.append("ANAMIKA SCREEN-BY-SCREEN CONTROL BLUEPRINT\n");
+        out.append("Every observed screen and every exposed control/touch target is listed below.\n");
+        out.append("An item is unverified when it was blocked, risky, hidden, or not exposed to Android.\n\n");
+        for (int i = 0; i < screens.length(); i++) {
+            JSONObject screen = screens.optJSONObject(i);
+            if (screen == null) continue;
+            out.append("SCREEN ").append(i + 1).append("\n");
+            out.append("  Class: ").append(screen.optString("class", "")).append("\n");
+            out.append("  Event: ").append(screen.optString("event_type", "")).append("\n");
+            JSONArray source = screen.optJSONArray("source_text");
+            if (source != null && source.length() > 0) out.append("  Visible text: ").append(source).append("\n");
+            JSONArray controls = screen.optJSONArray("controls_and_touch_targets");
+            int count = controls == null ? 0 : controls.length();
+            out.append("  Controls/touch targets: ").append(count).append("\n");
+            for (int j = 0; j < count; j++) {
+                JSONObject control = controls.optJSONObject(j);
+                if (control == null) continue;
+                String label = control.optString("text", "");
+                if (label.isEmpty()) label = control.optString("description", "");
+                if (label.isEmpty()) label = control.optString("view_id", "<unlabelled>");
+                out.append("    - ").append(label)
+                        .append(" | clickable=").append(control.optBoolean("clickable", false))
+                        .append(" | editable=").append(control.optBoolean("editable", false))
+                        .append(" | scrollable=").append(control.optBoolean("scrollable", false))
+                        .append(" | bounds=").append(control.optString("bounds", ""))
+                        .append("\n");
+            }
+            out.append("\n");
+        }
+        writeText(new File(root, "SCREENS_AND_CONTROLS.txt"), out.toString());
+        writeText(new File(root, "SCREENS_AND_CONTROLS.json"), screens.toString());
     }
 
     public static boolean shouldCaptureScreenshot(Context c){
