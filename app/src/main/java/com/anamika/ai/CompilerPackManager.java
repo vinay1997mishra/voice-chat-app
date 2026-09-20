@@ -106,7 +106,7 @@ public final class CompilerPackManager {
         EXT.put(".rb", new Spec("Ruby", "libanamika_ruby.so"));
         EXT.put(".php", new Spec("PHP", "libanamika_php.so"));
         EXT.put(".dart", new Spec("Dart", "libanamika_dart.so"));
-        EXT.put(".sh", new Spec("Shell", "libanamika_bash.so"));
+        EXT.put(".sh", new Spec("Shell", "Android system shell"));
     }
 
     private CompilerPackManager() { }
@@ -414,7 +414,7 @@ public final class CompilerPackManager {
     private static boolean isInProcessLanguage(String language) {
         return "Python".equals(language) || "JavaScript".equals(language) ||
                 "TypeScript".equals(language) || "Java".equals(language) ||
-                "Kotlin".equals(language);
+                "Kotlin".equals(language) || "Shell".equals(language);
     }
 
     private static Spec specFor(String lower) {
