@@ -2,8 +2,9 @@ package com.anamika.ai.phone;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;\nimport android.os.Build;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,25 +18,36 @@ public final class AppLauncher {
         Result(boolean launched,String message){this.launched=launched;this.message=message;}
     }
 
-    public static final class AppRef {\n        public final String packageName;\n        public final String label;\n        AppRef(String packageName,String label){this.packageName=packageName;this.label=label;}\n    }\n\n    private AppLauncher(){}
+    public static final class AppRef {
+        public final String packageName;
+        public final String label;
+        AppRef(String packageName,String label){this.packageName=packageName;this.label=label;}
+    }
 
+    private AppLauncher(){}
+
+    private static List<ApplicationInfo> installed(PackageManager pm){
+        if(Build.VERSION.SDK_INT>=33)
+            return pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0));
+        return pm.getInstalledApplications(0);
+    }
 
     public static AppRef resolve(Context c,String requested) {
         String q=requested==null?"":requested.trim().toLowerCase(Locale.ROOT);
         if(q.isEmpty()) return null;
         PackageManager pm=c.getPackageManager();
-        List<ApplicationInfo> apps;
-        if(Build.VERSION.SDK_INT>=33) apps=pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0));
-        else apps=pm.getInstalledApplications(0);
         AppRef best=null;
         int bestLen=Integer.MAX_VALUE;
-        for(ApplicationInfo a:apps){
+        for(ApplicationInfo a:installed(pm)){
             if(pm.getLaunchIntentForPackage(a.packageName)==null) continue;
             String label=String.valueOf(pm.getApplicationLabel(a));
             String lower=label.toLowerCase(Locale.ROOT);
             if(lower.equals(q)) return new AppRef(a.packageName,label);
             if(lower.contains(q)||q.contains(lower)){
-                if(label.length()<bestLen){best=new AppRef(a.packageName,label);bestLen=label.length();}
+                if(label.length()<bestLen){
+                    best=new AppRef(a.packageName,label);
+                    bestLen=label.length();
+                }
             }
         }
         return best;
@@ -45,11 +57,8 @@ public final class AppLauncher {
         String q=requested==null?"":requested.trim().toLowerCase(Locale.ROOT);
         if(q.isEmpty()) return new Result(false,"App name missing.");
         PackageManager pm=c.getPackageManager();
-        List<ApplicationInfo> apps;
-        if(Build.VERSION.SDK_INT>=33) apps=pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0));
-        else apps=pm.getInstalledApplications(0);
         List<ApplicationInfo> candidates=new ArrayList<>();
-        for(ApplicationInfo a:apps){
+        for(ApplicationInfo a:installed(pm)){
             Intent launch=pm.getLaunchIntentForPackage(a.packageName);
             if(launch==null) continue;
             String label=String.valueOf(pm.getApplicationLabel(a)).toLowerCase(Locale.ROOT);
