@@ -1,3 +1,5 @@
+import 'self_upgrade_system.dart';
+
 enum LocalCheckKind { syntax, analyzer, test, build, policy }
 
 class CodeDiagnostic {
