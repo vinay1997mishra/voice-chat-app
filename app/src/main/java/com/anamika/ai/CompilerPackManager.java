@@ -111,6 +111,43 @@ public final class CompilerPackManager {
 
     private CompilerPackManager() { }
 
+    /** Returns the real packaged status of every external compiler/runtime pack.
+     *  This is intentionally based on nativeLibraryDir, never only on metadata. */
+    public static List<Check> bundledInventory(Context context) {
+        List<Check> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Spec spec : EXT.values()) {
+            if (!seen.add(spec.binary)) continue;
+            File bin = new File(context.getApplicationInfo().nativeLibraryDir, spec.binary);
+            out.add(new Check(spec.lang, spec.binary,
+                    bin.isFile() ? State.PASS : State.MISSING,
+                    bin.isFile()
+                            ? "Physically bundled in APK native library directory (" + bin.length() + " bytes)."
+                            : "Not bundled in this APK."));
+        }
+        File androidPack = new File(context.getApplicationInfo().nativeLibraryDir, "libanamika_androidcheck.so");
+        out.add(new Check("Android project", "libanamika_androidcheck.so",
+                androidPack.isFile() ? State.PASS : State.MISSING,
+                androidPack.isFile()
+                        ? "Physically bundled Android verification pack (" + androidPack.length() + " bytes)."
+                        : "Not bundled in this APK."));
+        out.add(new Check("SQL", "Android SQLite", State.PASS, "Built into Android runtime."));
+        out.add(new Check("HTML5", "built-in HTML validator", State.PASS, "Built into Anamika."));
+        out.add(new Check("CSS3", "built-in CSS validator", State.PASS, "Built into Anamika."));
+        return Collections.unmodifiableList(out);
+    }
+
+    public static String bundledInventorySummary(Context context) {
+        StringBuilder sb = new StringBuilder();
+        int pass = 0, missing = 0;
+        for (Check check : bundledInventory(context)) {
+            if (check.state == State.PASS) pass++;
+            if (check.state == State.MISSING) missing++;
+            sb.append(check).append('\n');
+        }
+        return "Bundled verifier packs: " + pass + " ready, " + missing + " missing\n" + sb.toString().trim();
+    }
+
     public static Report verifyGeneratedText(Context context, String generatedText) {
         Map<String,String> files = OfflineCodeValidator.parse(generatedText);
         return verifyFiles(context, files);
