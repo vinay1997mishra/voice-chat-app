@@ -47,13 +47,17 @@ public final class UniversalLanguageRouter {
             LocalModelBridge.ModelStatus st=LocalModelBridge.getStatus(context);
             if(st.ready){
                 String prompt=
-                        "You are Anamika's multilingual intent parser. Understand Hindi, Hinglish, English and any human language.\\n"+
+                        "You are Anamika's semantic command interpreter. Understand meaning like a conversational assistant, not by exact keywords.\\n"+
+                        "Strongly understand colloquial Hindi, Urdu, Hinglish, Roman Urdu, English and arbitrary mixtures, slang, spelling mistakes and incomplete natural speech.\\n"+
+                        "Examples of equivalence: 'ye kar de', 'isko karna hai', 'کر دو', 'please do this' may express the same intent from context. "+
+                        "Never reject a sentence merely because grammar, script or spelling is mixed. Preserve the owner's actual target and details.\\n"+
                         "Return exactly four lines and nothing else:\\n"+
                         "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|FILE_SEARCH|VAULT_STATUS|FILE_EXPORT|FILE_DELETE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\\n"+
                         "ARG=<main target/query/message; preserve names, URLs, quoted text, numbers and filenames>\\n"+
-                        "NORMALIZED=<one concise English command preserving meaning>\\n"+
-                        "STYLE=<HINDI|HINGLISH|ENGLISH|OTHER>\\n"+
-                        "If the user is talking or asking a general question use CHAT. Do not answer or explain.\\n"+
+                        "NORMALIZED=<one concise English representation preserving the full meaning>\\n"+
+                        "STYLE=<HINDI|URDU|HINGLISH|ENGLISH|OTHER>\\n"+
+                        "If it is ordinary conversation, a question, advice, explanation, correction or follow-up, use CHAT. "+
+                        "Use UNKNOWN only when meaning truly cannot be inferred. Do not answer the user here.\\n"+
                         "User: "+original;
                 Interpretation parsed=parseModel(original,LocalModelBridge.generate(context,prompt),style);
                 if(parsed!=null) {
@@ -62,7 +66,10 @@ public final class UniversalLanguageRouter {
                 }
             }
         }catch(Throwable ignored){}
-        return new Interpretation(original,original,"UNKNOWN","",style,false);
+        // A conversational assistant should still answer natural language even when
+        // no action intent was confidently classified. Action execution remains gated
+        // by explicit classified intents, while fallback conversation is safe.
+        return new Interpretation(original,original,"CHAT",original,style,false);
     }
 
     private static final String LEARN_PREFS="anamika_language_learning";
