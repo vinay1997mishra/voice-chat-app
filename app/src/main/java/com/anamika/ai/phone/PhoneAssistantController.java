@@ -165,7 +165,7 @@ public final class PhoneAssistantController {
             return "Battery Saver settings khol di.";
         }
         if(s.contains("notification") || s.contains("नोटिफिकेशन")){
-            open(c,Settings.ACTION_NOTIFICATION_SETTINGS);
+            open(c,"android.settings.NOTIFICATION_SETTINGS");
             return "Notification settings khol di.";
         }
         if(s.contains("ringtone") || s.contains("रिंगटोन") || s.contains("sound setting")){
