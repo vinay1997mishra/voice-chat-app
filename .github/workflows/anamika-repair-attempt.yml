@@ -1,0 +1,102 @@
+name: Anamika isolated repair attempt
+on:
+  workflow_call:
+    inputs:
+      base_sha:
+        required: true
+        type: string
+      artifact:
+        required: true
+        type: string
+      attempt:
+        required: true
+        type: string
+      request:
+        required: true
+        type: string
+    secrets:
+      model_key:
+        required: true
+    outputs:
+      passed:
+        value: ${{ jobs.check.outputs.passed }}
+      artifact:
+        value: repair-${{ inputs.attempt }}
+permissions:
+  contents: read
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          path: trusted
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_sha }}
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: input
+      - name: Ask configured model for a bounded patch
+        env:
+          ANAMIKA_MODEL_URL: ${{ vars.ANAMIKA_MODEL_URL }}
+          ANAMIKA_MODEL: ${{ vars.ANAMIKA_MODEL }}
+          ANAMIKA_MODEL_KEY: ${{ secrets.model_key }}
+          OWNER_REQUEST: ${{ inputs.request }}
+        run: python3 trusted/tools/anamika/repair.py propose --root source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patch-${{ inputs.attempt }}
+          path: candidate.json
+          retention-days: 7
+  check:
+    needs: propose
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      passed: ${{ steps.report.outputs.passed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          path: trusted
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_sha }}
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: patch-${{ inputs.attempt }}
+          path: input
+      - run: python3 trusted/tools/anamika/repair.py apply --root source
+      - name: Compile and test without model or write credentials
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bash trusted/tools/anamika/check.sh source 2>&1 | tee checks.log
+      - name: Bind check results to candidate digest
+        id: report
+        if: ${{ always() && steps.check.outcome != 'skipped' }}
+        env:
+          CHECK_PASSED: ${{ steps.check.outcome == 'success' }}
+        run: python3 trusted/tools/anamika/repair.py report --root source --output diagnostics.json
+      - run: cp diagnostics.json input/diagnostics.json
+        if: ${{ always() && steps.report.outcome == 'success' }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.report.outcome == 'success' }}
+        with:
+          name: repair-${{ inputs.attempt }}
+          path: |
+            input/candidate.json
+            input/diagnostics.json
+          retention-days: 7

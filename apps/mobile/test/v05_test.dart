@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_chat_app/main_v05.dart';
 
 void main() {
-  testWidgets('v0.5 shows seat actions and room four-box tools', (tester) async {
+  testWidgets('v0.5 shows seat actions and room four-box tools', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {

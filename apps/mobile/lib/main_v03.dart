@@ -122,18 +122,15 @@ class _V03ShellState extends State<V03Shell> {
   void _openRoom() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => V03RoomPage(
-          coins: _coins,
-          spendCoins: _spendCoins,
-        ),
+        builder: (_) => V03RoomPage(coins: _coins, spendCoins: _spendCoins),
       ),
     );
   }
 
   void _openVip() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const VipCenterPage()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const VipCenterPage()));
   }
 
   void _openLuckyBag() {
@@ -346,7 +343,8 @@ class V03HomePage extends StatelessWidget {
           const _InfoTile(
             icon: Icons.cloud_off_rounded,
             title: 'GitHub-only v0.3',
-            subtitle: 'Realtime voice and multi-phone sync will be connected later.',
+            subtitle:
+                'Realtime voice and multi-phone sync will be connected later.',
           ),
         ],
       ),
@@ -355,11 +353,7 @@ class V03HomePage extends StatelessWidget {
 }
 
 class V03RoomPage extends StatefulWidget {
-  const V03RoomPage({
-    super.key,
-    required this.coins,
-    required this.spendCoins,
-  });
+  const V03RoomPage({super.key, required this.coins, required this.spendCoins});
 
   final int coins;
   final bool Function(int amount, String label) spendCoins;
@@ -402,7 +396,9 @@ class _V03RoomPageState extends State<V03RoomPage> {
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   int _firstOpenSeat() {
@@ -470,7 +466,9 @@ class _V03RoomPageState extends State<V03RoomPage> {
       _requests.remove(request);
       _seats[target] = request.name;
       if (request.name == 'You') _mySeat = target;
-      _messages.add(RoomMessage('System', '${request.name} joined seat ${target + 1}.'));
+      _messages.add(
+        RoomMessage('System', '${request.name} joined seat ${target + 1}.'),
+      );
     });
   }
 
@@ -513,12 +511,17 @@ class _V03RoomPageState extends State<V03RoomPage> {
                   children: [
                     const Text(
                       'Owner / Admin Controls',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Invite Mode'),
-                      subtitle: const Text('Normal users request a seat when ON.'),
+                      subtitle: const Text(
+                        'Normal users request a seat when ON.',
+                      ),
                       value: _inviteMode,
                       onChanged: (value) => refresh(() => _inviteMode = value),
                     ),
@@ -529,12 +532,19 @@ class _V03RoomPageState extends State<V03RoomPage> {
                     ),
                     const SizedBox(height: 8),
                     if (_requests.isEmpty)
-                      const Text('No pending requests.', style: TextStyle(color: Colors.white60)),
+                      const Text(
+                        'No pending requests.',
+                        style: TextStyle(color: Colors.white60),
+                      ),
                     ..._requests.map(
                       (request) => Card(
                         child: ListTile(
                           leading: CircleAvatar(
-                            child: Text(request.vip > 0 ? 'V${request.vip}' : request.name.substring(0, 1)),
+                            child: Text(
+                              request.vip > 0
+                                  ? 'V${request.vip}'
+                                  : request.name.substring(0, 1),
+                            ),
                           ),
                           title: Text(request.name),
                           subtitle: Text(
@@ -544,7 +554,8 @@ class _V03RoomPageState extends State<V03RoomPage> {
                             spacing: 2,
                             children: [
                               IconButton(
-                                onPressed: () => refresh(() => _requests.remove(request)),
+                                onPressed: () =>
+                                    refresh(() => _requests.remove(request)),
                                 icon: const Icon(Icons.close_rounded),
                               ),
                               IconButton(
@@ -565,7 +576,12 @@ class _V03RoomPageState extends State<V03RoomPage> {
                         setState(() {
                           _messages
                             ..clear()
-                            ..add(const RoomMessage('System', 'Chat cleared by Owner/Admin.'));
+                            ..add(
+                              const RoomMessage(
+                                'System',
+                                'Chat cleared by Owner/Admin.',
+                              ),
+                            );
                         });
                         Navigator.pop(sheetContext);
                       },
@@ -633,7 +649,8 @@ class _V03RoomPageState extends State<V03RoomPage> {
                               child: ChoiceChip(
                                 label: Text('×$combo'),
                                 selected: selectedCombo == combo,
-                                onSelected: (_) => setSheetState(() => selectedCombo = combo),
+                                onSelected: (_) =>
+                                    setSheetState(() => selectedCombo = combo),
                               ),
                             ),
                           )
@@ -644,7 +661,10 @@ class _V03RoomPageState extends State<V03RoomPage> {
                   ...gifts.map(
                     (gift) => Card(
                       child: ListTile(
-                        leading: Text(gift.emoji, style: const TextStyle(fontSize: 28)),
+                        leading: Text(
+                          gift.emoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
                         title: Text(gift.name),
                         subtitle: Text('${gift.cost} Coins each'),
                         trailing: FilledButton(
@@ -713,10 +733,16 @@ class _V03RoomPageState extends State<V03RoomPage> {
               children: [
                 Card(
                   child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.shield_rounded)),
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.shield_rounded),
+                    ),
                     title: const Text('Owner • VIP11'),
-                    subtitle: Text(_inviteMode ? 'Invite Mode ON' : 'Invite Mode OFF'),
-                    trailing: Chip(label: Text(_inviteMode ? 'Invite ON' : 'Direct Seat')),
+                    subtitle: Text(
+                      _inviteMode ? 'Invite Mode ON' : 'Invite Mode OFF',
+                    ),
+                    trailing: Chip(
+                      label: Text(_inviteMode ? 'Invite ON' : 'Direct Seat'),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -748,18 +774,20 @@ class _V03RoomPageState extends State<V03RoomPage> {
                                 color: isMine
                                     ? const Color(0xFF6D48D8)
                                     : locked
-                                        ? const Color(0xFF353640)
-                                        : const Color(0xFF252631),
+                                    ? const Color(0xFF353640)
+                                    : const Color(0xFF252631),
                                 border: Border.all(
-                                  color: isMine ? Colors.white70 : Colors.white12,
+                                  color: isMine
+                                      ? Colors.white70
+                                      : Colors.white12,
                                 ),
                               ),
                               child: Icon(
                                 locked
                                     ? Icons.lock_rounded
                                     : occupant == null
-                                        ? Icons.add_rounded
-                                        : Icons.person_rounded,
+                                    ? Icons.add_rounded
+                                    : Icons.person_rounded,
                               ),
                             ),
                           ),
@@ -783,7 +811,9 @@ class _V03RoomPageState extends State<V03RoomPage> {
                         onPressed: _mySeat == null
                             ? null
                             : () => setState(() => _micMuted = !_micMuted),
-                        icon: Icon(_micMuted ? Icons.mic_off_rounded : Icons.mic_rounded),
+                        icon: Icon(
+                          _micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                        ),
                         label: Text(_micMuted ? 'Mic Off' : 'Mic On'),
                       ),
                     ),
@@ -804,7 +834,10 @@ class _V03RoomPageState extends State<V03RoomPage> {
                     label: const Text('Leave seat / Audience'),
                   ),
                 const Divider(height: 28),
-                const Text('Room Chat', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text(
+                  'Room Chat',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const SizedBox(height: 8),
                 ..._messages.map(
                   (message) => Padding(
@@ -892,7 +925,9 @@ class VipCenterPage extends StatelessWidget {
                     ? 'Unique 3D+ entry concept, profile frame, mic skin, badge and room effects.'
                     : 'Progressive frame, badge, mic skin, vehicle and entry cosmetics.',
               ),
-              trailing: tier == 3 ? const Chip(label: Text('Demo Active')) : null,
+              trailing: tier == 3
+                  ? const Chip(label: Text('Demo Active'))
+                  : null,
             ),
           );
         },
@@ -939,9 +974,9 @@ class _LuckyBagPageState extends State<LuckyBagPage> {
   void _createBag(int amount) {
     final ok = widget.spendCoins(amount, 'Created Lucky Bag $amount');
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not enough demo Coins.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Not enough demo Coins.')));
       return;
     }
     setState(() {
@@ -962,9 +997,9 @@ class _LuckyBagPageState extends State<LuckyBagPage> {
       _claimed = true;
       _bag = bag.copyWith(claimed: 1);
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('You claimed $reward demo Coins.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('You claimed $reward demo Coins.')));
   }
 
   @override
@@ -975,7 +1010,11 @@ class _LuckyBagPageState extends State<LuckyBagPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Demo Coins', value: '$_coins'),
+          _BalanceCard(
+            icon: Icons.monetization_on_rounded,
+            label: 'Demo Coins',
+            value: '$_coins',
+          ),
           const SizedBox(height: 16),
           const Text(
             'Create LP',
@@ -1010,7 +1049,10 @@ class _LuckyBagPageState extends State<LuckyBagPage> {
                   children: [
                     Text(
                       'Active LP • ${_bag!.amount} Coins',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text('${_bag!.claimed}/${_bag!.capacity} claimed'),
@@ -1018,7 +1060,9 @@ class _LuckyBagPageState extends State<LuckyBagPage> {
                     FilledButton.icon(
                       onPressed: _claimed ? null : _claim,
                       icon: const Icon(Icons.touch_app_rounded),
-                      label: Text(_claimed ? 'Already Claimed' : 'Claim Demo LP'),
+                      label: Text(
+                        _claimed ? 'Already Claimed' : 'Claim Demo LP',
+                      ),
                     ),
                   ],
                 ),
@@ -1063,9 +1107,9 @@ class _DiceRushPageState extends State<DiceRushPage> {
   void _play() {
     final ok = widget.spendCoins(_bet, 'Dice Rush bet');
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not enough demo Coins.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Not enough demo Coins.')));
       return;
     }
     final roll = _random.nextInt(6) + 1;
@@ -1090,7 +1134,11 @@ class _DiceRushPageState extends State<DiceRushPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Demo Coins', value: '$_coins'),
+          _BalanceCard(
+            icon: Icons.monetization_on_rounded,
+            label: 'Demo Coins',
+            value: '$_coins',
+          ),
           const SizedBox(height: 20),
           Card(
             child: Padding(
@@ -1100,7 +1148,10 @@ class _DiceRushPageState extends State<DiceRushPage> {
                   const Text('🎲', style: TextStyle(fontSize: 72)),
                   Text(
                     _lastRoll == null ? '—' : 'Rolled $_lastRoll',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(_result, textAlign: TextAlign.center),
@@ -1115,14 +1166,20 @@ class _DiceRushPageState extends State<DiceRushPage> {
               ButtonSegment(value: true, label: Text('High 4–6')),
             ],
             selected: {_pickHigh},
-            onSelectionChanged: (value) => setState(() => _pickHigh = value.first),
+            onSelectionChanged: (value) =>
+                setState(() => _pickHigh = value.first),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
             initialValue: _bet,
             decoration: const InputDecoration(labelText: 'Bet amount'),
             items: const [100, 500, 1000]
-                .map((value) => DropdownMenuItem(value: value, child: Text('$value Coins')))
+                .map(
+                  (value) => DropdownMenuItem(
+                    value: value,
+                    child: Text('$value Coins'),
+                  ),
+                )
                 .toList(),
             onChanged: (value) {
               if (value != null) setState(() => _bet = value);
@@ -1170,18 +1227,37 @@ class WalletPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Coins', value: '$coins')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.monetization_on_rounded,
+                  label: 'Coins',
+                  value: '$coins',
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _BalanceCard(icon: Icons.diamond_rounded, label: 'Diamonds', value: '$diamonds')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.diamond_rounded,
+                  label: 'Diamonds',
+                  value: '$diamonds',
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          const Text('Demo transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text(
+            'Demo transactions',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           ...transactions.map(
             (entry) => ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(entry.isCoin ? Icons.monetization_on_rounded : Icons.diamond_rounded),
+              leading: Icon(
+                entry.isCoin
+                    ? Icons.monetization_on_rounded
+                    : Icons.diamond_rounded,
+              ),
               title: Text(entry.label),
               trailing: Text(
                 '${entry.amount > 0 ? '+' : ''}${entry.amount}',
@@ -1210,16 +1286,31 @@ class MePage extends StatelessWidget {
               padding: EdgeInsets.all(18),
               child: Row(
                 children: [
-                  CircleAvatar(radius: 34, child: Text('V', style: TextStyle(fontSize: 24))),
+                  CircleAvatar(
+                    radius: 34,
+                    child: Text('V', style: TextStyle(fontSize: 24)),
+                  ),
                   SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Vinay Demo', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                        Text(
+                          'Vinay Demo',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         Text('ID 10000001 • 🇮🇳 • VIP3'),
                         SizedBox(height: 6),
-                        Wrap(spacing: 6, children: [Chip(label: Text('VIP3')), Chip(label: Text('Demo User'))]),
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            Chip(label: Text('VIP3')),
+                            Chip(label: Text('Demo User')),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1228,9 +1319,22 @@ class MePage extends StatelessWidget {
             ),
           ),
           SizedBox(height: 14),
-          _InfoTile(icon: Icons.storefront_rounded, title: 'Store & Bag', subtitle: 'Catalog and owned cosmetics preview.'),
-          _InfoTile(icon: Icons.workspace_premium_rounded, title: 'VIP / Medal / Relationship', subtitle: 'Profile shortcuts are prepared for later expansion.'),
-          _InfoTile(icon: Icons.settings_rounded, title: 'Settings', subtitle: 'Language, security and account controls will be connected later.'),
+          _InfoTile(
+            icon: Icons.storefront_rounded,
+            title: 'Store & Bag',
+            subtitle: 'Catalog and owned cosmetics preview.',
+          ),
+          _InfoTile(
+            icon: Icons.workspace_premium_rounded,
+            title: 'VIP / Medal / Relationship',
+            subtitle: 'Profile shortcuts are prepared for later expansion.',
+          ),
+          _InfoTile(
+            icon: Icons.settings_rounded,
+            title: 'Settings',
+            subtitle:
+                'Language, security and account controls will be connected later.',
+          ),
         ],
       ),
     );
@@ -1238,7 +1342,11 @@ class MePage extends StatelessWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.icon, required this.label, required this.value});
+  const _BalanceCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
@@ -1258,7 +1366,13 @@ class _BalanceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label, style: Theme.of(context).textTheme.bodySmall),
-                  Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1270,7 +1384,12 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _FeatureButton extends StatelessWidget {
-  const _FeatureButton({super.key, required this.icon, required this.label, required this.onTap});
+  const _FeatureButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -1304,7 +1423,11 @@ class _Tag extends StatelessWidget {
 }
 
 class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.icon, required this.title, required this.subtitle});
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   final IconData icon;
   final String title;

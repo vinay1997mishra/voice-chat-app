@@ -19,3 +19,10 @@ The self-upgrade workflow, signing configuration, and keystore are protected fro
 This repository does not contain an AI coding backend or a production owner-authentication backend. The controller requires a trusted owner-authenticated result supplied by the future authentication layer. It deliberately does not hard-code an owner password or signing secret.
 
 Production release signing must use protected secrets/keys and should be placed behind a GitHub Environment required-reviewer gate. Never commit private signing keys or passwords to the repository.
+
+## Connected repair pipeline
+See [ANAMIKA_REPAIR_SETUP.md](ANAMIKA_REPAIR_SETUP.md) for the online repair worker,
+owner console, exact-commit approval and explicit remaining release prerequisites.
+The workflow now requires an open Anamika PR and its full reviewed head SHA, and
+restricts dispatch to the repository owner on main. A passing debug signature is
+not evidence of compatibility with an installed production APK.

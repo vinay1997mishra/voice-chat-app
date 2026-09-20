@@ -1,3 +1,4 @@
+import 'anamika_repair_page.dart';
 import 'package:flutter/material.dart';
 
 void main() => runApp(const VoiceChatV05());
@@ -51,14 +52,32 @@ class _MainShellV05State extends State<MainShellV05> {
       const ProfileV05(),
     ];
     return Scaffold(
+      floatingActionButton: anamikaOwnerTools
+          ? FloatingActionButton(
+              tooltip: 'Anamika Code Doctor',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const AnamikaRepairPage(),
+                ),
+              ),
+              child: const Icon(Icons.build_circle_outlined),
+            )
+          : null,
       body: IndexedStack(index: index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (v) => setState(() => index = v),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.explore_rounded), label: 'Discover'),
-          NavigationDestination(icon: Icon(Icons.forum_rounded), label: 'Message'),
+          NavigationDestination(
+            icon: Icon(Icons.explore_rounded),
+            label: 'Discover',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.forum_rounded),
+            label: 'Message',
+          ),
           NavigationDestination(icon: Icon(Icons.person_rounded), label: 'Me'),
         ],
       ),
@@ -77,7 +96,12 @@ class _MainShellV05State extends State<MainShellV05> {
 }
 
 class HomeV05 extends StatelessWidget {
-  const HomeV05({super.key, required this.rooms, required this.onCreateRoom, required this.onOpenRoom});
+  const HomeV05({
+    super.key,
+    required this.rooms,
+    required this.onCreateRoom,
+    required this.onOpenRoom,
+  });
   final List<RoomCardData> rooms;
   final VoidCallback onCreateRoom;
   final ValueChanged<RoomCardData> onOpenRoom;
@@ -98,11 +122,21 @@ class HomeV05 extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Mine', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
+                const Text(
+                  'Mine',
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+                ),
                 const SizedBox(width: 24),
-                const Text('Popular', style: TextStyle(fontSize: 23, color: Colors.white60)),
+                const Text(
+                  'Popular',
+                  style: TextStyle(fontSize: 23, color: Colors.white60),
+                ),
                 const Spacer(),
-                IconButton(onPressed: onCreateRoom, icon: const Icon(Icons.add_circle_rounded, size: 30), tooltip: 'Create Room'),
+                IconButton(
+                  onPressed: onCreateRoom,
+                  icon: const Icon(Icons.add_circle_rounded, size: 30),
+                  tooltip: 'Create Room',
+                ),
                 const Icon(Icons.search_rounded, size: 30),
               ],
             ),
@@ -132,12 +166,19 @@ class HomeV05 extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(colors: [Color(0xFF7A2AA2), Color(0xFF271036)]),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF7A2AA2), Color(0xFF271036)],
+                      ),
                       border: Border.all(color: Colors.white12),
                     ),
                     child: Stack(
                       children: [
-                        Center(child: Text(room.dp, style: const TextStyle(fontSize: 56))),
+                        Center(
+                          child: Text(
+                            room.dp,
+                            style: const TextStyle(fontSize: 56),
+                          ),
+                        ),
                         Positioned(
                           left: 12,
                           right: 12,
@@ -145,8 +186,21 @@ class HomeV05 extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              Text('${room.flag} ID ${room.id}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(
+                                room.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                '${room.flag} ID ${room.id}',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -184,30 +238,57 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 18, right: 18, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.only(
+        left: 18,
+        right: 18,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Create Room', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+          const Text(
+            'Create Room',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 14),
           Center(
             child: InkWell(
               key: const Key('room-dp-picker'),
-              onTap: () => setState(() => dp = dp == '👑' ? '🎧' : dp == '🎧' ? '🌙' : '👑'),
+              onTap: () => setState(
+                () => dp = dp == '👑'
+                    ? '🎧'
+                    : dp == '🎧'
+                    ? '🌙'
+                    : '👑',
+              ),
               borderRadius: BorderRadius.circular(50),
-              child: CircleAvatar(radius: 42, child: Text(dp, style: const TextStyle(fontSize: 34))),
+              child: CircleAvatar(
+                radius: 42,
+                child: Text(dp, style: const TextStyle(fontSize: 34)),
+              ),
             ),
           ),
           const SizedBox(height: 8),
           const Center(child: Text('Tap Room DP to change')),
           const SizedBox(height: 14),
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Room name', border: OutlineInputBorder())),
+          TextField(
+            controller: name,
+            decoration: const InputDecoration(
+              labelText: 'Room name',
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
             value: seats,
-            decoration: const InputDecoration(labelText: 'Seat count', border: OutlineInputBorder()),
-            items: const [10, 15, 20, 25, 30].map((v) => DropdownMenuItem(value: v, child: Text('$v seats'))).toList(),
+            decoration: const InputDecoration(
+              labelText: 'Seat count',
+              border: OutlineInputBorder(),
+            ),
+            items: const [10, 15, 20, 25, 30]
+                .map((v) => DropdownMenuItem(value: v, child: Text('$v seats')))
+                .toList(),
             onChanged: (v) => setState(() => seats = v ?? 10),
           ),
           SwitchListTile(
@@ -219,7 +300,12 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
           FilledButton(
             onPressed: () => Navigator.pop(
               context,
-              RoomCardData(name.text.trim().isEmpty ? 'My Voice Room' : name.text.trim(), '10000009', '🇮🇳', dp),
+              RoomCardData(
+                name.text.trim().isEmpty ? 'My Voice Room' : name.text.trim(),
+                '10000009',
+                '🇮🇳',
+                dp,
+              ),
             ),
             child: const Text('Create Room'),
           ),
@@ -269,19 +355,35 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
                 padding: const EdgeInsets.fromLTRB(8, 8, 10, 4),
                 child: Row(
                   children: [
-                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_rounded)),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
                     CircleAvatar(child: Text(widget.room.dp)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(widget.room.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                          Text('ID: ${widget.room.id}', style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                          Text(
+                            widget.room.name,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            'ID: ${widget.room.id}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white60,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    IconButton(key: const Key('four-box-menu'), onPressed: _openFourBoxMenu, icon: const Icon(Icons.grid_view_rounded, size: 28)),
+                    IconButton(
+                      key: const Key('four-box-menu'),
+                      onPressed: _openFourBoxMenu,
+                      icon: const Icon(Icons.grid_view_rounded, size: 28),
+                    ),
                   ],
                 ),
               ),
@@ -311,23 +413,45 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: occupied
-                                    ? const LinearGradient(colors: [Color(0xFFFFC13A), Color(0xFF8B36FF)])
-                                    : const LinearGradient(colors: [Color(0xFF3A244C), Color(0xFF1B1225)]),
-                                border: Border.all(color: const Color(0xFFFFCB62)),
+                                    ? const LinearGradient(
+                                        colors: [
+                                          Color(0xFFFFC13A),
+                                          Color(0xFF8B36FF),
+                                        ],
+                                      )
+                                    : const LinearGradient(
+                                        colors: [
+                                          Color(0xFF3A244C),
+                                          Color(0xFF1B1225),
+                                        ],
+                                      ),
+                                border: Border.all(
+                                  color: const Color(0xFFFFCB62),
+                                ),
                               ),
                               child: Center(
                                 child: isLocked
                                     ? const Icon(Icons.lock_rounded)
                                     : isMuted
-                                        ? const Icon(Icons.mic_off_rounded)
-                                        : occupied
-                                            ? Text(seats[i]!.substring(0, 1), style: const TextStyle(fontWeight: FontWeight.w900))
-                                            : const Icon(Icons.add_rounded),
+                                    ? const Icon(Icons.mic_off_rounded)
+                                    : occupied
+                                    ? Text(
+                                        seats[i]!.substring(0, 1),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      )
+                                    : const Icon(Icons.add_rounded),
                               ),
                             ),
                           ),
                           const SizedBox(height: 3),
-                          Text(seats[i] ?? 'Seat ${i + 1}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
+                          Text(
+                            seats[i] ?? 'Seat ${i + 1}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10),
+                          ),
                         ],
                       ),
                     );
@@ -368,26 +492,44 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Seat ${i + 1} options', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(
+                'Seat ${i + 1} options',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
               const SizedBox(height: 10),
               ListTile(
                 key: const Key('seat-lock-action'),
-                leading: Icon(isLocked ? Icons.lock_open_rounded : Icons.lock_rounded),
+                leading: Icon(
+                  isLocked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                ),
                 title: Text(isLocked ? 'Unlock Seat' : 'Lock Seat'),
                 onTap: () {
                   setState(() {
-                    if (isLocked) { locked.remove(i); } else { locked.add(i); }
+                    if (isLocked) {
+                      locked.remove(i);
+                    } else {
+                      locked.add(i);
+                    }
                   });
                   Navigator.pop(sheetContext);
                 },
               ),
               ListTile(
                 key: const Key('seat-mute-action'),
-                leading: Icon(isMuted ? Icons.mic_rounded : Icons.mic_off_rounded),
+                leading: Icon(
+                  isMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
+                ),
                 title: Text(isMuted ? 'Unmute Seat' : 'Mute Seat'),
                 onTap: () {
                   setState(() {
-                    if (isMuted) { muted.remove(i); } else { muted.add(i); }
+                    if (isMuted) {
+                      muted.remove(i);
+                    } else {
+                      muted.add(i);
+                    }
                   });
                   Navigator.pop(sheetContext);
                 },
@@ -422,20 +564,55 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Room Tools', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text(
+                'Room Tools',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 14),
               GridView.count(
                 shrinkWrap: true,
                 crossAxisCount: 4,
                 children: [
-                  _QuickBox(Icons.settings_rounded, 'Settings', () => _showSimple('Room Settings')),
-                  _QuickBox(Icons.card_giftcard_rounded, 'LP', () => _showSimple('Lucky Bag (LP)')),
-                  _QuickBox(Icons.sports_esports_rounded, 'Game', () => _showSimple('Game Center')),
-                  _QuickBox(Icons.wallpaper_rounded, 'Room DP', _changeRoomDpInfo),
-                  _QuickBox(Icons.music_note_rounded, 'Music', () => _showSimple('Music')),
-                  _QuickBox(Icons.people_alt_rounded, 'Members', () => _showSimple('Members')),
-                  _QuickBox(Icons.block_rounded, 'Block', () => _showSimple('Block List')),
-                  _QuickBox(Icons.more_horiz_rounded, 'More', () => _showSimple('More Room Tools')),
+                  _QuickBox(
+                    Icons.settings_rounded,
+                    'Settings',
+                    () => _showSimple('Room Settings'),
+                  ),
+                  _QuickBox(
+                    Icons.card_giftcard_rounded,
+                    'LP',
+                    () => _showSimple('Lucky Bag (LP)'),
+                  ),
+                  _QuickBox(
+                    Icons.sports_esports_rounded,
+                    'Game',
+                    () => _showSimple('Game Center'),
+                  ),
+                  _QuickBox(
+                    Icons.wallpaper_rounded,
+                    'Room DP',
+                    _changeRoomDpInfo,
+                  ),
+                  _QuickBox(
+                    Icons.music_note_rounded,
+                    'Music',
+                    () => _showSimple('Music'),
+                  ),
+                  _QuickBox(
+                    Icons.people_alt_rounded,
+                    'Members',
+                    () => _showSimple('Members'),
+                  ),
+                  _QuickBox(
+                    Icons.block_rounded,
+                    'Block',
+                    () => _showSimple('Block List'),
+                  ),
+                  _QuickBox(
+                    Icons.more_horiz_rounded,
+                    'More',
+                    () => _showSimple('More Room Tools'),
+                  ),
                 ],
               ),
             ],
@@ -447,35 +624,73 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
 
   void _showSimple(String title) {
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title opened in demo mode.')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$title opened in demo mode.')));
   }
 
   void _changeRoomDpInfo() {
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Room DP picker is available from Create/Edit Room in this demo.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Room DP picker is available from Create/Edit Room in this demo.',
+        ),
+      ),
+    );
   }
 }
 
 class ProfileV05 extends StatelessWidget {
   const ProfileV05({super.key});
   @override
-  Widget build(BuildContext context) => const BasicPage(title: 'Me', icon: Icons.person_rounded, subtitle: 'Coins, Diamond, VIP, Store, Bag, Level and settings live here.');
+  Widget build(BuildContext context) => const BasicPage(
+    title: 'Me',
+    icon: Icons.person_rounded,
+    subtitle: 'Coins, Diamond, VIP, Store, Bag, Level and settings live here.',
+  );
 }
 
 class BasicPage extends StatelessWidget {
-  const BasicPage({super.key, required this.title, required this.icon, this.subtitle = 'Coming in the next connected build.'});
+  const BasicPage({
+    super.key,
+    required this.title,
+    required this.icon,
+    this.subtitle = 'Coming in the next connected build.',
+  });
   final String title;
   final IconData icon;
   final String subtitle;
   @override
   Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF43126C), Color(0xFF130419)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
-        child: SafeArea(
-          child: Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 58), const SizedBox(height: 12), Text(title, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900)), const SizedBox(height: 8), Padding(padding: const EdgeInsets.symmetric(horizontal: 32), child: Text(subtitle, textAlign: TextAlign.center))]),
-          ),
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Color(0xFF43126C), Color(0xFF130419)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ),
+    ),
+    child: SafeArea(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 58),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(subtitle, textAlign: TextAlign.center),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _Tool extends StatelessWidget {
@@ -483,7 +698,14 @@ class _Tool extends StatelessWidget {
   final IconData icon;
   final String label;
   @override
-  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon), const SizedBox(height: 4), Text(label, style: const TextStyle(fontSize: 11))]);
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon),
+      const SizedBox(height: 4),
+      Text(label, style: const TextStyle(fontSize: 11)),
+    ],
+  );
 }
 
 class _QuickBox extends StatelessWidget {
@@ -493,13 +715,24 @@ class _QuickBox extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 28), const SizedBox(height: 6), Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))]),
-        ),
-      );
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(16),
+    child: Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 28),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class RoomCardData {

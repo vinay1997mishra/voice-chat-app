@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'local_code_doctor.dart';
+import 'self_upgrade_system.dart';
 
 /// Adapter for Anamika's already-installed on-device model.
 ///
@@ -20,7 +21,7 @@ class AnamikaLocalCodingModel implements CodingModel {
   }) async {
     final prompt = _repairPrompt(workspace, diagnostics);
     final raw = await inference.generate(prompt);
-    return _decodePatches(raw);
+    return _decodePatches(raw, workspace);
   }
 
   Future<Map<String, String>> writeFeature({
@@ -34,9 +35,11 @@ class AnamikaLocalCodingModel implements CodingModel {
     }
     final result = Map<String, String>.from(workspace);
     for (final item in decoded['files'] as List) {
-      if (item is! Map) continue;
+      if (item is! Map) throw const FormatException('Invalid file.');
       final path = item['path']?.toString() ?? '';
-      final content = item['content']?.toString() ?? '';
+      if (item['content'] is! String)
+        throw const FormatException('Missing file content.');
+      final content = item['content'] as String;
       if (!_safe(path)) throw FormatException('Unsafe generated path: $path');
       result[path] = content;
     }
@@ -62,7 +65,7 @@ Project:
 ${workspace.entries.map((e) => '--- ${e.key}\n${e.value}').join('\n')}
 ''';
 
-  List<RepairPatch> _decodePatches(String raw) {
+  List<RepairPatch> _decodePatches(String raw, Map<String, String> workspace) {
     final decoded = jsonDecode(_extractJson(raw));
     if (decoded is! Map || decoded['patches'] is! List) {
       throw const FormatException('Local model did not return patches JSON.');
@@ -71,22 +74,23 @@ ${workspace.entries.map((e) => '--- ${e.key}\n${e.value}').join('\n')}
       if (item is! Map) throw const FormatException('Invalid patch.');
       final path = item['path']?.toString() ?? '';
       if (!_safe(path)) throw FormatException('Unsafe repair path: $path');
-      return RepairPatch(path: path, beforeHash: '', replacement: item['replacement']?.toString() ?? '');
+      if (!workspace.containsKey(path) || item['replacement'] is! String)
+        throw const FormatException('Unknown file or missing replacement.');
+      return RepairPatch(
+        path: path,
+        beforeHash: sourceHash(workspace[path]!),
+        replacement: item['replacement'] as String,
+      );
     }).toList();
   }
 
   String _extractJson(String raw) {
     final start = raw.indexOf('{');
     final end = raw.lastIndexOf('}');
-    if (start < 0 || end < start) throw const FormatException('No JSON returned by local model.');
+    if (start < 0 || end < start)
+      throw const FormatException('No JSON returned by local model.');
     return raw.substring(start, end + 1);
   }
 
-  bool _safe(String path) =>
-      path.isNotEmpty &&
-      !path.startsWith('/') &&
-      !path.contains('..') &&
-      !path.startsWith('.github/') &&
-      path != 'android/key.properties' &&
-      !path.endsWith('upload-keystore.jks');
+  bool _safe(String path) => UpgradePolicy.allows(path);
 }
