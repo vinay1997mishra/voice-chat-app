@@ -163,6 +163,12 @@
             android:layout_height="wrap_content"
             android:text="Prepare Self-Upgrade Workspace" />
 
+        <Button
+            android:id="@+id/secureSelfUpdateButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secure Owner-Signed Self Update" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
