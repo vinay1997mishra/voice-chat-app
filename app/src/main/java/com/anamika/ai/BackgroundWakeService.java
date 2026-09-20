@@ -139,7 +139,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         if(isMediaPlaybackNow()){
             mediaPlaybackActive=true;
             stopListening();
-            updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+            updateNotification("Media/voice chat active • wake mic parked to avoid audio or microphone conflict");
             return;
         }
         if(!OwnerSession.isTrusted(this)){
@@ -306,7 +306,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         if(mediaPlaybackActive || isMediaPlaybackNow()){
             mediaPlaybackActive=true;
             stopListening();
-            updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+            updateNotification("Media/voice chat active • wake mic parked to avoid audio or microphone conflict");
             return;
         }
         handler.postDelayed(this::startListening,delay);
@@ -314,7 +314,15 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     private boolean isMediaPlaybackNow(){
         try{
-            if(audioManager!=null && audioManager.isMusicActive()) return true;
+            if(audioManager!=null){
+                if(audioManager.isMusicActive()) return true;
+                int mode=audioManager.getMode();
+                if(mode==AudioManager.MODE_IN_COMMUNICATION ||
+                        mode==AudioManager.MODE_IN_CALL ||
+                        mode==AudioManager.MODE_CALL_SCREENING){
+                    return true;
+                }
+            }
         }catch(Throwable ignored){}
         return mediaPlaybackActive;
     }
@@ -329,7 +337,9 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                 int usage=a.getUsage();
                 if(usage==AudioAttributes.USAGE_MEDIA ||
                         usage==AudioAttributes.USAGE_GAME ||
-                        usage==AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE){
+                        usage==AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE ||
+                        usage==AudioAttributes.USAGE_VOICE_COMMUNICATION ||
+                        usage==AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING){
                     return true;
                 }
             }catch(Throwable ignored){}
@@ -342,13 +352,13 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             if(!mediaPlaybackActive){
                 mediaPlaybackActive=true;
                 stopListening();
-                updateNotification("Media playing • wake mic parked to avoid pausing audio/video");
+                updateNotification("Media/voice chat active • wake mic parked to avoid audio or microphone conflict");
             }
             return;
         }
         if(mediaPlaybackActive){
             mediaPlaybackActive=false;
-            updateNotification("Media ended • resuming Hello Mika / Hello Anamika");
+            updateNotification("Media/voice chat ended • resuming Hello Mika / Hello Anamika");
             handler.postDelayed(() -> {
                 if(!mediaPlaybackActive && getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
                     startListening();
@@ -358,8 +368,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void pollMediaPlayback(){
-        boolean active=false;
-        try{ active=audioManager!=null && audioManager.isMusicActive(); }catch(Throwable ignored){}
+        boolean active=isMediaPlaybackNow();
         handleMediaPlaybackState(active);
         handler.postDelayed(mediaPoll,1000L);
     }
