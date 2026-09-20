@@ -25,18 +25,6 @@ android {
         }
     }
 
-    signingConfigs {
-        ownerRelease {
-            def ks = System.getenv("ANAMIKA_KEYSTORE_PATH")
-            if (ks != null && !ks.trim().isEmpty()) {
-                storeFile file(ks)
-                storePassword System.getenv("ANAMIKA_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("ANAMIKA_KEY_ALIAS")
-                keyPassword System.getenv("ANAMIKA_KEY_PASSWORD")
-            }
-        }
-    }
-
     defaultConfig {
         applicationId 'com.anamika.ai'
         minSdk 26
