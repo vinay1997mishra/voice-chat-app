@@ -25,7 +25,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.6.1'
+          gradle-version: '9.4.1'
 
       - name: Install Android SDK 36
         run: |
@@ -76,16 +76,16 @@ jobs:
             if npm pkg get scripts.typecheck | grep -vq '^{}$'; then npm run typecheck; fi
           else
             python3 - <<'PY'
-from pathlib import Path
-import html.parser
-root=Path(".")
-html=list(root.rglob("*.html"))+list(root.rglob("*.htm"))
-if not html:
-    print("No package.json or HTML project detected.")
-else:
-    class P(html.parser.HTMLParser): pass
-    for f in html:
-        P().feed(f.read_text(encoding="utf-8"))
-    print(f"HTML parse OK: {len(html)} file(s)")
-PY
+            from pathlib import Path
+            import html.parser
+            root=Path(".")
+            html=list(root.rglob("*.html"))+list(root.rglob("*.htm"))
+            if not html:
+                print("No package.json or HTML project detected.")
+            else:
+                class P(html.parser.HTMLParser): pass
+                for f in html:
+                    P().feed(f.read_text(encoding="utf-8"))
+                print(f"HTML parse OK: {len(html)} file(s)")
+            PY
           fi
