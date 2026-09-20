@@ -96,12 +96,12 @@ public final class CompilerPackManager {
         EXT.put(".cxx", new Spec("C++", "libanamika_clangxx.so"));
         EXT.put(".rs", new Spec("Rust", "libanamika_rustc.so"));
         EXT.put(".go", new Spec("Go", "libanamika_go.so"));
-        EXT.put(".py", new Spec("Python", "libanamika_python.so"));
-        EXT.put(".js", new Spec("JavaScript", "libanamika_node.so"));
-        EXT.put(".mjs", new Spec("JavaScript", "libanamika_node.so"));
-        EXT.put(".ts", new Spec("TypeScript", "libanamika_tsc.so"));
-        EXT.put(".java", new Spec("Java", "libanamika_javac.so"));
-        EXT.put(".kt", new Spec("Kotlin", "libanamika_kotlinc.so"));
+        EXT.put(".py", new Spec("Python", "Chaquopy CPython 3.13"));
+        EXT.put(".js", new Spec("JavaScript", "Mozilla Rhino 1.9.1"));
+        EXT.put(".mjs", new Spec("JavaScript", "Mozilla Rhino 1.9.1"));
+        EXT.put(".ts", new Spec("TypeScript", "Microsoft TypeScript 5.9.3"));
+        EXT.put(".java", new Spec("Java", "Eclipse ECJ 3.46.100"));
+        EXT.put(".kt", new Spec("Kotlin", "JetBrains Kotlin compiler 2.2.10"));
         EXT.put(".cs", new Spec("C#", "libanamika_csc.so"));
         EXT.put(".rb", new Spec("Ruby", "libanamika_ruby.so"));
         EXT.put(".php", new Spec("PHP", "libanamika_php.so"));
@@ -117,7 +117,14 @@ public final class CompilerPackManager {
         List<Check> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (Spec spec : EXT.values()) {
-            if (!seen.add(spec.binary)) continue;
+            if (!seen.add(spec.lang)) continue;
+            if (isInProcessLanguage(spec.lang)) {
+                BundledToolchainVerifier.Outcome bundled = BundledToolchainVerifier.inventory(context, spec.lang);
+                out.add(new Check(spec.lang, bundled.pack,
+                        bundled.available && bundled.pass ? State.PASS : State.MISSING,
+                        bundled.detail));
+                continue;
+            }
             File bin = new File(context.getApplicationInfo().nativeLibraryDir, spec.binary);
             out.add(new Check(spec.lang, spec.binary,
                     bin.isFile() ? State.PASS : State.MISSING,
@@ -197,6 +204,14 @@ public final class CompilerPackManager {
                 if(androidProject && ("Java".equals(spec.lang) || "Kotlin".equals(spec.lang))) {
                     out.add(new Check(spec.lang, "Android project verifier", State.SKIPPED,
                             "Covered by the Android SDK/aapt2/Gradle project verification pack."));
+                    continue;
+                }
+                if (isInProcessLanguage(spec.lang)) {
+                    BundledToolchainVerifier.Outcome bundled =
+                            BundledToolchainVerifier.verify(context, spec.lang, root, e.getValue());
+                    out.add(new Check(spec.lang, bundled.pack,
+                            !bundled.available ? State.MISSING : (bundled.pass ? State.PASS : State.FAIL),
+                            bundled.detail));
                     continue;
                 }
                 File bin=new File(context.getApplicationInfo().nativeLibraryDir, spec.binary);
@@ -368,6 +383,12 @@ public final class CompilerPackManager {
             if(c==';'&&!single&&!dbl) { out.add(cur.toString()); cur.setLength(0); } else cur.append(c);
         }
         if(cur.length()>0) out.add(cur.toString()); return out;
+    }
+
+    private static boolean isInProcessLanguage(String language) {
+        return "Python".equals(language) || "JavaScript".equals(language) ||
+                "TypeScript".equals(language) || "Java".equals(language) ||
+                "Kotlin".equals(language);
     }
 
     private static Spec specFor(String lower) {
