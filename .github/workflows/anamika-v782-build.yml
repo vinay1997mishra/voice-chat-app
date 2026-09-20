@@ -26,10 +26,39 @@ jobs:
       MODEL_PATH: app/src/main/assets/models/anamika-coder.gguf
       RELEASE_TAG: anamika-v7.8.2
       FINAL_NAME: AnamikaAI-V7.8.2-DirectSource-FINAL.apk
+      OWNER_SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned.apk
       SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned-FINAL.apk
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Set monotonic self-update version
+        run: |
+          set -euo pipefail
+          echo "ANAMIKA_VERSION_CODE=$((7802000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "ANAMIKA_VERSION_NAME=7.8.2.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Prepare owner signing key when configured
+        id: owner_signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANAMIKA_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANAMIKA_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANAMIKA_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANAMIKA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/anamika-owner.jks"
+            test -s "$RUNNER_TEMP/anamika-owner.jks"
+            echo "ANAMIKA_KEYSTORE_PATH=$RUNNER_TEMP/anamika-owner.jks" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Owner signing secrets are not configured; self-update-compatible release will not be published."
+          fi
 
       - name: Verify direct-source layout
         run: |
@@ -175,6 +204,19 @@ jobs:
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama.so'
           unzip -l "artifacts/full/$FINAL_NAME" | grep -F 'lib/arm64-v8a/libllama_jni.so'
 
+      - name: Build owner-signed self-update APK
+        if: steps.owner_signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleRelease
+          test -f app/build/outputs/apk/release/app-release.apk
+          unzip -tq app/build/outputs/apk/release/app-release.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk "artifacts/full/$OWNER_SIGNED_NAME"
+          sha256sum "artifacts/full/$OWNER_SIGNED_NAME" >> artifacts/SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: AnamikaAI-V7.8.2-direct-source-final
@@ -188,6 +230,14 @@ jobs:
           set -euo pipefail
           gh release view "$RELEASE_TAG" >/dev/null
           gh release upload "$RELEASE_TAG" "artifacts/full/$FINAL_NAME" --clobber
+
+      - name: Publish owner-signed self-update APK
+        if: steps.owner_signing.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" "artifacts/full/$OWNER_SIGNED_NAME" --clobber
 
       - name: Prepare owner signing keystore
         id: owner_signing
