@@ -330,7 +330,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private boolean isMediaPlaybackActive(java.util.List<AudioPlaybackConfiguration> configs){
         if(configs==null) return false;
         for(AudioPlaybackConfiguration cfg:configs){
-            if(cfg==null || cfg.getPlayerState()!=AudioPlaybackConfiguration.PLAYER_STATE_STARTED) continue;
+            if(cfg==null || !cfg.isActive()) continue;
             try{
                 AudioAttributes a=cfg.getAudioAttributes();
                 if(a==null) continue;
