@@ -199,7 +199,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                 if(list!=null&&!list.isEmpty()){
                     pendingSpeechText=list.get(0).trim();
                     handler.removeCallbacks(finalizeSpeech);
-                    handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(this));
+                    handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(BackgroundWakeService.this));
                 }
             }
             @Override public void onEvent(int eventType,Bundle params){}
@@ -207,8 +207,8 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(this));
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(this));
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(BackgroundWakeService.this));
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,RuntimeBehaviorPreferences.silenceMs(BackgroundWakeService.this));
         i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,1000L);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION",true);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH",true);
@@ -217,7 +217,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     private void scheduleSpeechFinalize(){
         handler.removeCallbacks(finalizeSpeech);
-        handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(this));
+        handler.postDelayed(finalizeSpeech,RuntimeBehaviorPreferences.silenceMs(BackgroundWakeService.this));
     }
 
     private void finalizePendingSpeech(){
