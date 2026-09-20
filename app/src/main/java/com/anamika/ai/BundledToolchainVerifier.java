@@ -68,6 +68,7 @@ public final class BundledToolchainVerifier {
             if ("TypeScript".equals(language)) return verifyTypeScript(context, root, relFiles);
             if ("Java".equals(language)) return verifyJava(root, relFiles);
             if ("Kotlin".equals(language)) return verifyKotlin(root, relFiles);
+            if ("Shell".equals(language)) return verifyShell(root, relFiles);
             return new Outcome(false, false, "none", "No bundled in-process verifier for " + language + ".");
         } catch (Throwable t) {
             return new Outcome(true, false, language + " bundled verifier",
@@ -99,6 +100,12 @@ public final class BundledToolchainVerifier {
             if ("Kotlin".equals(language)) {
                 Class.forName("org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment");
                 return new Outcome(true, true, "JetBrains Kotlin compiler 2.2.10", "Bundled Kotlin compiler frontend.");
+            }
+            if ("Shell".equals(language)) {
+                File sh = new File("/system/bin/sh");
+                return new Outcome(sh.isFile() && sh.canExecute(), sh.isFile() && sh.canExecute(),
+                        "Android system shell",
+                        sh.isFile() && sh.canExecute() ? "Real /system/bin/sh interpreter available." : "Android shell interpreter unavailable.");
             }
         } catch (Throwable t) {
             return new Outcome(false, false, language + " bundled verifier",
@@ -222,6 +229,29 @@ public final class BundledToolchainVerifier {
         }
         if (detail.isEmpty()) detail = "ECJ returned failure.";
         return new Outcome(true, false, "Eclipse ECJ 3.46.100", detail);
+    }
+
+    private static Outcome verifyShell(File root, List<String> relFiles) throws Exception {
+        File sh = new File("/system/bin/sh");
+        if (!sh.isFile() || !sh.canExecute()) {
+            return new Outcome(false, false, "Android system shell", "/system/bin/sh is unavailable.");
+        }
+        for (String rel : relFiles) {
+            Process process = new ProcessBuilder(sh.getAbsolutePath(), "-n", new File(root, rel).getAbsolutePath())
+                    .redirectErrorStream(true).start();
+            boolean done = process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+            if (!done) {
+                process.destroyForcibly();
+                return new Outcome(true, false, "Android system shell", rel + ": syntax check timed out.");
+            }
+            String output = readAll(process.getInputStream()).trim();
+            if (process.exitValue() != 0) {
+                return new Outcome(true, false, "Android system shell",
+                        rel + ": " + (output.isEmpty() ? "shell syntax error" : output));
+            }
+        }
+        return new Outcome(true, true, "Android system shell",
+                "All " + relFiles.size() + " shell file(s) passed /system/bin/sh -n.");
     }
 
     private static Outcome verifyKotlin(File root, List<String> relFiles) throws Exception {
