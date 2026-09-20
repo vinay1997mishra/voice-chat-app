@@ -4,6 +4,7 @@
     android:layout_height="match_parent"
     android:background="#101114">
 
+    <!-- Main screen: chat only -->
     <LinearLayout
         android:id="@+id/chatShell"
         android:layout_width="match_parent"
@@ -14,14 +15,23 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="8dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="12dp"
             android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/menuButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="☰"
+                android:textSize="23sp"
+                android:contentDescription="Open Anamika menu" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:paddingStart="6dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -41,22 +51,6 @@
                     android:textColor="#AAB0BA"
                     android:textSize="11sp" />
             </LinearLayout>
-
-            <Button
-                android:id="@+id/vaultButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="▣"
-                android:textSize="20sp"
-                android:contentDescription="Anamika personal space" />
-
-            <Button
-                android:id="@+id/toolsButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="⋮"
-                android:textSize="24sp"
-                android:contentDescription="Anamika tools" />
         </LinearLayout>
 
         <LinearLayout
@@ -156,23 +150,36 @@
         </LinearLayout>
     </LinearLayout>
 
-    <ScrollView
-        android:id="@+id/toolsPanel"
+    <!-- Tap-outside dim layer -->
+    <View
+        android:id="@+id/menuDim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="#99000000"
+        android:visibility="gone" />
+
+    <!-- Left drawer: every Anamika function lives here -->
+    <ScrollView
+        android:id="@+id/toolsPanel"
+        android:layout_width="330dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
         android:visibility="gone"
         android:fillViewport="true"
-        android:background="#101114">
+        android:background="#17191E">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="24dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="54dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -180,7 +187,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Anamika Tools"
+                    android:text="Anamika"
                     android:textColor="#FFFFFF"
                     android:textSize="24sp"
                     android:textStyle="bold" />
@@ -192,79 +199,179 @@
                     android:text="✕" />
             </LinearLayout>
 
-            <Button
-                android:id="@+id/permissionSetupButton"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="One-time Phone Access Setup" />
+                android:text="CREATE"
+                android:textColor="#8F96A3"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingTop="10dp"
+                android:paddingBottom="6dp" />
 
             <Button
-                android:id="@+id/storageSetupButton"
+                android:id="@+id/imageCreatorMenuButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Choose Storage Folder Once / Persistent Access" />
-
-            <Button
-                android:id="@+id/wakeListenButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="24×7 Hello Mika / Hello Anamika: ALWAYS ON" />
-
-            <Button
-                android:id="@+id/pluginCenterButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="App Control / Auto Audit" />
-
-            <Button
-                android:id="@+id/testLabButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Native App Test Lab" />
-
-            <Button
-                android:id="@+id/premium3dButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Local Cinematic 3D/4D Studio" />
+                android:text="Image / Photo Create & Edit"
+                android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/internetCreatorButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Online Video / Visual Creator" />
+                android:text="Video Create & Edit"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/premium3dButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Cinematic 3D / 4D Studio"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/projectMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Projects"
+                android:gravity="start|center_vertical" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ASSISTANT"
+                android:textColor="#8F96A3"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingTop="16dp"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/memoryMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Memory & Learning"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/voiceMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Voice Profile"
+                android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/researchButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Research / Learn from Visible Content" />
+                android:text="Research / Background Learning"
+                android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/languageStatusButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Language + Coding Status" />
+                android:text="Languages & Understanding"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/wakeListenButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="24×7 Hello Mika / Hello Anamika: ALWAYS ON"
+                android:gravity="start|center_vertical" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="PHONE & APPS"
+                android:textColor="#8F96A3"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingTop="16dp"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/remoteMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Remote / Phone Control"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/pluginCenterButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Plugins / App Control / Auto Audit"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/permissionSetupButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Phone Access & Permissions"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/storageSetupButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Files / Storage Access"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/vaultMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Personal Space / Vault"
+                android:gravity="start|center_vertical" />
+
+            <Button
+                android:id="@+id/deviceInfoMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Phone Model & Device Profile"
+                android:gravity="start|center_vertical" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DEVELOPER"
+                android:textColor="#8F96A3"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingTop="16dp"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/testLabButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Native App Test Lab"
+                android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/selfUpgradeButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Prepare Self-Upgrade Workspace" />
+                android:text="Self-Upgrade Workspace"
+                android:gravity="start|center_vertical" />
 
             <Button
                 android:id="@+id/secureSelfUpdateButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Secure Owner-Signed Self Update" />
+                android:text="Secure Self Update"
+                android:gravity="start|center_vertical" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:text="Developer / App Builder"
+                android:layout_marginTop="16dp"
+                android:text="App / Website / Code Builder"
                 android:textColor="#FFFFFF"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
 
             <EditText
@@ -272,7 +379,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:minLines="3"
-                android:hint="Detailed app / website / code request"
+                android:hint="Describe what to build"
                 android:textColor="#FFFFFF"
                 android:textColorHint="#7F8792" />
 
@@ -289,13 +396,13 @@
                 android:id="@+id/generateCodeButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Generate + Validate Offline" />
+                android:text="Generate + Validate Code" />
 
             <Button
                 android:id="@+id/saveProjectButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Save Verified Project Files" />
+                android:text="Save Verified Project" />
 
             <TextView
                 android:id="@+id/developerOutput"
@@ -307,6 +414,23 @@
                 android:textColor="#D6DAE1"
                 android:textIsSelectable="true"
                 android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="SYSTEM"
+                android:textColor="#8F96A3"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingTop="16dp"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/settingsMenuButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Anamika / Phone Settings"
+                android:gravity="start|center_vertical" />
 
         </LinearLayout>
     </ScrollView>
