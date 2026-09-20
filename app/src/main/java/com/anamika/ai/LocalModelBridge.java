@@ -79,4 +79,11 @@ public final class LocalModelBridge {
         File model = new File(context.getFilesDir(), "models/" + MODEL_FILE);
         return KotlinLlamaRunner.generateBlocking(model.getAbsolutePath(), prompt);
     }
+
+    public static String generateFastChat(Context context,String prompt) {
+        ModelStatus status=getStatus(context);
+        if(!status.ready) throw new IllegalStateException(status.message);
+        File model=new File(context.getFilesDir(),"models/"+MODEL_FILE);
+        return KotlinLlamaRunner.generateFastChat(model.getAbsolutePath(),prompt);
+    }
 }
