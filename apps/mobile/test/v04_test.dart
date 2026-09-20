@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_chat_app/main_v04.dart';
 
 void main() {
-  testWidgets('v0.4 uses Home Discover Message Me and royal room controls', (tester) async {
+  testWidgets('v0.4 uses Home Discover Message Me and royal room controls', (
+    tester,
+  ) async {
     await tester.pumpWidget(const VoiceChatV04());
 
     expect(find.text('Mine'), findsWidgets);

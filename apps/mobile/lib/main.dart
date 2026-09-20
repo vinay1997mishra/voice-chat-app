@@ -1,3 +1,4 @@
+import 'anamika_repair_page.dart';
 import 'package:flutter/material.dart';
 
 void main() => runApp(const VoiceChatApp());
@@ -112,10 +113,8 @@ class _DemoShellState extends State<DemoShell> {
   void _openRoom() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => DemoRoomPage(
-          startingCoins: _coins,
-          onSendGift: _sendGift,
-        ),
+        builder: (_) =>
+            DemoRoomPage(startingCoins: _coins, onSendGift: _sendGift),
       ),
     );
   }
@@ -124,7 +123,11 @@ class _DemoShellState extends State<DemoShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomePage(onOpenRoom: _openRoom, coins: _coins, diamonds: _diamonds),
-      WalletPage(coins: _coins, diamonds: _diamonds, transactions: _transactions),
+      WalletPage(
+        coins: _coins,
+        diamonds: _diamonds,
+        transactions: _transactions,
+      ),
       const MePage(),
     ];
     return Scaffold(
@@ -134,7 +137,10 @@ class _DemoShellState extends State<DemoShell> {
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.account_balance_wallet_rounded), label: 'Wallet'),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_rounded),
+            label: 'Wallet',
+          ),
           NavigationDestination(icon: Icon(Icons.person_rounded), label: 'Me'),
         ],
       ),
@@ -171,13 +177,28 @@ class HomePage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Coins', value: '$coins')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.monetization_on_rounded,
+                  label: 'Coins',
+                  value: '$coins',
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _BalanceCard(icon: Icons.diamond_rounded, label: 'Diamonds', value: '$diamonds')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.diamond_rounded,
+                  label: 'Diamonds',
+                  value: '$diamonds',
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),
-          const Text('Featured', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          const Text(
+            'Featured',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
           InkWell(
             key: const Key('open-night-vibes'),
@@ -200,13 +221,22 @@ class HomePage extends StatelessWidget {
                   children: [
                     const Row(
                       children: [
-                        CircleAvatar(radius: 24, child: Icon(Icons.music_note_rounded)),
+                        CircleAvatar(
+                          radius: 24,
+                          child: Icon(Icons.music_note_rounded),
+                        ),
                         SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Night Vibes', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+                              Text(
+                                'Night Vibes',
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                               Text('Room ID 10000000 • Hindi / English'),
                             ],
                           ),
@@ -235,7 +265,8 @@ class HomePage extends StatelessWidget {
           const _InfoTile(
             icon: Icons.cloud_off_rounded,
             title: 'GitHub-only build',
-            subtitle: 'Realtime voice and multi-phone sync will be connected later.',
+            subtitle:
+                'Realtime voice and multi-phone sync will be connected later.',
           ),
         ],
       ),
@@ -337,8 +368,13 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
   void _acceptRequest(SeatRequest request) {
     final preferred = request.preferredSeat;
     int target = preferred;
-    if (target < 0 || target >= _seats.length || _seats[target] != null || _lockedSeats.contains(target)) {
-      target = _seats.indexWhere((seat) => seat == null && !_lockedSeats.contains(_seats.indexOf(seat)));
+    if (target < 0 ||
+        target >= _seats.length ||
+        _seats[target] != null ||
+        _lockedSeats.contains(target)) {
+      target = _seats.indexWhere(
+        (seat) => seat == null && !_lockedSeats.contains(_seats.indexOf(seat)),
+      );
     }
     if (target < 0 || target >= _seats.length) {
       _snack('No available unlocked seat.');
@@ -348,7 +384,9 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
       _requests.remove(request);
       _seats[target] = request.name;
       if (request.name == 'You') _mySeat = target;
-      _messages.add(RoomMessage('System', '${request.name} joined seat ${target + 1}.'));
+      _messages.add(
+        RoomMessage('System', '${request.name} joined seat ${target + 1}.'),
+      );
     });
   }
 
@@ -401,31 +439,55 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Owner / Admin Controls', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Owner / Admin Controls',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Invite Mode'),
-                      subtitle: const Text('ON = normal users request a seat before sitting.'),
+                      subtitle: const Text(
+                        'ON = normal users request a seat before sitting.',
+                      ),
                       value: _inviteMode,
                       onChanged: (value) => refresh(() => _inviteMode = value),
                     ),
                     const Divider(),
-                    Text('Seat requests (${_requests.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Seat requests (${_requests.length})',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 8),
-                    if (_requests.isEmpty) const Text('No pending requests.', style: TextStyle(color: Colors.white60)),
+                    if (_requests.isEmpty)
+                      const Text(
+                        'No pending requests.',
+                        style: TextStyle(color: Colors.white60),
+                      ),
                     ..._requests.map(
                       (request) => Card(
                         child: ListTile(
-                          leading: CircleAvatar(child: Text(request.vip > 0 ? 'V${request.vip}' : request.name.characters.first)),
+                          leading: CircleAvatar(
+                            child: Text(
+                              request.vip > 0
+                                  ? 'V${request.vip}'
+                                  : request.name.characters.first,
+                            ),
+                          ),
                           title: Text(request.name),
-                          subtitle: Text('Preferred seat ${request.preferredSeat + 1}${request.vip > 0 ? ' • VIP${request.vip}' : ''}'),
+                          subtitle: Text(
+                            'Preferred seat ${request.preferredSeat + 1}${request.vip > 0 ? ' • VIP${request.vip}' : ''}',
+                          ),
                           trailing: Wrap(
                             spacing: 4,
                             children: [
                               IconButton(
                                 tooltip: 'Reject',
-                                onPressed: () => refresh(() => _rejectRequest(request)),
+                                onPressed: () =>
+                                    refresh(() => _rejectRequest(request)),
                                 icon: const Icon(Icons.close_rounded),
                               ),
                               IconButton(
@@ -460,7 +522,10 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                         label: const Text('Move You to audience'),
                       ),
                     const SizedBox(height: 8),
-                    const Text('Tip: long-press any empty seat to lock/unlock it.', style: TextStyle(color: Colors.white60)),
+                    const Text(
+                      'Tip: long-press any empty seat to lock/unlock it.',
+                      style: TextStyle(color: Colors.white60),
+                    ),
                   ],
                 ),
               ),
@@ -482,11 +547,29 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Send demo gift to Owner', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const Text(
+                'Send demo gift to Owner',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 12),
-              _GiftTile(icon: '🌹', name: 'Rose', cost: 100, onTap: () => _sendGift(sheetContext, 'Rose', 100)),
-              _GiftTile(icon: '💎', name: 'Crystal', cost: 500, onTap: () => _sendGift(sheetContext, 'Crystal', 500)),
-              _GiftTile(icon: '👑', name: 'Crown', cost: 1000, onTap: () => _sendGift(sheetContext, 'Crown', 1000)),
+              _GiftTile(
+                icon: '🌹',
+                name: 'Rose',
+                cost: 100,
+                onTap: () => _sendGift(sheetContext, 'Rose', 100),
+              ),
+              _GiftTile(
+                icon: '💎',
+                name: 'Crystal',
+                cost: 500,
+                onTap: () => _sendGift(sheetContext, 'Crystal', 500),
+              ),
+              _GiftTile(
+                icon: '👑',
+                name: 'Crown',
+                cost: 1000,
+                onTap: () => _sendGift(sheetContext, 'Crown', 1000),
+              ),
             ],
           ),
         ),
@@ -546,14 +629,22 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(child: Icon(Icons.workspace_premium_rounded)),
+                  const CircleAvatar(
+                    child: Icon(Icons.workspace_premium_rounded),
+                  ),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Owner • VIP11', style: TextStyle(fontWeight: FontWeight.w800)),
-                        Text('Admin: VIP6 • Room demo mode', style: TextStyle(fontSize: 12)),
+                        Text(
+                          'Owner • VIP11',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          'Admin: VIP6 • Room demo mode',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -565,9 +656,17 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  Text('${_requests.length} requests', style: const TextStyle(color: Colors.white60)),
+                  Text(
+                    '${_requests.length} requests',
+                    style: const TextStyle(color: Colors.white60),
+                  ),
                   const Spacer(),
-                  Text(_selectedSeat == null ? 'Tap a seat' : 'Selected seat ${_selectedSeat! + 1}', style: const TextStyle(color: Colors.white60)),
+                  Text(
+                    _selectedSeat == null
+                        ? 'Tap a seat'
+                        : 'Selected seat ${_selectedSeat! + 1}',
+                    style: const TextStyle(color: Colors.white60),
+                  ),
                 ],
               ),
             ),
@@ -594,10 +693,14 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: mine ? const Color(0xFF5536A9) : const Color(0xFF191A22),
+                        color: mine
+                            ? const Color(0xFF5536A9)
+                            : const Color(0xFF191A22),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: _selectedSeat == index ? Theme.of(context).colorScheme.primary : Colors.white12,
+                          color: _selectedSeat == index
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.white12,
                         ),
                       ),
                       padding: const EdgeInsets.all(4),
@@ -615,7 +718,8 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            occupant ?? (locked ? 'Locked' : 'Seat ${index + 1}'),
+                            occupant ??
+                                (locked ? 'Locked' : 'Seat ${index + 1}'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 10),
@@ -641,11 +745,18 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                   ),
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
-                    onPressed: _mySeat == null ? null : () => setState(() => _micMuted = !_micMuted),
-                    icon: Icon(_micMuted ? Icons.mic_off_rounded : Icons.mic_rounded),
+                    onPressed: _mySeat == null
+                        ? null
+                        : () => setState(() => _micMuted = !_micMuted),
+                    icon: Icon(
+                      _micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton.filledTonal(onPressed: _openGiftSheet, icon: const Icon(Icons.card_giftcard_rounded)),
+                  IconButton.filledTonal(
+                    onPressed: _openGiftSheet,
+                    icon: const Icon(Icons.card_giftcard_rounded),
+                  ),
                 ],
               ),
             ),
@@ -670,7 +781,12 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                             child: Text.rich(
                               TextSpan(
                                 children: [
-                                  TextSpan(text: '${message.author}: ', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  TextSpan(
+                                    text: '${message.author}: ',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                   TextSpan(text: message.text),
                                 ],
                               ),
@@ -694,7 +810,10 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                               ),
                             ),
                           ),
-                          IconButton(onPressed: _sendMessage, icon: const Icon(Icons.send_rounded)),
+                          IconButton(
+                            onPressed: _sendMessage,
+                            icon: const Icon(Icons.send_rounded),
+                          ),
                         ],
                       ),
                     ),
@@ -730,13 +849,28 @@ class WalletPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _BalanceCard(icon: Icons.monetization_on_rounded, label: 'Coins', value: '$coins')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.monetization_on_rounded,
+                  label: 'Coins',
+                  value: '$coins',
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _BalanceCard(icon: Icons.diamond_rounded, label: 'Diamonds', value: '$diamonds')),
+              Expanded(
+                child: _BalanceCard(
+                  icon: Icons.diamond_rounded,
+                  label: 'Diamonds',
+                  value: '$diamonds',
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 22),
-          const Text('Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          const Text(
+            'Transactions',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 10),
           ...transactions.map(
             (entry) => Card(
@@ -773,7 +907,22 @@ class MePage extends StatelessWidget {
       ('My Room', Icons.meeting_room_rounded),
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('Me')),
+      appBar: AppBar(
+        title: const Text('Me'),
+        actions: [
+          if (anamikaOwnerTools)
+            IconButton(
+              tooltip: 'Anamika Code Doctor',
+              icon: const Icon(Icons.build_circle_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const AnamikaRepairPage(),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -781,21 +930,38 @@ class MePage extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(colors: [Color(0xFF4D2D84), Color(0xFF1B1730)]),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF4D2D84), Color(0xFF1B1730)],
+              ),
             ),
             child: const Row(
               children: [
-                CircleAvatar(radius: 34, child: Text('V', style: TextStyle(fontSize: 24))),
+                CircleAvatar(
+                  radius: 34,
+                  child: Text('V', style: TextStyle(fontSize: 24)),
+                ),
                 SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Demo User', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                      Text(
+                        'Demo User',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                       SizedBox(height: 4),
                       Text('ID 10000000  🇮🇳'),
                       SizedBox(height: 6),
-                      Wrap(spacing: 6, children: [Chip(label: Text('VIP11')), Chip(label: Text('Owner'))]),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          Chip(label: Text('VIP11')),
+                          Chip(label: Text('Owner')),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -817,13 +983,16 @@ class MePage extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: 4,
             childAspectRatio: 0.92,
-            children: shortcuts.map((item) => _Shortcut(title: item.$1, icon: item.$2)).toList(),
+            children: shortcuts
+                .map((item) => _Shortcut(title: item.$1, icon: item.$2))
+                .toList(),
           ),
           const SizedBox(height: 10),
           const _InfoTile(
             icon: Icons.verified_user_rounded,
             title: 'v0.2 profile preview',
-            subtitle: 'Profile editing, badges and entitlement data are local demo content for now.',
+            subtitle:
+                'Profile editing, badges and entitlement data are local demo content for now.',
           ),
         ],
       ),
@@ -832,7 +1001,11 @@ class MePage extends StatelessWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.icon, required this.label, required this.value});
+  const _BalanceCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
   final IconData icon;
   final String label;
   final String value;
@@ -851,7 +1024,13 @@ class _BalanceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label, style: Theme.of(context).textTheme.bodySmall),
-                  Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -863,7 +1042,12 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _GiftTile extends StatelessWidget {
-  const _GiftTile({required this.icon, required this.name, required this.cost, required this.onTap});
+  const _GiftTile({
+    required this.icon,
+    required this.name,
+    required this.cost,
+    required this.onTap,
+  });
   final String icon;
   final String name;
   final int cost;
@@ -881,7 +1065,11 @@ class _GiftTile extends StatelessWidget {
 }
 
 class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.icon, required this.title, required this.subtitle});
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
   final IconData icon;
   final String title;
   final String subtitle;
@@ -906,7 +1094,10 @@ class _Tag extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Text(text, style: const TextStyle(fontSize: 12)),
     );
   }
@@ -921,7 +1112,10 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
         Text(label, style: const TextStyle(color: Colors.white60)),
       ],
     );

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'apps/mobile/**'
+      - 'tools/anamika/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +22,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Repair worker and approval tests
+        run: python3 -m unittest discover -s tools/anamika -v
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.8'

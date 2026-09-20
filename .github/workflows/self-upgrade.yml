@@ -1,66 +1,82 @@
 name: Anamika Safe Self-Upgrade Gate
-
 on:
   workflow_dispatch:
     inputs:
       proposal_id:
-        description: 'Upgrade proposal ID'
+        description: 'Reviewed Anamika pull request number'
+        required: true
+        type: string
+      approved_sha:
+        description: 'Exact reviewed 40-character candidate commit SHA'
         required: true
         type: string
       owner_approved:
-        description: 'Owner has reviewed the proposed diff'
+        description: 'I reviewed this exact diff and approve a candidate APK build'
         required: true
         default: false
         type: boolean
-
 permissions:
   contents: read
-
+  pull-requests: read
 jobs:
+  approve:
+    if: ${{ inputs.owner_approved && github.actor == github.repository_owner && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.approve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - id: approve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+          PROPOSAL_ID: ${{ inputs.proposal_id }}
+        run: python3 tools/anamika/approve.py
   validate-build:
-    if: ${{ inputs.owner_approved == true }}
+    needs: approve
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Checkout approved source
-        uses: actions/checkout@v4
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v4
         with:
-          flutter-version: '3.32.8'
-          channel: stable
-          cache: true
-      - name: Create isolated Android build
+          ref: ${{ needs.approve.outputs.sha }}
+          persist-credentials: false
+          path: source
+      - name: Build approved source in isolated container
         run: |
-          flutter create --platforms=android --org com.voicechat.anamika --project-name voice_chat_app /tmp/anamika_upgrade
-          rm -rf /tmp/anamika_upgrade/lib /tmp/anamika_upgrade/test
-          cp -R apps/mobile/lib /tmp/anamika_upgrade/lib
-          cp -R apps/mobile/test /tmp/anamika_upgrade/test
-          cp apps/mobile/pubspec.yaml /tmp/anamika_upgrade/pubspec.yaml
-      - name: Dependencies
-        working-directory: /tmp/anamika_upgrade
-        run: flutter pub get
-      - name: Analyze
-        working-directory: /tmp/anamika_upgrade
-        run: flutter analyze --no-fatal-infos
-      - name: Test self-upgrade safety gate
-        working-directory: /tmp/anamika_upgrade
-        run: flutter test test/self_upgrade_system_test.dart
-      - name: Test app
-        working-directory: /tmp/anamika_upgrade
-        run: flutter test
-      - name: Build APK
-        working-directory: /tmp/anamika_upgrade
-        run: flutter build apk --debug -t lib/main_v05.dart
-      - name: Verify APK signature
+          mkdir apk-output
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=1024 --memory=10g \
+            -v "$PWD/source/apps/mobile:/source:ro" -v "$PWD/apk-output:/output" \
+            ghcr.io/cirruslabs/flutter:3.32.8@sha256:1a9c4cebfa976b4dc4c6557727ad3083ba0fde0d3d24a969fb77ac60d30c69ac /bin/bash -lc '
+              set -euo pipefail
+              flutter create --platforms=android --org com.voicechat.anamika --project-name voice_chat_app /tmp/build
+              rm -rf /tmp/build/lib /tmp/build/test
+              cp -R /source/lib /tmp/build/lib
+              cp -R /source/test /tmp/build/test
+              cp /source/pubspec.yaml /tmp/build/pubspec.yaml
+              cd /tmp/build
+              flutter pub get
+              dart format --output=none --set-exit-if-changed lib test
+              flutter analyze --no-fatal-infos
+              flutter test
+              flutter build apk --debug -t lib/main_v05.dart --dart-define=ANAMIKA_OWNER_TOOLS=true
+              cp build/app/outputs/flutter-apk/app-debug.apk /output/anamika-candidate.apk
+            '
+      - name: Verify candidate signature and record provenance
+        env:
+          APPROVED_SHA: ${{ needs.approve.outputs.sha }}
+          PROPOSAL_ID: ${{ inputs.proposal_id }}
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           BUILD_TOOLS=$(ls -1d "$SDK_ROOT"/build-tools/* | sort -V | tail -1)
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs /tmp/anamika_upgrade/build/app/outputs/flutter-apk/app-debug.apk
-      - name: Upload verified candidate
-        uses: actions/upload-artifact@v4
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs apk-output/anamika-candidate.apk > apk-output/signature.txt
+          sha256sum apk-output/anamika-candidate.apk > apk-output/sha256.txt
+          printf 'Source SHA: %s\nProposal: %s\nDebug candidate; not a production signed update.\n' "$APPROVED_SHA" "$PROPOSAL_ID" > apk-output/provenance.txt
+      - uses: actions/upload-artifact@v4
         with:
-          name: anamika-upgrade-${{ inputs.proposal_id }}
-          path: /tmp/anamika_upgrade/build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
+          name: anamika-candidate-${{ needs.approve.outputs.sha }}
+          path: apk-output/
           retention-days: 14
