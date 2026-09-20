@@ -29,6 +29,7 @@
         android:label="Anamika AI V7.8.2"
         android:theme="@style/AppTheme">
         <activity android:name=".TestLabActivity" android:screenOrientation="portrait" android:launchMode="singleTop" />
+        <activity android:name=".SelfUpdateActivity" android:screenOrientation="portrait" android:launchMode="singleTop" />
         <activity android:name=".creator.CreatorHubActivity" android:screenOrientation="portrait" />
         <activity android:name=".plugins.PluginManagerActivity" android:screenOrientation="portrait" />
         <activity android:name=".plugins.VoiceCommandActivity" android:theme="@style/TransparentVoiceTheme" android:excludeFromRecents="true" />
