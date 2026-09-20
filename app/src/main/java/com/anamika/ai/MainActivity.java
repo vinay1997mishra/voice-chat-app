@@ -430,7 +430,13 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 RuntimeBehaviorPreferences.silenceMs(this));
         // Do not hard-code Hindi/English. Let the installed speech service use its multilingual/auto-detect capability.
         intent.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION", true);
-        intent.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH", true);
+        intent.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH", "balanced");
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN");
+        intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+        intent.putStringArrayListExtra("android.speech.extra.LANGUAGE_DETECTION_ALLOWED_LANGUAGES",
+                new java.util.ArrayList<>(java.util.Arrays.asList("hi-IN", "ur-IN", "en-IN")));
+        intent.putStringArrayListExtra("android.speech.extra.LANGUAGE_SWITCH_ALLOWED_LANGUAGES",
+                new java.util.ArrayList<>(java.util.Arrays.asList("hi-IN", "ur-IN", "en-IN")));
         intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to Anamika");
         try {
             startActivityForResult(intent, REQ_SPEECH);
@@ -1188,10 +1194,20 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 :"Phone function background me search karke verify kar rahi hoon…");
         DeviceFunctionDiscovery.discover(this,original,r -> {
             if(r.verified){
-                String msg=style==UniversalLanguageRouter.Style.HINDI
-                        ?"सही Android route verify हो गया और next time के लिए save कर लिया। "
-                        :"Sahi Android route verify ho gaya aur next time ke liye save kar liya. ";
-                answer(msg+r.explanation);
+                if(r.fromMemory){
+                    answer("Saved settings page is still available. "+r.explanation);
+                } else {
+                    answer("Settings page mili hai. Function ka kaam karna abhi confirm karna hai. "+r.explanation);
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("Remember this settings page?")
+                            .setMessage(original+"\n\n"+r.explanation+"\n\nAndroid can open this page; this does not prove the requested setting changed.")
+                            .setPositiveButton("Confirm & save", (dialog, which) -> {
+                                if(!ensureUnlocked()) return;
+                                boolean saved=VerifiedFunctionMemory.verifyAndSaveIntent(this,original,r.action,r.explanation);
+                                answer(saved?"Settings page aapki confirmation ke baad save ho gayi.":"Page ab available nahi hai; save nahi kiya.");
+                            })
+                            .setNegativeButton("Not now",null).show();
+                }
             }else if(r.found){
                 String msg=style==UniversalLanguageRouter.Style.HINDI
                         ?"Possible function मिला, लेकिन इस phone पर verify नहीं हुआ इसलिए save नहीं किया। "
