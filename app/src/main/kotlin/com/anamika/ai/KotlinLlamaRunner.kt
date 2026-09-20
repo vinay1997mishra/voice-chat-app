@@ -31,14 +31,14 @@ object KotlinLlamaRunner {
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
         val model = Llama.loadModel(
             modelPath = modelPath,
-            config = LlamaConfig(contextSize = 1536, threads = threads),
+            config = LlamaConfig(contextSize = 2048, threads = threads),
         )
         try {
             val result = Llama.complete(
                 model,
                 prompt = prompt,
-                systemPrompt = "You are Anamika, a fast personal assistant. Reply directly, naturally and briefly in the user's language. Do not output code unless explicitly asked.",
-                maxTokens = 256,
+                systemPrompt = "You are Anamika, a fast personal assistant. Reply directly and naturally in the user\'s language. Give a complete useful answer when needed; do not artificially shorten it. Do not output code unless explicitly asked.",
+                maxTokens = 1024,
             )
             result.text
         } finally {
