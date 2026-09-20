@@ -47,21 +47,20 @@ public final class UniversalLanguageRouter {
             LocalModelBridge.ModelStatus st=LocalModelBridge.getStatus(context);
             if(st.ready){
                 String prompt=
-                        "You are Anamika's semantic command interpreter. Understand meaning like a conversational assistant, not by exact keywords.\\n"+
-                        "Strongly understand colloquial Hindi, Urdu, Hinglish, Roman Urdu, English and arbitrary mixtures, slang, spelling mistakes and incomplete natural speech.\\n"+
+                        "You are Anamika's semantic command interpreter. Understand meaning like a conversational assistant, not by exact keywords.\n"+
+                        "Strongly understand colloquial Hindi, Urdu, Hinglish, Roman Urdu, English and arbitrary mixtures, slang, spelling mistakes and incomplete natural speech.\n"+
                         "Examples of equivalence: 'ye kar de', 'isko karna hai', 'کر دو', 'please do this' may express the same intent from context. "+
-                        "Never reject a sentence merely because grammar, script or spelling is mixed. Preserve the owner's actual target and details.\\n"+
-                        "Return exactly four lines and nothing else:\\n"+
-                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|FILE_SEARCH|VAULT_STATUS|FILE_EXPORT|FILE_DELETE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\\n"+
-                        "ARG=<main target/query/message; preserve names, URLs, quoted text, numbers and filenames>\\n"+
-                        "NORMALIZED=<one concise English representation preserving the full meaning>\\n"+
-                        "STYLE=<HINDI|URDU|HINGLISH|ENGLISH|OTHER>\\n"+
+                        "Never reject a sentence merely because grammar, script or spelling is mixed. Preserve the owner's actual target and details.\n"+
+                        "Return exactly four lines and nothing else:\n"+
+                        "INTENT=<CHAT|SEARCH|YOUTUBE_SEARCH|YOUTUBE_LEARN|OPEN_APP|PHONE_CONTROL|SYSTEM_SETTING|READ_SCREEN|EXPLAIN_SCREEN|CALCULATE|CALL|CONTACT_SEARCH|MESSAGE|FILE_SEARCH|VAULT_STATUS|FILE_EXPORT|FILE_DELETE|APP_AUDIT|CREATE_APP|CREATE_WEBSITE|CODE|RESEARCH|REMEMBER|RECALL|SELF_UPGRADE|UPDATE|SETTINGS|PLUGIN|MEDIA|UNKNOWN_LOOKUP|UNKNOWN>\n"+
+                        "ARG=<main target/query/message; preserve names, URLs, quoted text, numbers and filenames>\n"+
+                        "NORMALIZED=<one concise English representation preserving the full meaning>\n"+
+                        "STYLE=<HINDI|URDU|HINGLISH|ENGLISH|OTHER>\n"+
                         "If it is ordinary conversation, a question, advice, explanation, correction or follow-up, use CHAT. "+
-                        "Use UNKNOWN only when meaning truly cannot be inferred. Do not answer the user here.\\n"+
+                        "Use UNKNOWN only when meaning truly cannot be inferred. Do not answer the user here.\n"+
                         "User: "+original;
                 Interpretation parsed=parseModel(original,LocalModelBridge.generate(context,prompt),style);
                 if(parsed!=null) {
-                    remember(context,parsed);
                     return parsed;
                 }
             }
@@ -129,6 +128,14 @@ public final class UniversalLanguageRouter {
 
     private static Interpretation quickInterpret(String original,Style style){
         String s=original.toLowerCase(Locale.ROOT).trim();
+        if(s.startsWith("تلاش کرو ") || s.startsWith("گوگل پر تلاش کرو ")) {
+            String query=original.substring(original.indexOf("کرو ")+4).trim();
+            if(!query.isEmpty()) return new Interpretation(original,"search "+query,"SEARCH",query,style,false);
+        }
+        if(s.startsWith("کھولو ") || s.endsWith(" کھولو")) {
+            String app=original.replaceFirst("^کھولو\\s+", "").replaceFirst("\\s+کھولو$", "").trim();
+            if(!app.isEmpty()) return new Interpretation(original,"open "+app,"OPEN_APP",app,style,false);
+        }
         if(matchesAny(s,"नमस्ते","नमस्कार","hello","hi anamika","hello anamika","hey anamika","namaste"))
             return new Interpretation(original,original,"CHAT",original,style,false);
 
@@ -265,7 +272,7 @@ public final class UniversalLanguageRouter {
         }
         if(urdu>0 && devanagari==0) return Style.URDU;
         if(devanagari>0) return Style.HINDI;
-        if(latin>0 && containsAny(lower,"kya","kaise","kahan","kahaan","kyun","kyu","kar","karo","karna","mujhe","mera","meri","hai","ho","nahi","nhi",
+        if(latin>0 && containsWords(lower,"kya","kaise","kahan","kahaan","kyun","kyu","kar","karo","karna","mujhe","mera","meri","hai","ho","nahi","nhi",
                 "haan","han","acha","achha","theek","thik","bata","bta","batao","samjha","samjhao","sunao","dhundo","dhoondo","khol","kholo","yaad","rakho",
                 "bolo","bol","chahiye","chahta","chahti","wala","wali","waha","yaha","isme","usme","sab","saare","sare","fir","phir","aur","abhi","zara","bilkul",
                 "matlab","jawab","sawal","sahi","galat","band","chalu","dekho","dikhao")) return Style.HINGLISH;
@@ -275,9 +282,9 @@ public final class UniversalLanguageRouter {
 
     public static Locale speechLocaleFor(String text){
         Style s=detectStyle(text);
-        if(s==Style.URDU) return new Locale("ur","PK");
+        if(s==Style.URDU) return new Locale("ur","IN");
         if(s==Style.HINDI || s==Style.HINGLISH) return new Locale("hi","IN");
-        if(s==Style.ENGLISH) return Locale.US;
+        if(s==Style.ENGLISH) return new Locale("en","IN");
         return Locale.getDefault();
     }
 
@@ -308,7 +315,7 @@ public final class UniversalLanguageRouter {
             if(lower.endsWith(l) && s.length()>suf.length()) return clean(s.substring(0,s.length()-suf.length()));
         }
 
-        Matcher m=Pattern.compile("(?i)(?:google|internet|web)\\\\s+(?:par|pe|में|पर)?\\\\s*(?:search|सर्च|खोज)\\\\s*(?:karo|kar|करो)?\\\\s*(.+)").matcher(s);
+        Matcher m=Pattern.compile("(?i)(?:google|internet|web)\\s+(?:par|pe|में|पर)?\\s*(?:search|सर्च|खोज)\\s*(?:karo|kar|करो)?\\s*(.+)").matcher(s);
         if(m.find()) return clean(m.group(1));
         return null;
     }
@@ -316,7 +323,7 @@ public final class UniversalLanguageRouter {
     private static String extractYouTubeSearch(String raw){
         String lower=raw.toLowerCase(Locale.ROOT);
         if(!lower.contains("youtube") && !lower.contains("यूट्यूब")) return null;
-        Matcher m=Pattern.compile("(?i)(?:youtube|यूट्यूब)(?:\\\\s+(?:par|pe|में|पर))?\\\\s*(?:search|सर्च|dhundo|dhoondo|ढूंढो|खोजो)?\\\\s*(?:karo|kar|करो)?\\\\s*(.*)").matcher(raw.trim());
+        Matcher m=Pattern.compile("(?i)(?:youtube|यूट्यूब)(?:\\s+(?:par|pe|में|पर))?\\s*(?:search|सर्च|dhundo|dhoondo|ढूंढो|खोजो)?\\s*(?:karo|kar|करो)?\\s*(.*)").matcher(raw.trim());
         if(m.matches()){
             String q=clean(m.group(1));
             if(!q.isEmpty()) return q;
@@ -326,7 +333,7 @@ public final class UniversalLanguageRouter {
 
     private static String clean(String q){
         if(q==null) return "";
-        return q.trim().replaceFirst("(?i)^(?:ki|ke|ka|about|for)\\\\s+","");
+        return q.trim().replaceFirst("(?i)^(?:ki|ke|ka|about|for)\\s+","");
     }
 
     private static boolean looksOpenApp(String s){
@@ -341,6 +348,13 @@ public final class UniversalLanguageRouter {
             if(i>=0) return raw.substring(i+p.length()).trim();
         }
         return raw;
+    }
+
+    private static boolean containsWords(String text,String... words){
+        for(String word:words){
+            if(Pattern.compile("(?<![a-z])"+Pattern.quote(word)+"(?![a-z])").matcher(text).find()) return true;
+        }
+        return false;
     }
 
     private static boolean matchesAny(String text,String... values){ for(String v:values) if(text.equals(v)) return true; return false; }
