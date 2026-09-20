@@ -40,3 +40,6 @@ Any failed post-update health check -> RECOVERY_REQUIRED.
 
 ## Migration rule
 The V7.8.2 classes stay available only while their capability is being rebuilt in V13. A legacy module is removed only after its V13 replacement compiles and passes its smoke tests.
+
+## Active build target
+Gradle/CI builds only `:app13`. The legacy `:app` V7.x module is not part of the V13 build graph.
