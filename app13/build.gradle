@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.anamika.ai'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.anamika.ai'
+        minSdk 26
+        targetSdk 36
+        versionCode Integer.parseInt(System.getenv("ANAMIKA13_VERSION_CODE") ?: "130000")
+        versionName System.getenv("ANAMIKA13_VERSION_NAME") ?: "13.0.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ''
+            versionNameSuffix '-dev'
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+/*
+ * V13 bundles its own clean source snapshot. The runtime never edits this
+ * immutable copy. A self-upgrade starts by copying it to private app storage.
+ */
+def v13SelfSource = layout.buildDirectory.dir("generated/v13SelfSource")
+tasks.register("bundleV13SelfSource", Sync) {
+    into(v13SelfSource)
+    from("src/main/java") { into("self_source/app13/src/main/java") }
+    from("src/main/res") { into("self_source/app13/src/main/res") }
+    from("src/main/AndroidManifest.xml") { into("self_source/app13/src/main"); rename { "AndroidManifest.xml" } }
+    from("build.gradle") { into("self_source/app13"); rename { "build.gradle" } }
+    from(rootProject.file("build.gradle")) { into("self_source"); rename { "build.gradle" } }
+    from(rootProject.file("settings.gradle")) { into("self_source"); rename { "settings.gradle" } }
+    from(rootProject.file("gradle.properties")) { into("self_source"); rename { "gradle.properties" } }
+}
+android.sourceSets.main.assets.srcDir(v13SelfSource.get().asFile)
+tasks.named("preBuild").configure { dependsOn("bundleV13SelfSource") }
