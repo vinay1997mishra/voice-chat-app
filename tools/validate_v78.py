@@ -23,7 +23,7 @@ try:
         if lang not in langs: errors.append('toolchain registry missing '+lang)
 except Exception as e: errors.append('compiler_packs.json: '+str(e))
 main=(root/'app/src/main/java/com/anamika/ai/MainActivity.java').read_text()
-for t in ['AppSearchController.searchYouTube','AppSearchController.searchGoogle','ResearchLearningStore.start','SelfUpgradeWorkspace.prepare','UniversalLanguageRouter.normalize']:
+for t in ['AppSearchController.searchYouTube','AppSearchController.searchGoogle','ResearchLearningStore.start','SelfUpgradeWorkspace.prepare','UniversalLanguageRouter.interpret','answerWithLocalConversation','speechLocaleFor']:
     if t not in main: errors.append('MainActivity missing '+t)
 service=(root/'app/src/main/java/com/anamika/ai/plugins/AppAutomationAccessibilityService.java').read_text()
 if 'ResearchLearningStore.capture' not in service: errors.append('Accessibility service not wired to research capture')
