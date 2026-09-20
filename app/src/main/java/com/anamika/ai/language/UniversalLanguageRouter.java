@@ -33,8 +33,15 @@ public final class UniversalLanguageRouter {
         String original=raw==null?"":raw.trim();
         if(original.isEmpty()) return new Interpretation("","","EMPTY","",Style.OTHER,false);
         Style style=detectStyle(original);
+
+        Interpretation learned=loadLearned(context,original,style);
+        if(learned!=null) return learned;
+
         Interpretation quick=quickInterpret(original,style);
-        if(!"UNKNOWN".equals(quick.intent)) return quick;
+        if(!"UNKNOWN".equals(quick.intent)) {
+            remember(context,quick);
+            return quick;
+        }
 
         try{
             LocalModelBridge.ModelStatus st=LocalModelBridge.getStatus(context);
@@ -49,10 +56,68 @@ public final class UniversalLanguageRouter {
                         "If the user is talking or asking a general question use CHAT. Do not answer or explain.\\n"+
                         "User: "+original;
                 Interpretation parsed=parseModel(original,LocalModelBridge.generate(context,prompt),style);
-                if(parsed!=null) return parsed;
+                if(parsed!=null) {
+                    remember(context,parsed);
+                    return parsed;
+                }
             }
         }catch(Throwable ignored){}
         return new Interpretation(original,original,"UNKNOWN","",style,false);
+    }
+
+    private static final String LEARN_PREFS="anamika_language_learning";
+
+    private static Interpretation loadLearned(Context context,String original,Style fallback){
+        if(context==null || original==null) return null;
+        String key="p_"+Integer.toHexString(normalizePhrase(original).hashCode());
+        String packed=context.getSharedPreferences(LEARN_PREFS,Context.MODE_PRIVATE).getString(key,"");
+        if(packed.isEmpty()) return null;
+        String[] parts=packed.split("\\n",-1);
+        if(parts.length<3) return null;
+        try{
+            String intent=parts[0];
+            String normalized=parts[1];
+            Style style=parts[2].isEmpty()?fallback:Style.valueOf(parts[2]);
+            String arg=deriveLearnedArgument(intent,original,normalized);
+            return new Interpretation(original,normalized,intent,arg,style,false);
+        }catch(Exception e){
+            return null;
+        }
+    }
+
+    private static void remember(Context context,Interpretation i){
+        if(context==null || i==null || i.original.trim().isEmpty() || isSensitiveLearning(i.original)) return;
+        String intent=i.intent==null?"UNKNOWN":i.intent;
+        if("UNKNOWN".equals(intent) || "EMPTY".equals(intent)) return;
+        String key="p_"+Integer.toHexString(normalizePhrase(i.original).hashCode());
+        String normalized=i.normalized==null?i.original:i.normalized;
+        if(normalized.length()>700) normalized=normalized.substring(0,700);
+        String packed=intent+"\n"+normalized.replace("\n"," ")+"\n"+i.style.name();
+        context.getSharedPreferences(LEARN_PREFS,Context.MODE_PRIVATE).edit().putString(key,packed).apply();
+    }
+
+    private static String deriveLearnedArgument(String intent,String original,String normalized){
+        if("SEARCH".equals(intent)){
+            String q=extractSearch(original);
+            return q==null?original:q;
+        }
+        if("YOUTUBE_SEARCH".equals(intent)){
+            String q=extractYouTubeSearch(original);
+            return q==null?original:q;
+        }
+        if("REMEMBER".equals(intent)) return stripPrefix(original,"yaad rakho","याद रखो","remember");
+        if("CHAT".equals(intent)) return original;
+        return normalized;
+    }
+
+    private static boolean isSensitiveLearning(String raw){
+        String s=raw.toLowerCase(Locale.ROOT);
+        return containsAny(s,"password","passcode","otp","one time password","pin ","cvv","card number",
+                "पासवर्ड","ओटीपी","पिन","कार्ड नंबर","message bhejo","msg bhejo","send message");
+    }
+
+    private static String normalizePhrase(String raw){
+        return raw.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+"," ");
     }
 
     private static Interpretation quickInterpret(String original,Style style){
