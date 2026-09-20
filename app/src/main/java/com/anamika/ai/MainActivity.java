@@ -1626,17 +1626,18 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             answer("Jis app ka audit chahiye uska naam command me boliye, jaise: “Hika app open karke A to Z saare functions check karo aur blueprint banao.”");
             return;
         }
-        if(!com.anamika.ai.plugins.PluginRegistry.isEnabled(this,pkg)){
-            answer("Ye app aapke owner-selected plugins me enabled nahi hai, isliye Anamika ne audit/control start nahi kiya.");
-            return;
-        }
         if(!isAutomationServiceEnabled()){
-            answer("Anamika App Control service off hai, isliye is app par automatic audit/control start nahi kiya gaya.");
+            answer("Deep discover ke liye Android Accessibility/App Control service ON honi zaroori hai. Plugin banana zaroori nahi hai. Service ON karke wahi command dobara boliye.");
             return;
         }
         getSharedPreferences("anamika_automation",MODE_PRIVATE).edit().putString("target_package",pkg).apply();
-        String r=com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,"check all functions");
-        answer("Auto Audit start. Anamika app ke visible screens, rooms, menus, safe clickable buttons, scroll aur back-navigation ko systematically check karegi. Har tested/skipped control blueprint me record hoga. Password, payment, destructive action aur real message/send jaise side-effect actions generic audit me skip honge; unhe explicit command se chalaya ja sakta hai. "+r);
+        boolean persistentPlugin=com.anamika.ai.plugins.PluginRegistry.isEnabled(this,pkg);
+        String r=persistentPlugin
+                ? com.anamika.ai.plugins.AppPluginEngine.openAndRun(this,pkg,"check all functions")
+                : com.anamika.ai.plugins.AppPluginEngine.openAndDeepAuditOneShot(this,pkg);
+        answer("Deep Discover start. "+(persistentPlugin?"Selected plugin":"One-time owner-selected non-plugin app")+
+                " ko systematically map karke blueprint banaya jayega. Reachable screens, visible controls, scroll/back paths aur supported custom touch surfaces record honge. "+
+                "Risky real-world action par owner confirmation li jayegi. Hidden server logic ya Android ko expose na hone wali UI ko coverage gap me clearly likha jayega. "+r);
     }
 
     private String extractAuditAppName(String command){
