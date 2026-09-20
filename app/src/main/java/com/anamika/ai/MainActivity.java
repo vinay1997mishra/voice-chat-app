@@ -319,14 +319,40 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if (!ensureUnlocked()) return;
         String original=raw==null?"":raw.trim();
         if(!original.isEmpty()) appendChat("You",original);
-        String command = UniversalLanguageRouter.normalize(this, original);
+        UniversalLanguageRouter.Interpretation interpretation =
+                UniversalLanguageRouter.interpret(this, original);
+        String command = interpretation.normalized;
         if (command.isEmpty()) {
-            showResult("Please speak or type a command.");
+            answerForStyle(interpretation.style,
+                    "कृपया कुछ बोलिए या लिखिए।",
+                    "Kuch boliye ya likhiye.",
+                    "Please speak or type something.");
             return;
         }
 
         String lower = command.toLowerCase(Locale.ROOT);
-        prefs.edit().putString("last_command", command).apply();
+        prefs.edit()
+                .putString("last_command", command)
+                .putString("last_original_command", original)
+                .putString("last_language_style", interpretation.style.name())
+                .apply();
+
+        if ("SEARCH".equals(interpretation.intent)) {
+            String q=interpretation.argument.trim().isEmpty()?original:interpretation.argument.trim();
+            answer(searchReply(interpretation.style,q,AppSearchController.searchGoogle(this,q)));
+            return;
+        }
+
+        if ("YOUTUBE_SEARCH".equals(interpretation.intent)) {
+            String q=interpretation.argument.trim().isEmpty()?original:interpretation.argument.trim();
+            answer(searchReply(interpretation.style,q,AppSearchController.searchYouTube(this,q)));
+            return;
+        }
+
+        if ("CHAT".equals(interpretation.intent)) {
+            answerWithLocalConversation(original,interpretation.style);
+            return;
+        }
 
         if (lower.equals("hello") || lower.equals("hello anamika") || lower.equals("hi anamika") ||
                 lower.equals("namaste") || lower.equals("namaste anamika") || lower.equals("नमस्ते")) {
@@ -472,7 +498,71 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
-        answer("Command directly map nahi hua. Universal language mode text ko local model se normalize karne ki koshish karta hai. Aap Google/YouTube search, research mode, open app, developer mode, cinematic creator, plugin center, self upgrade, settings ya update bol sakte hain.");
+        // Unknown wording is not rejected. Let the bundled local model understand
+        // it as natural conversation in the owner's language instead of exposing a
+        // keyword-command failure message.
+        answerWithLocalConversation(original,interpretation.style);
+    }
+
+    private void answerForStyle(UniversalLanguageRouter.Style style,String hindi,String hinglish,String english){
+        if(style==UniversalLanguageRouter.Style.HINDI) answer(hindi);
+        else if(style==UniversalLanguageRouter.Style.HINGLISH) answer(hinglish);
+        else if(style==UniversalLanguageRouter.Style.ENGLISH) answer(english);
+        else answer(hinglish);
+    }
+
+    private String searchReply(UniversalLanguageRouter.Style style,String query,String technical){
+        if(style==UniversalLanguageRouter.Style.HINDI) return "मैंने “"+query+"” की खोज खोल दी है।";
+        if(style==UniversalLanguageRouter.Style.ENGLISH) return "I opened a search for “"+query+"”.";
+        return "Maine “"+query+"” ka search khol diya hai.";
+    }
+
+    private void answerWithLocalConversation(String original,UniversalLanguageRouter.Style style){
+        if(original==null || original.trim().isEmpty()) return;
+        showResult(style==UniversalLanguageRouter.Style.HINDI
+                ?"सोच रही हूँ…"
+                :style==UniversalLanguageRouter.Style.ENGLISH
+                    ?"Thinking…"
+                    :"Samajh rahi hoon…");
+
+        final String userText=original.trim();
+        final UniversalLanguageRouter.Style replyStyle=style;
+        new Thread(() -> {
+            String reply;
+            try{
+                LocalModelBridge.ModelStatus st=LocalModelBridge.getStatus(MainActivity.this);
+                if(!st.ready){
+                    reply=replyStyle==UniversalLanguageRouter.Style.HINDI
+                            ?"लोकल AI मॉडल अभी तैयार नहीं है। सामान्य कमांड काम करेंगे, लेकिन खुली बातचीत सीमित रहेगी।"
+                            :replyStyle==UniversalLanguageRouter.Style.ENGLISH
+                                ?"The local AI model is not ready yet. Basic commands will work, but open conversation is limited."
+                                :"Local AI model abhi ready nahi hai. Normal commands chalenge, lekin open conversation limited rahegi.";
+                }else{
+                    String memory=prefs.getString("memory_note","");
+                    String prompt="You are Anamika AI, the owner's personal on-device assistant. "+
+                            "Understand natural human language, including Hindi, Hinglish, English and mixed speech. "+
+                            UniversalLanguageRouter.replyInstruction(replyStyle)+" "+
+                            "Be concise, useful and conversational. Do not mention intent parsing, keyword maps or model internals. "+
+                            "If the user asks for an action you cannot actually execute in this reply, explain the next concrete action instead of pretending it happened. "+
+                            (memory.isEmpty()?"":"Relevant owner memory: "+memory+" ")+
+                            "User: "+userText+"\nAnamika:";
+                    reply=LocalModelBridge.generate(MainActivity.this,prompt);
+                    if(reply==null || reply.trim().isEmpty()) throw new IllegalStateException("empty local reply");
+                    reply=reply.trim();
+                    int fence=reply.indexOf("~~~");
+                    if(fence>=0) reply=reply.substring(0,fence).trim();
+                    if(reply.length()>1800) reply=reply.substring(0,1800).trim();
+                }
+            }catch(Throwable t){
+                reply=replyStyle==UniversalLanguageRouter.Style.HINDI
+                        ?"मैं आपकी बात समझने की कोशिश कर रही हूँ, लेकिन इस बार लोकल AI जवाब नहीं बना पाया। दोबारा बोलिए।"
+                        :replyStyle==UniversalLanguageRouter.Style.ENGLISH
+                            ?"I understood the request, but the local AI could not produce a reply this time. Please try again."
+                            :"Main baat samajhne ki koshish kar rahi hoon, lekin is baar local AI reply nahi bana paya. Dobara boliye.";
+            }
+            final String out=reply;
+            runOnUiThread(() -> answer(out));
+        },"AnamikaConversation").start();
     }
 
     private void generateDeveloperProject() {
@@ -898,8 +988,19 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void speak(String text) {
         stopWakeRecognizer();
         pauseBackgroundWakeService();
-        if (tts != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "anamika_reply");
-        long delay=Math.min(6500L,1800L+(text==null?0:text.length()*35L));
+        if (tts != null && text != null && !text.trim().isEmpty()) {
+            Locale desired=UniversalLanguageRouter.speechLocaleFor(text);
+            int lang=tts.setLanguage(desired);
+            if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
+                // Hindi/Hinglish is the owner's preferred fallback, then English.
+                lang=tts.setLanguage(new Locale("hi","IN"));
+                if(lang==TextToSpeech.LANG_MISSING_DATA || lang==TextToSpeech.LANG_NOT_SUPPORTED){
+                    tts.setLanguage(Locale.US);
+                }
+            }
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "anamika_reply");
+        }
+        long delay=Math.min(9000L,1800L+(text==null?0:text.length()*38L));
         mainHandler.postDelayed(this::resumeBackgroundWakeService,delay);
     }
 
@@ -910,12 +1011,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     public void onInit(int statusCode) {
         if (statusCode == TextToSpeech.SUCCESS) {
-            Locale preferred = Locale.getDefault();
-            int r = tts.setLanguage(preferred);
-            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-                r = tts.setLanguage(new Locale("hi", "IN"));
-                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
+            int r=tts.setLanguage(new Locale("hi","IN"));
+            if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED){
+                r=tts.setLanguage(Locale.getDefault());
+                if(r==TextToSpeech.LANG_MISSING_DATA || r==TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.US);
             }
+            tts.setSpeechRate(0.95f);
         }
     }
 
