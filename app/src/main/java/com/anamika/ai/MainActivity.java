@@ -827,6 +827,35 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void handleMediaCommand(String original,UniversalLanguageRouter.Style style){
         String lower=original.toLowerCase(Locale.ROOT);
+
+        boolean animeRequested=containsAny(lower,"anime","एनिमे");
+        boolean storyAnime=animeRequested && containsAny(lower,"story","kahani","कहानी","स्टोरी");
+        if(animeRequested){
+            Intent ai=new Intent(this,com.anamika.ai.creator.CreatorHubActivity.class);
+            ai.putExtra("media_type","video");
+            ai.putExtra("prompt",original);
+            ai.putExtra("workflow",storyAnime?"story_to_anime":"video_to_anime");
+            ai.putExtra("width",lower.contains("9:16")?1080:1920);
+            ai.putExtra("height",lower.contains("9:16")?1920:1080);
+            if(!storyAnime){
+                String last=prefs.getString("last_vault_file","");
+                String mime=prefs.getString("last_vault_mime","");
+                if(!last.isEmpty() && mime.startsWith("video/")) ai.putExtra("source_video_path",last);
+            }
+            startActivity(ai);
+            answerForStyle(style,
+                    storyAnime
+                            ?"Anime story creator खोल दिया है। Story, scenes और अलग-अलग natural character voices के साथ video generate होगा।"
+                            :"Anime video converter खोल दिया है। Last uploaded video को anime look और natural anime-style voice treatment के साथ process किया जा सकता है.",
+                    storyAnime
+                            ?"Anime story creator khol diya hai. Story, scenes aur alag-alag natural character voices ke saath video generate hoga."
+                            :"Anime video converter khol diya hai. Last uploaded video ko anime look aur natural anime-style voice treatment ke saath process kiya ja sakta hai.",
+                    storyAnime
+                            ?"Anime story creator opened with multi-character natural voice generation."
+                            :"Anime video converter opened for visual transformation and natural character-style voice treatment.");
+            return;
+        }
+
         boolean create=containsAny(lower,"banao","bana do","create","generate","new photo","new image","new video","बनाओ","बना दो");
         if(create){
             Intent i=new Intent(this,com.anamika.ai.creator.CreatorHubActivity.class);
