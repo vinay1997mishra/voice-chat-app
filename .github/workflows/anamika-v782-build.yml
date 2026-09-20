@@ -27,6 +27,7 @@ jobs:
       RELEASE_TAG: anamika-v7.8.2
       FINAL_NAME: AnamikaAI-V7.8.2-DirectSource-FINAL.apk
       OWNER_SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned.apk
+      OWNER_SIGNED_NAME: AnamikaAI-V7.8.2-OwnerSigned.apk
 
     steps:
       - uses: actions/checkout@v5
@@ -116,6 +117,29 @@ jobs:
         with:
           gradle-version: '9.6.1'
 
+      - name: Prepare owner signing key when configured
+        id: owner_signing
+        env:
+          ANAMIKA_KEYSTORE_B64: ${{ secrets.ANAMIKA_KEYSTORE_B64 }}
+          ANAMIKA_KEYSTORE_PASSWORD: ${{ secrets.ANAMIKA_KEYSTORE_PASSWORD }}
+          ANAMIKA_KEY_ALIAS: ${{ secrets.ANAMIKA_KEY_ALIAS }}
+          ANAMIKA_KEY_PASSWORD: ${{ secrets.ANAMIKA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANAMIKA_KEYSTORE_B64:-}" ] && [ -n "${ANAMIKA_KEYSTORE_PASSWORD:-}" ] && [ -n "${ANAMIKA_KEY_ALIAS:-}" ] && [ -n "${ANAMIKA_KEY_PASSWORD:-}" ]; then
+            mkdir -p .signing
+            printf '%s' "$ANAMIKA_KEYSTORE_B64" | base64 -d > .signing/anamika-owner.jks
+            keytool -list -keystore .signing/anamika-owner.jks -storepass "$ANAMIKA_KEYSTORE_PASSWORD" -alias "$ANAMIKA_KEY_ALIAS" >/dev/null
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "ANAMIKA_KEYSTORE_PATH=$GITHUB_WORKSPACE/.signing/anamika-owner.jks" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEYSTORE_PASSWORD=$ANAMIKA_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEY_ALIAS=$ANAMIKA_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ANAMIKA_KEY_PASSWORD=$ANAMIKA_KEY_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Owner signing secrets not configured; debug test APK will still build, but stable self-update signing is unavailable."
+          fi
+
       - name: Validate direct source
         run: |
           set -euo pipefail
@@ -196,6 +220,9 @@ jobs:
           set -euo pipefail
           gh release view "$RELEASE_TAG" >/dev/null
           gh release upload "$RELEASE_TAG" "artifacts/full/$FINAL_NAME" --clobber
+          if [ -f "artifacts/signed/$OWNER_SIGNED_NAME" ]; then
+            gh release upload "$RELEASE_TAG" "artifacts/signed/$OWNER_SIGNED_NAME" --clobber
+          fi
 
       - name: Publish owner-signed self-update APK
         if: steps.owner_signing.outputs.configured == 'true'
