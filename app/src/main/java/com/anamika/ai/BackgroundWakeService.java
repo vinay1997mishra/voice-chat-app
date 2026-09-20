@@ -49,6 +49,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private boolean mediaPlaybackActive=false;
     private AudioManager.AudioPlaybackCallback playbackCallback;
     private final Runnable mediaPoll=this::pollMediaPlayback;
+    private boolean explicitStop=false;
 
     @Override public void onCreate(){
         super.onCreate();
@@ -83,6 +84,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             return START_NOT_STICKY;
         }
         if(ACTION_STOP.equals(action)){
+            explicitStop=true;
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",false).apply();
             conversationSession=false;
             awaitingCommand=false;
@@ -486,16 +488,34 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     public static boolean isRunning(){ return running; }
 
+    private void scheduleRecovery(long delayMs){
+        if(explicitStop) return;
+        if(!OwnerSession.isTrusted(this)) return;
+        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)) return;
+        try{
+            Intent i=new Intent(this,WakeRecoveryReceiver.class);
+            PendingIntent pi=PendingIntent.getBroadcast(this,7821,i,
+                    PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+            AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);
+            if(am!=null){
+                long at=SystemClock.elapsedRealtime()+Math.max(1500L,delayMs);
+                am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,at,pi);
+            }
+        }catch(Throwable ignored){}
+    }
+
     @Override public void onTaskRemoved(Intent rootIntent){
         if(OwnerSession.isTrusted(this)){
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",true).apply();
             handler.postDelayed(this::startListening,300L);
+            scheduleRecovery(2200L);
         }
         super.onTaskRemoved(rootIntent);
     }
 
     @Override public void onDestroy(){
         running=false;
+        if(!explicitStop) scheduleRecovery(2500L);
         handler.removeCallbacksAndMessages(null);
         if(Build.VERSION.SDK_INT>=26 && audioManager!=null && playbackCallback!=null){
             try{audioManager.unregisterAudioPlaybackCallback(playbackCallback);}catch(Throwable ignored){}
