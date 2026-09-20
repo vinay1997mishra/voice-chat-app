@@ -17,6 +17,8 @@ public final class CreatorHubActivity extends Activity {
     private TextView status;
     private Button generate;
     private String mediaType="video";
+    private String workflow="standard";
+    private String sourceVideoPath="";
     private int requestedWidth=1920,requestedHeight=1080;
     @Override protected void onCreate(Bundle b){
         super.onCreate(b); setContentView(R.layout.activity_creator_hub);
@@ -29,20 +31,77 @@ public final class CreatorHubActivity extends Activity {
         if(incoming!=null){
             mediaType=incoming.getStringExtra("media_type");
             if(mediaType==null||mediaType.trim().isEmpty()) mediaType="video";
+            String wf=incoming.getStringExtra("workflow");
+            if(wf!=null&&!wf.trim().isEmpty()) workflow=wf.trim();
+            String sv=incoming.getStringExtra("source_video_path");
+            if(sv!=null) sourceVideoPath=sv;
             requestedWidth=incoming.getIntExtra("width",mediaType.equalsIgnoreCase("image")?1024:1920);
             requestedHeight=incoming.getIntExtra("height",mediaType.equalsIgnoreCase("image")?1024:1080);
             String p=incoming.getStringExtra("prompt");
             if(p!=null&&!p.trim().isEmpty()) prompt.setText(p.trim());
         }
-        generate.setText(mediaType.equalsIgnoreCase("image")
-                ?"Generate Image "+requestedWidth+"×"+requestedHeight
-                :"Generate Video "+requestedWidth+"×"+requestedHeight);
+        if("video_to_anime".equalsIgnoreCase(workflow)){
+            generate.setText("Convert Video to Anime "+requestedWidth+"×"+requestedHeight);
+            status.setText(sourceVideoPath.isEmpty()
+                    ?"Upload/select a source video in Anamika first."
+                    :"Anime transform ready. Source: "+new java.io.File(sourceVideoPath).getName());
+        }else if("story_to_anime".equalsIgnoreCase(workflow)){
+            generate.setText("Create Anime Story Video "+requestedWidth+"×"+requestedHeight);
+            status.setText("Story mode: scenes + dialogue + distinct natural character voices.");
+        }else{
+            generate.setText(mediaType.equalsIgnoreCase("image")
+                    ?"Generate Image "+requestedWidth+"×"+requestedHeight
+                    :"Generate Video "+requestedWidth+"×"+requestedHeight);
+        }
         findViewById(R.id.creatorLocal3d).setOnClickListener(v->startActivity(new Intent(this, Premium3DActivity.class)));
         generate.setOnClickListener(v->runGeneration());
     }
     private void runGeneration(){
         String ep=endpoint.getText().toString().trim();
-        getSharedPreferences("anamika_creator",MODE_PRIVATE).edit().putString("endpoint",ep).putString("model",model.getText().toString().trim()).apply();
+        String key=apiKey.getText().toString().trim();
+        String modelName=model.getText().toString().trim();
+        String textPrompt=prompt.getText().toString().trim();
+        getSharedPreferences("anamika_creator",MODE_PRIVATE).edit().putString("endpoint",ep).putString("model",modelName).apply();
+        generate.setEnabled(false);
+
+        if("video_to_anime".equalsIgnoreCase(workflow)){
+            java.io.File src=new java.io.File(sourceVideoPath==null?"":sourceVideoPath);
+            if(!src.isFile()){
+                generate.setEnabled(true);
+                status.setText("Anime transform ke liye source video nahi mila. + se video upload karke command dobara do.");
+                return;
+            }
+            status.setText("Starting anime video transformation…");
+            AnimeVideoCreator.transformVideo(this,ep,key,modelName,src,textPrompt,requestedWidth,requestedHeight,
+                    new AnimeVideoCreator.Callback(){
+                        public void onProgress(String m){runOnUiThread(()->status.setText(m));}
+                        public void onComplete(java.io.File f,AnimeVideoCreator.Verification v){runOnUiThread(()->{
+                            generate.setEnabled(true);apiKey.setText("");
+                            status.setText("Anime video ready: "+v.width+"×"+v.height+", "+(v.durationMs/1000f)+"s\n"+
+                                    f.getAbsolutePath()+"\nSaved in Anamika Personal Space.");
+                            Toast.makeText(CreatorHubActivity.this,"Anime video ready",Toast.LENGTH_LONG).show();
+                        });}
+                        public void onError(String e){runOnUiThread(()->{generate.setEnabled(true);apiKey.setText("");status.setText("Anime transform failed: "+e);});}
+                    });
+            return;
+        }
+
+        if("story_to_anime".equalsIgnoreCase(workflow)){
+            status.setText("Starting anime story generation…");
+            AnimeVideoCreator.storyToAnime(this,ep,key,modelName,textPrompt,requestedWidth,requestedHeight,
+                    new AnimeVideoCreator.Callback(){
+                        public void onProgress(String m){runOnUiThread(()->status.setText(m));}
+                        public void onComplete(java.io.File f,AnimeVideoCreator.Verification v){runOnUiThread(()->{
+                            generate.setEnabled(true);apiKey.setText("");
+                            status.setText("Anime story video ready: "+v.width+"×"+v.height+", "+(v.durationMs/1000f)+"s\n"+
+                                    f.getAbsolutePath()+"\nDistinct natural character voices requested. Saved in Personal Space.");
+                            Toast.makeText(CreatorHubActivity.this,"Anime story video ready",Toast.LENGTH_LONG).show();
+                        });}
+                        public void onError(String e){runOnUiThread(()->{generate.setEnabled(true);apiKey.setText("");status.setText("Anime story generation failed: "+e);});}
+                    });
+            return;
+        }
+
         generate.setEnabled(false); status.setText("Starting online cinematic job…");
         if(mediaType.equalsIgnoreCase("image")){
             InternetImageCreator.generate(this,ep,apiKey.getText().toString().trim(),model.getText().toString().trim(),
