@@ -49,19 +49,19 @@ Return ONLY JSON: {"patches":[{"path":"...","beforeHash":"...","replacement":"..
 beforeHash must equal the supplied file fingerprint.
 Never modify security, owner approval, signing, secrets, or workflow controls.
 Diagnostics:
-\${diagnostics.map((e) => '\${e.kind.name}: \${e.file ?? ''}:\${e.line ?? ''} \${e.message}').join('\\n')}
+${diagnostics.map((e) => '${e.kind.name}: ${e.file ?? ''}:${e.line ?? ''} ${e.message}').join('\\n')}
 Files:
-\${workspace.entries.map((e) => '--- \${e.key} [fingerprint=\${LocalCodeDoctor.contentFingerprint(e.value)}]\\n\${e.value}').join('\\n')}
+${workspace.entries.map((e) => '--- ${e.key} [fingerprint=${LocalCodeDoctor.contentFingerprint(e.value)}]\\n${e.value}').join('\\n')}
 ''';
 
   String _featurePrompt(String request, Map<String, String> workspace) =>
       '''You are Anamika's offline coding engine. Implement exactly this owner request:
-\$request
+$request
 Return ONLY JSON: {"files":[{"path":"...","content":"complete file content"}]}.
 Only generate apps/mobile/lib or apps/mobile/test files. Do not alter owner approval,
 signing, secrets, or protected workflows. Preserve unrelated behavior.
 Project:
-\${workspace.entries.map((e) => '--- \${e.key}\\n\${e.value}').join('\\n')}
+${workspace.entries.map((e) => '--- ${e.key}\\n${e.value}').join('\\n')}
 ''';
 
   List<RepairPatch> _decodePatches(String raw, Map<String, String> workspace) {
