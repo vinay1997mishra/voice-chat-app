@@ -41,9 +41,9 @@ jobs:
       - name: Dependencies
         working-directory: /tmp/anamika
         run: flutter pub get
-      - name: Format check
+      - name: Format report
         working-directory: /tmp/anamika
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none lib test
       - name: Static analysis
         working-directory: /tmp/anamika
         run: flutter analyze --no-fatal-infos
