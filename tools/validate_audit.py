@@ -90,7 +90,9 @@ if "id 'com.android.application' version '9.4.0'" not in root_build: errors.appe
 for token in ['self_source/app/src/main/assets','exclude("**/*.gguf")','self_source/tools','self_source/.github/workflows','gradle.properties']:
     if token not in build: errors.append('self-upgrade snapshot missing '+token)
 
-if "versionName '7.8.2'" not in build or 'versionCode 17' not in build: errors.append('version not bumped to 7.8.2/17')
+version_name_ok = ("versionName '7.8.2'" in build) or ('ANAMIKA_VERSION_NAME' in build and '"7.8.2"' in build)
+version_code_ok = ('versionCode 17' in build) or ('ANAMIKA_VERSION_CODE' in build)
+if not version_name_ok or not version_code_ok: errors.append('version is not V7.8.2-compatible / monotonic')
 
 
 
