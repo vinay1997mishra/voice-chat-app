@@ -1,225 +1,313 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:background="#101114">
 
     <LinearLayout
+        android:id="@+id/chatShell"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Anamika AI"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="Locked"
-            android:textSize="15sp" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Anamika"
+                    android:textColor="#FFFFFF"
+                    android:textSize="21sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Owner lock"
+                    android:textColor="#AAB0BA"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/vaultButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="▣"
+                android:textSize="20sp"
+                android:contentDescription="Anamika personal space" />
+
+            <Button
+                android:id="@+id/toolsButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="⋮"
+                android:textSize="24sp"
+                android:contentDescription="Anamika tools" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ownerBar"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
             android:orientation="horizontal">
 
             <EditText
                 android:id="@+id/pinInput"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:hint="Owner PIN (4–12 digits)"
+                android:hint="Owner PIN"
                 android:inputType="numberPassword"
-                android:maxLength="12" />
+                android:maxLength="12"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#7F8792" />
 
             <Button
                 android:id="@+id/unlockButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Set PIN" />
+                android:layout_height="48dp"
+                android:text="Unlock" />
+
+            <Button
+                android:id="@+id/forgetOwnerButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:visibility="gone"
+                android:text="Lock" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/forgetOwnerButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            android:text="Forget Owner Login / Require PIN Again" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="Talk to Anamika"
-            android:textSize="22sp"
-            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/result"
             android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:layout_marginTop="8dp"
-            android:background="#121212"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:background="#101114"
             android:gravity="top|start"
-            android:padding="12dp"
             android:scrollbars="vertical"
-            android:text="Anamika: Owner unlock ke baad yahin type ya bolkar koi bhi command dijiye."
-            android:textColor="#FFFFFF"
+            android:text="Anamika: Owner unlock ke baad yahin type ya bolkar baat kariye."
+            android:textColor="#F2F3F5"
             android:textIsSelectable="true"
-            android:textSize="15sp" />
-
-        <EditText
-            android:id="@+id/commandInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="top"
-            android:hint="Message or command… e.g. WhatsApp kholo aur Vinay ko hello bhejo"
-            android:minLines="3"
-            android:maxLines="6" />
+            android:textSize="16sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:gravity="bottom|center_vertical"
+            android:padding="8dp"
+            android:orientation="horizontal"
+            android:background="#191B20">
 
             <Button
-                android:id="@+id/runButton"
+                android:id="@+id/attachButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="+"
+                android:textSize="25sp"
+                android:contentDescription="Add file or media" />
+
+            <EditText
+                android:id="@+id/commandInput"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Send" />
+                android:minHeight="48dp"
+                android:maxLines="5"
+                android:gravity="center_vertical"
+                android:hint="Message Anamika…"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#7F8792"
+                android:background="#252830" />
 
             <Button
                 android:id="@+id/listenButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🎤 Mic" />
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="🎤"
+                android:contentDescription="Speak" />
+
+            <Button
+                android:id="@+id/runButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="➤"
+                android:contentDescription="Send" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/wakeListenButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="24×7 Hello Mika / Hello Anamika: ALWAYS ON" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="After the first Owner setup, 24×7 Background Wake stays enabled automatically. You do not need to open Anamika first—say “Hello Mika” or “Hello Anamika”. The foreground service resumes best-effort after app reopen, reboot and app update. Android Force Stop or some OEM battery controls can still interrupt it."
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/pluginCenterButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="App Control / Auto Audit Setup" />
-
-        <Button
-            android:id="@+id/testLabButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Native App Test Lab" />
-
-        <Button
-            android:id="@+id/premium3dButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Universal Cinematic 3D/4D Studio" />
-
-        <Button
-            android:id="@+id/internetCreatorButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Internet Cinematic Creator" />
-
-        <Button
-            android:id="@+id/researchButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Research / Learn from Visible Content" />
-
-        <Button
-            android:id="@+id/languageStatusButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Universal Language Status" />
-
-        <Button
-            android:id="@+id/selfUpgradeButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Prepare Self-Upgrade Workspace" />
-
-        <Button
-            android:id="@+id/secureSelfUpdateButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secure Owner-Signed Self Update" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Developer / App Builder"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="You can also simply type “video editing app banao…” in the main message box. This section shows detailed generated code/output."
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/developerPrompt"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="top"
-            android:hint="Detailed app/website/code request"
-            android:minLines="4" />
-
-        <EditText
-            android:id="@+id/referenceUrlInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Optional reference note/URL"
-            android:inputType="textUri" />
-
-        <Button
-            android:id="@+id/generateCodeButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Generate + Validate Offline" />
-
-        <Button
-            android:id="@+id/saveProjectButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Save Verified Project Files" />
-
-        <TextView
-            android:id="@+id/developerOutput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:fontFamily="monospace"
-            android:text="Developer output will appear here."
-            android:textIsSelectable="true"
-            android:textSize="13sp" />
-
     </LinearLayout>
-</ScrollView>
+
+    <ScrollView
+        android:id="@+id/toolsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:fillViewport="true"
+        android:background="#101114">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Anamika Tools"
+                    android:textColor="#FFFFFF"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/toolsCloseButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:text="✕" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/permissionSetupButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="One-time Phone Access Setup" />
+
+            <Button
+                android:id="@+id/storageSetupButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Choose Storage Folder Once / Persistent Access" />
+
+            <Button
+                android:id="@+id/wakeListenButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="24×7 Hello Mika / Hello Anamika" />
+
+            <Button
+                android:id="@+id/pluginCenterButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="App Control / Auto Audit" />
+
+            <Button
+                android:id="@+id/testLabButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Native App Test Lab" />
+
+            <Button
+                android:id="@+id/premium3dButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Local Cinematic 3D/4D Studio" />
+
+            <Button
+                android:id="@+id/internetCreatorButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Online Video / Visual Creator" />
+
+            <Button
+                android:id="@+id/researchButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Research / Learn from Visible Content" />
+
+            <Button
+                android:id="@+id/languageStatusButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Language + Coding Status" />
+
+            <Button
+                android:id="@+id/selfUpgradeButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Prepare Self-Upgrade Workspace" />
+
+            <Button
+                android:id="@+id/secureSelfUpdateButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secure Owner-Signed Self Update" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="Developer / App Builder"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/developerPrompt"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="3"
+                android:hint="Detailed app / website / code request"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#7F8792" />
+
+            <EditText
+                android:id="@+id/referenceUrlInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Optional reference URL / note"
+                android:inputType="textUri"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#7F8792" />
+
+            <Button
+                android:id="@+id/generateCodeButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Generate + Validate Offline" />
+
+            <Button
+                android:id="@+id/saveProjectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Save Verified Project Files" />
+
+            <TextView
+                android:id="@+id/developerOutput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:fontFamily="monospace"
+                android:text="Developer output will appear here."
+                android:textColor="#D6DAE1"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>
