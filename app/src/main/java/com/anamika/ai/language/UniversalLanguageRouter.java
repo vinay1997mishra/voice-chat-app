@@ -188,6 +188,14 @@ public final class UniversalLanguageRouter {
                 "create image","create photo","create video","फोटो एडिट","वीडियो एडिट","फोटो बनाओ","वीडियो बनाओ"))
             return new Interpretation(original,original,"MEDIA",original,style,false);
 
+        if(containsAny(s,
+                "self upgrade","khud ko upgrade","खुद को अपग्रेड","upgrade yourself",
+                "apne liye code","apne liye coding","khud ke liye code","khud ke liye coding",
+                "apna code fix","khud ka code fix","khud me function add","apne andar function add",
+                "apne aap me add","apne aap ko fix","self coding","code yourself",
+                "अपने लिए कोड","खुद के लिए कोड","अपने कोड को ठीक","खुद में फंक्शन"))
+            return new Interpretation(original,original,"SELF_UPGRADE",original,style,false);
+
         if(containsAny(s,"app banao","app bana","एप बनाओ","ऐप बनाओ","create app","make app"))
             return new Interpretation(original,original,"CREATE_APP",original,style,false);
         if(containsAny(s,"website banao","वेबसाइट बनाओ","create website","make website"))
