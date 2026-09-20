@@ -671,6 +671,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 "is app ke saare functions check kar","is app ke sare functions check kar",
                 "saare functions check kar","sare functions check kar","check all functions",
                 "a to z","atoz","poora app check","pura app check","full app check",
+                "khud se check karo","khud check karo","khud saare button click karo",
+                "mere touch ka wait mat karo","saare button khud click karo",
+                "har screen check karo","har screen ke functions check karo",
                 "blueprint bana","blueprint banao","auto audit app")) {
             startNamedOrSelectedAutoAudit(command);
             return;
@@ -1660,7 +1663,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         if(command==null) return "";
         Matcher m=Pattern.compile("(?i)^\\s*([\\p{L}\\p{N}._-]{2,30})\\s+app\\s+(?:open|khol|kholo|check|dekho|dekh)").matcher(command.trim());
         if(m.find()) return m.group(1).trim();
-        m=Pattern.compile("(?i)(?:open|khol|kholo)\\s+([\\p{L}\\p{N}._-]{2,30})\\s+app").matcher(command);
+        m=Pattern.compile("(?i)(?:open|khol|kholo)\s+([\p{L}\p{N}._-]{2,30})\s+app").matcher(command);
+        if(m.find()) return m.group(1).trim();
+        m=Pattern.compile("(?i)(?:open|khol|kholo)\s+([\p{L}\p{N}._-]{2,30})(?:\s+(?:aur|and|phir|fir)|\s*$)").matcher(command.trim());
         return m.find()?m.group(1).trim():"";
     }
 
