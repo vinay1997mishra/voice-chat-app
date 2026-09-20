@@ -20,7 +20,8 @@ class UpgradeProposal {
   UpgradeProposal copyWith({
     UpgradeStage? stage,
     List<String>? validationNotes,
-  }) => UpgradeProposal(
+  }) =>
+      UpgradeProposal(
         id: id,
         title: title,
         summary: summary,
@@ -37,17 +38,37 @@ class UpgradePolicy {
     'android/app/upload-keystore.jks',
   ];
 
+  static const forbiddenPrefixes = <String>[
+    '.github/workflows/',
+    '.git/',
+    'android/app signing/',
+    'android/app/build/',
+  ];
+
+  static String normalizePath(String path) => path.replaceAll('\\', '/').trim();
+
+  static bool isProtectedPath(String path) {
+    final normalized = normalizePath(path);
+    return forbiddenPaths.contains(normalized) ||
+        forbiddenPrefixes.any((prefix) => normalized.startsWith(prefix));
+  }
+
   static List<String> validate(UpgradeProposal proposal) {
     final errors = <String>[];
     if (proposal.id.trim().isEmpty) errors.add('Proposal id is required.');
     if (proposal.title.trim().isEmpty) errors.add('Proposal title is required.');
     if (proposal.summary.trim().isEmpty) errors.add('Proposal summary is required.');
     if (proposal.changedFiles.isEmpty) errors.add('At least one changed file is required.');
-    for (final path in proposal.changedFiles) {
-      if (path.contains('..') || path.startsWith('/')) {
-        errors.add('Unsafe path: $path');
+
+    final seen = <String>{};
+    for (final rawPath in proposal.changedFiles) {
+      final path = normalizePath(rawPath);
+      if (path.isEmpty || path.startsWith('/') || path.contains('..')) {
+        errors.add('Unsafe path: $rawPath');
+        continue;
       }
-      if (forbiddenPaths.contains(path)) {
+      if (!seen.add(path)) errors.add('Duplicate changed path: $path');
+      if (isProtectedPath(path)) {
         errors.add('Protected path cannot be self-updated: $path');
       }
     }
@@ -90,8 +111,14 @@ class SelfUpgradeController {
     return proposal.copyWith(stage: UpgradeStage.building);
   }
 
-  UpgradeProposal markVerified(UpgradeProposal proposal, {required bool testsPassed, required bool signatureVerified}) {
-    if (proposal.stage != UpgradeStage.building) throw StateError('Upgrade is not building.');
+  UpgradeProposal markVerified(
+    UpgradeProposal proposal, {
+    required bool testsPassed,
+    required bool signatureVerified,
+  }) {
+    if (proposal.stage != UpgradeStage.building) {
+      throw StateError('Upgrade is not building.');
+    }
     if (!testsPassed || !signatureVerified) {
       return proposal.copyWith(stage: UpgradeStage.failed);
     }
