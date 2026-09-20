@@ -112,16 +112,6 @@ public final class PhoneAssistantController {
 
     public static String handleSystemSetting(Context c,String command){
         if(c==null || command==null) return "";
-        VerifiedFunctionMemory.Entry learned=VerifiedFunctionMemory.find(c,command);
-        if(learned!=null && !learned.action.isEmpty()){
-            try{
-                Intent remembered=new Intent(learned.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if(remembered.resolveActivity(c.getPackageManager())!=null){
-                    c.startActivity(remembered);
-                    return "Verified setting route yaad tha, direct khol diya.";
-                }
-            }catch(Throwable ignored){}
-        }
         String s=command.toLowerCase(Locale.ROOT);
         int pct=extractPercent(s);
 
