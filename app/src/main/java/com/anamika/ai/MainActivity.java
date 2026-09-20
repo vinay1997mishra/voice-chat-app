@@ -318,7 +318,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void runCommand(String raw) {
         if (!ensureUnlocked()) return;
         String original=raw==null?"":raw.trim();
-        if(!original.isEmpty()) appendChat("You",original);
+        if(!original.isEmpty()) {
+            appendChat("You",original);
+            rememberConversationTurn("User",original);
+        }
         UniversalLanguageRouter.Interpretation interpretation =
                 UniversalLanguageRouter.interpret(this, original);
         String command = interpretation.normalized;
@@ -504,6 +507,25 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         answerWithLocalConversation(original,interpretation.style);
     }
 
+    private void rememberConversationTurn(String who,String text){
+        if(prefs==null || text==null || text.trim().isEmpty()) return;
+        String clean=text.trim().replace("\r"," ").replace("\n"," ");
+        if(clean.length()>500) clean=clean.substring(0,500);
+        String history=prefs.getString("conversation_history","");
+        history+=(history.isEmpty()?"":"\n")+who+": "+clean;
+        String[] lines=history.split("\\n");
+        if(lines.length>12){
+            StringBuilder keep=new StringBuilder();
+            for(int i=lines.length-12;i<lines.length;i++){
+                if(keep.length()>0) keep.append('\n');
+                keep.append(lines[i]);
+            }
+            history=keep.toString();
+        }
+        if(history.length()>5000) history=history.substring(history.length()-5000);
+        prefs.edit().putString("conversation_history",history).apply();
+    }
+
     private void answerForStyle(UniversalLanguageRouter.Style style,String hindi,String hinglish,String english){
         if(style==UniversalLanguageRouter.Style.HINDI) answer(hindi);
         else if(style==UniversalLanguageRouter.Style.HINGLISH) answer(hinglish);
@@ -539,12 +561,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                                 :"Local AI model abhi ready nahi hai. Normal commands chalenge, lekin open conversation limited rahegi.";
                 }else{
                     String memory=prefs.getString("memory_note","");
+                    String history=prefs.getString("conversation_history","");
                     String prompt="You are Anamika AI, the owner's personal on-device assistant. "+
                             "Understand natural human language, including Hindi, Hinglish, English and mixed speech. "+
                             UniversalLanguageRouter.replyInstruction(replyStyle)+" "+
                             "Be concise, useful and conversational. Do not mention intent parsing, keyword maps or model internals. "+
                             "If the user asks for an action you cannot actually execute in this reply, explain the next concrete action instead of pretending it happened. "+
                             (memory.isEmpty()?"":"Relevant owner memory: "+memory+" ")+
+                            (history.isEmpty()?"":"Recent conversation context:\n"+history+"\n")+
                             "User: "+userText+"\nAnamika:";
                     reply=LocalModelBridge.generate(MainActivity.this,prompt);
                     if(reply==null || reply.trim().isEmpty()) throw new IllegalStateException("empty local reply");
@@ -967,6 +991,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void answer(String text) {
         showResult(text);
+        rememberConversationTurn("Anamika",text);
         speak(text);
     }
 
