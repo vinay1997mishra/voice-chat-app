@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -18,6 +20,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Owner-only Native App Test Lab.
@@ -40,6 +45,7 @@ public final class TestLabActivity extends Activity {
     private TextView status;
     private File stagedApk;
     private String stagedPackage = "";
+    private boolean stagedSelfUpdate = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,8 +145,21 @@ public final class TestLabActivity extends Activity {
             return;
         }
         stagedPackage = info.packageName;
+        stagedSelfUpdate = getPackageName().equals(stagedPackage);
+        if (stagedSelfUpdate) {
+            String verify = verifySelfUpdateCandidate(stagedApk);
+            if (verify != null) {
+                stagedApk.delete();
+                stagedPackage = "";
+                stagedSelfUpdate = false;
+                status.setText("SELF-UPDATE REJECTED:\n" + verify);
+                return;
+            }
+        }
         getSharedPreferences(PREF, MODE_PRIVATE).edit().putString(KEY_PACKAGE, stagedPackage).apply();
-        status.setText("APK ready for test install.\nPackage: " + stagedPackage + "\nSize: " + stagedApk.length() + " bytes");
+        status.setText((stagedSelfUpdate ? "Verified Anamika self-update APK ready." : "APK ready for test install.") +
+                "\nPackage: " + stagedPackage + "\nSize: " + stagedApk.length() + " bytes" +
+                (stagedSelfUpdate ? "\nSigning certificate matches installed Anamika." : ""));
     }
 
     private void installStagedApk() {
@@ -157,6 +176,19 @@ public final class TestLabActivity extends Activity {
             return;
         }
 
+        if (stagedSelfUpdate) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Install Anamika Update?")
+                    .setMessage("This APK matches Anamika's package and signing certificate. Continue with the Android system update confirmation?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Continue", (d,w) -> commitInstall())
+                    .show();
+            return;
+        }
+        commitInstall();
+    }
+
+    private void commitInstall() {
         PackageInstaller installer = getPackageManager().getPackageInstaller();
         PackageInstaller.Session session = null;
         try {
@@ -189,6 +221,52 @@ public final class TestLabActivity extends Activity {
         } finally {
             if (session != null) session.close();
         }
+    }
+
+    private String verifySelfUpdateCandidate(File apk) {
+        try {
+            PackageManager pm = getPackageManager();
+            PackageInfo candidate = pm.getPackageArchiveInfo(apk.getAbsolutePath(),
+                    PackageManager.GET_SIGNING_CERTIFICATES);
+            PackageInfo installed = pm.getPackageInfo(getPackageName(),
+                    PackageManager.GET_SIGNING_CERTIFICATES);
+            if (candidate == null || installed == null) return "Unable to read signing information.";
+            if (!getPackageName().equals(candidate.packageName)) return "Package name does not match installed Anamika.";
+
+            Set<String> candidateCerts = certificateDigests(candidate.signingInfo);
+            Set<String> installedCerts = certificateDigests(installed.signingInfo);
+            if (candidateCerts.isEmpty() || installedCerts.isEmpty()) return "Signing certificate is missing.";
+            boolean match = false;
+            for (String cert : candidateCerts) if (installedCerts.contains(cert)) { match = true; break; }
+            if (!match) return "Signing certificate does not match installed Anamika. Update blocked.";
+
+            long candidateVersion = android.os.Build.VERSION.SDK_INT >= 28
+                    ? candidate.getLongVersionCode() : candidate.versionCode;
+            long installedVersion = android.os.Build.VERSION.SDK_INT >= 28
+                    ? installed.getLongVersionCode() : installed.versionCode;
+            if (candidateVersion < installedVersion)
+                return "Candidate version is older than installed Anamika.";
+            return null;
+        } catch (Exception e) {
+            return "Self-update verification failed: " + safe(e);
+        }
+    }
+
+    private static Set<String> certificateDigests(SigningInfo info) throws Exception {
+        Set<String> out = new HashSet<>();
+        if (info == null) return out;
+        Signature[] signatures = info.hasMultipleSigners()
+                ? info.getApkContentsSigners()
+                : info.getSigningCertificateHistory();
+        if (signatures == null) return out;
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        for (Signature sig : signatures) {
+            byte[] hash = md.digest(sig.toByteArray());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            out.add(sb.toString());
+        }
+        return out;
     }
 
     private void handleInstallResult(Intent intent) {
