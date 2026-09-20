@@ -12,7 +12,13 @@ public final class DeviceProfileStore {
     public static synchronized String ensureSaved(Context c){
         if(c==null)return "";
         String existing=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(KEY,"");
-        if(!existing.isEmpty()) return existing;
+        if(!existing.isEmpty()) {
+            try {
+                JSONObject saved=new JSONObject(existing);
+                if(safe(Build.FINGERPRINT).equals(saved.optString("fingerprint")) &&
+                        safe(Build.MODEL).equals(saved.optString("model"))) return existing;
+            } catch(Exception ignored) { }
+        }
         try{
             JSONObject o=new JSONObject();
             o.put("manufacturer",safe(Build.MANUFACTURER));
