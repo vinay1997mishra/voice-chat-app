@@ -1119,7 +1119,7 @@ class _DiceRushPageState extends State<DiceRushPage> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
-            initialValue: _bet,
+            value: _bet,
             decoration: const InputDecoration(labelText: 'Bet amount'),
             items: const [100, 500, 1000]
                 .map((value) => DropdownMenuItem(value: value, child: Text('$value Coins')))
