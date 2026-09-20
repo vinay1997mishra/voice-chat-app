@@ -420,6 +420,18 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
+        if ("SETTINGS".equals(interpretation.intent)) {
+            String stripped=original.replaceAll("(?i)(settings?|setting|सेटिंग्स?|khol|kholo|open|dhundo|search|change|badlo|बदलो|खोलो|खोजो)"," ")
+                    .replaceAll("\\s+"," ").trim();
+            if(stripped.isEmpty()) {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+                answerForStyle(interpretation.style,"सेटिंग्स खोल दी।","Settings khol di.","Settings opened.");
+            } else {
+                answer(PhoneAssistantController.openAndSearchSetting(this,stripped));
+            }
+            return;
+        }
+
         if ("CONTACT_SEARCH".equals(interpretation.intent)) {
             handleContactSearch(original,interpretation.style);
             return;
