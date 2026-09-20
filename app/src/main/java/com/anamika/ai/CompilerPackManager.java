@@ -214,10 +214,36 @@ public final class CompilerPackManager {
                             bundled.detail));
                     continue;
                 }
+                // For languages without a practical embedded full compiler, run the
+                // real broad syntax parser first. Parser PASS improves repair quality but
+                // NEVER upgrades the language to FULL VERIFIED without a real compiler.
+                boolean syntaxClean = true;
+                String syntaxDetail = "";
+                for (String rel : e.getValue()) {
+                    try {
+                        String source = new String(java.nio.file.Files.readAllBytes(new File(root, rel).toPath()), StandardCharsets.UTF_8);
+                        BroadSyntaxVerifier.Outcome syntax = BroadSyntaxVerifier.verify(spec.lang, source);
+                        if (syntax.getAvailable()) {
+                            syntaxDetail += rel + ": " + syntax.getDetail() + "\n";
+                            if (!syntax.getClean()) {
+                                out.add(new Check(spec.lang, syntax.getPack(), State.FAIL, syntaxDetail.trim()));
+                                syntaxClean = false;
+                                break;
+                            }
+                        } else {
+                            syntaxDetail += rel + ": " + syntax.getDetail() + "\n";
+                        }
+                    } catch (Exception parserError) {
+                        syntaxDetail += rel + ": parser error: " + parserError.getMessage() + "\n";
+                    }
+                }
+                if (!syntaxClean) continue;
+
                 File bin=new File(context.getApplicationInfo().nativeLibraryDir, spec.binary);
                 if(!bin.isFile()) {
-                    out.add(new Check(spec.lang, spec.binary, State.MISSING,
-                            "Real compiler/interpreter pack is not physically bundled in this APK."));
+                    String detail = "Real compiler/interpreter pack is not physically bundled in this APK.";
+                    if (!syntaxDetail.trim().isEmpty()) detail += " Local syntax layer: " + syntaxDetail.trim();
+                    out.add(new Check(spec.lang, spec.binary, State.MISSING, detail));
                     continue;
                 }
                 out.add(runCompiler(root, spec, bin, e.getValue()));
