@@ -258,10 +258,10 @@ public final class UniversalLanguageRouter {
     }
 
     public static String replyInstruction(Style style){
-        if(style==Style.HINDI) return "Reply naturally in simple Hindi using Devanagari script.";
-        if(style==Style.HINGLISH) return "Reply naturally in easy conversational Hinglish using Roman letters, like the user.";
-        if(style==Style.ENGLISH) return "Reply naturally in English.";
-        return "Reply naturally in the same language as the user.";
+        if(style==Style.HINDI) return "Reply naturally in everyday Indian Hindi. Use simple Devanagari, normal Indian conversational phrasing, and avoid bookish/formal Hindi unless the user uses it.";
+        if(style==Style.HINGLISH) return "Reply naturally in everyday Indian Hinglish using Roman letters, matching the user's casual vocabulary and sentence style. Sound like a normal Indian conversation, not a translated script.";
+        if(style==Style.ENGLISH) return "Reply naturally in clear Indian English unless the user's wording suggests another English style.";
+        return "Reply naturally in the same human language and conversational style as the user. Preserve culturally normal phrasing for that language.";
     }
 
     private static String extractMeaningTarget(String raw){
