@@ -115,7 +115,7 @@ public final class AppBlueprintStore {
         if(!path.isEmpty()){
             String text="Anamika Automatic App Audit\n"+
                     "Completed: "+new Date()+"\n"+
-                    "Safe controls tested: "+tested+"\n"+
+                    "Safe controls/touch zones tested: "+tested+"\n"+
                     "Sensitive/destructive/unknown controls skipped: "+skipped+"\n"+
                     "Observable screens sampled: "+screens+"\n"+
                     "Reason: "+(reason==null?"completed":reason)+"\n"+
@@ -142,11 +142,13 @@ public final class AppBlueprintStore {
                     String state=o.optString("state","");
                     String label=o.optString("label","");
                     String detail=o.optString("detail","");
-                    if("TRY_TAP".equals(state)){
+                    if("TRY_TAP".equals(state) || "TRY_TOUCH".equals(state)){
                         n++;
                         out.append("FUNCTION ").append(n).append(": ")
                                 .append(label.isEmpty()?"<unlabelled>":label).append("\n");
-                        out.append("  Test: Anamika tapped this visible safe control.\n");
+                        out.append("  Test: ").append("TRY_TOUCH".equals(state)
+                                ?"Anamika used a direct gesture touch on this safe touch zone.\n"
+                                :"Anamika tapped this visible safe accessibility control.\n");
                     } else if("RESULT".equals(state)){
                         out.append("  Observed result: ").append(detail).append("\n\n");
                     } else if("SCROLL".equals(state)){
@@ -156,8 +158,10 @@ public final class AppBlueprintStore {
                     } else if("SKIPPED".equals(state) || "SKIP_EXTERNAL".equals(state)){
                         out.append("SKIPPED CONTROL: ").append(label.isEmpty()?"<unknown>":label)
                                 .append(" — ").append(detail).append("\n");
-                    } else if("FAILED_TAP".equals(state)){
+                    } else if("FAILED_TAP".equals(state) || "FAILED_TOUCH".equals(state)){
                         out.append("FAILED CONTROL: ").append(label).append(" — ").append(detail).append("\n");
+                    } else if("SUMMARY".equals(state)){
+                        out.append("AUDIT SUMMARY: ").append(label).append(" — ").append(detail).append("\n");
                     }
                 }catch(Exception ignored){}
             }
