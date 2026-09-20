@@ -40,7 +40,10 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private PowerManager.WakeLock wakeLock;
     private boolean awaitingCommand=false;
     private boolean conversationSession=false;
+    private boolean silencedUntilExplicitWake=false;
     private boolean ttsReady=false;
+    private String pendingSpeechText="";
+    private final Runnable finalizeSpeech=this::finalizePendingSpeech;
     private AudioManager audioManager;
     private boolean mediaPlaybackActive=false;
     private AudioManager.AudioPlaybackCallback playbackCallback;
@@ -168,49 +171,97 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
                         ?"Conversation active • bolte rahiye"
                         :(awaitingCommand?"Listening for your command":"Listening for Hello Mika / Hello Anamika"));
             }
-            @Override public void onBeginningOfSpeech(){}
-            @Override public void onRmsChanged(float rmsdB){}
+            @Override public void onBeginningOfSpeech(){
+                handler.removeCallbacks(finalizeSpeech);
+            }
+            @Override public void onRmsChanged(float rmsdB){
+                if(rmsdB>1.5f) handler.removeCallbacks(finalizeSpeech);
+            }
             @Override public void onBufferReceived(byte[] buffer){}
-            @Override public void onEndOfSpeech(){}
-            @Override public void onError(int error){ restart(900L); }
+            @Override public void onEndOfSpeech(){
+                scheduleSpeechFinalize();
+            }
+            @Override public void onError(int error){
+                if(!pendingSpeechText.trim().isEmpty()) scheduleSpeechFinalize();
+                else restart(700L);
+            }
             @Override public void onResults(Bundle results){
                 ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                handle(list==null||list.isEmpty()?"":list.get(0));
+                if(list!=null&&!list.isEmpty()) pendingSpeechText=list.get(0).trim();
+                scheduleSpeechFinalize();
             }
-            @Override public void onPartialResults(Bundle partialResults){}
+            @Override public void onPartialResults(Bundle partialResults){
+                ArrayList<String> list=partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if(list!=null&&!list.isEmpty()){
+                    pendingSpeechText=list.get(0).trim();
+                    handler.removeCallbacks(finalizeSpeech);
+                    handler.postDelayed(finalizeSpeech,3000L);
+                }
+            }
             @Override public void onEvent(int eventType,Bundle params){}
         });
         Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,3000L);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,3000L);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,1000L);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION",true);
         i.putExtra("android.speech.extra.ENABLE_LANGUAGE_SWITCH",true);
         try{ recognizer.startListening(i); }catch(Throwable t){ restart(1500L); }
     }
 
+    private void scheduleSpeechFinalize(){
+        handler.removeCallbacks(finalizeSpeech);
+        handler.postDelayed(finalizeSpeech,3000L);
+    }
+
+    private void finalizePendingSpeech(){
+        String heard=pendingSpeechText==null?"":pendingSpeechText.trim();
+        pendingSpeechText="";
+        if(heard.isEmpty()){
+            restart(350L);
+            return;
+        }
+        handle(heard);
+    }
+
     private void handle(String heard){
-        if(heard==null || heard.trim().isEmpty()){ restart(600L); return; }
+        if(heard==null || heard.trim().isEmpty()){ restart(350L); return; }
         String clean=heard.trim();
         String lower=clean.toLowerCase(Locale.ROOT);
+
+        boolean explicitHelloWake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(clean).find();
+        boolean shortWake=lower.equals("anamika") || lower.equals("mika");
+
+        if(silencedUntilExplicitWake){
+            if(!explicitHelloWake){
+                restart(250L);
+                return;
+            }
+            silencedUntilExplicitWake=false;
+            conversationSession=true;
+        }
 
         if(conversationSession && isConversationStopCommand(lower)){
             conversationSession=false;
             awaitingCommand=false;
-            speakThen("Theek hai. Conversation mode band kar diya. Jab chaho Hello Anamika bol dena.",1000L);
+            silencedUntilExplicitWake=true;
+            // Owner asked for silence: do not speak any acknowledgement.
+            restart(250L);
             return;
         }
 
-        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(clean);
-        if(wake.find()){
+        Matcher wake=Pattern.compile("(?i)(?:(?:hello|hey|hi)\\s+)?(?:anamika|mika)").matcher(clean);
+        if(wake.find() && (explicitHelloWake || shortWake || !conversationSession)){
             conversationSession=true;
             String after=clean.substring(wake.end()).replaceFirst("^[\\s,.:;-]+","").trim();
             if(after.isEmpty()){
                 awaitingCommand=true;
-                speakThen("Ji, boliye.",1800L);
+                speakThen("Ji, boliye.",700L);
             }else{
                 awaitingCommand=false;
-                speakThen("Ji.",500L);
-                handler.postDelayed(() -> executeCommand(after),650L);
+                executeCommand(after);
             }
             return;
         }
@@ -222,13 +273,20 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             return;
         }
 
-        restart(500L);
+        restart(250L);
     }
 
     private boolean isConversationStopCommand(String lower){
         if(lower==null) return false;
         return lower.equals("bas") ||
                 lower.equals("bas karo") ||
+                lower.equals("bas abhi chup hoja") ||
+                lower.equals("bas ab chup hoja") ||
+                lower.equals("abhi chup hoja") ||
+                lower.equals("chup hoja") ||
+                lower.equals("chup ho ja") ||
+                lower.equals("خاموش ہو جاؤ") ||
+                lower.equals("بس اب خاموش ہو جاؤ") ||
                 lower.equals("stop listening") ||
                 lower.equals("conversation band karo") ||
                 lower.equals("baat band karo") ||
@@ -390,6 +448,8 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     }
 
     private void stopListening(){
+        handler.removeCallbacks(finalizeSpeech);
+        pendingSpeechText="";
         if(recognizer!=null){
             try{ recognizer.cancel(); }catch(Throwable ignored){}
             try{ recognizer.destroy(); }catch(Throwable ignored){}
