@@ -44,6 +44,11 @@ android {
             useLegacyPackaging true
             keepDebugSymbols += ['**/*.so']
         }
+        resources {
+            // kotlin-compiler-embeddable and kotlin-stdlib both carry this canonical
+            // compiler resource. They are byte-for-byte equivalent for 2.2.10.
+            pickFirsts += ['kotlin/reflect/reflect.kotlin_builtins']
+        }
     }
 
     buildTypes {
