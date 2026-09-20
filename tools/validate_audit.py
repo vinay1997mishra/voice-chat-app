@@ -63,7 +63,8 @@ for token in ['if (languagesDetected == 0) return false','deleteTree(root)','Cov
     if token not in compiler: errors.append('Compiler verifier fix missing '+token)
 
 lang=txt('app/src/main/java/com/anamika/ai/language/UniversalLanguageRouter.java')
-if 'looksCanonical' not in lang or 'LocalModelBridge.getStatus' not in lang: errors.append('Universal language router audit fix missing')
+for token in ['Interpretation','detectStyle','speechLocaleFor','replyInstruction','LEARN_PREFS','LocalModelBridge.getStatus']:
+    if token not in lang: errors.append('Universal language router audit fix missing '+token)
 
 
 local=txt('app/src/main/java/com/anamika/ai/LocalModelBridge.java')
