@@ -87,10 +87,10 @@ root_build=txt('build.gradle')
 if 'org.jetbrains.kotlin.android' in build: errors.append('AGP 9 module still applies incompatible external kotlin-android plugin')
 if "id 'com.android.application' version '9.2.0'" not in root_build: errors.append('AGP 9.2 plugin missing from root build')
 if "id 'com.chaquo.python' version '17.0.0'" not in root_build: errors.append('Chaquopy 17 plugin missing from root build')
-for token in ["org.eclipse.jdt:ecj:3.46.100","org.mozilla:rhino:1.9.1","org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.10"]:
+for token in ["org.eclipse.jdt:ecj:3.46.100","org.mozilla:rhino:1.9.1","org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.21"]:
     if token not in build: errors.append('bundled core compiler dependency missing '+token)
 bundled=txt('app/src/main/java/com/anamika/ai/BundledToolchainVerifier.java')
-for token in ['Chaquopy CPython 3.13','Eclipse ECJ 3.46.100','Mozilla Rhino 1.9.1','Microsoft TypeScript 5.9.3','JetBrains Kotlin compiler 2.2.10']:
+for token in ['Chaquopy CPython 3.13','Eclipse ECJ 3.46.100','Mozilla Rhino 1.9.1','Microsoft TypeScript 5.9.3','JetBrains Kotlin compiler 2.2.21']:
     if token not in bundled: errors.append('bundled toolchain verifier missing '+token)
 
 for token in ['self_source/app/src/main/assets','exclude("**/*.gguf")','self_source/tools','self_source/.github/workflows','gradle.properties']:
