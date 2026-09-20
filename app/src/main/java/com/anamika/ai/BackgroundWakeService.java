@@ -291,8 +291,11 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private void speakThen(String text,long restartDelay){
         stopListening();
         if(ttsReady && tts!=null){
-            SoftVoiceProfile.apply(tts,text);
-            tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"bg_wake");
+            SoftVoiceProfile.apply(this,tts,text);
+            android.os.Bundle params=new android.os.Bundle();
+            params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,
+                    Math.max(0.1f,Math.min(1.0f,SoftVoiceProfile.volumeHint(this))));
+            tts.speak(text,TextToSpeech.QUEUE_FLUSH,params,"bg_wake");
         }
         handler.postDelayed(this::startListening,restartDelay);
     }
@@ -380,7 +383,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     @Override public void onInit(int status){
         ttsReady=status==TextToSpeech.SUCCESS;
         if(ttsReady){
-            SoftVoiceProfile.apply(tts,"Ji, boliye.");
+            SoftVoiceProfile.apply(this,tts,"Ji, boliye.");
         }
     }
 
