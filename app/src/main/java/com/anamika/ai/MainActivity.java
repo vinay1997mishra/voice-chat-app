@@ -33,6 +33,10 @@ import java.util.regex.Pattern;
 import com.anamika.ai.language.UniversalLanguageRouter;
 import com.anamika.ai.phone.PhoneAssistantController;
 import com.anamika.ai.phone.CalculatorEngine;
+import com.anamika.ai.files.FileExportManager;
+import com.anamika.ai.files.StorageLibrary;
+import com.anamika.ai.files.AnamikaVault;
+import com.anamika.ai.phone.PermissionAccessManager;
 import com.anamika.ai.research.AppSearchController;
 import com.anamika.ai.research.BackgroundKnowledgeLookup;
 import com.anamika.ai.research.ResearchLearningStore;
@@ -43,6 +47,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private static final int REQ_AUDIO = 1002;
     private static final int REQ_CONTACTS = 1003;
     private static final int REQ_CALL = 1004;
+    private static final int REQ_PICK_FILES = 1801;
+    private static final int REQ_PICK_TREE = 1802;
 
     private TextToSpeech tts;
     private SharedPreferences prefs;
@@ -53,6 +59,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private String pendingPhoneCommand = "";
     private String pendingCallNumber = "";
     private String pendingCallName = "";
+    private boolean permissionSetupActive = false;
     private Button wakeListenButton;
     private Button forgetOwnerButton;
     private boolean unlocked = false;
@@ -100,6 +107,14 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         Button secureSelfUpdateButton = findViewById(R.id.secureSelfUpdateButton);
         Button testLabButton = findViewById(R.id.testLabButton);
         Button languageStatusButton = findViewById(R.id.languageStatusButton);
+        Button attachButton = findViewById(R.id.attachButton);
+        Button toolsButton = findViewById(R.id.toolsButton);
+        Button toolsCloseButton = findViewById(R.id.toolsCloseButton);
+        Button vaultButton = findViewById(R.id.vaultButton);
+        Button permissionSetupButton = findViewById(R.id.permissionSetupButton);
+        Button storageSetupButton = findViewById(R.id.storageSetupButton);
+        View toolsPanel = findViewById(R.id.toolsPanel);
+        View ownerBar = findViewById(R.id.ownerBar);
         wakeListenButton = findViewById(R.id.wakeListenButton);
         forgetOwnerButton = findViewById(R.id.forgetOwnerButton);
         result.setMovementMethod(new ScrollingMovementMethod());
@@ -110,7 +125,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         unlockButton.setText(ownerPinAlreadySet ? "Unlock Owner" : "Set Owner PIN");
         pinInput.setVisibility(ownerRemembered ? View.GONE : View.VISIBLE);
         unlockButton.setVisibility(ownerRemembered ? View.GONE : View.VISIBLE);
-        forgetOwnerButton.setVisibility(ownerRemembered ? View.VISIBLE : View.GONE);
+        forgetOwnerButton.setVisibility(ownerRemembered ? View.GONE : View.GONE);
+        ownerBar.setVisibility(ownerRemembered ? View.GONE : View.VISIBLE);
 
         unlockButton.setOnClickListener(v -> unlockOwner(unlockButton));
         listenButton.setOnClickListener(v -> startListening());
@@ -121,6 +137,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 commandInput.setText("");
             }
         });
+        attachButton.setOnClickListener(v -> showAttachMenu());
+        toolsButton.setOnClickListener(v -> toolsPanel.setVisibility(View.VISIBLE));
+        toolsCloseButton.setOnClickListener(v -> toolsPanel.setVisibility(View.GONE));
+        vaultButton.setOnClickListener(v -> answer(AnamikaVault.summary(this)));
+        permissionSetupButton.setOnClickListener(v -> startOneTimePermissionSetup());
+        storageSetupButton.setOnClickListener(v -> pickStorageTree());
         if(ownerRemembered){
             prefs.edit().putBoolean("wake_enabled",true).apply();
         }
@@ -141,6 +163,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             pinInput.setVisibility(View.VISIBLE);
             unlockButton.setVisibility(View.VISIBLE);
             forgetOwnerButton.setVisibility(View.GONE);
+            View ob=findViewById(R.id.ownerBar); if(ob!=null) ob.setVisibility(View.VISIBLE);
             status.setText("Owner login forgotten • PIN required");
             result.setText("Owner login is no longer remembered on this device. Enter your existing PIN to verify again.");
         });
@@ -238,7 +261,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 unlockButton.setText("Unlock Owner");
                 pinInput.setVisibility(View.GONE);
                 unlockButton.setVisibility(View.GONE);
-                forgetOwnerButton.setVisibility(View.VISIBLE);
+                forgetOwnerButton.setVisibility(View.GONE);
+                View ob=findViewById(R.id.ownerBar); if(ob!=null) ob.setVisibility(View.GONE);
                 result.setText(firstSetup
                         ? "Owner PIN set successfully. This phone is now remembered; repeated login is not required."
                         : "Owner verified. This phone is now remembered; repeated login is not required.");
@@ -294,6 +318,18 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode==REQ_PICK_FILES && resultCode==RESULT_OK && data!=null){
+            importPickedFiles(data);
+            return;
+        }
+        if(requestCode==REQ_PICK_TREE && resultCode==RESULT_OK && data!=null && data.getData()!=null){
+            Uri tree=data.getData();
+            int flags=data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            try{getContentResolver().takePersistableUriPermission(tree,flags);}catch(Exception ignored){}
+            StorageLibrary.saveTree(this,tree);
+            answer("Storage folder access save ho gaya. Next time is folder ke liye permission repeat nahi hogi.\n"+StorageLibrary.summary(this));
+            return;
+        }
         if (requestCode == REQ_SPEECH) resumeBackgroundWakeService();
         if (requestCode == REQ_SPEECH && resultCode == RESULT_OK && data != null) {
             ArrayList<String> text = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
@@ -328,6 +364,8 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             }else{
                 answer("Contacts permission ke bina naam se contact/number search nahi kar sakti.");
             }
+        } else if(requestCode==PermissionAccessManager.REQ_ALL_RUNTIME){
+            if(permissionSetupActive) mainHandler.postDelayed(this::continueOneTimePermissionSetup,400L);
         } else if(requestCode==REQ_CALL){
             String number=pendingCallNumber;
             String name=pendingCallName;
@@ -449,6 +487,26 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         if ("UNKNOWN_LOOKUP".equals(interpretation.intent)) {
             lookupUnknownMeaning(original,interpretation.style);
+            return;
+        }
+
+        if ("VAULT_STATUS".equals(interpretation.intent)) {
+            answer(AnamikaVault.summary(this)+"\n"+StorageLibrary.summary(this));
+            return;
+        }
+
+        if ("FILE_SEARCH".equals(interpretation.intent)) {
+            handleFileSearch(original,interpretation.style);
+            return;
+        }
+
+        if ("FILE_EXPORT".equals(interpretation.intent)) {
+            exportLastVaultFile(interpretation.style);
+            return;
+        }
+
+        if ("FILE_DELETE".equals(interpretation.intent)) {
+            handleVaultDelete(original,interpretation.style);
             return;
         }
 
@@ -608,6 +666,138 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         }else{
             answerWithLocalConversation(original,interpretation.style);
         }
+    }
+
+    private void showAttachMenu(){
+        if(!ensureUnlocked()) return;
+        String[] items={"Upload file / photo / video","Personal Space status","Choose storage folder once",
+                "One-time phone access setup","Photo/Video creator","App control / deep audit"};
+        new AlertDialog.Builder(this).setTitle("Add to Anamika").setItems(items,(d,which)->{
+            if(which==0) pickFiles();
+            else if(which==1) answer(AnamikaVault.summary(this)+"\n"+StorageLibrary.summary(this));
+            else if(which==2) pickStorageTree();
+            else if(which==3) startOneTimePermissionSetup();
+            else if(which==4) startActivity(new Intent(this,com.anamika.ai.creator.CreatorHubActivity.class));
+            else if(which==5) startActivity(new Intent(this,com.anamika.ai.plugins.PluginManagerActivity.class));
+        }).show();
+    }
+
+    private void pickFiles(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i,REQ_PICK_FILES);
+    }
+
+    private void pickStorageTree(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i,REQ_PICK_TREE);
+    }
+
+    private void importPickedFiles(Intent data){
+        java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();
+        if(data.getData()!=null) uris.add(data.getData());
+        if(data.getClipData()!=null){
+            for(int i=0;i<data.getClipData().getItemCount();i++) uris.add(data.getClipData().getItemAt(i).getUri());
+        }
+        if(uris.isEmpty()) return;
+        showResult("Anamika: "+uris.size()+" file(s) Personal Space me import kar rahi hoon…");
+        new Thread(() -> {
+            int ok=0; long bytes=0; String last="";
+            for(Uri u:uris){
+                try{
+                    try{getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                    AnamikaVault.Entry e=AnamikaVault.importUri(MainActivity.this,u);
+                    ok++;bytes+=e.size;last=e.name;
+                }catch(Exception ignored){}
+            }
+            final int fOk=ok; final long fBytes=bytes; final String fLast=last;
+            runOnUiThread(() -> answer(fOk+" file(s) save ho gayi • "+AnamikaVault.human(fBytes)+
+                    (fLast.isEmpty()?"":" • Last: "+fLast)+"\n"+AnamikaVault.summary(this)));
+        },"AnamikaFileImport").start();
+    }
+
+    private void startOneTimePermissionSetup(){
+        if(!ensureUnlocked()) return;
+        permissionSetupActive=true;
+        continueOneTimePermissionSetup();
+    }
+
+    private void continueOneTimePermissionSetup(){
+        if(!permissionSetupActive) return;
+        String[] missing=PermissionAccessManager.missingRuntimePermissions(this);
+        if(missing.length>0){
+            requestPermissions(missing,PermissionAccessManager.REQ_ALL_RUNTIME);
+            return;
+        }
+        if(!PermissionAccessManager.hasAllFilesAccess()){
+            showResult("Anamika: Android All Files Access screen khol rahi hoon. “Allow access to manage all files” ON kar do; phir main setup continue karungi.");
+            PermissionAccessManager.openAllFilesAccess(this);
+            return;
+        }
+        if(!PermissionAccessManager.canWriteSystemSettings(this)){
+            showResult("Anamika: Modify system settings access ON kar do; brightness jaise controls direct change ho sakenge.");
+            PermissionAccessManager.openWriteSettings(this);
+            return;
+        }
+        if(!PermissionAccessManager.isAccessibilityEnabled(this)){
+            showResult("Anamika: Accessibility me “Anamika App Control” ON kar do. Isse screen read, taps, app control aur settings automation chalega.");
+            PermissionAccessManager.openAccessibility(this);
+            return;
+        }
+        permissionSetupActive=false;
+        answer("One-time assistant access setup complete. "+PermissionAccessManager.status(this));
+    }
+
+    private void handleFileSearch(String original,UniversalLanguageRouter.Style style){
+        String q=original.replaceAll("(?i)(phone|mobile|storage|file|files|photo|pic|image|video|pdf|document|audio|dhundo|dhoondo|search|find|khojo|karo|kar|मेरे|फोन|फाइल|फोटो|वीडियो|पीडीएफ|ढूंढो|खोजो|सर्च)"," ")
+                .replaceAll("\\s+"," ").trim();
+        if(q.isEmpty()) q="";
+        final String query=q;
+        showResult("Anamika: phone storage search kar rahi hoon…");
+        new Thread(() -> {
+            java.util.List<StorageLibrary.Item> items=StorageLibrary.search(MainActivity.this,query,30);
+            StringBuilder out=new StringBuilder();
+            out.append("File search: ").append(query.isEmpty()?"all":query).append("\n");
+            if(items.isEmpty()) out.append("Koi matching file nahi mili. ").append(StorageLibrary.summary(MainActivity.this));
+            else{
+                for(int i=0;i<items.size();i++) out.append(i+1).append(". ").append(items.get(i).line()).append("\n");
+                out.append("Showing ").append(items.size()).append(" result(s).");
+            }
+            runOnUiThread(() -> answer(out.toString()));
+        },"AnamikaStorageSearch").start();
+    }
+
+    private void exportLastVaultFile(UniversalLanguageRouter.Style style){
+        String p=prefs.getString("last_vault_file","");
+        if(p.isEmpty()||!new java.io.File(p).isFile()){
+            answerForStyle(style,"कोई last saved file नहीं मिली।","Koi last saved file nahi mili.","No last saved file was found.");
+            return;
+        }
+        java.io.File f=new java.io.File(p);
+        String mime=prefs.getString("last_vault_mime","application/octet-stream");
+        new Thread(() -> {
+            try{
+                Uri out=FileExportManager.exportToDownloads(MainActivity.this,f,mime);
+                runOnUiThread(() -> answer("Downloads/Anamika me export ho gaya: "+f.getName()));
+            }catch(Exception e){
+                runOnUiThread(() -> answer("Export error: "+e.getMessage()));
+            }
+        },"AnamikaExport").start();
+    }
+
+    private void handleVaultDelete(String original,UniversalLanguageRouter.Style style){
+        String q=original.replaceAll("(?i)(file|delete|hatao|hata|hta|trash|karo|kar|फाइल|डिलीट|हटाओ|करो)"," ")
+                .replaceAll("\\s+"," ").trim();
+        if(q.isEmpty()){
+            answerForStyle(style,"कौन सी file हटानी है?","Kaunsi file hatani hai?","Which file should I remove?");
+            return;
+        }
+        boolean ok=AnamikaVault.moveToTrash(this,q);
+        answer(ok?"File Personal Space trash me move kar di: "+q:"Matching saved file nahi mili: "+q);
     }
 
     private void readCurrentScreenAloud(UniversalLanguageRouter.Style style){
@@ -1315,6 +1505,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     @Override
     protected void onResume(){
         super.onResume();
+        if(permissionSetupActive) mainHandler.postDelayed(this::continueOneTimePermissionSetup,500L);
         if(prefs!=null && OwnerSession.isTrusted(this)){
             unlocked=OwnerSession.isActive(this);
             if(unlocked){
