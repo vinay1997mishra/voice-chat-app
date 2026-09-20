@@ -632,6 +632,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             return;
         }
 
+        if ("SELF_UPGRADE".equals(interpretation.intent)) {
+            prepareSelfUpgrade(original);
+            return;
+        }
+
         if ("CHAT".equals(interpretation.intent)) {
             answerWithLocalConversation(original,interpretation.style);
             return;
@@ -1611,30 +1616,60 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private void prepareSelfUpgrade(String request) {
         try {
             java.io.File workspace = SelfUpgradeWorkspace.prepare(this, request);
+            String sourceContext = SelfUpgradeWorkspace.sourceContext(workspace, 65000);
+            if(sourceContext.trim().isEmpty()){
+                throw new IllegalStateException("Bundled current-source context is empty.");
+            }
             String upgradePrompt = "Upgrade Anamika itself. Owner request: " + request +
-                    "\nUse the bundled current-source snapshot from: " + workspace.getAbsolutePath() +
-                    "\nPreserve owner approval, rollback and validation gates. Generate the complete corrected project after analysing current source.";
-            developerPrompt.setText(upgradePrompt);
-            answer("Self-upgrade workspace ready. Anamika is generating and checking the requested upgrade locally. Nothing will be installed without owner approval.");
+                    "\nYou are editing the CURRENT Anamika source shown below, not creating an unrelated demo app." +
+                    "\nReturn only files that must be replaced/added, each as <<<FILE:path>>> ... <<<END FILE>>>." +
+                    "\nPreserve existing package names, owner approval gates, rollback, security and working features." +
+                    "\nDo not claim installation. The generated candidate will be validated, compiled where supported, saved privately, then require owner approval and a separately signed APK." +
+                    "\n\nCURRENT ANAMIKA SOURCE CONTEXT:\n" + sourceContext;
+            developerPrompt.setText(request);
+            answer("Self-coding start kar rahi hoon. Current Anamika source ko read karke code generate, validate aur compiler-check karungi. Verified candidate hi save hoga; install owner approval ke bina nahi hoga.");
+
             StandaloneDeveloperEngine.generate(this, upgradePrompt, new StandaloneDeveloperEngine.Callback() {
                 @Override public void onSuccess(StandaloneDeveloperEngine.Result generated) {
-                    runOnUiThread(() -> {
-                        lastGeneratedProject = generated.generatedText;
-                        boolean verified = generated.validation.isClean() && generated.compilerVerification.isFullyVerified();
-                        developerOutput.setText("SELF-UPGRADE CANDIDATE\nENGINE: " + generated.engine +
-                                "\nSTRUCTURAL: " + generated.validation.summary() +
-                                "\nCOMPILER: " + generated.compilerVerification.summary() +
-                                "\nFULL VERIFIED: " + verified +
-                                "\n\n" + generated.generatedText +
-                                "\n\n--- VALIDATION ---\n" + generated.validation.details() +
-                                "\n\n--- COMPILER ---\n" + generated.compilerVerification.details());
-                        speak(verified
-                                ? "Self upgrade candidate passed local checks. Review it and approve before installation."
-                                : "Self upgrade candidate is not fully verified. I will not mark it ready for installation.");
-                    });
+                    final boolean verified = generated.validation.isClean() &&
+                            generated.compilerVerification.isFullyVerified();
+                    if(verified){
+                        try{
+                            java.io.File candidate=SelfUpgradeWorkspace.saveVerifiedCandidate(
+                                    MainActivity.this,workspace,generated.generatedText);
+                            runOnUiThread(() -> {
+                                lastGeneratedProject=generated.generatedText;
+                                developerOutput.setText("SELF-UPGRADE CANDIDATE VERIFIED\nENGINE: "+generated.engine+
+                                        "\nCANDIDATE: "+candidate.getAbsolutePath()+
+                                        "\nSTRUCTURAL: "+generated.validation.summary()+
+                                        "\nCOMPILER: "+generated.compilerVerification.summary()+
+                                        "\n\n"+generated.generatedText);
+                                answer("Self-coding candidate verified aur private workspace me save ho gaya. Abhi install nahi hua hai. Owner review/approval ke baad signed APK build/install hoga.");
+                            });
+                        }catch(Exception e){
+                            runOnUiThread(() -> {
+                                developerOutput.setText("Verified generation ko candidate workspace me save karne me error: "+e.getMessage());
+                                answer("Code generate hua, lekin verified candidate save nahi ho paya: "+e.getMessage());
+                            });
+                        }
+                    }else{
+                        runOnUiThread(() -> {
+                            lastGeneratedProject=generated.generatedText;
+                            developerOutput.setText("SELF-UPGRADE CANDIDATE NOT VERIFIED\nENGINE: "+generated.engine+
+                                    "\nSTRUCTURAL: "+generated.validation.summary()+
+                                    "\nCOMPILER: "+generated.compilerVerification.summary()+
+                                    "\n\n"+generated.generatedText+
+                                    "\n\n--- VALIDATION ---\n"+generated.validation.details()+
+                                    "\n\n--- COMPILER ---\n"+generated.compilerVerification.details());
+                            answer("Self-coding hui, lekin candidate fully verify nahi hua. Isliye Anamika ne ise active/update-ready code ke roop me save nahi kiya.");
+                        });
+                    }
                 }
                 @Override public void onError(String error) {
-                    runOnUiThread(() -> developerOutput.setText("Self-upgrade generation error: " + error));
+                    runOnUiThread(() -> {
+                        developerOutput.setText("Self-upgrade generation error: " + error);
+                        answer("Self-coding error: "+error);
+                    });
                 }
             });
         } catch (Exception e) {
