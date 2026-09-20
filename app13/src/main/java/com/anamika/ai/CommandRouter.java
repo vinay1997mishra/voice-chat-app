@@ -9,6 +9,9 @@ import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.phone.AppLauncher;
 import com.anamika.ai.phone.CalculatorEngine;
+import com.anamika.ai.plugins.AppAutomationAccessibilityService;
+import com.anamika.ai.plugins.BlueprintStore;
+import com.anamika.ai.plugins.PluginManagerActivity;
 import com.anamika.ai.upgrade.SelfUpdateActivity;
 import com.anamika.ai.upgrade.UpgradeCoordinator;
 import com.anamika.ai.voice.WakeService;
@@ -30,8 +33,32 @@ public final class CommandRouter {
             return "Ji, boliye. Anamika 13 ready hai.";
 
         if(l.equals("functions")||l.contains("what can you do")||l.contains("kya kar sakti")){
-            return "Working V13 core: owner lock, text commands, voice input/reply, calculator, installed-app launch, web search, health/crash report, wake-service control, source-vault workspace, APK verification and Android update installer. More modules are being rebuilt independently.";
+            return "Working V13 core: owner lock, text commands, voice input/reply, calculator, installed-app launch, Google search, health/crash report, wake service, owner-controlled Plugin Center, Accessibility tap/type/back, Deep Blueprint recording, source-vault workspace, APK verification and Android update installer.";
         }
+
+        if(l.equals("plugins")||l.equals("plugin center")){
+            a.startActivity(new Intent(a,PluginManagerActivity.class));
+            return "Opening Plugin Center.";
+        }
+
+        if(l.startsWith("scan app ")||l.startsWith("blueprint ")){
+            String name=l.startsWith("scan app ")?text.substring(9).trim():text.substring(10).trim();
+            AppLauncher.AppRef app=AppLauncher.resolve(a,name);
+            if(app==null)return "Installed app not found: "+name;
+            String started=BlueprintStore.start(a,app.packageName,app.label);
+            AppLauncher.open(a,app.label);
+            return started+"\nOpen the screens you want Anamika to observe, then say “stop scan”.";
+        }
+        if(l.equals("stop scan")||l.equals("inspection complete")) return BlueprintStore.stop(a);
+        if(l.equals("blueprint status")||l.equals("scan status")) return BlueprintStore.status(a);
+
+        if(l.startsWith("tap ")){
+            return AppAutomationAccessibilityService.clickVisibleText(text.substring(4).trim());
+        }
+        if(l.startsWith("type ")){
+            return AppAutomationAccessibilityService.typeIntoFocused(text.substring(5));
+        }
+        if(l.equals("back")) return AppAutomationAccessibilityService.back();
 
         if(l.startsWith("open ")){
             return AppLauncher.open(a,text.substring(5).trim()).message;
