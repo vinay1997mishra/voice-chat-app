@@ -39,6 +39,7 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
     private TextToSpeech tts;
     private PowerManager.WakeLock wakeLock;
     private boolean awaitingCommand=false;
+    private boolean conversationSession=false;
     private boolean ttsReady=false;
     private AudioManager audioManager;
     private boolean mediaPlaybackActive=false;
@@ -78,6 +79,8 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         }
         if(ACTION_STOP.equals(action)){
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("wake_enabled",false).apply();
+            conversationSession=false;
+            awaitingCommand=false;
             stopListening();
             releaseWakeLock();
             stopForeground(STOP_FOREGROUND_REMOVE);
@@ -161,7 +164,9 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         recognizer=SpeechRecognizer.createSpeechRecognizer(this);
         recognizer.setRecognitionListener(new RecognitionListener(){
             @Override public void onReadyForSpeech(Bundle params){
-                updateNotification(awaitingCommand?"Listening for your command":"Listening for Hello Mika / Hello Anamika");
+                updateNotification(conversationSession
+                        ?"Conversation active • bolte rahiye"
+                        :(awaitingCommand?"Listening for your command":"Listening for Hello Mika / Hello Anamika"));
             }
             @Override public void onBeginningOfSpeech(){}
             @Override public void onRmsChanged(float rmsdB){}
@@ -185,9 +190,20 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
 
     private void handle(String heard){
         if(heard==null || heard.trim().isEmpty()){ restart(600L); return; }
-        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(heard.trim());
+        String clean=heard.trim();
+        String lower=clean.toLowerCase(Locale.ROOT);
+
+        if(conversationSession && isConversationStopCommand(lower)){
+            conversationSession=false;
+            awaitingCommand=false;
+            speakThen("Theek hai. Conversation mode band kar diya. Jab chaho Hello Anamika bol dena.",1000L);
+            return;
+        }
+
+        Matcher wake=Pattern.compile("(?i)(?:hello|hey|hi)\\s+(?:anamika|mika)").matcher(clean);
         if(wake.find()){
-            String after=heard.substring(wake.end()).replaceFirst("^[\\s,.:;-]+","").trim();
+            conversationSession=true;
+            String after=clean.substring(wake.end()).replaceFirst("^[\\s,.:;-]+","").trim();
             if(after.isEmpty()){
                 awaitingCommand=true;
                 speakThen("Ji, boliye.",1800L);
@@ -198,12 +214,28 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
             }
             return;
         }
-        if(awaitingCommand){
+
+        if(conversationSession || awaitingCommand){
             awaitingCommand=false;
-            executeCommand(heard.trim());
+            conversationSession=true;
+            executeCommand(clean);
             return;
         }
+
         restart(500L);
+    }
+
+    private boolean isConversationStopCommand(String lower){
+        if(lower==null) return false;
+        return lower.equals("bas") ||
+                lower.equals("bas karo") ||
+                lower.equals("stop listening") ||
+                lower.equals("conversation band karo") ||
+                lower.equals("baat band karo") ||
+                lower.equals("so jao") ||
+                lower.equals("sleep anamika") ||
+                lower.equals("stop anamika") ||
+                lower.equals("enough");
     }
 
     private void executeCommand(String command){
@@ -340,7 +372,9 @@ public final class BackgroundWakeService extends Service implements TextToSpeech
         }
         if(mediaPlaybackActive){
             mediaPlaybackActive=false;
-            updateNotification("Media/voice chat ended • resuming Hello Mika / Hello Anamika");
+            updateNotification(conversationSession
+                    ?"Media/voice chat ended • resuming conversation"
+                    :"Media/voice chat ended • resuming Hello Mika / Hello Anamika");
             handler.postDelayed(() -> {
                 if(!mediaPlaybackActive && getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("wake_enabled",false)){
                     startListening();
