@@ -52,6 +52,11 @@
             android:foregroundServiceType="microphone" />
 
         <receiver
+            android:name=".WakeRecoveryReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
             android:name=".BootWakeReceiver"
             android:enabled="true"
             android:exported="false">
