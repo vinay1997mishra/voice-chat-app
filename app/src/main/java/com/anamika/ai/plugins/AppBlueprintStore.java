@@ -113,13 +113,16 @@ public final class AppBlueprintStore {
         android.content.SharedPreferences p=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         String path=p.getString(SESSION,"");
         if(!path.isEmpty()){
+            String target=p.getString(TARGET,"");
             String text="Anamika Automatic App Audit\n"+
                     "Completed: "+new Date()+"\n"+
                     "Safe controls/touch zones tested: "+tested+"\n"+
-                    "Sensitive/destructive/unknown controls skipped: "+skipped+"\n"+
+                    "Risky/protected/unreachable items skipped or awaiting owner choice: "+skipped+"\n"+
                     "Observable screens sampled: "+screens+"\n"+
                     "Reason: "+(reason==null?"completed":reason)+"\n"+
-                    "Note: passwords, payment, messaging, account changes, destructive actions and OS permission grants are not auto-executed.\n";
+                    AuditLearningStore.summary(c,target)+"\n"+
+                    "Coverage rule: only observable/reachable UI can be proven checked. Hidden server-only logic or UI not exposed to Android accessibility/custom-surface probing is reported as a coverage gap, never silently treated as complete.\n"+
+                    "Protected data fields are never read or auto-filled. Risky real-world actions require owner confirmation.\n";
             writeText(new File(path,"AUTO_AUDIT_REPORT.txt"),text);
             writeFunctionBlueprint(new File(path));
         }
@@ -156,8 +159,14 @@ public final class AppBlueprintStore {
                     } else if("BACK".equals(state)){
                         out.append("NAVIGATION: Back — ").append(detail).append("\n");
                     } else if("SKIPPED".equals(state) || "SKIP_EXTERNAL".equals(state)){
-                        out.append("SKIPPED CONTROL: ").append(label.isEmpty()?"<unknown>":label)
+                        out.append("COVERAGE GAP / SKIPPED: ").append(label.isEmpty()?"<unknown>":label)
                                 .append(" — ").append(detail).append("\n");
+                    } else if("RISK_CONFIRM".equals(state)){
+                        out.append("RISK CONFIRMATION: ").append(label).append(" — ").append(detail).append("\n");
+                    } else if("RISK_ALLOWED_ONCE".equals(state)){
+                        out.append("RISK ALLOWED ONCE: ").append(label).append(" — ").append(detail).append("\n");
+                    } else if("RISK_SKIPPED".equals(state)){
+                        out.append("RISK SKIPPED BY OWNER: ").append(label).append(" — ").append(detail).append("\n");
                     } else if("FAILED_TAP".equals(state) || "FAILED_TOUCH".equals(state)){
                         out.append("FAILED CONTROL: ").append(label).append(" — ").append(detail).append("\n");
                     } else if("SUMMARY".equals(state)){
