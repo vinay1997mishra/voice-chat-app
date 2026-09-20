@@ -1,6 +1,7 @@
 package com.anamika.ai.plugins;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.ComponentName;
 import android.text.TextUtils;
@@ -66,10 +67,13 @@ public final class PluginManagerActivity extends Activity {
             Button select=new Button(this); select.setText("Select "+app.label);
             select.setOnClickListener(v -> { selectedPackage=app.packageName; selectedLabel=app.label;
                 selectedView.setText("Selected: "+app.label+" ("+app.packageName+")"); });
-            row.addView(enabled); row.addView(select); pluginList.addView(row);
+            Button oneShot=new Button(this);
+            oneShot.setText("Deep Discover Once (without plugin)");
+            oneShot.setOnClickListener(v -> startOneShotInspection(app.label, app.packageName));
+            row.addView(enabled); row.addView(select); row.addView(oneShot); pluginList.addView(row);
         }
         TextView count=new TextView(this);
-        count.setText("Detected launchable apps: "+apps.size()+". Check an app to enable it as a plugin, then Select it.");
+        count.setText("Detected launchable apps: "+apps.size()+". Enable an app for persistent plugin control, or use Deep Discover Once to inspect it without plugin enrollment.");
         count.setPadding(8,8,8,14);
         pluginList.addView(count,0);
         if(apps.isEmpty()) {
@@ -86,6 +90,19 @@ public final class PluginManagerActivity extends Activity {
         if(!isAutomationServiceEnabled()){ toast("Anamika App Control service is off. No control action was performed."); return; }
         String result=AppPluginEngine.openAndRun(this,selectedPackage,commandInput.getText().toString().trim());
         toast(result);
+    }
+
+    private void startOneShotInspection(String label, String packageName){
+        if(!OwnerSession.isActive(this)){ toast("Owner session expired. Verify PIN again."); finish(); return; }
+        if(!isAutomationServiceEnabled()){ toast("Anamika App Control service is off. Audit was not started."); return; }
+        new AlertDialog.Builder(this)
+                .setTitle("One-time deep discovery")
+                .setMessage("Open "+label+" and inspect its observable screens, buttons, tabs, scroll paths and bounded touch zones once?\n\nThis app will NOT be saved as a persistent plugin. Risky actions pause for your approval; login/server-only areas are recorded as gaps.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Start once", (d, w) -> {
+                    String result=AppPluginEngine.openAndDeepAuditOneShot(this, packageName);
+                    inspectionStatus.setText("One-time deep audit requested for "+label+" (plugin enrollment unchanged).\n"+result);
+                }).show();
     }
 
     private void startInspection(){
