@@ -259,8 +259,8 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 () => dp = dp == '👑'
                     ? '🎧'
                     : dp == '🎧'
-                    ? '🌙'
-                    : '👑',
+                        ? '🌙'
+                        : '👑',
               ),
               borderRadius: BorderRadius.circular(50),
               child: CircleAvatar(
@@ -433,15 +433,15 @@ class _RoyalRoomV05State extends State<RoyalRoomV05> {
                                 child: isLocked
                                     ? const Icon(Icons.lock_rounded)
                                     : isMuted
-                                    ? const Icon(Icons.mic_off_rounded)
-                                    : occupied
-                                    ? Text(
-                                        seats[i]!.substring(0, 1),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      )
-                                    : const Icon(Icons.add_rounded),
+                                        ? const Icon(Icons.mic_off_rounded)
+                                        : occupied
+                                            ? Text(
+                                                seats[i]!.substring(0, 1),
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              )
+                                            : const Icon(Icons.add_rounded),
                               ),
                             ),
                           ),
@@ -645,10 +645,11 @@ class ProfileV05 extends StatelessWidget {
   const ProfileV05({super.key});
   @override
   Widget build(BuildContext context) => const BasicPage(
-    title: 'Me',
-    icon: Icons.person_rounded,
-    subtitle: 'Coins, Diamond, VIP, Store, Bag, Level and settings live here.',
-  );
+        title: 'Me',
+        icon: Icons.person_rounded,
+        subtitle:
+            'Coins, Diamond, VIP, Store, Bag, Level and settings live here.',
+      );
 }
 
 class BasicPage extends StatelessWidget {
@@ -663,34 +664,35 @@ class BasicPage extends StatelessWidget {
   final String subtitle;
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        colors: [Color(0xFF43126C), Color(0xFF130419)],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ),
-    ),
-    child: SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 58),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(subtitle, textAlign: TextAlign.center),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF43126C), Color(0xFF130419)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-      ),
-    ),
-  );
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 58),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 30, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(subtitle, textAlign: TextAlign.center),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _Tool extends StatelessWidget {
@@ -699,13 +701,13 @@ class _Tool extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon),
-      const SizedBox(height: 4),
-      Text(label, style: const TextStyle(fontSize: 11)),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      );
 }
 
 class _QuickBox extends StatelessWidget {
@@ -715,24 +717,24 @@ class _QuickBox extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(16),
-    child: Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 28),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 28),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }
 
 class RoomCardData {

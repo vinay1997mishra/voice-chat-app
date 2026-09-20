@@ -69,9 +69,8 @@ class LocalCodeDoctor {
     final attempts = <RepairAttempt>[];
 
     for (var i = 1; i <= maxAttempts; i++) {
-      final diagnostics = await runner
-          .check(Map.unmodifiable(workspace))
-          .timeout(timeout);
+      final diagnostics =
+          await runner.check(Map.unmodifiable(workspace)).timeout(timeout);
       if (diagnostics.isEmpty) {
         return RepairSession(
           original: original,
@@ -105,9 +104,8 @@ class LocalCodeDoctor {
       );
     }
 
-    final remaining = await runner
-        .check(Map.unmodifiable(workspace))
-        .timeout(timeout);
+    final remaining =
+        await runner.check(Map.unmodifiable(workspace)).timeout(timeout);
     return RepairSession(
       original: original,
       candidate: workspace,
@@ -127,10 +125,10 @@ class RepairSession {
     required List<RepairAttempt> attempts,
     required this.passed,
     List<CodeDiagnostic> remaining = const [],
-  }) : original = Map.unmodifiable(original),
-       candidate = Map.unmodifiable(candidate),
-       attempts = List.unmodifiable(attempts),
-       remaining = List.unmodifiable(remaining);
+  })  : original = Map.unmodifiable(original),
+        candidate = Map.unmodifiable(candidate),
+        attempts = List.unmodifiable(attempts),
+        remaining = List.unmodifiable(remaining);
   final Map<String, String> original;
   final Map<String, String> candidate;
   final List<RepairAttempt> attempts;

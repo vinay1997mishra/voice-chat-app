@@ -28,8 +28,8 @@ class UpgradeProposal {
     this.candidateHash = '',
     required this.stage,
     List<String> validationNotes = const [],
-  }) : changedFiles = List.unmodifiable(changedFiles),
-       validationNotes = List.unmodifiable(validationNotes);
+  })  : changedFiles = List.unmodifiable(changedFiles),
+        validationNotes = List.unmodifiable(validationNotes);
 
   final String candidateHash;
   final String id;
@@ -42,15 +42,16 @@ class UpgradeProposal {
   UpgradeProposal copyWith({
     UpgradeStage? stage,
     List<String>? validationNotes,
-  }) => UpgradeProposal(
-    id: id,
-    candidateHash: candidateHash,
-    title: title,
-    summary: summary,
-    changedFiles: changedFiles,
-    stage: stage ?? this.stage,
-    validationNotes: validationNotes ?? this.validationNotes,
-  );
+  }) =>
+      UpgradeProposal(
+        id: id,
+        candidateHash: candidateHash,
+        title: title,
+        summary: summary,
+        changedFiles: changedFiles,
+        stage: stage ?? this.stage,
+        validationNotes: validationNotes ?? this.validationNotes,
+      );
 }
 
 class UpgradePolicy {
@@ -111,9 +112,8 @@ class SelfUpgradeController {
       stage: errors.isEmpty
           ? UpgradeStage.awaitingOwnerApproval
           : UpgradeStage.failed,
-      validationNotes: errors.isEmpty
-          ? const ['Static policy validation passed.']
-          : errors,
+      validationNotes:
+          errors.isEmpty ? const ['Static policy validation passed.'] : errors,
     );
   }
 

@@ -3,13 +3,13 @@ import '../lib/self_upgrade_system.dart';
 
 void main() {
   UpgradeProposal proposal({List<String>? files}) => UpgradeProposal(
-    id: 'upgrade-001',
-    candidateHash: sourceHash('candidate'),
-    title: 'Safe feature update',
-    summary: 'Owner-visible proposed change',
-    changedFiles: files ?? const ['apps/mobile/lib/main_v05.dart'],
-    stage: UpgradeStage.proposed,
-  );
+        id: 'upgrade-001',
+        candidateHash: sourceHash('candidate'),
+        title: 'Safe feature update',
+        summary: 'Owner-visible proposed change',
+        changedFiles: files ?? const ['apps/mobile/lib/main_v05.dart'],
+        stage: UpgradeStage.proposed,
+      );
 
   test('valid proposal waits for owner approval', () {
     final c = SelfUpgradeController();

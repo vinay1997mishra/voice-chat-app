@@ -774,20 +774,19 @@ class _V03RoomPageState extends State<V03RoomPage> {
                                 color: isMine
                                     ? const Color(0xFF6D48D8)
                                     : locked
-                                    ? const Color(0xFF353640)
-                                    : const Color(0xFF252631),
+                                        ? const Color(0xFF353640)
+                                        : const Color(0xFF252631),
                                 border: Border.all(
-                                  color: isMine
-                                      ? Colors.white70
-                                      : Colors.white12,
+                                  color:
+                                      isMine ? Colors.white70 : Colors.white12,
                                 ),
                               ),
                               child: Icon(
                                 locked
                                     ? Icons.lock_rounded
                                     : occupant == null
-                                    ? Icons.add_rounded
-                                    : Icons.person_rounded,
+                                        ? Icons.add_rounded
+                                        : Icons.person_rounded,
                               ),
                             ),
                           ),
@@ -925,9 +924,8 @@ class VipCenterPage extends StatelessWidget {
                     ? 'Unique 3D+ entry concept, profile frame, mic skin, badge and room effects.'
                     : 'Progressive frame, badge, mic skin, vehicle and entry cosmetics.',
               ),
-              trailing: tier == 3
-                  ? const Chip(label: Text('Demo Active'))
-                  : null,
+              trailing:
+                  tier == 3 ? const Chip(label: Text('Demo Active')) : null,
             ),
           );
         },

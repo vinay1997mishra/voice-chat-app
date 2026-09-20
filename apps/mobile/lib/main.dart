@@ -713,8 +713,8 @@ class _DemoRoomPageState extends State<DemoRoomPage> {
                             child: locked
                                 ? const Icon(Icons.lock_rounded, size: 18)
                                 : occupant == null
-                                ? const Icon(Icons.add_rounded, size: 18)
-                                : Text(occupant.characters.first),
+                                    ? const Icon(Icons.add_rounded, size: 18)
+                                    : Text(occupant.characters.first),
                           ),
                           const SizedBox(height: 3),
                           Text(

@@ -5,8 +5,8 @@ import '../lib/anamika_upgrade_orchestrator.dart';
 
 class FakeRunner implements CodeRunner {
   @override
-  Future<List<CodeDiagnostic>> check(Map<String, String> w) async =>
-      w.values.any((v) => v.contains('BROKEN'))
+  Future<List<CodeDiagnostic>> check(Map<String, String> w) async => w.values
+          .any((v) => v.contains('BROKEN'))
       ? const [
           CodeDiagnostic(kind: LocalCheckKind.syntax, message: 'broken code'),
         ]
@@ -18,13 +18,14 @@ class FakeModel implements CodingModel {
   Future<List<RepairPatch>> proposeRepair({
     required Map<String, String> workspace,
     required List<CodeDiagnostic> diagnostics,
-  }) async => [
-    RepairPatch(
-      path: 'apps/mobile/lib/x.dart',
-      beforeHash: sourceHash(workspace['apps/mobile/lib/x.dart']!),
-      replacement: 'fixed code',
-    ),
-  ];
+  }) async =>
+      [
+        RepairPatch(
+          path: 'apps/mobile/lib/x.dart',
+          beforeHash: sourceHash(workspace['apps/mobile/lib/x.dart']!),
+          replacement: 'fixed code',
+        ),
+      ];
 }
 
 void main() {

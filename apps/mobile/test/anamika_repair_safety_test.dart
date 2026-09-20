@@ -33,15 +33,15 @@ class PatchModel implements CodingModel {
   Future<List<RepairPatch>> proposeRepair({
     required Map<String, String> workspace,
     required List<CodeDiagnostic> diagnostics,
-  }) async => [
-    RepairPatch(
-      path: 'apps/mobile/lib/x.dart',
-      beforeHash: stale
-          ? 'bad'
-          : sourceHash(workspace['apps/mobile/lib/x.dart']!),
-      replacement: 'new',
-    ),
-  ];
+  }) async =>
+      [
+        RepairPatch(
+          path: 'apps/mobile/lib/x.dart',
+          beforeHash:
+              stale ? 'bad' : sourceHash(workspace['apps/mobile/lib/x.dart']!),
+          replacement: 'new',
+        ),
+      ];
 }
 
 void main() {

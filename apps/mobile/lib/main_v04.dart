@@ -251,10 +251,10 @@ class DiscoverScreen extends StatelessWidget {
   const DiscoverScreen({super.key});
   @override
   Widget build(BuildContext context) => _basicPage(
-    'Discover',
-    'Games, events, trending rooms and recommendations will live here.',
-    Icons.explore_rounded,
-  );
+        'Discover',
+        'Games, events, trending rooms and recommendations will live here.',
+        Icons.explore_rounded,
+      );
 }
 
 class MessagesScreen extends StatelessWidget {
@@ -574,11 +574,11 @@ class _RoyalRoomScreenState extends State<RoyalRoomScreen> {
                       itemCount: 15,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 5,
-                            childAspectRatio: .78,
-                            crossAxisSpacing: 6,
-                            mainAxisSpacing: 6,
-                          ),
+                        crossAxisCount: 5,
+                        childAspectRatio: .78,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                      ),
                       itemBuilder: (_, i) => GestureDetector(
                         onTap: () => _seatTap(i),
                         onLongPress: () => _toggleLock(i),
@@ -610,14 +610,15 @@ class _RoyalRoomScreenState extends State<RoyalRoomScreen> {
                                   child: locked.contains(i)
                                       ? const Icon(Icons.lock_rounded)
                                       : seats[i] == null
-                                      ? const Icon(Icons.add_rounded, size: 30)
-                                      : Text(
-                                          seats[i]!.substring(0, 1),
-                                          style: const TextStyle(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
+                                          ? const Icon(Icons.add_rounded,
+                                              size: 30)
+                                          : Text(
+                                              seats[i]!.substring(0, 1),
+                                              style: const TextStyle(
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
                                 ),
                               ),
                             ),
@@ -757,146 +758,150 @@ class _RoyalRoomScreenState extends State<RoyalRoomScreen> {
   void _snack(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   Widget _fab(IconData icon, String label) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Column(
-      children: [
-        FloatingActionButton.small(
-          heroTag: label,
-          onPressed: () => _snack('$label opened'),
-          child: Icon(icon),
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          children: [
+            FloatingActionButton.small(
+              heroTag: label,
+              onPressed: () => _snack('$label opened'),
+              child: Icon(icon),
+            ),
+            Text(label, style: const TextStyle(fontSize: 10)),
+          ],
         ),
-        Text(label, style: const TextStyle(fontSize: 10)),
-      ],
-    ),
-  );
+      );
 }
 
 Widget _tool(IconData icon, String label, VoidCallback onTap) => InkWell(
-  onTap: onTap,
-  child: Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon),
-      const SizedBox(height: 4),
-      Text(label, style: const TextStyle(fontSize: 11)),
-    ],
-  ),
-);
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+    );
 
 Widget _walletCard(
   IconData icon,
   String label,
   String value,
   List<Color> colors,
-) => Container(
-  padding: const EdgeInsets.all(16),
-  decoration: BoxDecoration(
-    gradient: LinearGradient(colors: colors),
-    borderRadius: BorderRadius.circular(20),
-    border: Border.all(color: const Color(0xFFFFC85A), width: 2),
-  ),
-  child: Row(
-    children: [
-      Icon(icon, color: const Color(0xFF5A2700), size: 36),
-      const SizedBox(width: 10),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+) =>
+    Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFC85A), width: 2),
+      ),
+      child: Row(
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF5A2700))),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Color(0xFF5A2700),
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-            ),
+          Icon(icon, color: const Color(0xFF5A2700), size: 36),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(color: Color(0xFF5A2700))),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF5A2700),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                ),
+              ),
+            ],
           ),
         ],
       ),
-    ],
-  ),
-);
+    );
 
 Widget _glass({
   required Widget child,
   EdgeInsetsGeometry padding = const EdgeInsets.all(14),
-}) => Container(
-  padding: padding,
-  decoration: BoxDecoration(
-    color: Colors.white.withValues(alpha: .07),
-    borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: Colors.white12),
-  ),
-  child: child,
-);
+}) =>
+    Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .07),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: child,
+    );
 
 Widget _avatar(String text, double radius, {bool gold = false}) => Container(
-  width: radius * 2,
-  height: radius * 2,
-  decoration: BoxDecoration(
-    shape: BoxShape.circle,
-    gradient: const LinearGradient(
-      colors: [Color(0xFF22222A), Color(0xFF060607)],
-    ),
-    border: Border.all(
-      color: gold ? const Color(0xFFFFC85A) : Colors.white24,
-      width: gold ? 3 : 1,
-    ),
-  ),
-  child: Center(
-    child: Text(text, style: const TextStyle(fontWeight: FontWeight.w900)),
-  ),
-);
-
-Widget _pill(String text, {bool selected = false}) => Container(
-  alignment: Alignment.center,
-  padding: const EdgeInsets.symmetric(vertical: 12),
-  decoration: BoxDecoration(
-    gradient: selected
-        ? const LinearGradient(colors: [Color(0xFF8427D7), Color(0xFF51118B)])
-        : null,
-    color: selected ? null : Colors.white10,
-    borderRadius: BorderRadius.circular(28),
-    border: Border.all(
-      color: selected ? const Color(0xFFFFCE59) : Colors.white24,
-    ),
-  ),
-  child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
-);
-
-Widget _basicPage(String title, String subtitle, IconData icon) => Container(
-  decoration: const BoxDecoration(
-    gradient: LinearGradient(
-      colors: [Color(0xFF3D0E5F), Color(0xFF14051A)],
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-    ),
-  ),
-  child: SafeArea(
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 70),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
+      width: radius * 2,
+      height: radius * 2,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF22222A), Color(0xFF060607)],
+        ),
+        border: Border.all(
+          color: gold ? const Color(0xFFFFC85A) : Colors.white24,
+          width: gold ? 3 : 1,
         ),
       ),
-    ),
-  ),
-);
+      child: Center(
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.w900)),
+      ),
+    );
+
+Widget _pill(String text, {bool selected = false}) => Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        gradient: selected
+            ? const LinearGradient(
+                colors: [Color(0xFF8427D7), Color(0xFF51118B)])
+            : null,
+        color: selected ? null : Colors.white10,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: selected ? const Color(0xFFFFCE59) : Colors.white24,
+        ),
+      ),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+
+Widget _basicPage(String title, String subtitle, IconData icon) => Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF3D0E5F), Color(0xFF14051A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 70),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 30, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
 
 String _format(int n) =>
     n.toString().replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => ',');
@@ -906,14 +911,14 @@ class _Stat extends StatelessWidget {
   final String value, label;
   @override
   Widget build(BuildContext context) => Column(
-    children: [
-      Text(
-        value,
-        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-      ),
-      Text(label, style: const TextStyle(color: Colors.white60)),
-    ],
-  );
+        children: [
+          Text(
+            value,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+          ),
+          Text(label, style: const TextStyle(color: Colors.white60)),
+        ],
+      );
 }
 
 class _Shortcut extends StatelessWidget {
@@ -922,15 +927,15 @@ class _Shortcut extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Column(
-      children: [
-        CircleAvatar(radius: 26, child: Icon(icon)),
-        const SizedBox(height: 8),
-        Text(label),
-      ],
-    ),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            CircleAvatar(radius: 26, child: Icon(icon)),
+            const SizedBox(height: 8),
+            Text(label),
+          ],
+        ),
+      );
 }
 
 class _Menu extends StatelessWidget {
@@ -939,9 +944,9 @@ class _Menu extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    leading: Icon(icon, color: const Color(0xFFC95BFF)),
-    title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-    trailing: const Icon(Icons.chevron_right_rounded),
-  );
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon, color: const Color(0xFFC95BFF)),
+        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      );
 }
