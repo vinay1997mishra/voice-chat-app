@@ -28,7 +28,9 @@ for t in ['AppSearchController.searchYouTube','AppSearchController.searchGoogle'
 service=(root/'app/src/main/java/com/anamika/ai/plugins/AppAutomationAccessibilityService.java').read_text()
 if 'ResearchLearningStore.capture' not in service: errors.append('Accessibility service not wired to research capture')
 build=(root/'app/build.gradle').read_text()
-for t in ["versionName '7.8.2'",'bundleAnamikaSelfSource','self_source/app/src/main/java','self_source/app/src/main/res']:
+version_ok = ("versionName '7.8.2'" in build) or ('ANAMIKA_VERSION_NAME' in build and '"7.8.2"' in build)
+if not version_ok: errors.append('build.gradle missing V7.8.2-compatible versionName')
+for t in ['bundleAnamikaSelfSource','self_source/app/src/main/java','self_source/app/src/main/res']:
     if t not in build: errors.append('build.gradle missing '+t)
 validator=(root/'app/src/main/java/com/anamika/ai/OfflineCodeValidator.java').read_text()
 for t in ['validateHtml','validateCss','HTML5 doctype','Unbalanced CSS braces']:
