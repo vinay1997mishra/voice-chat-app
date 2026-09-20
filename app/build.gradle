@@ -71,8 +71,8 @@ dependencies {
     implementation 'org.eclipse.jdt:ecj:3.46.100'
     implementation 'org.mozilla:rhino:1.9.1'
     implementation 'org.webjars.npm:typescript:5.9.3'
-    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.10'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10'
+    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.21'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.21'
     implementation 'io.xberg.tslp.android:tree-sitter-language-pack-android:1.15.12'
 }
 
