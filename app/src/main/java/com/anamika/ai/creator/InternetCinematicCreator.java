@@ -47,6 +47,13 @@ public final class InternetCinematicCreator {
 
     public static void generate(Context context, String endpoint, String apiKey, String model,
                                 String prompt, String referenceUrl, Callback callback) {
+        generate(context,endpoint,apiKey,model,prompt,referenceUrl,1920,1080,callback);
+    }
+
+    public static void generate(Context context, String endpoint, String apiKey, String model,
+                                String prompt, String referenceUrl, int width, int height, Callback callback) {
+        final int requestedWidth=Math.max(256,Math.min(4096,width<=0?1920:width));
+        final int requestedHeight=Math.max(256,Math.min(4096,height<=0?1080:height));
         new Thread(() -> {
             try {
                 URL base=requireHttps(endpoint,"Creator endpoint");
@@ -56,7 +63,9 @@ public final class InternetCinematicCreator {
                 payload.put("prompt",prompt.trim());
                 payload.put("model",model==null?"":model.trim());
                 payload.put("reference_url",referenceUrl==null?"":referenceUrl.trim());
-                payload.put("resolution","1920x1080");
+                payload.put("width",requestedWidth);
+                payload.put("height",requestedHeight);
+                payload.put("resolution",requestedWidth+"x"+requestedHeight);
                 payload.put("style","premium cinematic 3D animation movie");
                 payload.put("fps",30);
                 payload.put("audio",true);
