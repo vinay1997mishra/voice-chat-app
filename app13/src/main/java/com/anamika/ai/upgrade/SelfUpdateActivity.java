@@ -184,5 +184,5 @@ public final class SelfUpdateActivity extends Activity {
     }
 
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
-    private static String safe(Exception e){String m=e.getMessage();return m==null||m.isBlank()?e.getClass().getSimpleName():m;}
+    private static String safe(Exception e){String m=e.getMessage();return m==null||m.trim().isEmpty()?e.getClass().getSimpleName():m;}
 }
