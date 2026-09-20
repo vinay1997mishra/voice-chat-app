@@ -645,6 +645,41 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
         return true;
     }
 
+    public static boolean queueToggleByLabel(String[] labels,boolean desired,long delayMs){
+        AppAutomationAccessibilityService svc=instance;
+        if(svc==null || labels==null || labels.length==0) return false;
+        svc.handler.postDelayed(() -> {
+            AccessibilityNodeInfo root=svc.getRootInActiveWindow();
+            if(root==null) return;
+            for(AccessibilityNodeInfo n:svc.flatten(root)){
+                if(n==null || !n.isVisibleToUser() || !n.isEnabled()) continue;
+                String label=svc.nodeLabel(n).toLowerCase(Locale.ROOT);
+                boolean match=false;
+                for(String raw:labels){
+                    if(raw!=null && !raw.trim().isEmpty() && label.contains(raw.toLowerCase(Locale.ROOT))){ match=true; break; }
+                }
+                if(!match) continue;
+                AccessibilityNodeInfo cur=n;
+                for(int depth=0;cur!=null && depth<5;depth++,cur=cur.getParent()){
+                    if(cur.isCheckable()){
+                        if(cur.isChecked()!=desired) svc.clickNodeOrParent(cur);
+                        return;
+                    }
+                    CharSequence desc=cur.getContentDescription();
+                    String d=desc==null?"":desc.toString().toLowerCase(Locale.ROOT);
+                    boolean saysOn=d.contains(" on") || d.endsWith("on") || d.contains("enabled");
+                    boolean saysOff=d.contains(" off") || d.endsWith("off") || d.contains("disabled");
+                    if(saysOn||saysOff){
+                        boolean current=saysOn && !saysOff;
+                        if(current!=desired) svc.clickNodeOrParent(cur);
+                        return;
+                    }
+                }
+            }
+        },Math.max(0L,delayMs));
+        return true;
+    }
+
     public static boolean queueFirstSeekBarPercent(int percent,long delayMs){
         AppAutomationAccessibilityService svc=instance;
         if(svc==null) return false;
@@ -656,8 +691,13 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
                 if(n==null || !n.isVisibleToUser() || !n.isEnabled()) continue;
                 String cls=String.valueOf(n.getClassName()).toLowerCase(Locale.ROOT);
                 if(cls.contains("seekbar") || supportsSetProgress(n)){
+                    float target=p;
+                    AccessibilityNodeInfo.RangeInfo range=n.getRangeInfo();
+                    if(range!=null){
+                        target=range.getMin()+(range.getMax()-range.getMin())*(p/100f);
+                    }
                     android.os.Bundle b=new android.os.Bundle();
-                    b.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,p);
+                    b.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,target);
                     if(n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),b)) return;
                 }
             }
