@@ -64,8 +64,12 @@ public final class AppLauncher {
             String label=String.valueOf(pm.getApplicationLabel(a)).toLowerCase(Locale.ROOT);
             if(label.equals(q)) {
                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                c.startActivity(launch);
-                return new Result(true,"Opening "+pm.getApplicationLabel(a)+".");
+                try{
+                    c.startActivity(launch);
+                    return new Result(true,"Opening "+pm.getApplicationLabel(a)+".");
+                }catch(Exception e){
+                    return new Result(false,"App launch failed: "+safe(e));
+                }
             }
             if(label.contains(q)||q.contains(label)) candidates.add(a);
         }
@@ -75,7 +79,16 @@ public final class AppLauncher {
         Intent launch=pm.getLaunchIntentForPackage(a.packageName);
         if(launch==null) return new Result(false,"That app cannot be launched.");
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        c.startActivity(launch);
-        return new Result(true,"Opening "+pm.getApplicationLabel(a)+".");
+        try{
+            c.startActivity(launch);
+            return new Result(true,"Opening "+pm.getApplicationLabel(a)+".");
+        }catch(Exception e){
+            return new Result(false,"App launch failed: "+safe(e));
+        }
+    }
+
+    private static String safe(Exception e){
+        String m=e.getMessage();
+        return m==null||m.trim().isEmpty()?e.getClass().getSimpleName():m;
     }
 }
