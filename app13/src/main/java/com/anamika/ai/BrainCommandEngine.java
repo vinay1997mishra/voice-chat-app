@@ -90,7 +90,8 @@ public final class BrainCommandEngine {
         File schemaFile=new File(io,"schema.json");
 
         try{
-            write(promptFile,buildPrompt(c,ownerInstruction));
+            BrainEffortStore.Mode effort=BrainEffortStore.get(c);
+            write(promptFile,buildPrompt(c,ownerInstruction)+"\n\nLOCAL EFFORT MODE: "+effort.label+"\n");
             write(schemaFile,schema());
 
             List<String> cmd=new ArrayList<>();
@@ -98,9 +99,9 @@ public final class BrainCommandEngine {
             cmd.add("--offline");
             cmd.add("-m");cmd.add(model.getAbsolutePath());
             cmd.add("-f");cmd.add(promptFile.getAbsolutePath());
-            cmd.add("-c");cmd.add("8192");
-            cmd.add("-n");cmd.add("1400");
-            cmd.add("--temp");cmd.add("0.10");
+            cmd.add("-c");cmd.add(String.valueOf(effort.contextTokens));
+            cmd.add("-n");cmd.add(String.valueOf(effort.maxTokens));
+            cmd.add("--temp");cmd.add(effort.temperature);
             cmd.add("-st");
             cmd.add("--simple-io");
             cmd.add("--no-display-prompt");
@@ -117,7 +118,7 @@ public final class BrainCommandEngine {
             env.put("HOME",root.getAbsolutePath());
             env.put("LD_LIBRARY_PATH",new File(root,"lib").getAbsolutePath());
 
-            LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,io,env,90_000L);
+            LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
             if(!run.ok())
                 return new Plan(false,"Offline brain command planning failed. exit="+run.exitCode+
                         (run.timedOut?" timeout":"")+
