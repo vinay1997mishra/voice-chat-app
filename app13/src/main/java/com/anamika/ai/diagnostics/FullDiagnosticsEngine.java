@@ -375,14 +375,22 @@ public final class FullDiagnosticsEngine {
         File aapt2=new File(nativeDir==null?"":nativeDir,"libanamika_aapt2.so");
         List<String> aaptCmd=new ArrayList<>();
         aaptCmd.add(aapt2.getAbsolutePath());aaptCmd.add("version");
-        LocalProcessRunner.Result aapt=aapt2.isFile()
-                ?LocalProcessRunner.run(aaptCmd,root,null,30000)
-                :new LocalProcessRunner.Result(false,false,-1,"","embedded AAPT2 missing");
+        LocalProcessRunner.Result aapt=null;
+        boolean aaptOk=false;
+        String aaptError="";
+        if(aapt2.isFile()){
+            aapt=LocalProcessRunner.run(aaptCmd,root,null,30000);
+            aaptOk=aapt.ok();
+            aaptError=aapt.stderr;
+        }else{
+            aaptError="embedded AAPT2 missing";
+        }
 
-        boolean runtimeOk=shell.ok()&&aapt.ok();
+        boolean runtimeOk=shell.ok()&&aaptOk;
+        int aaptExit=aapt==null?-1:aapt.exitCode;
         state(x,"local_builder_runtime","self_upgrade",runtimeOk?State.PASS:State.FAIL,
                 runtimeOk?"builder shell syntax + APK-native AAPT2 execution passed":
-                        "shell="+shell.exitCode+" aapt2="+aapt.exitCode+" "+compact(shell.stderr+" "+aapt.stderr));
+                        "shell="+shell.exitCode+" aapt2="+aaptExit+" "+compact(shell.stderr+" "+aaptError));
 
         State e2e=!runtimeOk?State.FAIL:
                 (cap.ready?State.LIVE_TEST_REQUIRED:
