@@ -49,7 +49,7 @@ public final class LocalBuildEngine {
         boolean storage=HealthMonitor.enoughForLocalBuild(c,2L*1024L*1024L*1024L);
 
         if(!files)return new Capability(false,
-                "Local build toolchain incomplete. Required: anamika-builder, ARM64 aapt2, Java compiler runtime, D8, android-36.jar and APK signer.");
+                "Local build toolchain incomplete. Required: anamika-builder, embedded ARM64 AAPT2, Java compiler runtime, D8, android-36.jar and APK signer.");
         if(!aapt2.canExecute()&&!aapt2.setExecutable(true,true))
             return new Capability(false,"Android blocked the AAPT2 runtime. On Android 10+ AAPT2 must be embedded in the installed APK.");
         if(!storage)return new Capability(false,"At least 2 GB free private storage is required for a safe local build.");
@@ -89,6 +89,9 @@ public final class LocalBuildEngine {
             env.put("ANAMIKA_KS_PASS",new String(ks.password));
             env.put("ANAMIKA_OFFLINE","1");
             env.put("HOME",outputDir.getAbsolutePath());
+            String nativeDir=c.getApplicationInfo().nativeLibraryDir;
+            if(nativeDir!=null&&!nativeDir.trim().isEmpty())
+                env.put("LD_LIBRARY_PATH",nativeDir);
 
             LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,workspace,env,15L*60L*1000L);
             String log="exit="+run.exitCode+(run.timedOut?" timeout":"")+
