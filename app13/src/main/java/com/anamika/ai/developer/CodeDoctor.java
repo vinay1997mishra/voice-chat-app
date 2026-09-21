@@ -63,7 +63,7 @@ public final class CodeDoctor {
                 n.endsWith(".json")||n.endsWith(".gradle")||n.endsWith(".properties")))return;
         count[0]++;
         try{
-            String s=new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8);
+            String s=new String(AndroidCompat.readAllBytes(f),StandardCharsets.UTF_8);
             String rel=relative(root,f);
             if(n.endsWith(".json"))checkJson(rel,s,problems);
             else if(n.endsWith(".xml"))checkXml(rel,s,problems);

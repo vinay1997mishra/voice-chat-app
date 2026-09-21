@@ -71,7 +71,7 @@ public final class OfflineCodingBrain {
 
         try{
             if(!out.isFile())return new Result(false,"Offline brain produced no edit plan.","");
-            String plan=new String(AndroidCompat.readAllBytes(out)),StandardCharsets.UTF_8);
+            String plan=new String(AndroidCompat.readAllBytes(out),StandardCharsets.UTF_8);
             WorkspacePatchApplier.Result applied=WorkspacePatchApplier.apply(workspace,plan);
             return new Result(applied.ok,applied.message,plan);
         }catch(Exception e){

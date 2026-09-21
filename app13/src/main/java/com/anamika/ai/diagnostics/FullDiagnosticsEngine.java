@@ -248,7 +248,7 @@ public final class FullDiagnosticsEngine {
             File f=new File(dir,"rw_probe.tmp");
             byte[] expected="anamika13-probe".getBytes(StandardCharsets.UTF_8);
             try(FileOutputStream out=new FileOutputStream(f,false)){out.write(expected);out.getFD().sync();}
-            byte[] got=AndroidCompat.readAllBytes(f));
+            byte[] got=AndroidCompat.readAllBytes(f);
             boolean ok=java.util.Arrays.equals(expected,got);
             f.delete();
             add(x,"private_storage_read_write","storage",ok,ok?"round-trip verified":"round-trip mismatch");
@@ -264,7 +264,7 @@ public final class FullDiagnosticsEngine {
         File f=new File(LocalVault.root(c),"diagnostic_probe.txt");
         try{
             String r=LocalVault.saveText(c,"diagnostic_probe.txt","probe");
-            boolean ok=f.isFile()&&"probe".equals(new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8));
+            boolean ok=f.isFile()&&"probe".equals(new String(AndroidCompat.readAllBytes(f),StandardCharsets.UTF_8));
             f.delete();
             add(x,"private_vault","storage",ok,ok?"save/read/delete verified":r);
         }catch(Exception e){f.delete();add(x,"private_vault","storage",false,safe(e));}

@@ -56,7 +56,7 @@ public final class ComponentPackManager {
             if(!manifestFile.isFile())return new Result(false,"Component pack manifest.json missing.");
 
             JSONObject manifest=new JSONObject(new String(
-                    AndroidCompat.readAllBytes(manifestFile)),
+                    AndroidCompat.readAllBytes(manifestFile),
                     java.nio.charset.StandardCharsets.UTF_8));
 
             if(!"anamika13-component-pack-v1".equals(manifest.optString("schema","")))
@@ -256,7 +256,7 @@ public final class ComponentPackManager {
         if(!dir.isDirectory())return label+": NOT INSTALLED";
         String v="unknown";
         try{
-            if(version.isFile())v=new String(AndroidCompat.readAllBytes(version)),
+            if(version.isFile())v=new String(AndroidCompat.readAllBytes(version),
                     java.nio.charset.StandardCharsets.UTF_8).trim();
         }catch(Exception ignored){}
         return label+": INSTALLED ("+v+")";
