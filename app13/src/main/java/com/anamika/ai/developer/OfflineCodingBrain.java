@@ -35,15 +35,12 @@ public final class OfflineCodingBrain {
     private OfflineCodingBrain(){}
 
     public static Result repair(Context c,File workspace,String request){
-        File root=new File(c.getFilesDir(),"v13_brain");
-        File runtime=new File(root,"bin/anamika-brain");
-        File model=new File(root,"model.gguf");
-        if(!runtime.isFile()||!model.isFile())
-            return new Result(false,"Offline coding brain runtime/model is not installed.","");
-        if(!runtime.canExecute()&&!runtime.setExecutable(true,true))
-            return new Result(false,"Offline coding runtime is not executable on this Android build.","");
-        File llama=new File(root,"bin/llama-cli");
-        if(llama.isFile()&&!llama.canExecute())llama.setExecutable(true,true);
+        File root=BrainRuntimePaths.root(c);
+        File cli=BrainRuntimePaths.embeddedCli(c);
+        File model=BrainRuntimePaths.model(c);
+        File schema=BrainRuntimePaths.schema(c);
+        if(!BrainRuntimePaths.runtimeReady(c)||!model.isFile())
+            return new Result(false,"Offline coding brain runtime/model is not installed or APK-native runtime is unavailable.","");
         if(workspace==null||!workspace.isDirectory())
             return new Result(false,"Upgrade workspace is missing.","");
 
@@ -60,16 +57,29 @@ public final class OfflineCodingBrain {
         }
 
         List<String> cmd=new ArrayList<>();
-        cmd.add(runtime.getAbsolutePath());
-        cmd.add("--model");cmd.add(model.getAbsolutePath());
-        cmd.add("--workspace");cmd.add(workspace.getAbsolutePath());
-        cmd.add("--request");cmd.add(req.getAbsolutePath());
-        cmd.add("--output");cmd.add(out.getAbsolutePath());
+        cmd.add(cli.getAbsolutePath());
+        cmd.add("--offline");
+        cmd.add("-m");cmd.add(model.getAbsolutePath());
+        cmd.add("-f");cmd.add(req.getAbsolutePath());
+        cmd.add("-c");cmd.add("16384");
+        cmd.add("-n");cmd.add("4096");
+        cmd.add("--temp");cmd.add("0.15");
+        cmd.add("-st");
+        cmd.add("--simple-io");
+        cmd.add("--no-display-prompt");
+        cmd.add("--no-show-timings");
+        cmd.add("--no-warmup");
+        cmd.add("--log-colors");cmd.add("off");
+        cmd.add("--no-log-prefix");
+        cmd.add("--no-log-timestamps");
+        cmd.add("-lv");cmd.add("1");
+        cmd.add("-jf");cmd.add(schema.getAbsolutePath());
 
         HashMap<String,String> env=new HashMap<>();
         env.put("ANAMIKA_OFFLINE","1");
         env.put("HOME",root.getAbsolutePath());
-        env.put("LD_LIBRARY_PATH",new File(root,"lib").getAbsolutePath());
+        String nativeDir=c.getApplicationInfo().nativeLibraryDir;
+        if(nativeDir!=null&&!nativeDir.trim().isEmpty())env.put("LD_LIBRARY_PATH",nativeDir);
 
         LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,workspace,env,15L*60L*1000L);
         if(!run.ok())
@@ -78,8 +88,11 @@ public final class OfflineCodingBrain {
                             (run.stderr.isEmpty()?"":"\n"+trim(run.stderr)),"");
 
         try{
-            if(!out.isFile())return new Result(false,"Offline brain produced no edit plan.","");
-            String raw=AndroidCompat.readText(out,StandardCharsets.UTF_8);
+            String raw=run.stdout;
+            try(FileOutputStream os=new FileOutputStream(out,false)){
+                os.write(raw.getBytes(StandardCharsets.UTF_8));
+                os.getFD().sync();
+            }
             String plan=extractJsonObject(raw);
             if(plan==null)return new Result(false,"Offline brain output contained no valid JSON object.",raw);
             WorkspacePatchApplier.Result applied=WorkspacePatchApplier.apply(workspace,plan);
@@ -90,14 +103,12 @@ public final class OfflineCodingBrain {
     }
 
     public static String status(Context c){
-        File root=new File(c.getFilesDir(),"v13_brain");
-        File runtime=new File(root,"bin/anamika-brain");
-        File model=new File(root,"model.gguf");
-        File llama=new File(root,"bin/llama-cli");
-        return "Offline coding brain\nRuntime: "+(runtime.isFile()?"present":"missing")+
-                "\nllama.cpp CLI: "+(llama.isFile()?"present":"missing")+
+        File model=BrainRuntimePaths.model(c);
+        File cli=BrainRuntimePaths.embeddedCli(c);
+        return "Offline coding brain\nRuntime metadata: "+(BrainRuntimePaths.runtimeMarker(c).isFile()?"present":"missing")+
+                "\nAPK-native llama.cpp CLI: "+(cli.isFile()?"present":"missing")+
                 "\nModel: "+(model.isFile()?(model.length()/1024/1024)+" MB":"missing")+
-                "\nExecution: "+(runtime.isFile()&&runtime.canExecute()?"ready":"not verified");
+                "\nExecution: "+(BrainRuntimePaths.runtimeReady(c)?"ready":"not verified");
     }
 
     private static String buildPrompt(File workspace,String ownerRequest)throws Exception{
