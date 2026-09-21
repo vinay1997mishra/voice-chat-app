@@ -85,16 +85,16 @@ jobs:
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/certs.txt
           GOT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' /tmp/certs.txt | awk '{print $NF}')"
           test "$GOT" = "$EXPECTED_CERT_SHA256"
-          cp "$APK" AnamikaAI-13-PERMANENT-SIGNED.apk
-          sha256sum AnamikaAI-13-PERMANENT-SIGNED.apk > AnamikaAI-13-PERMANENT-SIGNED.apk.sha256
+          cp "$APK" AnamikaAI-13.apk
+          sha256sum AnamikaAI-13.apk > AnamikaAI-13.apk.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AnamikaAI-13-PERMANENT-SIGNED
+          name: AnamikaAI-13
           compression-level: 0
           path: |
-            AnamikaAI-13-PERMANENT-SIGNED.apk
-            AnamikaAI-13-PERMANENT-SIGNED.apk.sha256
+            AnamikaAI-13.apk
+            AnamikaAI-13.apk.sha256
 
       - name: Publish permanent-signed prerelease
         env:
@@ -102,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="anamika-v13-signed-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             AnamikaAI-13-PERMANENT-SIGNED.apk             AnamikaAI-13-PERMANENT-SIGNED.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Permanent-Signed • ${GITHUB_RUN_NUMBER}"             --notes "Permanent-signed V13 with embedded ARM64 AAPT2 and bundled Android Toolchain 13. The APK auto-installs the verified toolchain into Anamika private storage after owner unlock. The private PKCS#12 is supplied only through GitHub Actions secrets and is never committed to the repository."             --prerelease
+          gh release create "$TAG"             AnamikaAI-13.apk             AnamikaAI-13.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Permanent-Signed • ${GITHUB_RUN_NUMBER}"             --notes "Permanent-signed V13 with embedded ARM64 AAPT2 and bundled Android Toolchain 13. The APK auto-installs the verified toolchain into Anamika private storage after owner unlock. The private PKCS#12 is supplied only through GitHub Actions secrets and is never committed to the repository."             --prerelease
 
       - name: Destroy runner signer copy
         if: always()
