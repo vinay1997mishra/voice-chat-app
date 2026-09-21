@@ -94,11 +94,14 @@ jobs:
           cp /tmp/tooljars/apksig.jar "$P/lib/apksig.jar"
           cp "$ANDROID_HOME/platforms/android-36/android.jar" "$P/platforms/android-36/android.jar"
 
-          python3 -c 'import hashlib,json,os; root="/tmp/AnamikaAI-13-Toolchain-arm64"; payload=os.path.join(root,"payload"); files={}; [(lambda p,rel: files.__setitem__(rel,hashlib.sha256(open(p,"rb").read()).hexdigest()))(os.path.join(base,n),os.path.relpath(os.path.join(base,n),root).replace(os.sep,"/")) for base,_,names in os.walk(payload) for n in sorted(names)]; json.dump({"schema":"anamika13-component-pack-v1","type":"toolchain","version":"13-toolchain-2","min_api":28,"architecture":"arm64-v8a","aapt2_delivery":"embedded-apk-native-library","files":files},open(os.path.join(root,"manifest.json"),"w"),indent=2,sort_keys=True)'
+          python3 -c 'import hashlib,json,os; root="/tmp/AnamikaAI-13-Toolchain-arm64"; payload=os.path.join(root,"payload"); files={}; [(lambda p,rel: files.__setitem__(rel,hashlib.sha256(open(p,"rb").read()).hexdigest()))(os.path.join(base,n),os.path.relpath(os.path.join(base,n),root).replace(os.sep,"/")) for base,_,names in os.walk(payload) for n in sorted(names)]; json.dump({"schema":"anamika13-component-pack-v1","type":"toolchain","version":"13-toolchain-3","min_api":28,"architecture":"arm64-v8a","aapt2_delivery":"embedded-apk-native-library","files":files},open(os.path.join(root,"manifest.json"),"w"),indent=2,sort_keys=True)'
 
-          cd /tmp
-          zip -qr AnamikaAI-13-Toolchain-arm64.zip AnamikaAI-13-Toolchain-arm64
-          sha256sum AnamikaAI-13-Toolchain-arm64.zip > AnamikaAI-13-Toolchain-arm64.zip.sha256
+          rm -f /tmp/AnamikaAI-13-Toolchain-arm64.zip /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256
+          (cd "$ROOT" && zip -qr /tmp/AnamikaAI-13-Toolchain-arm64.zip manifest.json payload)
+          unzip -l /tmp/AnamikaAI-13-Toolchain-arm64.zip | tee /tmp/toolchain-files.txt
+          grep -q " manifest.json$" /tmp/toolchain-files.txt
+          grep -q " payload/bin/anamika-builder$" /tmp/toolchain-files.txt
+          sha256sum /tmp/AnamikaAI-13-Toolchain-arm64.zip > /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256
 
       - uses: actions/upload-artifact@v4
         with:
