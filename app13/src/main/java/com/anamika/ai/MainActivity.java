@@ -229,11 +229,19 @@ public final class MainActivity extends Activity implements VoiceController.List
         final Context appContext=getApplicationContext();
         new Thread(()->{
             BrainCommandEngine.Plan plan=BrainCommandEngine.plan(appContext,text);
-            runOnUiThread(()->{
+            if(BrainCommandEngine.requiresBackground(plan)){
                 String reply=BrainCommandEngine.execute(this,plan);
-                finishReply(reply);
-                if(status!=null)status.setText("Owner verified • brain command complete");
-            });
+                runOnUiThread(()->{
+                    finishReply(reply);
+                    if(status!=null)status.setText("Owner verified • brain command complete");
+                });
+            }else{
+                runOnUiThread(()->{
+                    String reply=BrainCommandEngine.execute(this,plan);
+                    finishReply(reply);
+                    if(status!=null)status.setText("Owner verified • brain command complete");
+                });
+            }
         },"anamika-brain-command").start();
     }
 
