@@ -1,5 +1,6 @@
 package com.anamika.ai.messaging;
 
+import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -120,8 +121,19 @@ public final class MessagingAutomationEngine {
             switch(stage){
                 case OPEN_APP:
                     if(hasMessageField(root)){
-                        move(c,Stage.TYPE_MESSAGE,"Chat screen found.");
-                        scheduleContinue(c,pkg,650);
+                        if(recipientVisible(root,recipient)){
+                            move(c,Stage.TYPE_MESSAGE,"Correct chat screen found.");
+                            scheduleContinue(c,pkg,650);
+                            return;
+                        }
+                        if(c instanceof AccessibilityService){
+                            boolean backed=((AccessibilityService)c).performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK);
+                            if(backed){
+                                action(c,Stage.OPEN_APP,"Returning to the conversation list before selecting "+recipient+".");
+                                return;
+                            }
+                        }
+                        fail(c,"A different chat is open and Anamika could not safely return to the conversation list.");
                         return;
                     }
                     AccessibilityNodeInfo recipientNode=findByVisibleText(root,recipient,true);
@@ -171,8 +183,8 @@ public final class MessagingAutomationEngine {
                     break;
 
                 case OPEN_CHAT:
-                    if(hasMessageField(root)){
-                        move(c,Stage.TYPE_MESSAGE,"Chat opened.");
+                    if(hasMessageField(root)&&recipientVisible(root,recipient)){
+                        move(c,Stage.TYPE_MESSAGE,"Verified chat opened for "+recipient+".");
                         scheduleContinue(c,pkg,450);
                         return;
                     }
@@ -189,6 +201,10 @@ public final class MessagingAutomationEngine {
                     break;
 
                 case TYPE_MESSAGE:
+                    if(!recipientVisible(root,recipient)){
+                        fail(c,"Recipient verification failed. Message was not typed or sent.");
+                        return;
+                    }
                     AccessibilityNodeInfo box=findMessageField(root);
                     if(box==null){
                         update(c,"Waiting for the message field in "+recipient+"'s chat…");
@@ -204,6 +220,10 @@ public final class MessagingAutomationEngine {
                     break;
 
                 case SEND:
+                    if(!recipientVisible(root,recipient)||!hasMessageField(root)){
+                        fail(c,"Chat verification changed before Send. Message was not sent.");
+                        return;
+                    }
                     AccessibilityNodeInfo send=findSendControl(root);
                     if(send==null){
                         update(c,"Message is typed, but a safe Send control was not found.");
@@ -235,6 +255,14 @@ public final class MessagingAutomationEngine {
             if(p.getBoolean(ACTIVE,false)&&pkg.equals(p.getString(PACKAGE,"")))
                 p.edit().putLong(LAST_ACTION,0L).apply();
         },delay);
+    }
+
+
+    private static boolean recipientVisible(AccessibilityNodeInfo root,String recipient){
+        AccessibilityNodeInfo n=findByVisibleText(root,recipient,true);
+        if(n==null)return false;
+        n.recycle();
+        return true;
     }
 
     private static boolean hasMessageField(AccessibilityNodeInfo root){
