@@ -16,7 +16,7 @@ curl -fsSL "$PACKAGES_URL" -o "$WORK/Packages"
 python3 - "$WORK/Packages" "$WORK/selection.tsv" <<'PY'
 import re,sys
 src,out=sys.argv[1:3]
-wanted=["aapt2","fmt","libc++","libexpat","libpng","libzopfli","zlib"]
+wanted=["aapt2","fmt","libc++","libexpat","libpng","libzopfli","zlib","abseil-cpp","libprotobuf","libutf8-range"]
 blocks=open(src,encoding="utf-8").read().split("\n\n")
 found={}
 for b in blocks:
@@ -56,6 +56,11 @@ mkdir -p "$OUT"
 cp "$AAPT2" "$OUT/libanamika_aapt2.so"
 chmod 755 "$OUT/libanamika_aapt2.so"
 
+if ! command -v patchelf >/dev/null 2>&1; then
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq patchelf
+fi
+
 # Materialize unversioned .so symlinks as real files because APK packaging does
 # not preserve Termux's filesystem symlink layout.
 while IFS= read -r lib; do
@@ -66,6 +71,21 @@ while IFS= read -r lib; do
       ;;
   esac
 done < <(find "$WORK/root" \( -type f -o -type l \) -path '*/lib/*.so' | sort -u)
+
+# Rewrite versioned Termux SONAME requests (for example libz.so.1) to the
+# unversioned library names that Android reliably packages under jniLibs.
+for elf in "$OUT"/*.so; do
+  while IFS= read -r need; do
+    case "$need" in
+      *.so.*)
+        plain="${need%%.so.*}.so"
+        if [ -f "$OUT/$plain" ]; then
+          patchelf --replace-needed "$need" "$plain" "$elf"
+        fi
+        ;;
+    esac
+  done < <(patchelf --print-needed "$elf" 2>/dev/null || true)
+done
 
 # Verify every DT_NEEDED dependency is either packaged next to AAPT2 or is a
 # stable Android system library. Fail closed if the Termux package set changes.
