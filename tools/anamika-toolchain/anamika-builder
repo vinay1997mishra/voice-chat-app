@@ -9,6 +9,8 @@ D8=""
 COMPILER=""
 APKSIG=""
 KEYSTORE=""
+VERSION_CODE=""
+VERSION_NAME=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -20,6 +22,8 @@ while [ "$#" -gt 0 ]; do
     --compiler) COMPILER="$2"; shift 2 ;;
     --apksig) APKSIG="$2"; shift 2 ;;
     --keystore) KEYSTORE="$2"; shift 2 ;;
+    --version-code) VERSION_CODE="$2"; shift 2 ;;
+    --version-name) VERSION_NAME="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -32,6 +36,8 @@ done
 [ -n "$COMPILER" ] || { echo "Missing COMPILER" >&2; exit 2; }
 [ -n "$APKSIG" ] || { echo "Missing APKSIG" >&2; exit 2; }
 [ -n "$KEYSTORE" ] || { echo "Missing KEYSTORE" >&2; exit 2; }
+[ -n "$VERSION_CODE" ] || { echo "Missing VERSION_CODE" >&2; exit 2; }
+[ -n "$VERSION_NAME" ] || { echo "Missing VERSION_NAME" >&2; exit 2; }
 [ "${ANAMIKA_KS_PASS+x}" = "x" ] || { echo "ANAMIKA_KS_PASS missing" >&2; exit 2; }
 
 APP="$WORKSPACE/app13"
@@ -48,7 +54,7 @@ rm -rf "$BUILD"
 mkdir -p "$GEN" "$CLASSES" "$DEX" "$(dirname "$OUTPUT")"
 
 "$AAPT2" compile --dir "$RES" -o "$BUILD/resources.zip"
-"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --min-sdk-version 21   --target-sdk-version 36   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
+"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --min-sdk-version 21   --target-sdk-version 36   --version-code "$VERSION_CODE"   --version-name "$VERSION_NAME"   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
 
 find "$SRC" "$GEN" -type f -name '*.java' | sort > "$BUILD/sources.txt"
 [ -s "$BUILD/sources.txt" ] || { echo "No Java sources found" >&2; exit 3; }
