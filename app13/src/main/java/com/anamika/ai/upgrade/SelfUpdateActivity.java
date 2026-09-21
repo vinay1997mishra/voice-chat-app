@@ -62,14 +62,17 @@ public final class SelfUpdateActivity extends Activity {
         sp.topMargin=dp(16);
         box.addView(status,sp);
 
+        Button local=new Button(this); local.setText("Use Latest Local Build");
         Button pick=new Button(this); pick.setText("Select APK");
         Button permission=new Button(this); permission.setText("Install Permission");
         Button install=new Button(this); install.setText("Install Verified Update");
         install.setEnabled(false);
+        box.addView(local);
         box.addView(pick);
         box.addView(permission);
         box.addView(install);
 
+        local.setOnClickListener(v->stageLocalBuild());
         pick.setOnClickListener(v->pick());
         permission.setOnClickListener(v->openPermission());
         install.setOnClickListener(v->install());
@@ -86,6 +89,39 @@ public final class SelfUpdateActivity extends Activity {
     }
 
     private Button installButton(){return (Button)status.getTag();}
+
+
+    private void stageLocalBuild(){
+        File candidate=UpgradeCoordinator.latestCandidate(this);
+        if(candidate==null||!candidate.isFile()){
+            status.setText("No local build candidate found. Run local build first.");
+            return;
+        }
+        verified=false;
+        installButton().setEnabled(false);
+        File dir=staged.getParentFile();
+        if(dir!=null&&!dir.exists()&&!dir.mkdirs()){status.setText("Cannot create update folder.");return;}
+        File partial=new File(dir,"candidate.partial");
+        try(InputStream in=new FileInputStream(candidate); OutputStream out=new FileOutputStream(partial,false)){
+            byte[] buf=new byte[128*1024];int n;long total=0;
+            while((n=in.read(buf))>0){
+                total+=n;
+                if(total>2L*1024L*1024L*1024L)throw new IllegalStateException("APK exceeds 2 GB safety limit.");
+                out.write(buf,0,n);
+            }
+            if(total<1024)throw new IllegalStateException("Local candidate is empty.");
+        }catch(Exception e){
+            partial.delete();
+            status.setText("Local candidate copy failed: "+safe(e));
+            return;
+        }
+        if(staged.exists()&&!staged.delete()){partial.delete();status.setText("Cannot replace previous candidate.");return;}
+        if(!partial.renameTo(staged)){partial.delete();status.setText("Cannot finalize local candidate.");return;}
+        ApkVerifier.Result r=ApkVerifier.verifySelfUpdate(this,staged);
+        verified=r.ok;
+        installButton().setEnabled(verified);
+        status.setText(r.message+(verified?"\nReady for Android system confirmation.":"\nUpdate rejected."));
+    }
 
     private void pick(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);

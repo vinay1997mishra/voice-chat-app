@@ -50,6 +50,26 @@ public final class SignerVault {
         }
     }
 
+    public static final class TemporaryPkcs12 implements AutoCloseable {
+        public final File file;
+        public final char[] password;
+        TemporaryPkcs12(File file,char[] password){this.file=file;this.password=password;}
+        @Override public void close(){
+            Arrays.fill(password,'\0');
+            if(file!=null&&file.exists()){
+                try{
+                    java.io.RandomAccessFile raf=new java.io.RandomAccessFile(file,"rw");
+                    byte[] zero=new byte[8192];
+                    long left=raf.length();
+                    raf.seek(0);
+                    while(left>0){int n=(int)Math.min(zero.length,left);raf.write(zero,0,n);left-=n;}
+                    raf.close();
+                }catch(Exception ignored){}
+                try{file.delete();}catch(Exception ignored){}
+            }
+        }
+    }
+
     private SignerVault(){}
 
     public static String status(Context c){
@@ -149,6 +169,26 @@ public final class SignerVault {
             Arrays.fill(password,'\0');
             Arrays.fill(p12Bytes,(byte)0);
         }
+    }
+
+
+    public static TemporaryPkcs12 materializeTemporary(Context c,File dir) throws Exception {
+        if(!ready(c))throw new IllegalStateException("Signer vault is not ready.");
+        if(!dir.exists()&&!dir.mkdirs())throw new IllegalStateException("Cannot create signer temp directory.");
+        JSONObject o=new JSONObject(new String(java.nio.file.Files.readAllBytes(vaultFile(c).toPath()),StandardCharsets.UTF_8));
+        SecretKey wrap=wrappingKey();
+        byte[] p12Bytes=decrypt(wrap,b64d(o.getString("key_iv")),b64d(o.getString("key_ct")));
+        byte[] passBytes=decrypt(wrap,b64d(o.getString("pass_iv")),b64d(o.getString("pass_ct")));
+        char[] password=new String(passBytes,StandardCharsets.UTF_8).toCharArray();
+        Arrays.fill(passBytes,(byte)0);
+        File f=new File(dir,"signer-"+System.currentTimeMillis()+".p12");
+        try(FileOutputStream out=new FileOutputStream(f,false)){
+            out.write(p12Bytes);
+            out.getFD().sync();
+        }finally{
+            Arrays.fill(p12Bytes,(byte)0);
+        }
+        return new TemporaryPkcs12(f,password);
     }
 
     private static SecretKey wrappingKey() throws Exception {

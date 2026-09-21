@@ -45,6 +45,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".upgrade.SignerProvisionActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".upgrade.SelfUpdateActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

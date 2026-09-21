@@ -173,6 +173,12 @@ public final class CommandRouter {
 
         if(l.equals("upgrade status")||l.equals("self upgrade status"))
             return UpgradeCoordinator.status(a);
+        if(l.startsWith("offline repair ")){
+            String request=text.substring("offline repair ".length()).trim();
+            return UpgradeCoordinator.repairLatestOffline(a,request);
+        }
+        if(l.equals("local build")||l.equals("build upgrade"))
+            return UpgradeCoordinator.buildLatest(a);
         if(l.startsWith("prepare upgrade")||l.startsWith("prepare self upgrade"))
             return UpgradeCoordinator.prepare(a,text);
         if(l.equals("validate upgrade")||l.equals("code doctor"))

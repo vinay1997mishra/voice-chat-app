@@ -13,6 +13,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.anamika.ai.core.OwnerStore;
+import com.anamika.ai.upgrade.SignerProvisionActivity;
 
 import java.io.BufferedInputStream;
 import java.io.InputStream;
@@ -56,10 +57,13 @@ public final class ComponentPacksActivity extends Activity {
         download.setText("Download + Verify + Install");
         Button importZip=new Button(this);
         importZip.setText("Import Component Pack ZIP");
+        Button signer=new Button(this);
+        signer.setText("Setup Release Signer");
         Button refresh=new Button(this);
         refresh.setText("Refresh Status");
         box.addView(download);
         box.addView(importZip);
+        box.addView(signer);
         box.addView(refresh);
 
         status=new TextView(this);
@@ -70,6 +74,7 @@ public final class ComponentPacksActivity extends Activity {
 
         download.setOnClickListener(v->download(url.getText().toString().trim()));
         importZip.setOnClickListener(v->pick());
+        signer.setOnClickListener(v->startActivity(new Intent(this,SignerProvisionActivity.class)));
         refresh.setOnClickListener(v->status.setText(ComponentPackManager.status(this)));
 
         ScrollView scroll=new ScrollView(this);

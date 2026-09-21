@@ -125,6 +125,15 @@ public final class LanguageCommandInterpreter {
                 "अपग्रेड स्टेटस","अपग्रेड का स्टेटस"))
             return "upgrade status";
 
+        if(any(l,"local build","build upgrade","apk build karo","upgrade build karo",
+                "लोकल बिल्ड","एपीके बिल्ड करो"))
+            return "local build";
+
+        arg=matchArg(s,
+                "^(?iu)(?:offline repair|code repair|khud ka code thik karo|khud ko thik karo|ऑफलाइन रिपेयर|कोड ठीक करो)\\s+(.+)$");
+        if(arg!=null)return "offline repair "+arg;
+
+
         if(any(l,"upgrade validate karo","code check karo","code doctor chalao",
                 "कोड चेक करो","कोड डॉक्टर चलाओ","validate upgrade","code doctor"))
             return "validate upgrade";
