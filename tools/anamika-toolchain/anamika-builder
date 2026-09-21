@@ -53,8 +53,16 @@ DEX="$BUILD/dex"
 rm -rf "$BUILD"
 mkdir -p "$GEN" "$CLASSES" "$DEX" "$(dirname "$OUTPUT")"
 
+AAPT_MANIFEST="$BUILD/AndroidManifest.xml"
+if grep -q '<manifest[^>]*package=' "$MANIFEST"; then
+  cp "$MANIFEST" "$AAPT_MANIFEST"
+else
+  sed 's/<manifest /<manifest package="com.anamika.ai13" /' "$MANIFEST" > "$AAPT_MANIFEST"
+fi
+grep -q 'package="com.anamika.ai13"' "$AAPT_MANIFEST" || { echo "Could not prepare AAPT2 manifest package" >&2; exit 3; }
+
 "$AAPT2" compile --dir "$RES" -o "$BUILD/resources.zip"
-"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --custom-package com.anamika.ai   --rename-manifest-package com.anamika.ai13   --min-sdk-version 21   --target-sdk-version 36   --version-code "$VERSION_CODE"   --version-name "$VERSION_NAME"   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
+"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$AAPT_MANIFEST"   --java "$GEN"   --custom-package com.anamika.ai   --rename-manifest-package com.anamika.ai13   --min-sdk-version 21   --target-sdk-version 36   --version-code "$VERSION_CODE"   --version-name "$VERSION_NAME"   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
 
 find "$SRC" "$GEN" -type f -name '*.java' | sort > "$BUILD/sources.txt"
 [ -s "$BUILD/sources.txt" ] || { echo "No Java sources found" >&2; exit 3; }
