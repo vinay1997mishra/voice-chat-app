@@ -83,6 +83,13 @@ public final class SourceVault {
         if(replaced.equals(s))
             throw new IllegalStateException("Could not locate V13 versionCode declaration in workspace.");
         writeText(gradle,replaced);
+
+        File metaFile=new File(workspace,"ANAMIKA_WORKSPACE.json");
+        if(metaFile.isFile()){
+            JSONObject meta=new JSONObject(new String(readAll(metaFile),StandardCharsets.UTF_8));
+            meta.put("candidate_version_code",nextVersionCode);
+            writeText(metaFile,meta.toString(2));
+        }
     }
 
     public static File snapshotBaseline(Context c,File destination) throws Exception {
