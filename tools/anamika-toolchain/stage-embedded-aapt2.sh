@@ -16,7 +16,7 @@ curl -fsSL "$PACKAGES_URL" -o "$WORK/Packages"
 python3 - "$WORK/Packages" "$WORK/selection.tsv" <<'PY'
 import re,sys
 src,out=sys.argv[1:3]
-wanted=["aapt2","fmt","libc++","libexpat","libpng","libzopfli","zlib","abseil-cpp","libprotobuf","libutf8-range"]
+wanted=["aapt2","fmt","libc++","libexpat","libpng","libzopfli","zlib","abseil-cpp","libprotobuf","protobuf"]
 blocks=open(src,encoding="utf-8").read().split("\n\n")
 found={}
 for b in blocks:
