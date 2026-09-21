@@ -124,7 +124,7 @@ public final class ComponentPacksActivity extends Activity {
                 con.setRequestProperty("User-Agent","AnamikaAI13-ComponentInstaller");
                 int code=con.getResponseCode();
                 if(code<200||code>=300)throw new IllegalStateException("HTTP "+code);
-                long len=con.getContentLengthLong();
+                long len=con.getContentLength();
                 if(len>8L*1024L*1024L*1024L)throw new IllegalStateException("Pack exceeds 8 GB safety limit.");
                 try(InputStream in=new BufferedInputStream(con.getInputStream())){
                     ComponentPackManager.Result r=ComponentPackManager.installZip(this,in);

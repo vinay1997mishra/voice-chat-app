@@ -16,6 +16,7 @@ import com.anamika.ai.MainActivity;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.core.CrashJournal;
+import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.developer.OfflineCodingBrain;
 import com.anamika.ai.files.LocalVault;
@@ -247,7 +248,7 @@ public final class FullDiagnosticsEngine {
             File f=new File(dir,"rw_probe.tmp");
             byte[] expected="anamika13-probe".getBytes(StandardCharsets.UTF_8);
             try(FileOutputStream out=new FileOutputStream(f,false)){out.write(expected);out.getFD().sync();}
-            byte[] got=java.nio.file.Files.readAllBytes(f.toPath());
+            byte[] got=AndroidCompat.readAllBytes(f));
             boolean ok=java.util.Arrays.equals(expected,got);
             f.delete();
             add(x,"private_storage_read_write","storage",ok,ok?"round-trip verified":"round-trip mismatch");
@@ -263,7 +264,7 @@ public final class FullDiagnosticsEngine {
         File f=new File(LocalVault.root(c),"diagnostic_probe.txt");
         try{
             String r=LocalVault.saveText(c,"diagnostic_probe.txt","probe");
-            boolean ok=f.isFile()&&"probe".equals(new String(java.nio.file.Files.readAllBytes(f.toPath()),StandardCharsets.UTF_8));
+            boolean ok=f.isFile()&&"probe".equals(new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8));
             f.delete();
             add(x,"private_vault","storage",ok,ok?"save/read/delete verified":r);
         }catch(Exception e){f.delete();add(x,"private_vault","storage",false,safe(e));}
@@ -305,7 +306,7 @@ public final class FullDiagnosticsEngine {
     private static void testVoice(Context c,List<Check>x){
         boolean speech=SpeechRecognizer.isRecognitionAvailable(c);
         add(x,"speech_recognizer","voice",speech,speech?"available":"unavailable");
-        boolean mic=c.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
+        boolean mic=AndroidCompat.hasPermission(c,Manifest.permission.RECORD_AUDIO);
         add(x,"microphone_permission","voice",mic,mic?"granted":"not granted");
         state(x,"wake_service_setting","voice",WakeService.isEnabled(c)?State.PASS:State.FAIL,
                 WakeService.isEnabled(c)?"enabled":"disabled");
@@ -392,7 +393,7 @@ public final class FullDiagnosticsEngine {
     }
 
     private static void testInstaller(Context c,List<Check>x){
-        boolean can=c.getPackageManager().canRequestPackageInstalls();
+        boolean can=AndroidCompat.canRequestPackageInstalls(c);
         state(x,"unknown_app_install_permission","self_update",can?State.PASS:State.FAIL,can?"allowed":"not allowed");
         state(x,"verified_update_install_end_to_end","self_update",
                 can?State.LIVE_TEST_REQUIRED:State.FAIL,

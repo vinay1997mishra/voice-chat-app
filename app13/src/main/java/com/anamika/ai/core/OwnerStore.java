@@ -15,6 +15,7 @@ public final class OwnerStore {
     private static final String SALT="pin_salt";
     private static final String HASH="pin_hash";
     private static final String TRUSTED="trusted";
+    private static final String ALGORITHM="pin_algorithm";
     private static final int ITERATIONS=120_000;
     private static final int BITS=256;
 
@@ -33,10 +34,12 @@ public final class OwnerStore {
         validatePin(pin);
         byte[] salt=new byte[16];
         new SecureRandom().nextBytes(salt);
-        byte[] hash=derive(pin,salt);
+        String algorithm=bestAlgorithm();
+        byte[] hash=derive(pin,salt,algorithm);
         c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
                 .putString(SALT,Base64.encodeToString(salt,Base64.NO_WRAP))
                 .putString(HASH,Base64.encodeToString(hash,Base64.NO_WRAP))
+                .putString(ALGORITHM,algorithm)
                 .putBoolean(TRUSTED,true)
                 .apply();
     }
@@ -47,7 +50,8 @@ public final class OwnerStore {
             SharedPreferences p=c.getSharedPreferences(PREF,Context.MODE_PRIVATE);
             byte[] salt=Base64.decode(p.getString(SALT,""),Base64.NO_WRAP);
             byte[] expected=Base64.decode(p.getString(HASH,""),Base64.NO_WRAP);
-            byte[] actual=derive(pin,salt);
+            String algorithm=p.getString(ALGORITHM,bestAlgorithm());
+            byte[] actual=derive(pin,salt,algorithm);
             boolean same=constantTimeEquals(expected,actual);
             if(same) p.edit().putBoolean(TRUSTED,true).apply();
             return same;
@@ -65,10 +69,15 @@ public final class OwnerStore {
             throw new IllegalArgumentException("Owner PIN must be 4-12 digits.");
     }
 
-    private static byte[] derive(String pin,byte[] salt) throws Exception {
+    private static String bestAlgorithm(){
+        try{SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");return "PBKDF2WithHmacSHA256";}
+        catch(Exception ignored){return "PBKDF2WithHmacSHA1";}
+    }
+
+    private static byte[] derive(String pin,byte[] salt,String algorithm) throws Exception {
         PBEKeySpec spec=new PBEKeySpec(pin.toCharArray(),salt,ITERATIONS,BITS);
         try {
-            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            return SecretKeyFactory.getInstance(algorithm).generateSecret(spec).getEncoded();
         } finally {
             spec.clearPassword();
         }

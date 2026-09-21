@@ -1,5 +1,7 @@
 package com.anamika.ai.core;
 
+import com.anamika.ai.core.AndroidCompat;
+
 import android.content.Context;
 
 import java.io.File;
@@ -30,7 +32,7 @@ public final class CrashJournal {
         try {
             File f=file(c);
             if(!f.isFile()) return "No recorded Java crash.";
-            return new String(java.nio.file.Files.readAllBytes(f.toPath()),StandardCharsets.UTF_8);
+            return new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8);
         } catch(Exception e) {
             return "Crash journal unavailable: "+e.getClass().getSimpleName();
         }

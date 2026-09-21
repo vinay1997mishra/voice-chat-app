@@ -19,6 +19,7 @@ import android.widget.Toast;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.core.CrashJournal;
+import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.RuntimeWatchdog;
@@ -152,7 +153,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 wake.setText("Wake OFF");
                 append("Anamika","Wake listener disabled.");
             }else{
-                if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+                if(Build.VERSION.SDK_INT>=23 && !AndroidCompat.hasPermission(this,Manifest.permission.RECORD_AUDIO)){
                     requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
                     return;
                 }
@@ -186,7 +187,7 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private void startVoice(){
-        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+        if(Build.VERSION.SDK_INT>=23 && !AndroidCompat.hasPermission(this,Manifest.permission.RECORD_AUDIO)){
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
             return;
         }
@@ -195,7 +196,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     private void requestNotificationPermission(){
         if(Build.VERSION.SDK_INT>=33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                !AndroidCompat.hasPermission(this,Manifest.permission.POST_NOTIFICATIONS))
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},REQ_NOTIFY);
     }
 

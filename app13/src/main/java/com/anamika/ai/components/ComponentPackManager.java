@@ -1,5 +1,7 @@
 package com.anamika.ai.components;
 
+import com.anamika.ai.core.AndroidCompat;
+
 import android.content.Context;
 
 import org.json.JSONObject;
@@ -54,7 +56,7 @@ public final class ComponentPackManager {
             if(!manifestFile.isFile())return new Result(false,"Component pack manifest.json missing.");
 
             JSONObject manifest=new JSONObject(new String(
-                    java.nio.file.Files.readAllBytes(manifestFile.toPath()),
+                    AndroidCompat.readAllBytes(manifestFile)),
                     java.nio.charset.StandardCharsets.UTF_8));
 
             if(!"anamika13-component-pack-v1".equals(manifest.optString("schema","")))
@@ -254,7 +256,7 @@ public final class ComponentPackManager {
         if(!dir.isDirectory())return label+": NOT INSTALLED";
         String v="unknown";
         try{
-            if(version.isFile())v=new String(java.nio.file.Files.readAllBytes(version.toPath()),
+            if(version.isFile())v=new String(AndroidCompat.readAllBytes(version)),
                     java.nio.charset.StandardCharsets.UTF_8).trim();
         }catch(Exception ignored){}
         return label+": INSTALLED ("+v+")";

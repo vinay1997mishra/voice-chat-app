@@ -1,5 +1,7 @@
 package com.anamika.ai.diagnostics;
 
+import com.anamika.ai.core.AndroidCompat;
+
 import android.content.Context;
 
 import org.json.JSONObject;
@@ -51,7 +53,7 @@ public final class DiagnosticsReportStore {
         try{
             File f=latest(c);
             if(!f.isFile())return "No diagnostics report yet.";
-            return new String(java.nio.file.Files.readAllBytes(f.toPath()),StandardCharsets.UTF_8);
+            return new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8);
         }catch(Exception e){
             return "Diagnostics report unavailable: "+safe(e);
         }

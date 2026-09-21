@@ -9,6 +9,7 @@ import android.os.StatFs;
 import android.speech.SpeechRecognizer;
 
 import com.anamika.ai.core.CrashJournal;
+import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.messaging.MessagingAutomationEngine;
 import com.anamika.ai.phone.CalculatorEngine;
@@ -137,7 +138,7 @@ public final class SelfTestEngine {
         items.add(item("speech_recognizer",speech,true,
                 speech?"available":"not available"));
 
-        boolean mic=c.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
+        boolean mic=AndroidCompat.hasPermission(c,Manifest.permission.RECORD_AUDIO);
         items.add(item("microphone_permission",mic,true,
                 mic?"granted":"not granted"));
 
@@ -198,7 +199,7 @@ public final class SelfTestEngine {
         LocalBuildEngine.Capability build=LocalBuildEngine.capability(c);
         items.add(item("local_apk_builder",build.ready,false,compact(build.detail)));
 
-        boolean installPermission=c.getPackageManager().canRequestPackageInstalls();
+        boolean installPermission=AndroidCompat.canRequestPackageInstalls(c);
         items.add(item("package_install_permission",installPermission,false,
                 installPermission?"allowed":"not allowed yet"));
 

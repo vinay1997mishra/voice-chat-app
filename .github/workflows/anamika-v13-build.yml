@@ -50,6 +50,14 @@ jobs:
           gradle --no-daemon :app13:assembleDebug
           test -f app13/build/outputs/apk/debug/app13-debug.apk
           unzip -tq app13/build/outputs/apk/debug/app13-debug.apk
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          "$AAPT" dump badging app13/build/outputs/apk/debug/app13-debug.apk | tee /tmp/badging.txt
+          grep -q "sdkVersion:'21'" /tmp/badging.txt
+          unzip -l app13/build/outputs/apk/debug/app13-debug.apk > /tmp/apk-files.txt
+          grep -q "assets/self_source/FILE_INVENTORY.txt" /tmp/apk-files.txt
+          SOURCE_COUNT="$(grep -c 'assets/self_source/app13/src/main/java/.*\.java' /tmp/apk-files.txt)"
+          test "$SOURCE_COUNT" -ge 45
+          echo "Bundled V13 Java source files: $SOURCE_COUNT"
 
       - name: APK size
         run: |

@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId 'com.anamika.ai13'
-        minSdk 26
+        minSdk 21
         targetSdk 36
         versionCode Integer.parseInt(System.getenv("ANAMIKA13_VERSION_CODE") ?: "130000")
         versionName System.getenv("ANAMIKA13_VERSION_NAME") ?: "13.0.0"
@@ -45,6 +45,18 @@ tasks.register("bundleV13SelfSource", Sync) {
     from(rootProject.file("build.gradle")) { into("self_source"); rename { "build.gradle" } }
     from(rootProject.file("settings.gradle")) { into("self_source"); rename { "settings.gradle" } }
     from(rootProject.file("gradle.properties")) { into("self_source"); rename { "gradle.properties" } }
+    if(rootProject.file("V13_ARCHITECTURE.md").exists()) {
+        from(rootProject.file("V13_ARCHITECTURE.md")) { into("self_source") }
+    }
+    doLast {
+        def root = v13SelfSource.get().asFile
+        def inventory = new File(root, "self_source/FILE_INVENTORY.txt")
+        inventory.parentFile.mkdirs()
+        def entries = fileTree(projectDir) {
+            include "src/main/java/**", "src/main/res/**", "src/main/AndroidManifest.xml", "build.gradle"
+        }.files.collect { projectDir.toPath().relativize(it.toPath()).toString().replace('\\','/') }.sort()
+        inventory.text = entries.join("\n") + "\n"
+    }
 }
 android.sourceSets.main.assets.srcDir(v13SelfSource.get().asFile)
 tasks.named("preBuild").configure { dependsOn("bundleV13SelfSource") }

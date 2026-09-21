@@ -14,6 +14,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.anamika.ai.core.OwnerStore;
+import com.anamika.ai.core.AndroidCompat;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -166,7 +167,7 @@ public final class SelfUpdateActivity extends Activity {
 
     private void install(){
         if(!verified){status.setText("No verified candidate is ready.");return;}
-        if(!getPackageManager().canRequestPackageInstalls()){
+        if(!AndroidCompat.canRequestPackageInstalls(this)){
             status.setText("Enable “Install unknown apps” for Anamika first.");
             openPermission();
             return;
@@ -187,7 +188,7 @@ public final class SelfUpdateActivity extends Activity {
                     .setAction(RESULT_ACTION)
                     .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
             PendingIntent pi=PendingIntent.getActivity(this,id,callback,
-                    PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
+                    AndroidCompat.mutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
             session.commit(pi.getIntentSender());
             status.setText("Update handed to Android. Complete the system confirmation.");
         }catch(Exception e){

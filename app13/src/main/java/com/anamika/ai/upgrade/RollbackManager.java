@@ -1,5 +1,7 @@
 package com.anamika.ai.upgrade;
 
+import com.anamika.ai.core.AndroidCompat;
+
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.os.Build;
@@ -53,7 +55,7 @@ public final class RollbackManager {
         try{
             File f=new File(new File(c.getFilesDir(),DIR),CHECKPOINT);
             if(!f.isFile())return "Rollback pipeline: no recovery checkpoint yet.";
-            JSONObject o=new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()),StandardCharsets.UTF_8));
+            JSONObject o=new JSONObject(new String(AndroidCompat.readAllBytes(f)),StandardCharsets.UTF_8));
             return "Rollback pipeline: CHECKPOINT READY"+
                     "\nLast-known-good version: "+o.optLong("version_code",-1)+
                     "\nSource: "+o.optString("source_baseline","unknown")+
@@ -67,7 +69,7 @@ public final class RollbackManager {
         File checkpoint=new File(new File(c.getFilesDir(),DIR),CHECKPOINT);
         if(!checkpoint.isFile())throw new IllegalStateException("Create a recovery checkpoint first.");
 
-        JSONObject o=new JSONObject(new String(java.nio.file.Files.readAllBytes(checkpoint.toPath()),StandardCharsets.UTF_8));
+        JSONObject o=new JSONObject(new String(AndroidCompat.readAllBytes(checkpoint)),StandardCharsets.UTF_8));
         PackageInfo cur=c.getPackageManager().getPackageInfo(c.getPackageName(),0);
         long current=Build.VERSION.SDK_INT>=28?cur.getLongVersionCode():cur.versionCode;
         File ws=SourceVault.createWorkspace(c,"RECOVERY: "+(reason==null?"":reason));

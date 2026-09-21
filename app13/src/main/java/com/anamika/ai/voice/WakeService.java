@@ -17,6 +17,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 
 import com.anamika.ai.MainActivity;
+import com.anamika.ai.core.AndroidCompat;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -135,7 +136,7 @@ public final class WakeService extends Service implements RecognitionListener {
     private Notification notification(String text){
         Intent open=new Intent(this,MainActivity.class);
         PendingIntent pi=PendingIntent.getActivity(this,13,open,
-                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+                AndroidCompat.immutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
         Notification.Builder b=Build.VERSION.SDK_INT>=26
                 ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
         return b.setContentTitle("Anamika AI 13")
