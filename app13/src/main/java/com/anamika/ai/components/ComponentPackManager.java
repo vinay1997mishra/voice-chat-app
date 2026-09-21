@@ -207,10 +207,10 @@ public final class ComponentPackManager {
         copyTree(payload,temp);
         new File(temp,"manifest.json").delete();
 
-        File aapt2=new File(temp,"bin/aapt2");
         File builder=new File(temp,"bin/anamika-builder");
-        if(aapt2.isFile())aapt2.setExecutable(true,true);
-        if(builder.isFile())builder.setExecutable(true,true);
+        // Builder is a shell script. AAPT2 is embedded in the installed APK
+        // so Android 10+ never executes it from writable private storage.
+        if(builder.isFile())builder.setReadable(true,true);
 
         deleteTree(backup);
         if(target.exists()&&!target.renameTo(backup)){
@@ -246,7 +246,6 @@ public final class ComponentPackManager {
     public static boolean toolchainInstalled(Context c){
         File root=new File(c.getFilesDir(),"v13_toolchain");
         return new File(root,"bin/anamika-builder").isFile()&&
-                new File(root,"bin/aapt2").isFile()&&
                 new File(root,"lib/java-compiler.jar").isFile()&&
                 new File(root,"lib/d8.jar").isFile()&&
                 new File(root,"lib/apksig.jar").isFile()&&
@@ -280,7 +279,7 @@ public final class ComponentPackManager {
             return null;
         }
 
-        String[] req={"bin/anamika-builder","bin/aapt2","lib/java-compiler.jar","lib/d8.jar",
+        String[] req={"bin/anamika-builder","lib/java-compiler.jar","lib/d8.jar",
                 "lib/apksig.jar","platforms/android-36/android.jar"};
         for(String rel:req)if(!new File(base,rel).isFile())return "Toolchain pack missing: "+rel;
         return null;
