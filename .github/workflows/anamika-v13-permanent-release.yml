@@ -56,6 +56,12 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
           echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
 
+      - name: Stage embedded ARM64 AAPT2
+        run: |
+          set -euo pipefail
+          bash tools/anamika-toolchain/stage-embedded-aapt2.sh
+          test -f app13/src/main/jniLibs/arm64-v8a/libanamika_aapt2.so
+
       - name: Build permanently signed APK
         env:
           ANAMIKA13_VERSION_CODE: ${{ github.run_number }}
@@ -65,6 +71,7 @@ jobs:
           gradle --no-daemon :app13:assembleRelease
           APK="app13/build/outputs/apk/release/app13-release.apk"
           test -f "$APK"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libanamika_aapt2.so"
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/certs.txt
           GOT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' /tmp/certs.txt | awk '{print $NF}')"
           test "$GOT" = "$EXPECTED_CERT_SHA256"
