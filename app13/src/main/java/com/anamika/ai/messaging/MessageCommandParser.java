@@ -11,7 +11,7 @@ public final class MessageCommandParser {
         public final String recipient;
         public final String message;
 
-        Request(String app,String recipient,String message){
+        public Request(String app,String recipient,String message){
             this.app=clean(app);
             this.recipient=clean(recipient);
             this.message=clean(message);
