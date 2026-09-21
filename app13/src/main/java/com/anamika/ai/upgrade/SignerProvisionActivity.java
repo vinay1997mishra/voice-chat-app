@@ -54,7 +54,7 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(note);
 
         password=new EditText(this);
-        password.setHint("PKCS#12 password");
+        password.setHint("PKCS#12 password (leave empty if none)");
         password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         box.addView(password);
 
@@ -133,11 +133,6 @@ public final class SignerProvisionActivity extends Activity {
         }
 
         String passwordText=password.getText().toString();
-        if(passwordText.isEmpty()){
-            status.setText("PKCS#12 password empty hai. Password enter karke Done dubara dabao.");
-            return;
-        }
-
         char[] pass=passwordText.toCharArray();
         done.setEnabled(false);
         status.setText("Checking signing file…");
