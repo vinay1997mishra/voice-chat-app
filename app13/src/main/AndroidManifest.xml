@@ -30,6 +30,11 @@
         android:usesCleartextTraffic="false">
 
         <activity
+            android:name=".components.ComponentPacksActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".diagnostics.DiagnosticsActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

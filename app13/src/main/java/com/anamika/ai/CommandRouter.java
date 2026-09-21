@@ -6,6 +6,8 @@ import android.os.Build;
 
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
+import com.anamika.ai.components.ComponentPackManager;
+import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.developer.AutonomyComponents;
@@ -57,6 +59,13 @@ public final class CommandRouter {
         if(l.equals("functions")){
             return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, diagnostics/self-test, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
         }
+
+        if(l.equals("component packs")||l.equals("component center")){
+            a.startActivity(new Intent(a,ComponentPacksActivity.class));
+            return "Component Packs khol rahi hu.";
+        }
+        if(l.equals("component status"))
+            return ComponentPackManager.status(a);
 
         if(l.equals("autonomy status")||l.equals("self repair status")||l.equals("offline brain status"))
             return AutonomyComponents.status(a);

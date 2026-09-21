@@ -32,6 +32,14 @@ public final class LanguageCommandInterpreter {
                 "self test kholo","डायग्नोस्टिक्स","डायग्नोस्टिक्स खोलो"))
             return "diagnostics";
 
+        if(any(l,"component packs","component center","components kholo","component packs kholo",
+                "कंपोनेंट पैक्स","कंपोनेंट सेंटर","कंपोनेंट पैक्स खोलो"))
+            return "component packs";
+
+        if(any(l,"component status","components status","packs status",
+                "कंपोनेंट स्टेटस","पैक स्टेटस"))
+            return "component status";
+
         if(any(l,"autonomy status","self repair status","khud ko thik karne ka status",
                 "offline brain status","ऑटोनॉमी स्टेटस","सेल्फ रिपेयर स्टेटस"))
             return "autonomy status";
