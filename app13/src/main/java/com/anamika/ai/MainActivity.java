@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -216,7 +217,27 @@ public final class MainActivity extends Activity implements VoiceController.List
     private void runCommand(String text){
         append("You",text);
         MemoryStore.appendTurn(this,"owner",text);
-        String reply=CommandRouter.run(this,text);
+
+        String fast=CommandRouter.runFast(this,text);
+        if(fast!=null){
+            finishReply(fast);
+            return;
+        }
+
+        append("Anamika","Offline brain se instruction samajh rahi hu…");
+        if(status!=null)status.setText("Offline brain planning…");
+        final Context appContext=getApplicationContext();
+        new Thread(()->{
+            BrainCommandEngine.Plan plan=BrainCommandEngine.plan(appContext,text);
+            runOnUiThread(()->{
+                String reply=BrainCommandEngine.execute(this,plan);
+                finishReply(reply);
+                if(status!=null)status.setText("Owner verified • brain command complete");
+            });
+        },"anamika-brain-command").start();
+    }
+
+    private void finishReply(String reply){
         append("Anamika",reply);
         MemoryStore.appendTurn(this,"anamika",reply);
         voice.speak(reply);
