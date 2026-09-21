@@ -21,7 +21,10 @@ import java.util.Arrays;
 public final class SignerProvisionActivity extends Activity {
     private static final int PICK=1330;
     private TextView status;
+    private TextView selectedFile;
     private EditText password;
+    private Button done;
+    private Uri selectedUri;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -41,7 +44,12 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(title);
 
         TextView note=new TextView(this);
-        note.setText("Sirf wahi PKCS#12 accept hoga jiska certificate installed Anamika se match kare. File encrypted vault me store hogi.");
+        note.setText(
+                "3 steps:\n"+
+                "1) PKCS#12 password enter karo.\n"+
+                "2) Matching .p12/.pfx file select karo.\n"+
+                "3) Done • Import Signer dabao.\n\n"+
+                "Sirf wahi PKCS#12 accept hoga jiska certificate installed permanent-signed Anamika se match kare. File encrypted vault me store hogi.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
@@ -51,10 +59,23 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(password);
 
         Button pick=new Button(this);
-        pick.setText("Select PKCS#12");
+        pick.setText("2 • Select PKCS#12");
+
+        selectedFile=new TextView(this);
+        selectedFile.setText("No signing file selected.");
+        selectedFile.setPadding(0,dp(8),0,dp(8));
+
+        done=new Button(this);
+        done.setText("3 • Done • Import Signer");
+        done.setEnabled(false);
+
         Button refresh=new Button(this);
         refresh.setText("Refresh Status");
-        box.addView(pick);box.addView(refresh);
+
+        box.addView(pick);
+        box.addView(selectedFile);
+        box.addView(done);
+        box.addView(refresh);
 
         status=new TextView(this);
         status.setText(SignerVault.status(this));
@@ -63,6 +84,7 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(status);
 
         pick.setOnClickListener(v->pick());
+        done.setOnClickListener(v->importSelected());
         refresh.setOnClickListener(v->status.setText(SignerVault.status(this)));
 
         ScrollView scroll=new ScrollView(this);
@@ -79,16 +101,62 @@ public final class SignerProvisionActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode!=PICK||resultCode!=RESULT_OK||data==null||data.getData()==null)return;
-        char[] pass=password.getText().toString().toCharArray();
-        password.setText("");
+        if(requestCode!=PICK)return;
+
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null){
+            status.setText("File selection cancelled. Password aur PKCS#12 file select karke Done dabao.");
+            return;
+        }
+
+        selectedUri=data.getData();
         try{
-            byte[] bytes=read(data.getData(),16*1024*1024);
+            final int flags=data.getFlags()&
+                    (Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if((flags&Intent.FLAG_GRANT_READ_URI_PERMISSION)!=0){
+                getContentResolver().takePersistableUriPermission(
+                        selectedUri,flags&Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+        }catch(Throwable ignored){}
+
+        String name=selectedUri.getLastPathSegment();
+        if(name==null||name.trim().isEmpty())name="selected PKCS#12";
+        selectedFile.setText("Selected: "+name);
+        done.setEnabled(true);
+        status.setText("File selected. Ab password check karo aur “Done • Import Signer” dabao.");
+    }
+
+    private void importSelected(){
+        if(selectedUri==null){
+            status.setText("No PKCS#12 file selected.");
+            done.setEnabled(false);
+            return;
+        }
+
+        String passwordText=password.getText().toString();
+        if(passwordText.isEmpty()){
+            status.setText("PKCS#12 password empty hai. Password enter karke Done dubara dabao.");
+            return;
+        }
+
+        char[] pass=passwordText.toCharArray();
+        done.setEnabled(false);
+        status.setText("Checking signing file…");
+        try{
+            byte[] bytes=read(selectedUri,16*1024*1024);
             String result=SignerVault.importPkcs12(this,bytes,pass);
             Arrays.fill(bytes,(byte)0);
             status.setText(result+"\n\n"+SignerVault.status(this));
+            if(SignerVault.ready(this)){
+                password.setText("");
+                selectedUri=null;
+                selectedFile.setText("Signer imported successfully.");
+                done.setEnabled(false);
+            }else{
+                done.setEnabled(true);
+            }
         }catch(Exception e){
             status.setText("Signer import failed: "+safe(e));
+            done.setEnabled(true);
         }finally{
             Arrays.fill(pass,'\0');
         }
