@@ -13,9 +13,12 @@ import java.util.Locale;
 
 /** Writes the last uncaught Java crash to private storage before delegating to Android. */
 public final class CrashJournal {
+    private static volatile boolean installed;
     private CrashJournal() {}
 
-    public static void install(Context c) {
+    public static synchronized void install(Context c) {
+        if(installed)return;
+        installed=true;
         final Context app=c.getApplicationContext();
         final Thread.UncaughtExceptionHandler previous=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{
