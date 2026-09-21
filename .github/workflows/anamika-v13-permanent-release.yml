@@ -65,8 +65,8 @@ jobs:
       - name: Bundle verified V13 toolchain into APK
         run: |
           set -euo pipefail
-          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-11/AnamikaAI-13-Toolchain-arm64.zip"
-          TOOLCHAIN_SHA="4a1df8ac6db1c87fb7ef6adefd639bc90db3b3536381efc3e5d062eeec9fa772"
+          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-13/AnamikaAI-13-Toolchain-arm64.zip"
+          TOOLCHAIN_SHA="ad19deb321e15ebb1e698e73daa8ea6b829483c8fe178b977c5b954d5f730745"
           mkdir -p app13/src/main/assets/components
           curl -fL "$TOOLCHAIN_URL" -o app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip
           echo "$TOOLCHAIN_SHA  app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip" | sha256sum -c -
@@ -102,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="anamika-v13-signed-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             AnamikaAI-13-PERMANENT-SIGNED.apk             AnamikaAI-13-PERMANENT-SIGNED.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Permanent-Signed • ${GITHUB_RUN_NUMBER}"             --notes "Permanent-signed V13 with embedded ARM64 AAPT2 and bundled Android Toolchain 11. The APK auto-installs the verified toolchain into Anamika private storage after owner unlock. The private PKCS#12 is supplied only through GitHub Actions secrets and is never committed to the repository."             --prerelease
+          gh release create "$TAG"             AnamikaAI-13-PERMANENT-SIGNED.apk             AnamikaAI-13-PERMANENT-SIGNED.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Permanent-Signed • ${GITHUB_RUN_NUMBER}"             --notes "Permanent-signed V13 with embedded ARM64 AAPT2 and bundled Android Toolchain 13. The APK auto-installs the verified toolchain into Anamika private storage after owner unlock. The private PKCS#12 is supplied only through GitHub Actions secrets and is never committed to the repository."             --prerelease
 
       - name: Destroy runner signer copy
         if: always()
