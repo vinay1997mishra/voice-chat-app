@@ -51,6 +51,15 @@ jobs:
           bash tools/anamika-toolchain/stage-embedded-aapt2.sh
           test -f app13/src/main/jniLibs/arm64-v8a/libanamika_aapt2.so
 
+      - name: Bundle verified Toolchain 13
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-13/AnamikaAI-13-Toolchain-arm64.zip"
+          TOOLCHAIN_SHA="ad19deb321e15ebb1e698e73daa8ea6b829483c8fe178b977c5b954d5f730745"
+          mkdir -p app13/src/main/assets/components
+          curl -fL "$TOOLCHAIN_URL" -o app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip
+          echo "$TOOLCHAIN_SHA  app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip" | sha256sum -c -
+
       - name: Build clean V13 APK
         run: |
           set -euo pipefail
@@ -63,6 +72,7 @@ jobs:
           unzip -l app13/build/outputs/apk/debug/app13-debug.apk > /tmp/apk-files.txt
           grep -q "assets/self_source/FILE_INVENTORY.txt" /tmp/apk-files.txt
           grep -q "lib/arm64-v8a/libanamika_aapt2.so" /tmp/apk-files.txt
+          grep -q "assets/components/AnamikaAI-13-Toolchain-arm64.zip" /tmp/apk-files.txt
           SOURCE_COUNT="$(grep -c 'assets/self_source/app13/src/main/java/.*\.java' /tmp/apk-files.txt)"
           test "$SOURCE_COUNT" -ge 45
           echo "Bundled V13 Java source files: $SOURCE_COUNT"
@@ -92,4 +102,4 @@ jobs:
         run: |
           set -euo pipefail
           TAG="anamika-v13-dev-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             AnamikaAI-13-FULL-Installer-DEV.apk             AnamikaAI-13-FULL-Installer-DEV.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Full Installer DEV • ${GITHUB_RUN_NUMBER}"             --notes "Full V13 installer APK built from branch anamika-v13-local-self-upgrade at commit $GITHUB_SHA. Offline Brain and Android Toolchain are installed later through Anamika Component Packs into private storage. This is a debug-signed test build, not the final production self-upgrade signing identity."             --prerelease
+          gh release create "$TAG"             AnamikaAI-13-FULL-Installer-DEV.apk             AnamikaAI-13-FULL-Installer-DEV.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Full Installer DEV • ${GITHUB_RUN_NUMBER}"             --notes "Full V13 test installer from commit $GITHUB_SHA with embedded ARM64 AAPT2, bundled verified Toolchain 13, full-screen chat UI, effort selector and startup Brain/Qwen setup. Offline Brain Runtime and Qwen model are downloaded/imported after owner approval. This is debug-signed and cannot be the final permanent self-upgrade signing identity."             --prerelease
