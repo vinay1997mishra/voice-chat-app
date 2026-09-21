@@ -23,6 +23,14 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    packaging {
+        jniLibs {
+            // Android 10+ forbids execve from writable app storage. Keep
+            // embedded AAPT2/dependencies in the APK native-library area.
+            useLegacyPackaging = true
+        }
+    }
+
     signingConfigs {
         if (anamikaReleaseStore && anamikaReleasePass) {
             release {
