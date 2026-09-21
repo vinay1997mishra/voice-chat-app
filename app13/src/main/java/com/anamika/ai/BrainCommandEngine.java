@@ -224,6 +224,7 @@ public final class BrainCommandEngine {
             case "offline_repair": return UpgradeCoordinator.repairLatestOffline(a,text.isEmpty()?arg1:text);
             case "local_build": return UpgradeCoordinator.buildLatest(a);
             case "prepare_upgrade": return UpgradeCoordinator.prepare(a,text.isEmpty()?arg1:text);
+            case "create_function": return UpgradeCoordinator.createOrUpgradeFunction(a,text.isEmpty()?arg1:text);
             case "validate_upgrade": return UpgradeCoordinator.validateLatest(a);
             case "install_update":
                 a.startActivity(new Intent(a,SelfUpdateActivity.class)); return "Verified self-update installer khol rahi hu.";
@@ -251,7 +252,7 @@ public final class BrainCommandEngine {
                 "remember(text); memory_status; save_file(arg1=filename,text=content); vault_status; open_plugins; open_components; component_status; autonomy_status; brain_status; "+
                 "diagnostics; self_test; diagnostics_report; message(arg1=app,arg2=recipient,text=message); message_status; cancel_message; "+
                 "scan_app(arg1=app); stop_scan; blueprint_status; research(text=query); stop_research; research_status; tap(text=visible control); type(text); back; "+
-                "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); local_build; prepare_upgrade(text=request); "+
+                "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); local_build; prepare_upgrade(text=request); create_function(text=request); "+
                 "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; device_info.\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
                 "OWNER INSTRUCTION:\n"+(instruction==null?"":instruction)+"\n\n"+
@@ -286,7 +287,7 @@ public final class BrainCommandEngine {
                 "\"type\":\"object\",\"additionalProperties\":false,"+
                 "\"required\":[\"action\",\"arg1\",\"arg2\",\"text\"],"+
                 "\"properties\":{"+
-                "\"action\":{\"enum\":[\"reply\",\"open_app\",\"search_web\",\"open_url\",\"open_settings\",\"open_app_settings\",\"dial\",\"calculate\",\"remember\",\"memory_status\",\"save_file\",\"vault_status\",\"open_plugins\",\"open_components\",\"component_status\",\"autonomy_status\",\"brain_status\",\"diagnostics\",\"self_test\",\"diagnostics_report\",\"message\",\"message_status\",\"cancel_message\",\"scan_app\",\"stop_scan\",\"blueprint_status\",\"research\",\"stop_research\",\"research_status\",\"tap\",\"type\",\"back\",\"wake_on\",\"wake_off\",\"health\",\"last_crash\",\"watchdog\",\"upgrade_status\",\"offline_repair\",\"local_build\",\"prepare_upgrade\",\"validate_upgrade\",\"install_update\",\"recovery_checkpoint\",\"rollback_status\",\"signer_status\",\"device_info\"]},"+
+                "\"action\":{\"enum\":[\"reply\",\"open_app\",\"search_web\",\"open_url\",\"open_settings\",\"open_app_settings\",\"dial\",\"calculate\",\"remember\",\"memory_status\",\"save_file\",\"vault_status\",\"open_plugins\",\"open_components\",\"component_status\",\"autonomy_status\",\"brain_status\",\"diagnostics\",\"self_test\",\"diagnostics_report\",\"message\",\"message_status\",\"cancel_message\",\"scan_app\",\"stop_scan\",\"blueprint_status\",\"research\",\"stop_research\",\"research_status\",\"tap\",\"type\",\"back\",\"wake_on\",\"wake_off\",\"health\",\"last_crash\",\"watchdog\",\"upgrade_status\",\"offline_repair\",\"local_build\",\"prepare_upgrade\",\"create_function\",\"validate_upgrade\",\"install_update\",\"recovery_checkpoint\",\"rollback_status\",\"signer_status\",\"device_info\"]},"+
                 "\"arg1\":{\"type\":\"string\"},\"arg2\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"}"+
                 "}}}}}";
     }
