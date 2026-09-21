@@ -32,7 +32,7 @@ done
 [ -n "$COMPILER" ] || { echo "Missing COMPILER" >&2; exit 2; }
 [ -n "$APKSIG" ] || { echo "Missing APKSIG" >&2; exit 2; }
 [ -n "$KEYSTORE" ] || { echo "Missing KEYSTORE" >&2; exit 2; }
-[ -n "${ANAMIKA_KS_PASS:-}" ] || { echo "ANAMIKA_KS_PASS missing" >&2; exit 2; }
+[ "${ANAMIKA_KS_PASS+x}" = "x" ] || { echo "ANAMIKA_KS_PASS missing" >&2; exit 2; }
 
 APP="$WORKSPACE/app13"
 MANIFEST="$APP/src/main/AndroidManifest.xml"
