@@ -77,8 +77,8 @@ jobs:
       - name: Bundle verified V13 toolchain into APK
         run: |
           set -euo pipefail
-          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-13/AnamikaAI-13-Toolchain-arm64.zip"
-          TOOLCHAIN_SHA="ad19deb321e15ebb1e698e73daa8ea6b829483c8fe178b977c5b954d5f730745"
+          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-16/AnamikaAI-13-Toolchain-arm64.zip"
+          TOOLCHAIN_SHA="1f7a459b928892fce004f7b00ecc311944514a5695b8ce911246977cda022dbf"
           mkdir -p app13/src/main/assets/components
           curl -fL "$TOOLCHAIN_URL" -o app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip
           echo "$TOOLCHAIN_SHA  app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip" | sha256sum -c -
