@@ -58,16 +58,16 @@ jobs:
 
       - name: Prepare downloadable APK
         run: |
-          cp app13/build/outputs/apk/debug/app13-debug.apk AnamikaAI-13-DEV.apk
-          sha256sum AnamikaAI-13-DEV.apk | tee AnamikaAI-13-DEV.apk.sha256
+          cp app13/build/outputs/apk/debug/app13-debug.apk AnamikaAI-13-FULL-Installer-DEV.apk
+          sha256sum AnamikaAI-13-FULL-Installer-DEV.apk | tee AnamikaAI-13-FULL-Installer-DEV.apk.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AnamikaAI-13-DEV
+          name: AnamikaAI-13-FULL-Installer-DEV
           compression-level: 0
           path: |
-            AnamikaAI-13-DEV.apk
-            AnamikaAI-13-DEV.apk.sha256
+            AnamikaAI-13-FULL-Installer-DEV.apk
+            AnamikaAI-13-FULL-Installer-DEV.apk.sha256
 
       - name: Publish GitHub prerelease APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/anamika-v13-local-self-upgrade'
@@ -76,4 +76,4 @@ jobs:
         run: |
           set -euo pipefail
           TAG="anamika-v13-dev-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             AnamikaAI-13-DEV.apk             AnamikaAI-13-DEV.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 DEV • ${GITHUB_RUN_NUMBER}"             --notes "Development/test APK built from branch anamika-v13-local-self-upgrade at commit $GITHUB_SHA. This is a debug-signed test build, not the final production self-upgrade signing identity."             --prerelease
+          gh release create "$TAG"             AnamikaAI-13-FULL-Installer-DEV.apk             AnamikaAI-13-FULL-Installer-DEV.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Full Installer DEV • ${GITHUB_RUN_NUMBER}"             --notes "Full V13 installer APK built from branch anamika-v13-local-self-upgrade at commit $GITHUB_SHA. Offline Brain and Android Toolchain are installed later through Anamika Component Packs into private storage. This is a debug-signed test build, not the final production self-upgrade signing identity."             --prerelease
