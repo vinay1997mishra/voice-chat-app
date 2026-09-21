@@ -1,6 +1,11 @@
 name: Build Anamika 13 Android Toolchain Pack
 
 on:
+  push:
+    branches: [ anamika-v13-local-self-upgrade ]
+    paths:
+      - 'tools/anamika-toolchain/**'
+      - '.github/workflows/anamika-v13-toolchain.yml'
   workflow_dispatch:
 
 permissions:
@@ -32,35 +37,6 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
           echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
-
-      - name: Fetch verified Termux ARM64 aapt2
-        run: |
-          set -euo pipefail
-          BASE="https://packages.termux.dev/apt/termux-main"
-          curl -fsSL "$BASE/dists/stable/main/binary-aarch64/Packages" -o /tmp/Packages
-          python3 - <<'PY' >/tmp/aapt2.meta
-import re
-text=open('/tmp/Packages',encoding='utf-8').read()
-for block in text.split('\n\n'):
-    if re.search(r'^Package: aapt2$', block, re.M):
-        f=re.search(r'^Filename: (.+)$', block, re.M)
-        s=re.search(r'^SHA256: ([0-9a-fA-F]{64})$', block, re.M)
-        if not f or not s: raise SystemExit('aapt2 metadata incomplete')
-        print(f.group(1)); print(s.group(1).lower()); break
-else:
-    raise SystemExit('aapt2 package not found')
-PY
-          FILE="$(sed -n '1p' /tmp/aapt2.meta)"
-          SHA="$(sed -n '2p' /tmp/aapt2.meta)"
-          curl -fsSL "$BASE/$FILE" -o /tmp/aapt2.deb
-          echo "$SHA  /tmp/aapt2.deb" | sha256sum -c -
-          mkdir -p /tmp/aapt2-pkg
-          dpkg-deb -x /tmp/aapt2.deb /tmp/aapt2-pkg
-          AAPT2="$(find /tmp/aapt2-pkg -type f -path '*/bin/aapt2' | head -1)"
-          test -n "$AAPT2"
-          file "$AAPT2" | tee /tmp/aapt2-file.txt
-          grep -Eqi 'aarch64|ARM aarch64' /tmp/aapt2-file.txt
-          echo "TERMUX_AAPT2=$AAPT2" >> "$GITHUB_ENV"
 
       - name: Build Android-runtime dex tool jars
         run: |
@@ -102,9 +78,7 @@ PY
           P="$ROOT/payload"
           mkdir -p "$P/bin" "$P/lib" "$P/platforms/android-36"
           cp tools/anamika-toolchain/anamika-builder "$P/bin/anamika-builder"
-          chmod 755 "$P/bin/anamika-builder"
-          cp "$TERMUX_AAPT2" "$P/bin/aapt2"
-          chmod 755 "$P/bin/aapt2"
+          chmod 644 "$P/bin/anamika-builder"
           cp /tmp/tooljars/java-compiler.jar "$P/lib/java-compiler.jar"
           cp /tmp/tooljars/d8.jar "$P/lib/d8.jar"
           cp /tmp/tooljars/apksig.jar "$P/lib/apksig.jar"
@@ -126,9 +100,10 @@ for base,_,names in os.walk(payload):
 manifest={
   'schema':'anamika13-component-pack-v1',
   'type':'toolchain',
-  'version':'13-toolchain-1',
+  'version':'13-toolchain-2',
   'min_api':28,
   'architecture':'arm64-v8a',
+  'aapt2_delivery':'embedded-apk-native-library',
   'files':files
 }
 with open(os.path.join(root,'manifest.json'),'w',encoding='utf-8') as f:
@@ -151,4 +126,4 @@ PY
         run: |
           set -euo pipefail
           TAG="anamika-toolchain-v13-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             /tmp/AnamikaAI-13-Toolchain-arm64.zip             /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Android Toolchain • ${GITHUB_RUN_NUMBER}"             --notes "ARM64 phone-local toolchain candidate. Minimum tool runtime API 28. Requires the matching permanent Anamika release signer in SignerVault. Physical-device build/sign/install validation is still required before this pack is called production-ready."             --prerelease
+          gh release create "$TAG"             /tmp/AnamikaAI-13-Toolchain-arm64.zip             /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Android Toolchain • ${GITHUB_RUN_NUMBER}"             --notes "ARM64 phone-local toolchain candidate. AAPT2 is deliberately NOT inside this ZIP; Android 10+ executes the AAPT2 binary embedded in the installed Anamika APK native-library area. Minimum tool runtime API 28. Requires the matching permanent signer in SignerVault. Physical-device source→APK→sign→install validation is still required."             --prerelease
