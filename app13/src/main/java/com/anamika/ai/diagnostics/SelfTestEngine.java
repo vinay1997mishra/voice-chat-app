@@ -97,7 +97,7 @@ public final class SelfTestEngine {
             return new JSONObject()
                     .put("schema","anamika13-diagnostics-v1")
                     .put("time_ms",timeMs)
-                    .put("package","com.anamika.ai")
+                    .put("package","com.anamika.ai13")
                     .put("version_name",versionName)
                     .put("version_code",versionCode)
                     .put("android_api",Build.VERSION.SDK_INT)
@@ -123,7 +123,7 @@ public final class SelfTestEngine {
             PackageInfo pi=c.getPackageManager().getPackageInfo(c.getPackageName(),0);
             versionName=pi.versionName==null?"unknown":pi.versionName;
             versionCode=Build.VERSION.SDK_INT>=28?pi.getLongVersionCode():pi.versionCode;
-            items.add(item("package_identity","com.anamika.ai".equals(c.getPackageName()),true,c.getPackageName()));
+            items.add(item("package_identity","com.anamika.ai13".equals(c.getPackageName()),true,c.getPackageName()));
         }catch(Exception e){
             items.add(item("package_identity",false,true,safe(e)));
         }
