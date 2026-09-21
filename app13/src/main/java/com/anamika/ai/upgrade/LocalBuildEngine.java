@@ -39,7 +39,7 @@ public final class LocalBuildEngine {
     public static Capability capability(Context c){
         File root=new File(c.getFilesDir(),"v13_toolchain");
         File builder=new File(root,"bin/anamika-builder");
-        File aapt2=new File(root,"bin/aapt2");
+        File aapt2=resolveAapt2(c,root);
         File d8=new File(root,"lib/d8.jar");
         File androidJar=new File(root,"platforms/android-36/android.jar");
         File signer=new File(root,"lib/apksig.jar");
@@ -50,8 +50,8 @@ public final class LocalBuildEngine {
 
         if(!files)return new Capability(false,
                 "Local build toolchain incomplete. Required: anamika-builder, ARM64 aapt2, Java compiler runtime, D8, android-36.jar and APK signer.");
-        if((!builder.canExecute()&&!builder.setExecutable(true,true))||(!aapt2.canExecute()&&!aapt2.setExecutable(true,true)))
-            return new Capability(false,"Android blocked execution of the installed builder/aapt2 on this device.");
+        if(!aapt2.canExecute()&&!aapt2.setExecutable(true,true))
+            return new Capability(false,"Android blocked the AAPT2 runtime. On Android 10+ AAPT2 must be embedded in the installed APK.");
         if(!storage)return new Capability(false,"At least 2 GB free private storage is required for a safe local build.");
         if(!SignerVault.ready(c))return new Capability(false,"Build tools are present, but matching release signer is not provisioned.");
         return new Capability(true,"Phone-local compiler/build/sign pipeline is ready.");
@@ -65,6 +65,7 @@ public final class LocalBuildEngine {
 
         File root=new File(c.getFilesDir(),"v13_toolchain");
         File builder=new File(root,"bin/anamika-builder");
+        File aapt2=resolveAapt2(c,root);
         File outputDir=new File(workspace,".anamika_build");
         if(!outputDir.exists()&&!outputDir.mkdirs())
             return new BuildResult(false,null,"Cannot create build output directory.");
@@ -73,11 +74,12 @@ public final class LocalBuildEngine {
 
         try(SignerVault.TemporaryPkcs12 ks=SignerVault.materializeTemporary(c,outputDir)){
             List<String> cmd=new ArrayList<>();
+            cmd.add("/system/bin/sh");
             cmd.add(builder.getAbsolutePath());
             cmd.add("--workspace");cmd.add(workspace.getAbsolutePath());
             cmd.add("--output");cmd.add(output.getAbsolutePath());
             cmd.add("--android-jar");cmd.add(new File(root,"platforms/android-36/android.jar").getAbsolutePath());
-            cmd.add("--aapt2");cmd.add(new File(root,"bin/aapt2").getAbsolutePath());
+            cmd.add("--aapt2");cmd.add(aapt2.getAbsolutePath());
             cmd.add("--d8");cmd.add(new File(root,"lib/d8.jar").getAbsolutePath());
             cmd.add("--compiler");cmd.add(new File(root,"lib/java-compiler.jar").getAbsolutePath());
             cmd.add("--apksig");cmd.add(new File(root,"lib/apksig.jar").getAbsolutePath());
@@ -103,6 +105,13 @@ public final class LocalBuildEngine {
         }catch(Exception e){
             return new BuildResult(false,null,"Local build exception: "+safe(e));
         }
+    }
+
+    private static File resolveAapt2(Context c,File root){
+        File nativeDir=new File(c.getApplicationInfo().nativeLibraryDir==null?"":c.getApplicationInfo().nativeLibraryDir);
+        File embedded=new File(nativeDir,"libanamika_aapt2.so");
+        if(embedded.isFile())return embedded;
+        return new File(root,"bin/aapt2");
     }
 
     private static String trim(String s){return s.length()>4000?s.substring(0,4000):s;}
