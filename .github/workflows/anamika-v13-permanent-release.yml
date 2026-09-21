@@ -1,0 +1,92 @@
+name: Build Anamika 13 Permanent-Signed Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      EXPECTED_CERT_SHA256: 508f4a20c4d5daa8c314796608e8c5e6988dad37adf9f5f5a6022442d155f520
+      ANAMIKA_RELEASE_KEY_ALIAS: anamika13-release
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: anamika-v13-local-self-upgrade
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Require protected signer secrets
+        env:
+          P12_B64: ${{ secrets.ANAMIKA13_RELEASE_P12_B64 }}
+          P12_PASS: ${{ secrets.ANAMIKA13_RELEASE_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$P12_B64"
+          test -n "$P12_PASS"
+          printf '%s' "$P12_B64" | base64 -d > "$RUNNER_TEMP/anamika13-release.p12"
+          chmod 600 "$RUNNER_TEMP/anamika13-release.p12"
+          CERT_SHA="$(openssl pkcs12 -in "$RUNNER_TEMP/anamika13-release.p12" -clcerts -nokeys -passin env:P12_PASS 2>/dev/null | openssl x509 -outform der 2>/dev/null | sha256sum | awk '{print $1}')"
+          test "$CERT_SHA" = "$EXPECTED_CERT_SHA256"
+          echo "ANAMIKA_RELEASE_STORE_FILE=$RUNNER_TEMP/anamika13-release.p12" >> "$GITHUB_ENV"
+          echo "ANAMIKA_RELEASE_STORE_PASSWORD=$P12_PASS" >> "$GITHUB_ENV"
+
+      - name: Install Android SDK 36
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Build permanently signed APK
+        env:
+          ANAMIKA13_VERSION_CODE: ${{ github.run_number }}
+          ANAMIKA13_VERSION_NAME: "13.0.${{ github.run_number }}"
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app13:assembleRelease
+          APK="app13/build/outputs/apk/release/app13-release.apk"
+          test -f "$APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/certs.txt
+          GOT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' /tmp/certs.txt | awk '{print $NF}')"
+          test "$GOT" = "$EXPECTED_CERT_SHA256"
+          cp "$APK" AnamikaAI-13-PERMANENT-SIGNED.apk
+          sha256sum AnamikaAI-13-PERMANENT-SIGNED.apk > AnamikaAI-13-PERMANENT-SIGNED.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13-PERMANENT-SIGNED
+          compression-level: 0
+          path: |
+            AnamikaAI-13-PERMANENT-SIGNED.apk
+            AnamikaAI-13-PERMANENT-SIGNED.apk.sha256
+
+      - name: Publish permanent-signed prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="anamika-v13-signed-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             AnamikaAI-13-PERMANENT-SIGNED.apk             AnamikaAI-13-PERMANENT-SIGNED.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Permanent-Signed • ${GITHUB_RUN_NUMBER}"             --notes "Signed with the pinned Anamika 13 release certificate. The private PKCS#12 is supplied only through GitHub Actions secrets and is never committed to the repository."             --prerelease
+
+      - name: Destroy runner signer copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/anamika13-release.p12"
