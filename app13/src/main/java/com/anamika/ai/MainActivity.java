@@ -482,8 +482,13 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     @Override protected void onResume(){
         super.onResume();
-        if(OwnerStore.isTrusted(this)&&status!=null)
-            getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,900);
+        if(OwnerStore.isTrusted(this)){
+            if(WakeService.isEnabled(this)&&!WakeService.isRunning()&&
+                    (Build.VERSION.SDK_INT<23||AndroidCompat.hasPermission(this,Manifest.permission.RECORD_AUDIO))){
+                WakeService.enable(this);
+            }
+            if(status!=null)getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,900);
+        }
     }
 
     private void startVoice(){
