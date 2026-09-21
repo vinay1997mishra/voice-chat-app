@@ -1,6 +1,12 @@
 name: Build Anamika 13 Permanent-Signed Release
 
 on:
+  push:
+    branches:
+      - anamika-v13-local-self-upgrade
+    paths:
+      - '.github/workflows/anamika-v13-permanent-release.yml'
+      - 'app13/PERMANENT_RELEASE_REQUEST.txt'
   workflow_dispatch:
 
 permissions:
