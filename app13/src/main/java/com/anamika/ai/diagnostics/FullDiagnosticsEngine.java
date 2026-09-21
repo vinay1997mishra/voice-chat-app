@@ -111,7 +111,7 @@ public final class FullDiagnosticsEngine {
             return new JSONObject()
                     .put("schema","anamika13-full-functional-diagnostics-v2")
                     .put("time_ms",timeMs)
-                    .put("package","com.anamika.ai")
+                    .put("package","com.anamika.ai13")
                     .put("version_name",versionName)
                     .put("version_code",versionCode)
                     .put("android_api",Build.VERSION.SDK_INT)
@@ -140,7 +140,7 @@ public final class FullDiagnosticsEngine {
             PackageInfo p=c.getPackageManager().getPackageInfo(c.getPackageName(),0);
             versionName=p.versionName==null?"unknown":p.versionName;
             versionCode=Build.VERSION.SDK_INT>=28?p.getLongVersionCode():p.versionCode;
-            add(x,"package_identity","core",eq("com.anamika.ai",c.getPackageName()),c.getPackageName());
+            add(x,"package_identity","core",eq("com.anamika.ai13",c.getPackageName()),c.getPackageName());
         }catch(Exception e){add(x,"package_identity","core",false,safe(e));}
 
         add(x,"owner_pin","security",OwnerStore.hasPin(c),OwnerStore.hasPin(c)?"configured":"missing");
