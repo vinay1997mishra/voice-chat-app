@@ -139,6 +139,19 @@ public final class BrainCommandEngine {
         }
     }
 
+    public static boolean requiresBackground(Plan p){
+        if(p==null||p.actions==null)return false;
+        for(int i=0;i<p.actions.length();i++){
+            JSONObject x=p.actions.optJSONObject(i);
+            if(x==null)continue;
+            String a=x.optString("action","").toLowerCase(Locale.ROOT);
+            if(a.equals("create_function")||a.equals("offline_repair")||a.equals("local_build")||
+                    a.equals("self_test")||a.equals("prepare_upgrade")||a.equals("validate_upgrade")||
+                    a.equals("recovery_checkpoint"))return true;
+        }
+        return false;
+    }
+
     public static String execute(Activity a,Plan p){
         if(p==null||!p.ok)return p==null?"Brain plan missing.":p.message;
         ArrayList<String> results=new ArrayList<>();
