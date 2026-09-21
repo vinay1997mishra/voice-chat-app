@@ -19,6 +19,7 @@ import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.developer.OfflineCodingBrain;
+import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.messaging.MessageCommandParser;
@@ -331,49 +332,65 @@ public final class FullDiagnosticsEngine {
     }
 
     private static void testOfflineBrain(Context c,List<Check>x){
-        File root=new File(c.getFilesDir(),"v13_brain");
-        File runtime=new File(root,"bin/anamika-brain");
-        File model=new File(root,"model.gguf");
-        if(!runtime.isFile()||!model.isFile()){
-            state(x,"offline_coding_runtime","offline_ai",State.NOT_INSTALLED,"runtime/model missing");
+        File root=BrainRuntimePaths.root(c);
+        File cli=BrainRuntimePaths.embeddedCli(c);
+        File model=BrainRuntimePaths.model(c);
+        if(!BrainRuntimePaths.runtimeReady(c)){
+            state(x,"offline_coding_runtime","offline_ai",State.NOT_INSTALLED,
+                    "APK-native llama runtime or runtime metadata/schema missing");
+            state(x,"offline_code_repair_end_to_end","offline_ai",State.NOT_INSTALLED,
+                    "Offline runtime setup is incomplete.");
             return;
         }
-        if(!runtime.canExecute())runtime.setExecutable(true,true);
         List<String> cmd=new ArrayList<>();
-        cmd.add(runtime.getAbsolutePath());cmd.add("--self-test");cmd.add("--model");cmd.add(model.getAbsolutePath());
-        HashMap<String,String> env=new HashMap<>();env.put("ANAMIKA_OFFLINE","1");env.put("HOME",root.getAbsolutePath());
+        cmd.add(cli.getAbsolutePath());cmd.add("--version");
+        HashMap<String,String> env=new HashMap<>();
+        env.put("ANAMIKA_OFFLINE","1");
+        env.put("HOME",root.getAbsolutePath());
+        String nativeDir=c.getApplicationInfo().nativeLibraryDir;
+        if(nativeDir!=null&&!nativeDir.trim().isEmpty())env.put("LD_LIBRARY_PATH",nativeDir);
         LocalProcessRunner.Result r=LocalProcessRunner.run(cmd,root,env,120000);
         state(x,"offline_coding_runtime","offline_ai",r.ok()?State.PASS:State.FAIL,
-                r.ok()?"runtime self-test exit 0":"exit="+r.exitCode+(r.timedOut?" timeout":"")+" "+compact(r.stderr));
+                r.ok()?"APK-native llama runtime version check passed":"exit="+r.exitCode+(r.timedOut?" timeout":"")+" "+compact(r.stderr));
         state(x,"offline_code_repair_end_to_end","offline_ai",
-                r.ok()?State.LIVE_TEST_REQUIRED:State.FAIL,
-                r.ok()?"Runtime self-test passed; a real repair is tested only in a disposable upgrade workspace, not current installed source.":"runtime self-test failed");
+                !r.ok()?State.FAIL:(model.isFile()?State.LIVE_TEST_REQUIRED:State.NOT_INSTALLED),
+                !r.ok()?"runtime self-test failed":
+                        (model.isFile()?"Runtime is executable; a real repair still requires a disposable workspace test.":"GGUF model is not installed."));
     }
 
     private static void testLocalBuilder(Context c,List<Check>x){
         LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
         if(!ComponentPackManager.toolchainInstalled(c)){
             state(x,"local_builder_runtime","self_upgrade",State.NOT_INSTALLED,cap.detail);
+            state(x,"source_to_signed_apk_end_to_end","self_upgrade",State.NOT_INSTALLED,"Toolchain is not installed.");
             return;
         }
         File root=new File(c.getFilesDir(),"v13_toolchain");
         File builder=new File(root,"bin/anamika-builder");
-        if(!builder.canExecute())builder.setExecutable(true,true);
-        List<String> cmd=new ArrayList<>();
-        cmd.add(builder.getAbsolutePath());cmd.add("--self-test");
-        cmd.add("--android-jar");cmd.add(new File(root,"platforms/android-36/android.jar").getAbsolutePath());
-        cmd.add("--aapt2");cmd.add(new File(root,"bin/aapt2").getAbsolutePath());
-        cmd.add("--d8");cmd.add(new File(root,"lib/d8.jar").getAbsolutePath());
-        cmd.add("--compiler");cmd.add(new File(root,"lib/java-compiler.jar").getAbsolutePath());
-        cmd.add("--apksig");cmd.add(new File(root,"lib/apksig.jar").getAbsolutePath());
-        LocalProcessRunner.Result r=LocalProcessRunner.run(cmd,root,null,120000);
-        state(x,"local_builder_runtime","self_upgrade",r.ok()?State.PASS:State.FAIL,
-                r.ok()?"builder self-test exit 0":"exit="+r.exitCode+(r.timedOut?" timeout":"")+" "+compact(r.stderr));
-        state(x,"source_to_signed_apk_end_to_end","self_upgrade",
-                r.ok()&&SignerVault.ready(c)?State.LIVE_TEST_REQUIRED:(r.ok()?State.FAIL:State.FAIL),
-                r.ok()&&SignerVault.ready(c)
-                        ?"Builder and signer ready; complete source→APK proof requires a real disposable build candidate with a higher versionCode."
-                        :(r.ok()?"Matching signer not ready.":"builder self-test failed"));
+        List<String> syntax=new ArrayList<>();
+        syntax.add("/system/bin/sh");syntax.add("-n");syntax.add(builder.getAbsolutePath());
+        LocalProcessRunner.Result shell=LocalProcessRunner.run(syntax,root,null,30000);
+
+        String nativeDir=c.getApplicationInfo().nativeLibraryDir;
+        File aapt2=new File(nativeDir==null?"":nativeDir,"libanamika_aapt2.so");
+        List<String> aaptCmd=new ArrayList<>();
+        aaptCmd.add(aapt2.getAbsolutePath());aaptCmd.add("version");
+        LocalProcessRunner.Result aapt=aapt2.isFile()
+                ?LocalProcessRunner.run(aaptCmd,root,null,30000)
+                :new LocalProcessRunner.Result(false,false,-1,"","embedded AAPT2 missing");
+
+        boolean runtimeOk=shell.ok()&&aapt.ok();
+        state(x,"local_builder_runtime","self_upgrade",runtimeOk?State.PASS:State.FAIL,
+                runtimeOk?"builder shell syntax + APK-native AAPT2 execution passed":
+                        "shell="+shell.exitCode+" aapt2="+aapt.exitCode+" "+compact(shell.stderr+" "+aapt.stderr));
+
+        State e2e=!runtimeOk?State.FAIL:
+                (cap.ready?State.LIVE_TEST_REQUIRED:
+                        (SignerVault.ready(c)?State.FAIL:State.NOT_INSTALLED));
+        state(x,"source_to_signed_apk_end_to_end","self_upgrade",e2e,
+                cap.ready
+                        ?"Builder, AAPT2 and signer are ready; complete proof requires a real disposable source→signed-APK build."
+                        :cap.detail);
     }
 
     private static void testSigner(Context c,List<Check>x){
