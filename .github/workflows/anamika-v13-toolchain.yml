@@ -1,0 +1,154 @@
+name: Build Anamika 13 Android Toolchain Pack
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: anamika-v13-local-self-upgrade
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 36
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Fetch verified Termux ARM64 aapt2
+        run: |
+          set -euo pipefail
+          BASE="https://packages.termux.dev/apt/termux-main"
+          curl -fsSL "$BASE/dists/stable/main/binary-aarch64/Packages" -o /tmp/Packages
+          python3 - <<'PY' >/tmp/aapt2.meta
+import re
+text=open('/tmp/Packages',encoding='utf-8').read()
+for block in text.split('\n\n'):
+    if re.search(r'^Package: aapt2$', block, re.M):
+        f=re.search(r'^Filename: (.+)$', block, re.M)
+        s=re.search(r'^SHA256: ([0-9a-fA-F]{64})$', block, re.M)
+        if not f or not s: raise SystemExit('aapt2 metadata incomplete')
+        print(f.group(1)); print(s.group(1).lower()); break
+else:
+    raise SystemExit('aapt2 package not found')
+PY
+          FILE="$(sed -n '1p' /tmp/aapt2.meta)"
+          SHA="$(sed -n '2p' /tmp/aapt2.meta)"
+          curl -fsSL "$BASE/$FILE" -o /tmp/aapt2.deb
+          echo "$SHA  /tmp/aapt2.deb" | sha256sum -c -
+          mkdir -p /tmp/aapt2-pkg
+          dpkg-deb -x /tmp/aapt2.deb /tmp/aapt2-pkg
+          AAPT2="$(find /tmp/aapt2-pkg -type f -path '*/bin/aapt2' | head -1)"
+          test -n "$AAPT2"
+          file "$AAPT2" | tee /tmp/aapt2-file.txt
+          grep -Eqi 'aarch64|ARM aarch64' /tmp/aapt2-file.txt
+          echo "TERMUX_AAPT2=$AAPT2" >> "$GITHUB_ENV"
+
+      - name: Build Android-runtime dex tool jars
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          D8HOST="$BT/lib/d8.jar"
+          APKSIGNERHOST="$BT/lib/apksigner.jar"
+          test -f "$D8HOST"
+          test -f "$APKSIGNERHOST"
+
+          curl -fsSL             "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.42.0/ecj-3.42.0.jar"             -o /tmp/ecj.jar
+
+          mkdir -p /tmp/injector-classes
+          javac -source 8 -target 8 -d /tmp/injector-classes tools/anamika-toolchain/ZipInjector.java
+          cp /tmp/ecj.jar /tmp/compiler-host.jar
+          jar uf /tmp/compiler-host.jar -C /tmp/injector-classes .
+
+          dexjar() {
+            IN="$1"; OUT="$2"; MIN="$3"
+            TMP="$(mktemp -d)"
+            java -cp "$D8HOST" com.android.tools.r8.D8 --min-api "$MIN" --output "$TMP" "$IN"
+            test -f "$TMP/classes.dex"
+            (cd "$TMP" && zip -q "$OUT" classes.dex)
+            rm -rf "$TMP"
+          }
+
+          mkdir -p /tmp/tooljars
+          dexjar /tmp/compiler-host.jar /tmp/tooljars/java-compiler.jar 28
+          dexjar "$D8HOST" /tmp/tooljars/d8.jar 28
+          dexjar "$APKSIGNERHOST" /tmp/tooljars/apksig.jar 28
+          unzip -tq /tmp/tooljars/java-compiler.jar
+          unzip -tq /tmp/tooljars/d8.jar
+          unzip -tq /tmp/tooljars/apksig.jar
+
+      - name: Assemble component pack
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/AnamikaAI-13-Toolchain-arm64"
+          P="$ROOT/payload"
+          mkdir -p "$P/bin" "$P/lib" "$P/platforms/android-36"
+          cp tools/anamika-toolchain/anamika-builder "$P/bin/anamika-builder"
+          chmod 755 "$P/bin/anamika-builder"
+          cp "$TERMUX_AAPT2" "$P/bin/aapt2"
+          chmod 755 "$P/bin/aapt2"
+          cp /tmp/tooljars/java-compiler.jar "$P/lib/java-compiler.jar"
+          cp /tmp/tooljars/d8.jar "$P/lib/d8.jar"
+          cp /tmp/tooljars/apksig.jar "$P/lib/apksig.jar"
+          cp "$ANDROID_HOME/platforms/android-36/android.jar" "$P/platforms/android-36/android.jar"
+
+          python3 - <<'PY'
+import hashlib,json,os
+root='/tmp/AnamikaAI-13-Toolchain-arm64'
+payload=os.path.join(root,'payload')
+files={}
+for base,_,names in os.walk(payload):
+    for name in sorted(names):
+        p=os.path.join(base,name)
+        rel=os.path.relpath(p,root).replace(os.sep,'/')
+        h=hashlib.sha256()
+        with open(p,'rb') as f:
+            for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+        files[rel]=h.hexdigest()
+manifest={
+  'schema':'anamika13-component-pack-v1',
+  'type':'toolchain',
+  'version':'13-toolchain-1',
+  'min_api':28,
+  'architecture':'arm64-v8a',
+  'files':files
+}
+with open(os.path.join(root,'manifest.json'),'w',encoding='utf-8') as f:
+    json.dump(manifest,f,indent=2,sort_keys=True)
+PY
+          (cd /tmp && zip -qr AnamikaAI-13-Toolchain-arm64.zip AnamikaAI-13-Toolchain-arm64)
+          sha256sum /tmp/AnamikaAI-13-Toolchain-arm64.zip > /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13-Toolchain-arm64
+          compression-level: 0
+          path: |
+            /tmp/AnamikaAI-13-Toolchain-arm64.zip
+            /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256
+
+      - name: Publish toolchain prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="anamika-toolchain-v13-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             /tmp/AnamikaAI-13-Toolchain-arm64.zip             /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Android Toolchain • ${GITHUB_RUN_NUMBER}"             --notes "ARM64 phone-local toolchain candidate. Minimum tool runtime API 28. Requires the matching permanent Anamika release signer in SignerVault. Physical-device build/sign/install validation is still required before this pack is called production-ready."             --prerelease
