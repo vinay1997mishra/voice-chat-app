@@ -1,3 +1,7 @@
+def anamikaReleaseStore = System.getenv("ANAMIKA_RELEASE_STORE_FILE")
+def anamikaReleasePass = System.getenv("ANAMIKA_RELEASE_STORE_PASSWORD")
+def anamikaReleaseAlias = System.getenv("ANAMIKA_RELEASE_KEY_ALIAS") ?: "anamika13-release"
+
 plugins {
     id 'com.android.application'
 }
@@ -19,6 +23,18 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        if (anamikaReleaseStore && anamikaReleasePass) {
+            release {
+                storeFile file(anamikaReleaseStore)
+                storePassword anamikaReleasePass
+                keyAlias anamikaReleaseAlias
+                keyPassword anamikaReleasePass
+                storeType "PKCS12"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ''
@@ -27,6 +43,9 @@ android {
         release {
             minifyEnabled false
             shrinkResources false
+            if (anamikaReleaseStore && anamikaReleasePass) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
