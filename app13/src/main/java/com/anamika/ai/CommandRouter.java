@@ -6,6 +6,8 @@ import android.os.Build;
 
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
+import com.anamika.ai.diagnostics.DiagnosticsActivity;
+import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.memory.MemoryStore;
@@ -50,8 +52,19 @@ public final class CommandRouter {
             return "Ji, boliye. Anamika 13 ready hai.";
 
         if(l.equals("functions")){
-            return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
+            return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, diagnostics/self-test, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
         }
+
+        if(l.equals("diagnostics")||l.equals("diagnostics center")){
+            a.startActivity(new Intent(a,DiagnosticsActivity.class));
+            return "Diagnostics Center khol rahi hu.";
+        }
+        if(l.equals("run self test")||l.equals("self test"))
+            return DiagnosticsController.runAndSave(a);
+        if(l.equals("share diagnostics")||l.equals("share diagnostic report"))
+            return DiagnosticsController.shareLatest(a);
+        if(l.equals("show diagnostics")||l.equals("diagnostics report"))
+            return DiagnosticsController.latest(a);
 
         if(l.equals("message status")||l.equals("messaging status"))
             return MessagingAutomationEngine.status(a);

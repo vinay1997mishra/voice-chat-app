@@ -28,6 +28,24 @@ public final class LanguageCommandInterpreter {
                 "प्लगइन खोलो","प्लगइन सेंटर खोलो","plugins","plugin center"))
             return "plugins";
 
+        if(any(l,"diagnostics","diagnostics center","diagnostic center","diagnostics kholo",
+                "self test kholo","डायग्नोस्टिक्स","डायग्नोस्टिक्स खोलो"))
+            return "diagnostics";
+
+        if(any(l,"self test","run self test","self test chalao","full self test chalao",
+                "apne saare function check karo","saare function check karo",
+                "सेल्फ टेस्ट","सेल्फ टेस्ट चलाओ","सारे फंक्शन चेक करो"))
+            return "run self test";
+
+        if(any(l,"share diagnostics","diagnostics share karo","diagnostic report share karo",
+                "report mujhe bhejo","डायग्नोस्टिक्स शेयर करो","रिपोर्ट शेयर करो"))
+            return "share diagnostics";
+
+        if(any(l,"diagnostics report","diagnostic report","latest diagnostics","report dikhao",
+                "डायग्नोस्टिक्स रिपोर्ट","रिपोर्ट दिखाओ"))
+            return "diagnostics report";
+
+
         if(any(l,"message status","msg status","message ka status","message kaha tak hua",
                 "मैसेज स्टेटस","मैसेज का स्टेटस","messaging status"))
             return "message status";
