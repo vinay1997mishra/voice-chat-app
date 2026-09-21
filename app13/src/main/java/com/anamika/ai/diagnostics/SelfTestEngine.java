@@ -142,8 +142,10 @@ public final class SelfTestEngine {
         items.add(item("microphone_permission",mic,true,
                 mic?"granted":"not granted"));
 
-        items.add(item("wake_setting",true,false,
-                WakeService.isEnabled(c)?"enabled":"disabled"));
+        boolean wakeEnabled=WakeService.isEnabled(c);
+        boolean wakeRunning=WakeService.isRunning();
+        items.add(item("wake_setting",!wakeEnabled||wakeRunning,false,
+                !wakeEnabled?"disabled":(wakeRunning?"enabled + running":"enabled but service not running")));
 
         boolean accessibility=AppAutomationAccessibilityService.isConnected();
         items.add(item("accessibility_bridge",accessibility,false,
