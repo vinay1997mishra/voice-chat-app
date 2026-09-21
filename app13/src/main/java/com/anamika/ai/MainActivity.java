@@ -521,6 +521,20 @@ public final class MainActivity extends Activity implements VoiceController.List
         append("You",text);
         MemoryStore.appendTurn(this,"owner",text);
 
+        if(CommandRouter.requiresBackgroundFast(text)){
+            if(status!=null)status.setText("Working in background…");
+            final String command=text;
+            new Thread(()->{
+                String reply=CommandRouter.runFast(this,command);
+                runOnUiThread(()->{
+                    if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
+                    finishReply(reply==null?"Command could not be completed.":reply);
+                    if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
+                });
+            },"anamika-heavy-command").start();
+            return;
+        }
+
         String fast=CommandRouter.runFast(this,text);
         if(fast!=null){
             finishReply(fast);
@@ -535,11 +549,13 @@ public final class MainActivity extends Activity implements VoiceController.List
             if(BrainCommandEngine.requiresBackground(plan)){
                 String reply=BrainCommandEngine.execute(this,plan);
                 runOnUiThread(()->{
+                    if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
                     finishReply(reply);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
             }else{
                 runOnUiThread(()->{
+                    if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
                     String reply=BrainCommandEngine.execute(this,plan);
                     finishReply(reply);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
