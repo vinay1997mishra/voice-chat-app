@@ -24,6 +24,8 @@ import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.RuntimeWatchdog;
+import com.anamika.ai.upgrade.SignerProvisionActivity;
+import com.anamika.ai.upgrade.SignerVault;
 import com.anamika.ai.voice.VoiceController;
 import com.anamika.ai.voice.WakeService;
 
@@ -36,6 +38,7 @@ public final class MainActivity extends Activity implements VoiceController.List
     private TextView transcript;
     private EditText input;
     private VoiceController voice;
+    private boolean startupSetupDialogVisible;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -86,7 +89,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 if(ok){
                     Toast.makeText(this,"Owner verified",Toast.LENGTH_SHORT).show();
                     showAssistant();
-                    maybeOfferComponentSetup();
+                    maybeOfferStartupSetup();
                 }
                 else Toast.makeText(this,"Wrong Owner PIN",Toast.LENGTH_LONG).show();
             }catch(Exception e){
@@ -171,7 +174,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
         setContentView(root);
         bootstrapBundledToolchain();
-        getWindow().getDecorView().postDelayed(this::maybeOfferComponentSetup,500);
+        getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,700);
     }
 
     private void bootstrapBundledToolchain(){
@@ -190,21 +193,45 @@ public final class MainActivity extends Activity implements VoiceController.List
         },"anamika-toolchain-bootstrap").start();
     }
 
-    private void maybeOfferComponentSetup(){
-        if(!OwnerStore.isTrusted(this))return;
-        if(ComponentPackManager.bundledToolchainAvailable(this) && !ComponentPackManager.toolchainInstalled(this))
-            return; // bootstrap thread is installing the signed-in APK toolchain.
-        if(!ComponentPackManager.needsSetup(this))return;
-        android.content.SharedPreferences p=getSharedPreferences("anamika13_component_onboarding",MODE_PRIVATE);
-        if(p.getBoolean("shown_this_install",false))return;
-        p.edit().putBoolean("shown_this_install",true).apply();
+    private void maybeOfferStartupSetup(){
+        if(!OwnerStore.isTrusted(this)||startupSetupDialogVisible)return;
 
+        boolean signerReady=SignerVault.ready(this);
+        boolean toolchainReady=ComponentPackManager.toolchainInstalled(this);
+        boolean runtimeReady=ComponentPackManager.brainRuntimeInstalled(this);
+        boolean modelReady=ComponentPackManager.modelInstalled(this);
+
+        if(signerReady&&toolchainReady&&runtimeReady&&modelReady)return;
+
+        StringBuilder missing=new StringBuilder();
+        if(!signerReady)missing.append("• Permanent .p12 signer + password\n");
+        if(!toolchainReady)missing.append("• Android local-build toolchain\n");
+        if(!runtimeReady)missing.append("• Offline Brain Runtime\n");
+        if(!modelReady)missing.append("• Qwen2.5-Coder-1.5B-Instruct Q4_K_M model\n");
+
+        startupSetupDialogVisible=true;
         new AlertDialog.Builder(this)
-                .setTitle("Offline Components Setup")
-                .setMessage("Offline coding brain aur Android build toolchain abhi install nahi hain. Inhe Anamika ke andar download/import karke private storage me rakhna hoga. Install hone ke baad ye offline use honge.")
-                .setPositiveButton("Setup Now",(d,w)->startActivity(new Intent(this,ComponentPacksActivity.class)))
-                .setNegativeButton("Later",null)
+                .setTitle("Anamika 13 • First Setup")
+                .setMessage("Anamika ko full offline coding/self-upgrade ke liye ye setup chahiye:\n\n"+
+                        missing+
+                        "\nToolchain signed V13 APK me bundled hai aur automatically install hota hai. Signer aur Qwen/Brain setup Anamika abhi aapse khud mangegi.")
+                .setPositiveButton("Continue Setup",(d,w)->{
+                    startupSetupDialogVisible=false;
+                    if(!SignerVault.ready(this)){
+                        startActivity(new Intent(this,SignerProvisionActivity.class));
+                    }else{
+                        startActivity(new Intent(this,ComponentPacksActivity.class));
+                    }
+                })
+                .setNegativeButton("Later",(d,w)->startupSetupDialogVisible=false)
+                .setOnCancelListener(d->startupSetupDialogVisible=false)
                 .show();
+    }
+
+    @Override protected void onResume(){
+        super.onResume();
+        if(OwnerStore.isTrusted(this)&&status!=null)
+            getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,900);
     }
 
     private void startVoice(){
