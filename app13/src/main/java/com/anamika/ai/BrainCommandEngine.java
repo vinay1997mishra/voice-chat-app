@@ -13,6 +13,7 @@ import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.developer.AutonomyComponents;
+import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.files.LocalVault;
@@ -75,13 +76,11 @@ public final class BrainCommandEngine {
                     "Offline brain abhi ready nahi hai. Runtime aur GGUF model Components me install karein.",
                     new JSONArray(),"");
 
-        File root=new File(c.getFilesDir(),"v13_brain");
-        File cli=new File(root,"bin/llama-cli");
-        File model=new File(root,"model.gguf");
-        if(!cli.isFile()||!model.isFile())
-            return new Plan(false,"Offline brain files missing hain.",new JSONArray(),"");
-        if(!cli.canExecute()&&!cli.setExecutable(true,true))
-            return new Plan(false,"Offline brain runtime executable nahi hai.",new JSONArray(),"");
+        File root=BrainRuntimePaths.root(c);
+        File cli=BrainRuntimePaths.embeddedCli(c);
+        File model=BrainRuntimePaths.model(c);
+        if(!BrainRuntimePaths.runtimeReady(c)||!model.isFile())
+            return new Plan(false,"Offline brain files or APK-native runtime missing hain.",new JSONArray(),"");
 
         File io=new File(c.getCacheDir(),"brain_command");
         if(!io.exists()&&!io.mkdirs())
@@ -116,7 +115,8 @@ public final class BrainCommandEngine {
             HashMap<String,String> env=new HashMap<>();
             env.put("ANAMIKA_OFFLINE","1");
             env.put("HOME",root.getAbsolutePath());
-            env.put("LD_LIBRARY_PATH",new File(root,"lib").getAbsolutePath());
+            String nativeDir=c.getApplicationInfo().nativeLibraryDir;
+            if(nativeDir!=null&&!nativeDir.trim().isEmpty())env.put("LD_LIBRARY_PATH",nativeDir);
 
             LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
             if(!run.ok())
@@ -229,7 +229,7 @@ public final class BrainCommandEngine {
             case "tap": return AppAutomationAccessibilityService.clickVisibleText(text.isEmpty()?arg1:text);
             case "type": return AppAutomationAccessibilityService.typeIntoFocused(text);
             case "back": return AppAutomationAccessibilityService.back();
-            case "wake_on": WakeService.enable(a); return "Wake listener on kar diya.";
+            case "wake_on": return WakeService.enable(a);
             case "wake_off": WakeService.disable(a); return "Wake listener off kar diya.";
             case "health": return HealthMonitor.report(a);
             case "last_crash": return CrashJournal.read(a);
