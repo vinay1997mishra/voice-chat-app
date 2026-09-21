@@ -2,7 +2,8 @@ name: Build Anamika 13 Android Toolchain Pack
 
 on:
   push:
-    branches: [ anamika-v13-local-self-upgrade ]
+    branches:
+      - anamika-v13-local-self-upgrade
     paths:
       - 'tools/anamika-toolchain/**'
       - '.github/workflows/anamika-v13-toolchain.yml'
@@ -15,6 +16,7 @@ jobs:
   toolchain:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+
     steps:
       - uses: actions/checkout@v5
         with:
@@ -26,6 +28,7 @@ jobs:
           java-version: '17'
 
       - name: Install Android SDK 36
+        shell: bash
         run: |
           set -euo pipefail
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -38,7 +41,8 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
           echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
 
-      - name: Build Android-runtime dex tool jars
+      - name: Build Android-runtime tool jars
+        shell: bash
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/36.0.0"
@@ -47,36 +51,42 @@ jobs:
           test -f "$D8HOST"
           test -f "$APKSIGNERHOST"
 
-          curl -fsSL             "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.42.0/ecj-3.42.0.jar"             -o /tmp/ecj.jar
+          curl -fsSL "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.42.0/ecj-3.42.0.jar" -o /tmp/ecj.jar
 
-          mkdir -p /tmp/injector-classes
+          rm -rf /tmp/injector-classes /tmp/tooljars
+          mkdir -p /tmp/injector-classes /tmp/tooljars
           javac -source 8 -target 8 -d /tmp/injector-classes tools/anamika-toolchain/ZipInjector.java
           cp /tmp/ecj.jar /tmp/compiler-host.jar
           jar uf /tmp/compiler-host.jar -C /tmp/injector-classes .
 
           dexjar() {
-            IN="$1"; OUT="$2"; MIN="$3"
-            TMP="$(mktemp -d)"
-            java -cp "$D8HOST" com.android.tools.r8.D8 --min-api "$MIN" --output "$TMP" "$IN"
-            test -f "$TMP/classes.dex"
-            (cd "$TMP" && zip -q "$OUT" classes.dex)
-            rm -rf "$TMP"
+            local input="$1"
+            local output="$2"
+            local tmp
+            tmp="$(mktemp -d)"
+            java -cp "$D8HOST" com.android.tools.r8.D8 --min-api 28 --output "$tmp" "$input"
+            test -f "$tmp/classes.dex"
+            (cd "$tmp" && zip -q "$output" classes.dex)
+            rm -rf "$tmp"
           }
 
-          mkdir -p /tmp/tooljars
-          dexjar /tmp/compiler-host.jar /tmp/tooljars/java-compiler.jar 28
-          dexjar "$D8HOST" /tmp/tooljars/d8.jar 28
-          dexjar "$APKSIGNERHOST" /tmp/tooljars/apksig.jar 28
+          dexjar /tmp/compiler-host.jar /tmp/tooljars/java-compiler.jar
+          dexjar "$D8HOST" /tmp/tooljars/d8.jar
+          dexjar "$APKSIGNERHOST" /tmp/tooljars/apksig.jar
+
           unzip -tq /tmp/tooljars/java-compiler.jar
           unzip -tq /tmp/tooljars/d8.jar
           unzip -tq /tmp/tooljars/apksig.jar
 
       - name: Assemble component pack
+        shell: bash
         run: |
           set -euo pipefail
           ROOT="/tmp/AnamikaAI-13-Toolchain-arm64"
           P="$ROOT/payload"
+          rm -rf "$ROOT"
           mkdir -p "$P/bin" "$P/lib" "$P/platforms/android-36"
+
           cp tools/anamika-toolchain/anamika-builder "$P/bin/anamika-builder"
           chmod 644 "$P/bin/anamika-builder"
           cp /tmp/tooljars/java-compiler.jar "$P/lib/java-compiler.jar"
@@ -84,33 +94,11 @@ jobs:
           cp /tmp/tooljars/apksig.jar "$P/lib/apksig.jar"
           cp "$ANDROID_HOME/platforms/android-36/android.jar" "$P/platforms/android-36/android.jar"
 
-          python3 - <<'PY'
-import hashlib,json,os
-root='/tmp/AnamikaAI-13-Toolchain-arm64'
-payload=os.path.join(root,'payload')
-files={}
-for base,_,names in os.walk(payload):
-    for name in sorted(names):
-        p=os.path.join(base,name)
-        rel=os.path.relpath(p,root).replace(os.sep,'/')
-        h=hashlib.sha256()
-        with open(p,'rb') as f:
-            for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
-        files[rel]=h.hexdigest()
-manifest={
-  'schema':'anamika13-component-pack-v1',
-  'type':'toolchain',
-  'version':'13-toolchain-2',
-  'min_api':28,
-  'architecture':'arm64-v8a',
-  'aapt2_delivery':'embedded-apk-native-library',
-  'files':files
-}
-with open(os.path.join(root,'manifest.json'),'w',encoding='utf-8') as f:
-    json.dump(manifest,f,indent=2,sort_keys=True)
-PY
-          (cd /tmp && zip -qr AnamikaAI-13-Toolchain-arm64.zip AnamikaAI-13-Toolchain-arm64)
-          sha256sum /tmp/AnamikaAI-13-Toolchain-arm64.zip > /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256
+          python3 -c 'import hashlib,json,os; root="/tmp/AnamikaAI-13-Toolchain-arm64"; payload=os.path.join(root,"payload"); files={}; [(lambda p,rel: files.__setitem__(rel,hashlib.sha256(open(p,"rb").read()).hexdigest()))(os.path.join(base,n),os.path.relpath(os.path.join(base,n),root).replace(os.sep,"/")) for base,_,names in os.walk(payload) for n in sorted(names)]; json.dump({"schema":"anamika13-component-pack-v1","type":"toolchain","version":"13-toolchain-2","min_api":28,"architecture":"arm64-v8a","aapt2_delivery":"embedded-apk-native-library","files":files},open(os.path.join(root,"manifest.json"),"w"),indent=2,sort_keys=True)'
+
+          cd /tmp
+          zip -qr AnamikaAI-13-Toolchain-arm64.zip AnamikaAI-13-Toolchain-arm64
+          sha256sum AnamikaAI-13-Toolchain-arm64.zip > AnamikaAI-13-Toolchain-arm64.zip.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -123,7 +111,8 @@ PY
       - name: Publish toolchain prerelease
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           set -euo pipefail
           TAG="anamika-toolchain-v13-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             /tmp/AnamikaAI-13-Toolchain-arm64.zip             /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Android Toolchain • ${GITHUB_RUN_NUMBER}"             --notes "ARM64 phone-local toolchain candidate. AAPT2 is deliberately NOT inside this ZIP; Android 10+ executes the AAPT2 binary embedded in the installed Anamika APK native-library area. Minimum tool runtime API 28. Requires the matching permanent signer in SignerVault. Physical-device source→APK→sign→install validation is still required."             --prerelease
+          gh release create "$TAG"             /tmp/AnamikaAI-13-Toolchain-arm64.zip             /tmp/AnamikaAI-13-Toolchain-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Android Toolchain • ${GITHUB_RUN_NUMBER}"             --notes "ARM64 phone-local toolchain candidate. AAPT2 is embedded in the installed APK native-library area rather than the writable component ZIP. Minimum tool runtime API 28. Matching permanent signer in SignerVault is required. Physical-device source-to-APK-to-install validation is still required."             --prerelease
