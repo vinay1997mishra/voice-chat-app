@@ -174,10 +174,11 @@ public final class FullDiagnosticsEngine {
                         :"Accessibility service is not connected.");
 
         state(x,"wake_phrase_end_to_end","voice",
-                WakeService.isEnabled(c)?State.LIVE_TEST_REQUIRED:State.FAIL,
-                WakeService.isEnabled(c)
-                        ?"Wake service enabled; real background phrase detection needs a live microphone/background test."
-                        :"Wake service disabled.");
+                WakeService.isRunning()?State.LIVE_TEST_REQUIRED:
+                        (WakeService.isEnabled(c)?State.FAIL:State.NOT_INSTALLED),
+                WakeService.isRunning()
+                        ?"Wake service is actually running; real phrase detection still needs a live microphone/background test."
+                        :(WakeService.isEnabled(c)?"Wake setting is enabled but service is not running. Open Anamika and enable wake while visible.":"Wake service disabled."));
 
         state(x,"app_ui_tap_type_back_end_to_end","automation",
                 AppAutomationAccessibilityService.isConnected()?State.LIVE_TEST_REQUIRED:State.FAIL,
@@ -309,8 +310,11 @@ public final class FullDiagnosticsEngine {
         add(x,"speech_recognizer","voice",speech,speech?"available":"unavailable");
         boolean mic=AndroidCompat.hasPermission(c,Manifest.permission.RECORD_AUDIO);
         add(x,"microphone_permission","voice",mic,mic?"granted":"not granted");
-        state(x,"wake_service_setting","voice",WakeService.isEnabled(c)?State.PASS:State.FAIL,
-                WakeService.isEnabled(c)?"enabled":"disabled");
+        State wakeState=!WakeService.isEnabled(c)?State.NOT_INSTALLED:
+                (WakeService.isRunning()?State.PASS:State.FAIL);
+        state(x,"wake_service_setting","voice",wakeState,
+                !WakeService.isEnabled(c)?"disabled":
+                        (WakeService.isRunning()?"enabled + service running":"enabled setting, service not running"));
     }
 
     private static void testAccessibility(Context c,List<Check>x){
