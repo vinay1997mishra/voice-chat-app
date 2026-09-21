@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Build;
 
 import com.anamika.ai.core.AndroidCompat;
+import com.anamika.ai.developer.BrainRuntimePaths;
 
 import org.json.JSONObject;
 
@@ -131,16 +132,16 @@ public final class ComponentPackManager {
             if(partial.exists())partial.delete();
 
             byte[] first=new byte[4];
+            int firstCount=0;
             long total=0;
             try(FileOutputStream out=new FileOutputStream(partial,false)){
                 byte[] buf=new byte[128*1024];
                 int n;
-                boolean firstFilled=false;
                 while((n=raw.read(buf))>0){
-                    if(!firstFilled){
-                        int copy=Math.min(4,n);
-                        System.arraycopy(buf,0,first,0,copy);
-                        firstFilled=copy==4;
+                    if(firstCount<4){
+                        int copy=Math.min(4-firstCount,n);
+                        System.arraycopy(buf,0,first,firstCount,copy);
+                        firstCount+=copy;
                     }
                     total+=n;
                     if(total>MAX_PACK_BYTES)throw new IllegalStateException("GGUF exceeds 8 GB safety limit.");
@@ -198,11 +199,6 @@ public final class ComponentPackManager {
         copyTree(payload,temp);
         new File(temp,"manifest.json").delete();
 
-        File brain=new File(temp,"bin/anamika-brain");
-        File llama=new File(temp,"bin/llama-cli");
-        if(brain.isFile())brain.setExecutable(true,true);
-        if(llama.isFile())llama.setExecutable(true,true);
-
         File backup=new File(c.getFilesDir(),"v13_brain.previous");
         deleteTree(backup);
         if(target.exists()&&!target.renameTo(backup)){
@@ -253,10 +249,7 @@ public final class ComponentPackManager {
     }
 
     public static boolean brainRuntimeInstalled(Context c){
-        File root=new File(c.getFilesDir(),"v13_brain");
-        return new File(root,"runtime.ready").isFile()&&
-                new File(root,"bin/anamika-brain").isFile()&&
-                new File(root,"bin/llama-cli").isFile();
+        return BrainRuntimePaths.runtimeReady(c);
     }
 
     public static boolean modelInstalled(Context c){
@@ -292,14 +285,14 @@ public final class ComponentPackManager {
         File base=new File(staging,"payload");
         if(!base.isDirectory())base=staging;
         if("brain-runtime".equals(type)){
-            String[] req={"runtime.ready","bin/anamika-brain","bin/llama-cli","edit-plan.schema.json"};
+            String[] req={"runtime.ready","edit-plan.schema.json"};
             for(String rel:req)if(!new File(base,rel).isFile())return "Brain runtime pack missing: "+rel;
             return null;
         }
         if("brain".equals(type)){
             if(!new File(base,"model.gguf").isFile()||new File(base,"model.gguf").length()<MIN_MODEL_BYTES)
                 return "Brain pack requires model.gguf larger than 16 MB.";
-            String[] req={"runtime.ready","bin/anamika-brain","bin/llama-cli","edit-plan.schema.json"};
+            String[] req={"runtime.ready","edit-plan.schema.json"};
             for(String rel:req)if(!new File(base,rel).isFile())return "Brain pack missing: "+rel;
             return null;
         }
