@@ -25,12 +25,14 @@ public final class LocalBuildEngine {
         File d8=new File(root,"lib/d8.jar");
         File androidJar=new File(root,"platforms/android-36/android.jar");
         File signer=new File(root,"lib/apksig.jar");
-        boolean files=aapt2.isFile()&&d8.isFile()&&androidJar.isFile()&&signer.isFile();
+        File compiler=new File(root,"lib/java-compiler.jar");
+        boolean files=aapt2.isFile()&&d8.isFile()&&androidJar.isFile()&&signer.isFile()&&compiler.isFile();
         boolean storage=HealthMonitor.enoughForLocalBuild(c,2L*1024L*1024L*1024L);
         if(!files) return new Capability(false,
-                "Local build toolchain is not installed yet. Required: ARM64 aapt2, D8, android-36.jar and APK signer.");
+                "Local build toolchain is not installed yet. Required: ARM64 aapt2, Java compiler runtime, D8, android-36.jar and APK signer.");
         if(!aapt2.canExecute()) return new Capability(false,"Bundled aapt2 exists but is not executable.");
         if(!storage) return new Capability(false,"At least 2 GB free private storage is required for a safe local build.");
-        return new Capability(true,"Phone-local Android build toolchain is ready.");
+        if(!SignerVault.ready(c)) return new Capability(false,"Build tools are present, but matching release signer is not provisioned.");
+        return new Capability(true,"Phone-local Android build toolchain and matching signer are ready.");
     }
 }

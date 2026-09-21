@@ -32,6 +32,24 @@ public final class LanguageCommandInterpreter {
                 "self test kholo","डायग्नोस्टिक्स","डायग्नोस्टिक्स खोलो"))
             return "diagnostics";
 
+        if(any(l,"autonomy status","self repair status","khud ko thik karne ka status",
+                "offline brain status","ऑटोनॉमी स्टेटस","सेल्फ रिपेयर स्टेटस"))
+            return "autonomy status";
+
+        if(any(l,"brain status","offline brain","coding brain status","ब्रेन स्टेटस","ऑफलाइन ब्रेन"))
+            return "brain status";
+
+        if(any(l,"signer status","signing status","साइनर स्टेटस","साइनिंग स्टेटस"))
+            return "signer status";
+
+        if(any(l,"rollback status","recovery status","रोलबैक स्टेटस","रिकवरी स्टेटस"))
+            return "rollback status";
+
+        if(any(l,"recovery checkpoint","create recovery checkpoint","rollback point banao",
+                "recovery point banao","रिकवरी पॉइंट बनाओ","रोलबैक पॉइंट बनाओ"))
+            return "create recovery checkpoint";
+
+
         if(any(l,"self test","run self test","self test chalao","full self test chalao",
                 "apne saare function check karo","saare function check karo",
                 "सेल्फ टेस्ट","सेल्फ टेस्ट चलाओ","सारे फंक्शन चेक करो"))

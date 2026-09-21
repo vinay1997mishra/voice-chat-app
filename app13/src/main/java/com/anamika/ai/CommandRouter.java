@@ -8,6 +8,7 @@ import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
+import com.anamika.ai.developer.AutonomyComponents;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.memory.MemoryStore;
@@ -22,6 +23,8 @@ import com.anamika.ai.plugins.PluginManagerActivity;
 import com.anamika.ai.research.ResearchStore;
 import com.anamika.ai.runtime.RuntimeWatchdog;
 import com.anamika.ai.upgrade.SelfUpdateActivity;
+import com.anamika.ai.upgrade.RollbackManager;
+import com.anamika.ai.upgrade.SignerVault;
 import com.anamika.ai.upgrade.UpgradeCoordinator;
 import com.anamika.ai.voice.WakeService;
 
@@ -54,6 +57,17 @@ public final class CommandRouter {
         if(l.equals("functions")){
             return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, diagnostics/self-test, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
         }
+
+        if(l.equals("autonomy status")||l.equals("self repair status")||l.equals("offline brain status"))
+            return AutonomyComponents.status(a);
+        if(l.equals("brain status"))
+            return AutonomyComponents.brainStatus(a);
+        if(l.equals("signer status"))
+            return SignerVault.status(a);
+        if(l.equals("rollback status"))
+            return RollbackManager.status(a);
+        if(l.equals("create recovery checkpoint")||l.equals("recovery checkpoint"))
+            return RollbackManager.checkpoint(a);
 
         if(l.equals("diagnostics")||l.equals("diagnostics center")){
             a.startActivity(new Intent(a,DiagnosticsActivity.class));
