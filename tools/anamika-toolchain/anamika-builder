@@ -54,7 +54,7 @@ rm -rf "$BUILD"
 mkdir -p "$GEN" "$CLASSES" "$DEX" "$(dirname "$OUTPUT")"
 
 "$AAPT2" compile --dir "$RES" -o "$BUILD/resources.zip"
-"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --min-sdk-version 21   --target-sdk-version 36   --version-code "$VERSION_CODE"   --version-name "$VERSION_NAME"   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
+"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --custom-package com.anamika.ai   --rename-manifest-package com.anamika.ai13   --min-sdk-version 21   --target-sdk-version 36   --version-code "$VERSION_CODE"   --version-name "$VERSION_NAME"   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
 
 find "$SRC" "$GEN" -type f -name '*.java' | sort > "$BUILD/sources.txt"
 [ -s "$BUILD/sources.txt" ] || { echo "No Java sources found" >&2; exit 3; }
