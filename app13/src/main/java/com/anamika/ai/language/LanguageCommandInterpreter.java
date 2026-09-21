@@ -129,9 +129,9 @@ public final class LanguageCommandInterpreter {
                 "लोकल बिल्ड","एपीके बिल्ड करो"))
             return "local build";
 
-        arg=matchArg(s,
+        String repairArg=matchArg(s,
                 "^(?iu)(?:offline repair|code repair|khud ka code thik karo|khud ko thik karo|ऑफलाइन रिपेयर|कोड ठीक करो)\\s+(.+)$");
-        if(arg!=null)return "offline repair "+arg;
+        if(repairArg!=null)return "offline repair "+repairArg;
 
 
         if(any(l,"upgrade validate karo","code check karo","code doctor chalao",
