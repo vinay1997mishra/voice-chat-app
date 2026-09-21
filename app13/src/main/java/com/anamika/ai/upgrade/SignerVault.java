@@ -47,6 +47,8 @@ public final class SignerVault {
     private static final String DIR="v13_signer";
     private static final String FILE="vault.json";
     private static final String LEGACY_WRAPPED_AES="legacy_wrapped_aes.bin";
+    // Permanent Anamika 13 release identity. Public fingerprint only; private key is never stored in Git.
+    public static final String EXPECTED_RELEASE_CERT_SHA256="508f4a20c4d5daa8c314796608e8c5e6988dad37adf9f5f5a6022442d155f520";
 
     public static final class SigningMaterial {
         public final PrivateKey privateKey;
@@ -85,7 +87,8 @@ public final class SignerVault {
             JSONObject o=new JSONObject(AndroidCompat.readText(f,StandardCharsets.UTF_8));
             String cert=o.optString("cert_sha256","");
             String installed=installedCertSha256(c);
-            boolean match=!cert.isEmpty()&&cert.equalsIgnoreCase(installed);
+            boolean match=!cert.isEmpty()&&cert.equalsIgnoreCase(installed)
+                    &&cert.equalsIgnoreCase(EXPECTED_RELEASE_CERT_SHA256);
             return "Signer vault: "+(match?"READY":"CERTIFICATE MISMATCH")+
                     "\nCertificate SHA-256: "+(cert.isEmpty()?"unknown":cert)+
                     "\nKeystore mode: "+(Build.VERSION.SDK_INT>=23?"AES":"RSA-wrapped AES");
@@ -99,7 +102,9 @@ public final class SignerVault {
         if(!f.isFile())return false;
         try{
             JSONObject o=new JSONObject(AndroidCompat.readText(f,StandardCharsets.UTF_8));
-            return o.optString("cert_sha256","").equalsIgnoreCase(installedCertSha256(c));
+            String cert=o.optString("cert_sha256","");
+            return cert.equalsIgnoreCase(installedCertSha256(c))
+                    &&cert.equalsIgnoreCase(EXPECTED_RELEASE_CERT_SHA256);
         }catch(Throwable e){return false;}
     }
 
@@ -118,6 +123,8 @@ public final class SignerVault {
 
             String candidate=sha256(cert.getEncoded());
             String installed=installedCertSha256(c);
+            if(!candidate.equalsIgnoreCase(EXPECTED_RELEASE_CERT_SHA256))
+                return "Signer rejected: this is not the pinned Anamika 13 permanent release key.";
             if(!candidate.equalsIgnoreCase(installed))
                 return "Signer rejected: certificate does not match installed Anamika.";
 
