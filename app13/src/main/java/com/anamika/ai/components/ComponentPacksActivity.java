@@ -23,6 +23,7 @@ import java.net.URL;
 /** Owner-only installer for offline model/toolchain component packs. */
 public final class ComponentPacksActivity extends Activity {
     private static final int PICK_ZIP=1320;
+    private static final int PICK_GGUF=1321;
     private TextView status;
     private EditText url;
 
@@ -39,12 +40,12 @@ public final class ComponentPacksActivity extends Activity {
         box.setPadding(p,p,p,p);
 
         TextView title=new TextView(this);
-        title.setText("Anamika 13 • Component Packs");
+        title.setText("Anamika 13 • Offline Components");
         title.setTextSize(23);
         box.addView(title);
 
         TextView note=new TextView(this);
-        note.setText("Brain/model aur Android toolchain Anamika ki private storage me install honge. Separate app ki zarurat nahi. Pack hashes verify hone ke baad hi activate hoga.");
+        note.setText("Step 1: Anamika Brain Runtime ZIP install karein.\nStep 2: Qwen/Q4_K_M GGUF model import karein.\nStep 3: Android toolchain pack install karein. Sab files Anamika ki private storage me rahengi.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
@@ -53,16 +54,14 @@ public final class ComponentPacksActivity extends Activity {
         url.setSingleLine(true);
         box.addView(url);
 
-        Button download=new Button(this);
-        download.setText("Download + Verify + Install");
-        Button importZip=new Button(this);
-        importZip.setText("Import Component Pack ZIP");
-        Button signer=new Button(this);
-        signer.setText("Setup Release Signer");
-        Button refresh=new Button(this);
-        refresh.setText("Refresh Status");
+        Button download=new Button(this); download.setText("Download Runtime/Toolchain ZIP");
+        Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
+        Button importModel=new Button(this); importModel.setText("Import GGUF Coding Model");
+        Button signer=new Button(this); signer.setText("Setup Release Signer");
+        Button refresh=new Button(this); refresh.setText("Refresh Status");
         box.addView(download);
         box.addView(importZip);
+        box.addView(importModel);
         box.addView(signer);
         box.addView(refresh);
 
@@ -73,7 +72,8 @@ public final class ComponentPacksActivity extends Activity {
         box.addView(status);
 
         download.setOnClickListener(v->download(url.getText().toString().trim()));
-        importZip.setOnClickListener(v->pick());
+        importZip.setOnClickListener(v->pickZip());
+        importModel.setOnClickListener(v->pickModel());
         signer.setOnClickListener(v->startActivity(new Intent(this,SignerProvisionActivity.class)));
         refresh.setOnClickListener(v->status.setText(ComponentPackManager.status(this)));
 
@@ -82,28 +82,50 @@ public final class ComponentPacksActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void pick(){
+    private void pickZip(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("application/zip");
         startActivityForResult(i,PICK_ZIP);
     }
 
+    private void pickModel(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        startActivityForResult(i,PICK_GGUF);
+    }
+
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode!=PICK_ZIP||resultCode!=RESULT_OK||data==null||data.getData()==null)return;
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();
+        if(requestCode==PICK_ZIP)installZip(uri);
+        else if(requestCode==PICK_GGUF)installModel(uri);
+    }
+
+    private void installZip(Uri uri){
         status.setText("Component pack verify/install ho raha hai…");
         new Thread(()->{
             ComponentPackManager.Result r;
             try(InputStream in=getContentResolver().openInputStream(uri)){
                 if(in==null)throw new IllegalStateException("Cannot read selected pack.");
                 r=ComponentPackManager.installZip(this,in);
-            }catch(Exception e){
-                r=new ComponentPackManager.Result(false,"Import failed: "+safe(e));
-            }
+            }catch(Exception e){r=new ComponentPackManager.Result(false,"Import failed: "+safe(e));}
             post(r.message);
         },"anamika-component-import").start();
+    }
+
+    private void installModel(Uri uri){
+        status.setText("GGUF model private storage me import ho raha hai… 1+ GB file me time lag sakta hai.");
+        new Thread(()->{
+            ComponentPackManager.Result r;
+            try(InputStream in=getContentResolver().openInputStream(uri)){
+                if(in==null)throw new IllegalStateException("Cannot read selected model.");
+                r=ComponentPackManager.installModel(this,in);
+            }catch(Exception e){r=new ComponentPackManager.Result(false,"Model import failed: "+safe(e));}
+            post(r.message);
+        },"anamika-model-import").start();
     }
 
     private void download(String raw){
@@ -130,11 +152,8 @@ public final class ComponentPacksActivity extends Activity {
                     ComponentPackManager.Result r=ComponentPackManager.installZip(this,in);
                     post(r.message);
                 }
-            }catch(Exception e){
-                post("Download/install failed: "+safe(e));
-            }finally{
-                if(con!=null)con.disconnect();
-            }
+            }catch(Exception e){post("Download/install failed: "+safe(e));}
+            finally{if(con!=null)con.disconnect();}
         },"anamika-component-download").start();
     }
 
