@@ -24,6 +24,10 @@ import java.net.URL;
 public final class ComponentPacksActivity extends Activity {
     private static final int PICK_ZIP=1320;
     private static final int PICK_GGUF=1321;
+    private static final String BRAIN_RUNTIME_URL=
+            "https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-brain-v13-2/AnamikaAI-13-BrainRuntime-arm64.zip";
+    private static final String QWEN_MODEL_URL=
+            "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true";
     private TextView status;
     private EditText url;
 
@@ -45,7 +49,7 @@ public final class ComponentPacksActivity extends Activity {
         box.addView(title);
 
         TextView note=new TextView(this);
-        note.setText("Step 1: Anamika Brain Runtime ZIP install karein.\nStep 2: Qwen/Q4_K_M GGUF model import karein.\nStep 3: Android toolchain pack install karein. Sab files Anamika ki private storage me rahengi.");
+        note.setText("Step 1: Offline Brain Runtime install karein.\nStep 2: Qwen2.5-Coder-1.5B-Instruct Q4_K_M model download/import karein.\nStep 3: Android toolchain signed V13 APK ke andar bundled hai aur owner unlock ke baad auto-install hota hai.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
@@ -54,11 +58,15 @@ public final class ComponentPacksActivity extends Activity {
         url.setSingleLine(true);
         box.addView(url);
 
-        Button download=new Button(this); download.setText("Download Runtime/Toolchain ZIP");
+        Button runtime=new Button(this); runtime.setText("Install Offline Brain Runtime");
+        Button qwen=new Button(this); qwen.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
+        Button download=new Button(this); download.setText("Download Component ZIP from URL");
         Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
-        Button importModel=new Button(this); importModel.setText("Import GGUF Coding Model");
+        Button importModel=new Button(this); importModel.setText("Import Existing GGUF Model");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
         Button refresh=new Button(this); refresh.setText("Refresh Status");
+        box.addView(runtime);
+        box.addView(qwen);
         box.addView(download);
         box.addView(importZip);
         box.addView(importModel);
@@ -71,6 +79,8 @@ public final class ComponentPacksActivity extends Activity {
         status.setPadding(0,dp(14),0,dp(24));
         box.addView(status);
 
+        runtime.setOnClickListener(v->download(BRAIN_RUNTIME_URL));
+        qwen.setOnClickListener(v->downloadModel(QWEN_MODEL_URL));
         download.setOnClickListener(v->download(url.getText().toString().trim()));
         importZip.setOnClickListener(v->pickZip());
         importModel.setOnClickListener(v->pickModel());
@@ -126,6 +136,30 @@ public final class ComponentPacksActivity extends Activity {
             }catch(Exception e){r=new ComponentPackManager.Result(false,"Model import failed: "+safe(e));}
             post(r.message);
         },"anamika-model-import").start();
+    }
+
+    private void downloadModel(String raw){
+        status.setText("Qwen2.5-Coder-1.5B-Instruct Q4_K_M download ho raha hai… file 1 GB+ hai.");
+        new Thread(()->{
+            HttpURLConnection con=null;
+            try{
+                URL u=new URL(raw);
+                con=(HttpURLConnection)u.openConnection();
+                con.setConnectTimeout(20000);
+                con.setReadTimeout(120000);
+                con.setInstanceFollowRedirects(true);
+                con.setRequestProperty("User-Agent","AnamikaAI13-ModelInstaller");
+                int code=con.getResponseCode();
+                if(code<200||code>=300)throw new IllegalStateException("HTTP "+code);
+                long len=con.getContentLengthLong();
+                if(len>8L*1024L*1024L*1024L)throw new IllegalStateException("Model exceeds 8 GB safety limit.");
+                try(InputStream in=new BufferedInputStream(con.getInputStream())){
+                    ComponentPackManager.Result r=ComponentPackManager.installModel(this,in);
+                    post(r.message);
+                }
+            }catch(Exception e){post("Qwen model download/import failed: "+safe(e));}
+            finally{if(con!=null)con.disconnect();}
+        },"anamika-qwen-download").start();
     }
 
     private void download(String raw){
