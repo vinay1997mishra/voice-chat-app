@@ -170,11 +170,31 @@ public final class MainActivity extends Activity implements VoiceController.List
         lock.setOnClickListener(v->{OwnerStore.forgetTrust(this);WakeService.disable(this);showOwnerGate();});
 
         setContentView(root);
+        bootstrapBundledToolchain();
         getWindow().getDecorView().postDelayed(this::maybeOfferComponentSetup,500);
     }
 
+    private void bootstrapBundledToolchain(){
+        if(!OwnerStore.isTrusted(this)||ComponentPackManager.toolchainInstalled(this)
+                ||!ComponentPackManager.bundledToolchainAvailable(this))return;
+        if(status!=null)status.setText("Owner verified • bundled toolchain setup…");
+        final Context app=getApplicationContext();
+        new Thread(()->{
+            ComponentPackManager.Result r=ComponentPackManager.installBundledToolchainIfNeeded(app);
+            runOnUiThread(()->{
+                if(status!=null)status.setText(r.ok
+                        ?"Owner verified • bundled toolchain ready"
+                        :"Owner verified • toolchain setup needs attention");
+                if(transcript!=null)append("Anamika",r.message);
+            });
+        },"anamika-toolchain-bootstrap").start();
+    }
+
     private void maybeOfferComponentSetup(){
-        if(!OwnerStore.isTrusted(this)||!ComponentPackManager.needsSetup(this))return;
+        if(!OwnerStore.isTrusted(this))return;
+        if(ComponentPackManager.bundledToolchainAvailable(this) && !ComponentPackManager.toolchainInstalled(this))
+            return; // bootstrap thread is installing the signed-in APK toolchain.
+        if(!ComponentPackManager.needsSetup(this))return;
         android.content.SharedPreferences p=getSharedPreferences("anamika13_component_onboarding",MODE_PRIVATE);
         if(p.getBoolean("shown_this_install",false))return;
         p.edit().putBoolean("shown_this_install",true).apply();
