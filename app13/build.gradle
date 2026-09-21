@@ -7,7 +7,7 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId 'com.anamika.ai'
+        applicationId 'com.anamika.ai13'
         minSdk 26
         targetSdk 36
         versionCode Integer.parseInt(System.getenv("ANAMIKA13_VERSION_CODE") ?: "130000")
