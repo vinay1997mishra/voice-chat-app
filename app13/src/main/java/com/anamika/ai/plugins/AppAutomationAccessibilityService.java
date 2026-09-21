@@ -2,10 +2,13 @@ package com.anamika.ai.plugins;
 
 import android.accessibilityservice.AccessibilityService;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.anamika.ai.core.OwnerStore;
+import com.anamika.ai.messaging.MessagingAutomationEngine;
 import com.anamika.ai.research.ResearchStore;
 
 import java.util.ArrayDeque;
@@ -17,6 +20,8 @@ import java.util.Deque;
  */
 public final class AppAutomationAccessibilityService extends AccessibilityService {
     private static volatile AppAutomationAccessibilityService instance;
+    private final Handler automationHandler=new Handler(Looper.getMainLooper());
+    private final Runnable messagingTick=()->processMessagingWindow();
 
     @Override protected void onServiceConnected(){instance=this;}
 
@@ -30,13 +35,37 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
             try{
                 BlueprintStore.recordWindow(this,pkg,root,String.valueOf(event.getEventType()));
                 ResearchStore.recordWindow(this,pkg,root);
+                MessagingAutomationEngine.onWindow(this,pkg,root);
             }finally{root.recycle();}
         }
+        if(MessagingAutomationEngine.hasActiveSession(this)){
+            automationHandler.removeCallbacks(messagingTick);
+            automationHandler.postDelayed(messagingTick,650L);
+        }
+    }
+
+    private void processMessagingWindow(){
+        if(!MessagingAutomationEngine.hasActiveSession(this))return;
+        AccessibilityNodeInfo root=getRootInActiveWindow();
+        if(root==null)return;
+        try{
+            String pkg=root.getPackageName()==null?"":root.getPackageName().toString();
+            MessagingAutomationEngine.onWindow(this,pkg,root);
+        }finally{
+            root.recycle();
+        }
+        if(MessagingAutomationEngine.hasActiveSession(this))
+            automationHandler.postDelayed(messagingTick,650L);
+    }
+
+    public static boolean isConnected(){
+        return instance!=null;
     }
 
     @Override public void onInterrupt(){}
 
     @Override public void onDestroy(){
+        automationHandler.removeCallbacksAndMessages(null);
         if(instance==this)instance=null;
         super.onDestroy();
     }

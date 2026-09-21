@@ -8,6 +8,8 @@ import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.memory.MemoryStore;
+import com.anamika.ai.messaging.MessageCommandParser;
+import com.anamika.ai.messaging.MessagingAutomationEngine;
 import com.anamika.ai.phone.AppLauncher;
 import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.phone.PhoneActions;
@@ -36,8 +38,22 @@ public final class CommandRouter {
             return "Ji, boliye. Anamika 13 ready hai.";
 
         if(l.equals("functions")||l.contains("what can you do")||l.contains("kya kar sakti")){
-            return "V13 core: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, owner-controlled Plugin Center, Accessibility tap/type/back, Deep Blueprint, research notebook, source-vault self-upgrade workspace, Code Doctor validation, APK verification and Android update installer.";
+            return "V13 core: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, owner-controlled Plugin Center, Accessibility tap/type/back, one-shot message sending in supported visible chat UIs, Deep Blueprint, research notebook, source-vault self-upgrade workspace, Code Doctor validation, APK verification and Android update installer.";
         }
+
+        if(l.equals("message status")||l.equals("messaging status"))
+            return MessagingAutomationEngine.status(a);
+        if(l.equals("cancel message")||l.equals("stop message"))
+            return MessagingAutomationEngine.cancel(a);
+
+        MessageCommandParser.Request messageRequest=MessageCommandParser.parse(text);
+        if(messageRequest!=null){
+            if(!AppAutomationAccessibilityService.isConnected())
+                return "Accessibility service is not enabled/connected. Open Plugin Center, enable Anamika Accessibility, then repeat the message command.";
+            return MessagingAutomationEngine.start(a,messageRequest);
+        }
+        if(MessageCommandParser.looksLikeMessageCommand(text))
+            return "Message command samajh nahi aaya. Example: WhatsApp me Rahul ko Hello bhejo. Or: Send message on WhatsApp to Rahul: Hello.";
 
         if(l.equals("plugins")||l.equals("plugin center")){
             a.startActivity(new Intent(a,PluginManagerActivity.class));
