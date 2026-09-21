@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -56,8 +56,24 @@ jobs:
           du -h app13/build/outputs/apk/debug/app13-debug.apk
           stat -c%s app13/build/outputs/apk/debug/app13-debug.apk
 
+      - name: Prepare downloadable APK
+        run: |
+          cp app13/build/outputs/apk/debug/app13-debug.apk AnamikaAI-13-DEV.apk
+          sha256sum AnamikaAI-13-DEV.apk | tee AnamikaAI-13-DEV.apk.sha256
+
       - uses: actions/upload-artifact@v4
         with:
-          name: AnamikaAI-13-clean-debug
+          name: AnamikaAI-13-DEV
           compression-level: 0
-          path: app13/build/outputs/apk/debug/app13-debug.apk
+          path: |
+            AnamikaAI-13-DEV.apk
+            AnamikaAI-13-DEV.apk.sha256
+
+      - name: Publish GitHub prerelease APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/anamika-v13-local-self-upgrade'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="anamika-v13-dev-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             AnamikaAI-13-DEV.apk             AnamikaAI-13-DEV.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 DEV • ${GITHUB_RUN_NUMBER}"             --notes "Development/test APK built from branch anamika-v13-local-self-upgrade at commit $GITHUB_SHA. This is a debug-signed test build, not the final production self-upgrade signing identity."             --prerelease
