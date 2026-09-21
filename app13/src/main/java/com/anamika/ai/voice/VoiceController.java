@@ -39,17 +39,22 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
             return;
         }
         stopRecognizer();
-        recognizer=SpeechRecognizer.createSpeechRecognizer(activity);
-        recognizer.setRecognitionListener(this);
+        try{
+            recognizer=SpeechRecognizer.createSpeechRecognizer(activity);
+            recognizer.setRecognitionListener(this);
 
-        Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,recognitionLanguage());
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,recognitionLanguage());
-        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
-        i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
-        listener.onVoiceState("Listening… Hindi / Hinglish / English");
-        recognizer.startListening(i);
+            Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,recognitionLanguage());
+            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,recognitionLanguage());
+            i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
+            i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
+            listener.onVoiceState("Listening… Hindi / Hinglish / English");
+            recognizer.startListening(i);
+        }catch(Throwable e){
+            stopRecognizer();
+            listener.onVoiceState("Voice start failed: "+safe(e));
+        }
     }
 
     public void speak(String text){
@@ -58,7 +63,9 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
             if(containsDevanagari(text))tts.setLanguage(new Locale("hi","IN"));
             else tts.setLanguage(new Locale("en","IN"));
         }catch(Throwable ignored){}
-        tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"anamika13_reply");
+        try{
+            if(tts!=null)tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"anamika13_reply");
+        }catch(Throwable ignored){}
     }
 
     public void close(){
@@ -146,4 +153,9 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     }
     @Override public void onPartialResults(Bundle partialResults){}
     @Override public void onEvent(int eventType,Bundle params){}
+
+    private static String safe(Throwable e){
+        String m=e.getMessage();
+        return m==null||m.trim().isEmpty()?e.getClass().getSimpleName():m;
+    }
 }
