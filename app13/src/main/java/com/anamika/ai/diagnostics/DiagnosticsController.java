@@ -14,7 +14,7 @@ public final class DiagnosticsController {
 
     public static String runAndSave(Activity a){
         try{
-            SelfTestEngine.Result r=SelfTestEngine.run(a);
+            FullDiagnosticsEngine.Result r=FullDiagnosticsEngine.run(a);
             File f=DiagnosticsReportStore.save(a,r);
             return r.summary()+"\nReport saved: "+f.getAbsolutePath();
         }catch(Exception e){
@@ -33,7 +33,7 @@ public final class DiagnosticsController {
 
         Intent i=new Intent(Intent.ACTION_SEND);
         i.setType("text/plain");
-        i.putExtra(Intent.EXTRA_SUBJECT,"Anamika AI 13 Diagnostics");
+        i.putExtra(Intent.EXTRA_SUBJECT,"Anamika AI 13 Full Functional Diagnostics");
         i.putExtra(Intent.EXTRA_TEXT,report);
         a.startActivity(Intent.createChooser(i,"Share Anamika diagnostics"));
         return "Diagnostics share sheet khol di. Aap report ChatGPT ya kisi trusted destination ko bhej sakte ho.";

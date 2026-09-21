@@ -31,12 +31,12 @@ public final class DiagnosticsActivity extends Activity {
         box.addView(title);
 
         TextView note=new TextView(this);
-        note.setText("Self-test non-destructive hai. Report automatically upload nahi hoti; Share button aapki permission se share sheet kholta hai.");
+        note.setText("Full diagnostics har current V13 function ko inventory me check karti hai. Safe automated probes actually run hote hain. Jo function real external side effect ke bina prove nahi ho sakta, use PASS nahi diya jata; LIVE_TEST_REQUIRED report hota hai.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
         Button run=new Button(this);
-        run.setText("Run Full Self-Test");
+        run.setText("Run Full Functional Diagnostics");
         Button share=new Button(this);
         share.setText("Share Latest Report");
         Button show=new Button(this);
@@ -47,12 +47,22 @@ public final class DiagnosticsActivity extends Activity {
         box.addView(show);
 
         output=new TextView(this);
-        output.setText("Run Full Self-Test dabao.");
+        output.setText("Run Full Functional Diagnostics dabao.");
         output.setTextIsSelectable(true);
         output.setPadding(0,dp(14),0,dp(24));
         box.addView(output);
 
-        run.setOnClickListener(v->output.setText(DiagnosticsController.runAndSave(this)));
+        run.setOnClickListener(v->{
+            run.setEnabled(false);
+            output.setText("Saare functions check ho rahe hain… offline runtime/toolchain self-test me time lag sakta hai.");
+            new Thread(()->{
+                String result=DiagnosticsController.runAndSave(this);
+                runOnUiThread(()->{
+                    output.setText(result);
+                    run.setEnabled(true);
+                });
+            },"anamika-full-diagnostics").start();
+        });
         share.setOnClickListener(v->output.setText(DiagnosticsController.shareLatest(this)));
         show.setOnClickListener(v->output.setText(DiagnosticsController.latest(this)));
 

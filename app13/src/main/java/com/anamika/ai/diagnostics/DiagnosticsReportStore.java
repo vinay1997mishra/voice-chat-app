@@ -13,14 +13,21 @@ public final class DiagnosticsReportStore {
     private DiagnosticsReportStore(){}
 
     public static File save(Context c,SelfTestEngine.Result result) throws Exception {
+        return saveJson(c,result.timeMs,result.json());
+    }
+
+    public static File save(Context c,FullDiagnosticsEngine.Result result) throws Exception {
+        return saveJson(c,result.timeMs,result.json());
+    }
+
+    private static File saveJson(Context c,long timeMs,JSONObject json) throws Exception {
         File dir=new File(c.getFilesDir(),"diagnostics");
         if(!dir.exists()&&!dir.mkdirs())
             throw new IllegalStateException("Cannot create diagnostics directory.");
 
-        JSONObject json=result.json();
         byte[] bytes=json.toString(2).getBytes(StandardCharsets.UTF_8);
 
-        File stamped=new File(dir,"diagnostics_"+result.timeMs+".json");
+        File stamped=new File(dir,"diagnostics_"+timeMs+".json");
         try(FileOutputStream out=new FileOutputStream(stamped,false)){
             out.write(bytes);
             out.getFD().sync();

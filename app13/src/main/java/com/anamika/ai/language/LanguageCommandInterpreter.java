@@ -59,9 +59,10 @@ public final class LanguageCommandInterpreter {
 
 
         if(any(l,"self test","run self test","self test chalao","full self test chalao",
-                "apne saare function check karo","saare function check karo",
-                "सेल्फ टेस्ट","सेल्फ टेस्ट चलाओ","सारे फंक्शन चेक करो"))
-            return "run self test";
+                "full diagnostics","check all functions","apne saare function check karo",
+                "saare function check karo","sabhi functions check karo","pura diagnostics chalao",
+                "सेल्फ टेस्ट","सेल्फ टेस्ट चलाओ","सारे फंक्शन चेक करो","पूरा डायग्नोस्टिक्स चलाओ"))
+            return "full diagnostics";
 
         if(any(l,"share diagnostics","diagnostics share karo","diagnostic report share karo",
                 "report mujhe bhejo","डायग्नोस्टिक्स शेयर करो","रिपोर्ट शेयर करो"))

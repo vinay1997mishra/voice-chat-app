@@ -82,7 +82,7 @@ public final class CommandRouter {
             a.startActivity(new Intent(a,DiagnosticsActivity.class));
             return "Diagnostics Center khol rahi hu.";
         }
-        if(l.equals("run self test")||l.equals("self test"))
+        if(l.equals("run self test")||l.equals("self test")||l.equals("full diagnostics")||l.equals("check all functions"))
             return DiagnosticsController.runAndSave(a);
         if(l.equals("share diagnostics")||l.equals("share diagnostic report"))
             return DiagnosticsController.shareLatest(a);
