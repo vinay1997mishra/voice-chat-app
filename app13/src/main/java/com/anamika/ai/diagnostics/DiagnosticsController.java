@@ -31,12 +31,16 @@ public final class DiagnosticsController {
         if(report.startsWith("Diagnostics report unavailable"))
             return report;
 
-        Intent i=new Intent(Intent.ACTION_SEND);
-        i.setType("text/plain");
-        i.putExtra(Intent.EXTRA_SUBJECT,"Anamika AI 13 Full Functional Diagnostics");
-        i.putExtra(Intent.EXTRA_TEXT,report);
-        a.startActivity(Intent.createChooser(i,"Share Anamika diagnostics"));
-        return "Diagnostics share sheet khol di. Aap report ChatGPT ya kisi trusted destination ko bhej sakte ho.";
+        try{
+            Intent i=new Intent(Intent.ACTION_SEND);
+            i.setType("text/plain");
+            i.putExtra(Intent.EXTRA_SUBJECT,"Anamika AI 13 Full Functional Diagnostics");
+            i.putExtra(Intent.EXTRA_TEXT,report);
+            a.startActivity(Intent.createChooser(i,"Share Anamika diagnostics"));
+            return "Diagnostics share sheet khol di. Aap report ChatGPT ya kisi trusted destination ko bhej sakte ho.";
+        }catch(Exception e){
+            return "Diagnostics share sheet open nahi hui: "+safe(e);
+        }
     }
 
     public static String latest(Activity a){
