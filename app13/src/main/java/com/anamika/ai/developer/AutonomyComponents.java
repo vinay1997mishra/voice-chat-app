@@ -14,12 +14,10 @@ public final class AutonomyComponents {
 
     public static String status(Context c){
         LocalBuildEngine.Capability build=LocalBuildEngine.capability(c);
-        File brainRoot=new File(c.getFilesDir(),"v13_brain");
-        File model=new File(brainRoot,"model.gguf");
-        File runtime=new File(brainRoot,"bin/anamika-brain");
+        File model=BrainRuntimePaths.model(c);
 
         boolean modelReady=model.isFile()&&model.length()>16L*1024L*1024L;
-        boolean runtimeReady=runtime.isFile()&&runtime.canExecute();
+        boolean runtimeReady=BrainRuntimePaths.runtimeReady(c);
 
         return "Anamika 13 autonomy components"+
                 "\nLocal builder: "+(build.ready?"READY":"NOT READY")+
@@ -31,9 +29,7 @@ public final class AutonomyComponents {
     }
 
     public static String brainStatus(Context c){
-        File root=new File(c.getFilesDir(),"v13_brain");
-        File model=new File(root,"model.gguf");
         return OfflineCodingBrain.status(c)+
-                "\nNo separate app is required; model/runtime live in Anamika private storage.";
+                "\nNo separate app is required; model/schema stay private and native inference runtime is embedded in the signed APK.";
     }
 }
