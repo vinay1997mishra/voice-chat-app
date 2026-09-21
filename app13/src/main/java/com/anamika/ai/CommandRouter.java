@@ -169,8 +169,7 @@ public final class CommandRouter {
         if(l.equals("watchdog")||l.equals("runtime status")) return RuntimeWatchdog.status(a);
 
         if(l.equals("wake on")||l.equals("wake enable")){
-            WakeService.enable(a);
-            return "Wake listener on kar diya. Android ya speech provider background recognition ko kabhi-kabhi pause kar sakta hai.";
+            return WakeService.enable(a);
         }
         if(l.equals("wake off")||l.equals("wake disable")){
             WakeService.disable(a);
