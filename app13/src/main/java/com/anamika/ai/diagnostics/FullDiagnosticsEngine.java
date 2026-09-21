@@ -383,12 +383,12 @@ public final class FullDiagnosticsEngine {
 
     private static void testRecovery(Context c,List<Check>x){
         try{
-            String r=RollbackManager.checkpoint(c);
-            boolean ok=r.contains("READY");
-            add(x,"recovery_checkpoint","rollback",ok,compact(r));
+            boolean ok=RollbackManager.checkpointReady(c);
+            state(x,"recovery_checkpoint","rollback",ok?State.PASS:State.NOT_INSTALLED,
+                    ok?compact(RollbackManager.status(c)):"No immutable recovery checkpoint yet.");
             state(x,"rollback_recovery_install_end_to_end","rollback",
-                    ok?State.LIVE_TEST_REQUIRED:State.FAIL,
-                    ok?"Checkpoint creation proven; real recovery APK build/install cannot be performed during diagnostics without changing the installed app.":"checkpoint failed");
+                    ok?State.LIVE_TEST_REQUIRED:State.NOT_INSTALLED,
+                    ok?"Exact checkpoint source is available; real recovery APK build/install still needs a deliberate owner-triggered recovery test.":"Create a checkpoint before recovery can be tested.");
         }catch(Exception e){add(x,"recovery_checkpoint","rollback",false,safe(e));}
     }
 
