@@ -51,7 +51,9 @@ jobs:
           rm -rf /tmp/anamika-aapt-smoke
           mkdir -p /tmp/anamika-aapt-smoke/gen
           "$AAPT2" compile --dir app13/src/main/res -o /tmp/anamika-aapt-smoke/resources.zip
-          "$AAPT2" link             -I "$ANDROID_JAR"             --manifest app13/src/main/AndroidManifest.xml             --java /tmp/anamika-aapt-smoke/gen             --custom-package com.anamika.ai             --rename-manifest-package com.anamika.ai13             --min-sdk-version 21             --target-sdk-version 36             --version-code 130999             --version-name 13.local.130999             -o /tmp/anamika-aapt-smoke/base.apk             /tmp/anamika-aapt-smoke/resources.zip
+          sed 's/<manifest /<manifest package="com.anamika.ai13" /' app13/src/main/AndroidManifest.xml > /tmp/anamika-aapt-smoke/AndroidManifest.xml
+          grep -q 'package="com.anamika.ai13"' /tmp/anamika-aapt-smoke/AndroidManifest.xml
+          "$AAPT2" link             -I "$ANDROID_JAR"             --manifest /tmp/anamika-aapt-smoke/AndroidManifest.xml             --java /tmp/anamika-aapt-smoke/gen             --custom-package com.anamika.ai             --rename-manifest-package com.anamika.ai13             --min-sdk-version 21             --target-sdk-version 36             --version-code 130999             --version-name 13.local.130999             -o /tmp/anamika-aapt-smoke/base.apk             /tmp/anamika-aapt-smoke/resources.zip
           test -f /tmp/anamika-aapt-smoke/gen/com/anamika/ai/R.java
           "$AAPT" dump badging /tmp/anamika-aapt-smoke/base.apk | tee /tmp/anamika-aapt-smoke/badging.txt
           grep -q "package: name='com.anamika.ai13' versionCode='130999'" /tmp/anamika-aapt-smoke/badging.txt
