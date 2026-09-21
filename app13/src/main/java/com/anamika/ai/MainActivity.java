@@ -235,6 +235,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
         setContentView(shell);
         append("Anamika","Ji, boliye.");
+        requestNotificationPermission();
         bootstrapBundledToolchain();
         getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,700);
     }
