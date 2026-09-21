@@ -38,6 +38,8 @@ APP="$WORKSPACE/app13"
 MANIFEST="$APP/src/main/AndroidManifest.xml"
 RES="$APP/src/main/res"
 SRC="$APP/src/main/java"
+ASSETS="$APP/src/main/assets"
+JNI_ARM64="$APP/src/main/jniLibs/arm64-v8a"
 BUILD="$WORKSPACE/.anamika_build/toolchain"
 GEN="$BUILD/gen"
 CLASSES="$BUILD/classes"
@@ -55,7 +57,7 @@ CLASSPATH="$COMPILER" /system/bin/app_process /system/bin   org.eclipse.jdt.inte
 
 CLASSPATH="$D8" /system/bin/app_process /system/bin   com.android.tools.r8.D8   --min-api 21   --lib "$ANDROID_JAR"   --output "$DEX"   "$CLASSES"
 
-CLASSPATH="$COMPILER" /system/bin/app_process /system/bin   com.anamika.toolchain.ZipInjector   "$BUILD/base.apk" "$DEX/classes.dex" "$BUILD/unsigned.apk"
+CLASSPATH="$COMPILER" /system/bin/app_process /system/bin   com.anamika.toolchain.ZipInjector   "$BUILD/base.apk" "$DEX/classes.dex" "$BUILD/unsigned.apk" "$ASSETS" "$JNI_ARM64"
 
 CLASSPATH="$APKSIG" /system/bin/app_process /system/bin   com.android.apksigner.ApkSignerTool sign   --ks "$KEYSTORE"   --ks-type PKCS12   --ks-pass env:ANAMIKA_KS_PASS   --key-pass env:ANAMIKA_KS_PASS   --out "$OUTPUT"   "$BUILD/unsigned.apk"
 
