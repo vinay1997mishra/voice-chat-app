@@ -68,6 +68,12 @@ jobs:
           bash tools/anamika-toolchain/stage-embedded-aapt2.sh
           test -f app13/src/main/jniLibs/arm64-v8a/libanamika_aapt2.so
 
+      - name: Stage embedded ARM64 Brain runtime
+        run: |
+          set -euo pipefail
+          bash tools/anamika-brain/stage-embedded-brain.sh
+          test -f app13/src/main/jniLibs/arm64-v8a/libanamika_llama_cli.so
+
       - name: Bundle verified V13 toolchain into APK
         run: |
           set -euo pipefail
@@ -87,6 +93,7 @@ jobs:
           APK="app13/build/outputs/apk/release/app13-release.apk"
           test -f "$APK"
           unzip -l "$APK" | grep -q "lib/arm64-v8a/libanamika_aapt2.so"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libanamika_llama_cli.so"
           unzip -l "$APK" | grep -q "assets/components/AnamikaAI-13-Toolchain-arm64.zip"
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/certs.txt
           GOT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' /tmp/certs.txt | awk '{print $NF}')"
