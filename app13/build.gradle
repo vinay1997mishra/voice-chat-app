@@ -1,10 +1,10 @@
-def anamikaReleaseStore = System.getenv("ANAMIKA_RELEASE_STORE_FILE")
-def anamikaReleasePass = System.getenv("ANAMIKA_RELEASE_STORE_PASSWORD")
-def anamikaReleaseAlias = System.getenv("ANAMIKA_RELEASE_KEY_ALIAS") ?: "anamika13-release"
-
 plugins {
     id 'com.android.application'
 }
+
+def anamikaReleaseStore = System.getenv("ANAMIKA_RELEASE_STORE_FILE")
+def anamikaReleasePass = System.getenv("ANAMIKA_RELEASE_STORE_PASSWORD")
+def anamikaReleaseAlias = System.getenv("ANAMIKA_RELEASE_KEY_ALIAS") ?: "anamika13-release"
 
 android {
     namespace 'com.anamika.ai'
