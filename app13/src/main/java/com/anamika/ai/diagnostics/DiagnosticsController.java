@@ -24,10 +24,8 @@ public final class DiagnosticsController {
 
     public static String shareLatest(Activity a){
         String report=DiagnosticsReportStore.readLatest(a);
-        if(report.startsWith("No diagnostics report")){
-            runAndSave(a);
-            report=DiagnosticsReportStore.readLatest(a);
-        }
+        if(report.startsWith("No diagnostics report"))
+            return "Pehle “Run Full Functional Diagnostics” chalao, phir report share karo.";
         if(report.startsWith("Diagnostics report unavailable"))
             return report;
 
