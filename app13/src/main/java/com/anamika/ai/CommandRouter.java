@@ -37,6 +37,12 @@ public final class CommandRouter {
     private CommandRouter(){}
 
     public static String run(Activity a,String raw){
+        String fast=runFast(a,raw);
+        if(fast!=null)return fast;
+        return runBrain(a,raw);
+    }
+
+    public static String runFast(Activity a,String raw){
         String original=raw==null?"":raw.trim();
         if(original.isEmpty()) return "Command empty.";
 
@@ -194,7 +200,12 @@ public final class CommandRouter {
                     Build.MANUFACTURER+" "+Build.MODEL+"\nABI: "+String.join(", ",Build.SUPPORTED_ABIS);
         }
 
-        return "Ye baat samajh aayi, lekin is intent ka V13 action abhi mapped nahi hai. Main original sentence ko future AI/reasoning layer ke liye preserve kar rahi hu: "+original;
+        return null;
+    }
+
+    public static String runBrain(Activity a,String raw){
+        BrainCommandEngine.Plan p=BrainCommandEngine.plan(a.getApplicationContext(),raw);
+        return BrainCommandEngine.execute(a,p);
     }
 
     private static String safe(Exception e){
