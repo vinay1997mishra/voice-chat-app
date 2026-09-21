@@ -126,9 +126,28 @@ public final class ComponentPackManager {
         }
     }
 
+    public static boolean brainInstalled(Context c){
+        File root=new File(c.getFilesDir(),"v13_brain");
+        return new File(root,"model.gguf").isFile()&&new File(root,"runtime.ready").isFile();
+    }
+
+    public static boolean toolchainInstalled(Context c){
+        File root=new File(c.getFilesDir(),"v13_toolchain");
+        return new File(root,"bin/aapt2").isFile()&&
+                new File(root,"lib/java-compiler.jar").isFile()&&
+                new File(root,"lib/d8.jar").isFile()&&
+                new File(root,"lib/apksig.jar").isFile()&&
+                new File(root,"platforms/android-36/android.jar").isFile();
+    }
+
+    public static boolean needsSetup(Context c){
+        return !brainInstalled(c)||!toolchainInstalled(c);
+    }
+
     public static String status(Context c){
         return describe(new File(c.getFilesDir(),"v13_brain"),"Brain pack")+
-                "\n"+describe(new File(c.getFilesDir(),"v13_toolchain"),"Toolchain pack");
+                "\n"+describe(new File(c.getFilesDir(),"v13_toolchain"),"Toolchain pack")+
+                "\nOffline mode: "+(!needsSetup(c)?"READY":"COMPONENTS REQUIRED");
     }
 
     private static String checkRequired(String type,File staging)throws Exception{

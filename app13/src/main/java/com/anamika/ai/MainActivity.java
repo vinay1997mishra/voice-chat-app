@@ -2,6 +2,8 @@ package com.anamika.ai;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,6 +16,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.anamika.ai.components.ComponentPackManager;
+import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.memory.MemoryStore;
@@ -77,7 +81,11 @@ public final class MainActivity extends Activity implements VoiceController.List
                 boolean ok;
                 if(OwnerStore.hasPin(this)) ok=OwnerStore.verify(this,p);
                 else{OwnerStore.setPin(this,p);ok=true;}
-                if(ok){Toast.makeText(this,"Owner verified",Toast.LENGTH_SHORT).show();showAssistant();}
+                if(ok){
+                    Toast.makeText(this,"Owner verified",Toast.LENGTH_SHORT).show();
+                    showAssistant();
+                    maybeOfferComponentSetup();
+                }
                 else Toast.makeText(this,"Wrong Owner PIN",Toast.LENGTH_LONG).show();
             }catch(Exception e){
                 Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
@@ -127,9 +135,11 @@ public final class MainActivity extends Activity implements VoiceController.List
         LinearLayout row2=new LinearLayout(this);
         row2.setOrientation(LinearLayout.HORIZONTAL);
         Button functions=button("Functions");
+        Button components=button("Components");
         Button update=button("Self Update");
         Button lock=button("Lock");
         row2.addView(functions,new LinearLayout.LayoutParams(0,-2,1));
+        row2.addView(components,new LinearLayout.LayoutParams(0,-2,1));
         row2.addView(update,new LinearLayout.LayoutParams(0,-2,1));
         row2.addView(lock,new LinearLayout.LayoutParams(0,-2,1));
         root.addView(row2);
@@ -153,10 +163,26 @@ public final class MainActivity extends Activity implements VoiceController.List
             }
         });
         functions.setOnClickListener(v->runCommand("functions"));
+        components.setOnClickListener(v->startActivity(new Intent(this,ComponentPacksActivity.class)));
         update.setOnClickListener(v->runCommand("self update"));
         lock.setOnClickListener(v->{OwnerStore.forgetTrust(this);WakeService.disable(this);showOwnerGate();});
 
         setContentView(root);
+        getWindow().getDecorView().postDelayed(this::maybeOfferComponentSetup,500);
+    }
+
+    private void maybeOfferComponentSetup(){
+        if(!OwnerStore.isTrusted(this)||!ComponentPackManager.needsSetup(this))return;
+        android.content.SharedPreferences p=getSharedPreferences("anamika13_component_onboarding",MODE_PRIVATE);
+        if(p.getBoolean("shown_this_install",false))return;
+        p.edit().putBoolean("shown_this_install",true).apply();
+
+        new AlertDialog.Builder(this)
+                .setTitle("Offline Components Setup")
+                .setMessage("Offline coding brain aur Android build toolchain abhi install nahi hain. Inhe Anamika ke andar download/import karke private storage me rakhna hoga. Install hone ke baad ye offline use honge.")
+                .setPositiveButton("Setup Now",(d,w)->startActivity(new Intent(this,ComponentPacksActivity.class)))
+                .setNegativeButton("Later",null)
+                .show();
     }
 
     private void startVoice(){
