@@ -40,6 +40,31 @@ public final class ComponentPackManager {
 
     private ComponentPackManager(){}
 
+    /**
+     * Installs the toolchain bundled inside the signed APK, if present.
+     * The APK asset is trusted only after its internal manifest hashes pass
+     * the same verification path as a manually imported component pack.
+     */
+    public static Result installBundledToolchainIfNeeded(Context c){
+        if(toolchainInstalled(c))
+            return new Result(true,"Bundled toolchain already installed.");
+        try(InputStream in=c.getAssets().open("components/AnamikaAI-13-Toolchain-arm64.zip")){
+            Result r=installZip(c,in);
+            if(!r.ok)return new Result(false,"Bundled toolchain install failed: "+r.message);
+            return new Result(true,"Bundled Android toolchain installed from signed APK.\n"+r.message);
+        }catch(java.io.FileNotFoundException e){
+            return new Result(false,"This APK does not contain the bundled Android toolchain.");
+        }catch(Exception e){
+            return new Result(false,"Bundled toolchain bootstrap failed: "+safe(e));
+        }
+    }
+
+    public static boolean bundledToolchainAvailable(Context c){
+        try(InputStream in=c.getAssets().open("components/AnamikaAI-13-Toolchain-arm64.zip")){
+            return in.read()!=-1;
+        }catch(Exception e){return false;}
+    }
+
     public static Result installZip(Context c,InputStream raw){
         File staging=null;
         try{
