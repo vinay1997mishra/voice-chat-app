@@ -42,6 +42,22 @@ public final class CommandRouter {
         return runBrain(a,raw);
     }
 
+
+    public static boolean requiresBackgroundFast(String raw){
+        String original=raw==null?"":raw.trim();
+        if(original.isEmpty())return false;
+        String text=LanguageCommandInterpreter.normalize(original);
+        String l=text.toLowerCase(Locale.ROOT);
+        return l.equals("run self test")||l.equals("self test")||l.equals("full diagnostics")||
+                l.equals("check all functions")||
+                l.equals("local build")||l.equals("build upgrade")||
+                l.startsWith("offline repair ")||
+                l.startsWith("create function ")||l.startsWith("add function ")||l.startsWith("new function ")||
+                l.startsWith("prepare upgrade")||l.startsWith("prepare self upgrade")||
+                l.equals("validate upgrade")||l.equals("code doctor")||
+                l.equals("create recovery checkpoint")||l.equals("recovery checkpoint");
+    }
+
     public static String runFast(Activity a,String raw){
         String original=raw==null?"":raw.trim();
         if(original.isEmpty()) return "Command empty.";
