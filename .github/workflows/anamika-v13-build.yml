@@ -10,6 +10,7 @@ on:
       - 'gradle.properties'
       - '.github/workflows/anamika-v13-build.yml'
       - 'tools/anamika-toolchain/**'
+      - 'tools/anamika-brain/**'
   pull_request:
   workflow_dispatch:
 
@@ -51,6 +52,12 @@ jobs:
           bash tools/anamika-toolchain/stage-embedded-aapt2.sh
           test -f app13/src/main/jniLibs/arm64-v8a/libanamika_aapt2.so
 
+      - name: Stage embedded ARM64 Brain runtime
+        run: |
+          set -euo pipefail
+          bash tools/anamika-brain/stage-embedded-brain.sh
+          test -f app13/src/main/jniLibs/arm64-v8a/libanamika_llama_cli.so
+
       - name: Bundle verified Toolchain 13
         run: |
           set -euo pipefail
@@ -72,6 +79,7 @@ jobs:
           unzip -l app13/build/outputs/apk/debug/app13-debug.apk > /tmp/apk-files.txt
           grep -q "assets/self_source/FILE_INVENTORY.txt" /tmp/apk-files.txt
           grep -q "lib/arm64-v8a/libanamika_aapt2.so" /tmp/apk-files.txt
+          grep -q "lib/arm64-v8a/libanamika_llama_cli.so" /tmp/apk-files.txt
           grep -q "assets/components/AnamikaAI-13-Toolchain-arm64.zip" /tmp/apk-files.txt
           SOURCE_COUNT="$(grep -c 'assets/self_source/app13/src/main/java/.*\.java' /tmp/apk-files.txt)"
           test "$SOURCE_COUNT" -ge 45
