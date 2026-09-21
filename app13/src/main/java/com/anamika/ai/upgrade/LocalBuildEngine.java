@@ -4,8 +4,12 @@ import android.content.Context;
 
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.runtime.LocalProcessRunner;
+import com.anamika.ai.core.AndroidCompat;
+
+import org.json.JSONObject;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -73,6 +77,13 @@ public final class LocalBuildEngine {
         if(output.exists())output.delete();
 
         try(SignerVault.TemporaryPkcs12 ks=SignerVault.materializeTemporary(c,outputDir)){
+            JSONObject meta=new JSONObject(AndroidCompat.readText(
+                    new File(workspace,"ANAMIKA_WORKSPACE.json"),StandardCharsets.UTF_8));
+            long candidateVersion=meta.optLong("candidate_version_code",-1L);
+            if(candidateVersion<=0L)
+                throw new IllegalStateException("Workspace candidate versionCode is missing.");
+            String candidateName="13.local."+candidateVersion;
+
             List<String> cmd=new ArrayList<>();
             cmd.add("/system/bin/sh");
             cmd.add(builder.getAbsolutePath());
@@ -84,6 +95,8 @@ public final class LocalBuildEngine {
             cmd.add("--compiler");cmd.add(new File(root,"lib/java-compiler.jar").getAbsolutePath());
             cmd.add("--apksig");cmd.add(new File(root,"lib/apksig.jar").getAbsolutePath());
             cmd.add("--keystore");cmd.add(ks.file.getAbsolutePath());
+            cmd.add("--version-code");cmd.add(String.valueOf(candidateVersion));
+            cmd.add("--version-name");cmd.add(candidateName);
 
             HashMap<String,String> env=new HashMap<>();
             env.put("ANAMIKA_KS_PASS",new String(ks.password));
