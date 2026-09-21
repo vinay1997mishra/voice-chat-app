@@ -66,8 +66,12 @@ public final class LocalProcessRunner {
                 byte[] b=new byte[8192];int n,total=0;
                 while((n=in.read(b))>0){
                     int keep=Math.min(n,Math.max(0,limit-total));
-                    if(keep>0){data.write(b,0,keep);total+=keep;}
-                    if(total>=limit)break;
+                    if(keep>0){
+                        data.write(b,0,keep);
+                        total+=keep;
+                    }
+                    // Keep draining the pipe after the capture limit is reached.
+                    // Otherwise a verbose child can block forever on a full stdout/stderr pipe.
                 }
             }catch(Exception ignored){}
         }
