@@ -1,5 +1,6 @@
 package com.anamika.ai.voice;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -37,18 +38,27 @@ public final class WakeService extends Service implements RecognitionListener {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
     private boolean stopping;
+    private static volatile boolean running;
 
     public static boolean isEnabled(Context c){
         return c.getSharedPreferences(PREF,MODE_PRIVATE).getBoolean(KEY,false);
     }
 
-    public static void enable(Context c){
+    public static String enable(Context c){
         c.getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(KEY,true).apply();
+        if(Build.VERSION.SDK_INT>=23&&!AndroidCompat.hasPermission(c,Manifest.permission.RECORD_AUDIO))
+            return "Wake listener enabled setting saved, but microphone permission is not granted.";
         Intent i=new Intent(c,WakeService.class);
         try{
             if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i); else c.startService(i);
-        }catch(Exception ignored){}
+            return "Wake listener start requested. Keep Anamika unrestricted from battery optimization for better reliability.";
+        }catch(Throwable e){
+            return "Wake listener setting saved, but Android blocked background microphone service start: "+safe(e)+
+                    ". Open Anamika and enable wake while the app is visible.";
+        }
     }
+
+    public static boolean isRunning(){return running;}
 
     public static void disable(Context c){
         c.getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(KEY,false).apply();
@@ -58,6 +68,7 @@ public final class WakeService extends Service implements RecognitionListener {
 
     @Override public void onCreate(){
         super.onCreate();
+        running=true;
         createChannel();
         startForeground(NOTIFICATION_ID,notification("Wake listener starting…"));
         handler.post(this::startListening);
@@ -161,6 +172,7 @@ public final class WakeService extends Service implements RecognitionListener {
     }
 
     @Override public void onDestroy(){
+        running=false;
         stopping=true;
         handler.removeCallbacksAndMessages(null);
         destroyRecognizer();
@@ -182,4 +194,9 @@ public final class WakeService extends Service implements RecognitionListener {
     }
     @Override public void onPartialResults(Bundle partialResults){}
     @Override public void onEvent(int eventType,Bundle params){}
+
+    private static String safe(Throwable e){
+        String m=e.getMessage();
+        return m==null||m.trim().isEmpty()?e.getClass().getSimpleName():m;
+    }
 }
