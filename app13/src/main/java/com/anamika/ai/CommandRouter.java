@@ -183,6 +183,13 @@ public final class CommandRouter {
             String request=text.substring("offline repair ".length()).trim();
             return UpgradeCoordinator.repairLatestOffline(a,request);
         }
+        if(l.startsWith("create function ")||l.startsWith("add function ")||l.startsWith("new function ")){
+            int p=text.indexOf(' ');
+            String request=p>=0?text.substring(p+1).trim():text;
+            if(request.toLowerCase(Locale.ROOT).startsWith("function "))
+                request=request.substring("function ".length()).trim();
+            return UpgradeCoordinator.createOrUpgradeFunction(a,request);
+        }
         if(l.equals("local build")||l.equals("build upgrade"))
             return UpgradeCoordinator.buildLatest(a);
         if(l.startsWith("prepare upgrade")||l.startsWith("prepare self upgrade"))
