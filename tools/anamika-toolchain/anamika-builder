@@ -1,0 +1,63 @@
+#!/system/bin/sh
+set -eu
+
+WORKSPACE=""
+OUTPUT=""
+ANDROID_JAR=""
+AAPT2=""
+D8=""
+COMPILER=""
+APKSIG=""
+KEYSTORE=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace) WORKSPACE="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    --android-jar) ANDROID_JAR="$2"; shift 2 ;;
+    --aapt2) AAPT2="$2"; shift 2 ;;
+    --d8) D8="$2"; shift 2 ;;
+    --compiler) COMPILER="$2"; shift 2 ;;
+    --apksig) APKSIG="$2"; shift 2 ;;
+    --keystore) KEYSTORE="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$WORKSPACE" ] || { echo "Missing WORKSPACE" >&2; exit 2; }
+[ -n "$OUTPUT" ] || { echo "Missing OUTPUT" >&2; exit 2; }
+[ -n "$ANDROID_JAR" ] || { echo "Missing ANDROID_JAR" >&2; exit 2; }
+[ -n "$AAPT2" ] || { echo "Missing AAPT2" >&2; exit 2; }
+[ -n "$D8" ] || { echo "Missing D8" >&2; exit 2; }
+[ -n "$COMPILER" ] || { echo "Missing COMPILER" >&2; exit 2; }
+[ -n "$APKSIG" ] || { echo "Missing APKSIG" >&2; exit 2; }
+[ -n "$KEYSTORE" ] || { echo "Missing KEYSTORE" >&2; exit 2; }
+[ -n "${ANAMIKA_KS_PASS:-}" ] || { echo "ANAMIKA_KS_PASS missing" >&2; exit 2; }
+
+APP="$WORKSPACE/app13"
+MANIFEST="$APP/src/main/AndroidManifest.xml"
+RES="$APP/src/main/res"
+SRC="$APP/src/main/java"
+BUILD="$WORKSPACE/.anamika_build/toolchain"
+GEN="$BUILD/gen"
+CLASSES="$BUILD/classes"
+DEX="$BUILD/dex"
+rm -rf "$BUILD"
+mkdir -p "$GEN" "$CLASSES" "$DEX" "$(dirname "$OUTPUT")"
+
+"$AAPT2" compile --dir "$RES" -o "$BUILD/resources.zip"
+"$AAPT2" link   -I "$ANDROID_JAR"   --manifest "$MANIFEST"   --java "$GEN"   --min-sdk-version 21   --target-sdk-version 36   -o "$BUILD/base.apk"   "$BUILD/resources.zip"
+
+find "$SRC" "$GEN" -type f -name '*.java' | sort > "$BUILD/sources.txt"
+[ -s "$BUILD/sources.txt" ] || { echo "No Java sources found" >&2; exit 3; }
+
+CLASSPATH="$COMPILER" /system/bin/app_process /system/bin   org.eclipse.jdt.internal.compiler.batch.Main   -17 -proc:none -encoding UTF-8   -classpath "$ANDROID_JAR"   -d "$CLASSES"   @"$BUILD/sources.txt"
+
+CLASSPATH="$D8" /system/bin/app_process /system/bin   com.android.tools.r8.D8   --min-api 21   --lib "$ANDROID_JAR"   --output "$DEX"   "$CLASSES"
+
+CLASSPATH="$COMPILER" /system/bin/app_process /system/bin   com.anamika.toolchain.ZipInjector   "$BUILD/base.apk" "$DEX/classes.dex" "$BUILD/unsigned.apk"
+
+CLASSPATH="$APKSIG" /system/bin/app_process /system/bin   com.android.apksigner.ApkSignerTool sign   --ks "$KEYSTORE"   --ks-type PKCS12   --ks-pass env:ANAMIKA_KS_PASS   --key-pass env:ANAMIKA_KS_PASS   --out "$OUTPUT"   "$BUILD/unsigned.apk"
+
+[ -s "$OUTPUT" ] || { echo "Signed APK was not produced" >&2; exit 4; }
+echo "ANAMIKA_LOCAL_BUILD_OK $OUTPUT"
