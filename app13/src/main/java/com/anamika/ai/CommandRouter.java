@@ -7,6 +7,7 @@ import android.os.Build;
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.HealthMonitor;
 import com.anamika.ai.files.LocalVault;
+import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.messaging.MessageCommandParser;
 import com.anamika.ai.messaging.MessagingAutomationEngine;
@@ -24,21 +25,32 @@ import com.anamika.ai.voice.WakeService;
 
 import java.util.Locale;
 
-/** Deterministic V13 command layer. AI reasoning remains isolated from phone-control functions. */
+/** Deterministic V13 command layer with Hindi/Hinglish/English normalization. */
 public final class CommandRouter {
     private CommandRouter(){}
 
     public static String run(Activity a,String raw){
-        String text=raw==null?"":raw.trim();
-        if(text.isEmpty()) return "Command empty.";
+        String original=raw==null?"":raw.trim();
+        if(original.isEmpty()) return "Command empty.";
+
+        // Message parsing uses the untouched owner sentence so the message body is never rewritten.
+        MessageCommandParser.Request messageRequest=MessageCommandParser.parse(original);
+        if(messageRequest!=null){
+            if(!AppAutomationAccessibilityService.isConnected())
+                return "Accessibility service connected nahi hai. Plugin Center me Anamika Accessibility on karke command dobara bolo.";
+            return MessagingAutomationEngine.start(a,messageRequest);
+        }
+
+        String text=LanguageCommandInterpreter.normalize(original);
         String l=text.toLowerCase(Locale.ROOT);
 
         if(l.equals("hello")||l.equals("hi")||l.equals("hey")||
-                l.equals("hello anamika")||l.equals("hello mika"))
+                l.equals("hello anamika")||l.equals("hello mika")||
+                l.equals("namaste")||l.equals("नमस्ते"))
             return "Ji, boliye. Anamika 13 ready hai.";
 
-        if(l.equals("functions")||l.contains("what can you do")||l.contains("kya kar sakti")){
-            return "V13 core: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, owner-controlled Plugin Center, Accessibility tap/type/back, one-shot message sending in supported visible chat UIs, Deep Blueprint, research notebook, source-vault self-upgrade workspace, Code Doctor validation, APK verification and Android update installer.";
+        if(l.equals("functions")){
+            return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
         }
 
         if(l.equals("message status")||l.equals("messaging status"))
@@ -46,27 +58,21 @@ public final class CommandRouter {
         if(l.equals("cancel message")||l.equals("stop message"))
             return MessagingAutomationEngine.cancel(a);
 
-        MessageCommandParser.Request messageRequest=MessageCommandParser.parse(text);
-        if(messageRequest!=null){
-            if(!AppAutomationAccessibilityService.isConnected())
-                return "Accessibility service is not enabled/connected. Open Plugin Center, enable Anamika Accessibility, then repeat the message command.";
-            return MessagingAutomationEngine.start(a,messageRequest);
-        }
-        if(MessageCommandParser.looksLikeMessageCommand(text))
-            return "Message command samajh nahi aaya. Example: WhatsApp me Rahul ko Hello bhejo. Or: Send message on WhatsApp to Rahul: Hello.";
+        if(MessageCommandParser.looksLikeMessageCommand(original))
+            return "Message command samajh nahi aaya. Aise bolo: WhatsApp me Rahul ko Hello bhejo. Ya: व्हाट्सऐप में राहुल को हेलो भेजो.";
 
         if(l.equals("plugins")||l.equals("plugin center")){
             a.startActivity(new Intent(a,PluginManagerActivity.class));
-            return "Opening Plugin Center.";
+            return "Plugin Center khol rahi hu.";
         }
 
-        if(l.startsWith("scan app ")||l.startsWith("blueprint ")){
-            String name=l.startsWith("scan app ")?text.substring(9).trim():text.substring(10).trim();
+        if(l.startsWith("scan app ")){
+            String name=text.substring(9).trim();
             AppLauncher.AppRef app=AppLauncher.resolve(a,name);
-            if(app==null)return "Installed app not found: "+name;
+            if(app==null)return "Installed app nahi mila: "+name;
             String started=BlueprintStore.start(a,app.packageName,app.label);
             AppLauncher.open(a,app.label);
-            return started+"\nOpen the screens you want Anamika to observe, then say “stop scan”.";
+            return started+"\nJin screens ko observe karwana hai unhe kholo, phir “scan band karo” bolo.";
         }
         if(l.equals("stop scan")||l.equals("inspection complete")) return BlueprintStore.stop(a);
         if(l.equals("blueprint status")||l.equals("scan status")) return BlueprintStore.status(a);
@@ -82,11 +88,13 @@ public final class CommandRouter {
         if(l.startsWith("type ")) return AppAutomationAccessibilityService.typeIntoFocused(text.substring(5));
         if(l.equals("back")) return AppAutomationAccessibilityService.back();
 
-        if(l.startsWith("open ")) return AppLauncher.open(a,text.substring(5).trim()).message;
         if(l.startsWith("app open ")) return AppLauncher.open(a,text.substring(9).trim()).message;
+        if(l.startsWith("open ")) return AppLauncher.open(a,text.substring(5).trim()).message;
 
-        if(l.startsWith("search ")||l.startsWith("google "))
-            return PhoneActions.webSearch(a,text.substring(text.indexOf(' ')+1).trim());
+        if(l.startsWith("search "))
+            return PhoneActions.webSearch(a,text.substring(7).trim());
+        if(l.startsWith("google "))
+            return PhoneActions.webSearch(a,text.substring(7).trim());
         if(l.startsWith("open url ")) return PhoneActions.openUrl(a,text.substring(9).trim());
         if(l.equals("settings")) return PhoneActions.openSettings(a);
         if(l.equals("app settings")) return PhoneActions.openAppSettings(a);
@@ -101,15 +109,14 @@ public final class CommandRouter {
             }catch(Exception e){return "Calculation error: "+safe(e);}
         }
 
-        if(l.startsWith("remember ")){
+        if(l.startsWith("remember "))
             return MemoryStore.saveNote(a,text.substring(9).trim());
-        }
         if(l.equals("memory")||l.equals("memory status")) return MemoryStore.summary(a);
 
         if(l.startsWith("save file ")){
             String body=text.substring(10);
             int split=body.indexOf('|');
-            if(split<1)return "Use: save file NAME | CONTENT";
+            if(split<1)return "Aise bolo: file notes.txt me hello save karo";
             return LocalVault.saveText(a,body.substring(0,split).trim(),body.substring(split+1).trim());
         }
         if(l.equals("vault")||l.equals("vault status")) return LocalVault.summary(a);
@@ -121,11 +128,11 @@ public final class CommandRouter {
 
         if(l.equals("wake on")||l.equals("wake enable")){
             WakeService.enable(a);
-            return "Wake listener enabled. Android or the speech-recognition provider may still pause continuous background recognition.";
+            return "Wake listener on kar diya. Android ya speech provider background recognition ko kabhi-kabhi pause kar sakta hai.";
         }
         if(l.equals("wake off")||l.equals("wake disable")){
             WakeService.disable(a);
-            return "Wake listener disabled.";
+            return "Wake listener off kar diya.";
         }
 
         if(l.equals("upgrade status")||l.equals("self upgrade status"))
@@ -137,7 +144,7 @@ public final class CommandRouter {
 
         if(l.equals("install update")||l.equals("self update")){
             a.startActivity(new Intent(a,SelfUpdateActivity.class));
-            return "Opening verified self-update installer.";
+            return "Verified self-update installer khol rahi hu.";
         }
 
         if(l.equals("device info")){
@@ -145,7 +152,7 @@ public final class CommandRouter {
                     Build.MANUFACTURER+" "+Build.MODEL+"\nABI: "+String.join(", ",Build.SUPPORTED_ABIS);
         }
 
-        return "Ye command V13 deterministic core me abhi mapped nahi hai. “functions” bolo. AI/reasoning layer ko alag rakha gaya hai taaki AI fail hone par phone functions band na hon.";
+        return "Ye baat samajh aayi, lekin is intent ka V13 action abhi mapped nahi hai. Main original sentence ko future AI/reasoning layer ke liye preserve kar rahi hu: "+original;
     }
 
     private static String safe(Exception e){
