@@ -27,6 +27,7 @@ public final class AppAutomationAccessibilityService extends AccessibilityServic
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
         if(event==null)return;
+        MessagingAutomationEngine.onOwnerInteraction(this,event);
         CharSequence p=event.getPackageName();
         String pkg=p==null?"":p.toString();
         if(pkg.isEmpty())return;
