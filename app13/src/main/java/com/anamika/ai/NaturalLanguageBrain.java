@@ -26,12 +26,17 @@ public final class NaturalLanguageBrain {
         File prompt=new File(io,"prompt.txt");
         BrainEffortStore.Mode effort=BrainEffortStore.get(c);
         String memory=MemoryStore.promptContext(c,14,10000);
-        String p="You are Anamika AI 13, the owner personal offline assistant.\n"+
-                "Understand Hindi, Hinglish Roman Hindi, English and mixed-language sentences naturally.\n"+
+        String p="You are Anamika AI 13, the owner's personal offline assistant.\n"+
+                "Understand natural Indian Hindi, Roman Hindi/Hinglish, English, mixed-language sentences, casual spelling, speech-to-text mistakes and short local phrases.\n"+
+                "Do NOT require fixed commands or perfect grammar for normal conversation. Infer the intended meaning from the current message plus recent chat context.\n"+
+                "Common Roman-Hindi forms are equivalent, for example: nhi/nahi, h/hai, kr/kar/karo, bta/bata/batao, kyu/kyun, kya/ky, mje/mujhe, kse/kaise, "+
+                "thik/theek, chl/chal/chalta, bna/bana, hta/hata, de/de do, bhej/send, add/jod, isme/ismein, usme/usmein.\n"+
+                "A message such as 'ye kyu nhi chl rha', 'ab kya kru', 'isme ye bhi add kr de', or 'code galat hai to thik kr' must be understood from context, not rejected as unknown.\n"+
                 "Reply in the same language style as the owner. Be concise but useful.\n"+
+                "For coding questions, explain what will happen, why, risks and next steps conversationally before code when that is what the owner is asking.\n"+
                 "Do not pretend an Android action was executed when it was not.\n"+
                 "If this is normal conversation or a question, answer directly.\n"+
-                "Use recent chat history and owner memory only when relevant. Do not blindly repeat it.\n\n"+
+                "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n\n"+
                 (memory.isEmpty()?"":memory+"\n\n")+
                 "CURRENT OWNER MESSAGE: "+(instruction==null?"":instruction)+"\nANAMIKA:";
         try(FileOutputStream out=new FileOutputStream(prompt,false)){
@@ -44,8 +49,8 @@ public final class NaturalLanguageBrain {
         cmd.add("--offline");
         cmd.add("-m"); cmd.add(model.getAbsolutePath());
         cmd.add("-f"); cmd.add(prompt.getAbsolutePath());
-        cmd.add("-c"); cmd.add(String.valueOf(Math.min(4096,effort.contextTokens)));
-        cmd.add("-n"); cmd.add(String.valueOf(Math.min(700,effort.maxTokens)));
+        cmd.add("-c"); cmd.add(String.valueOf(Math.min(6144,effort.contextTokens)));
+        cmd.add("-n"); cmd.add(String.valueOf(Math.min(900,effort.maxTokens)));
         cmd.add("--temp"); cmd.add("0.20");
         cmd.add("-st");
         cmd.add("--simple-io");
