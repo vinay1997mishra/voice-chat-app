@@ -559,8 +559,9 @@ public final class MainActivity extends Activity implements VoiceController.List
                 return;
             }
 
-            if((plan.actions==null||plan.actions.length()==0)
-                    &&(plan.reply==null||plan.reply.trim().isEmpty())){
+            if(plan.actions==null||plan.actions.length()==0){
+                // No device/app action was selected: answer as a normal conversation
+                // using Qwen with recent chat history + local owner memory context.
                 String reply=NaturalLanguageBrain.reply(appContext,text);
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
