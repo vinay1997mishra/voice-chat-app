@@ -14,6 +14,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 /**
  * Executes the owner-installed offline coding runtime.
  *
@@ -22,8 +25,9 @@ import java.util.List;
  *                   --request <request.txt> --output <edit-plan.json>
  */
 public final class OfflineCodingBrain {
-    private static final int MAX_CONTEXT_CHARS=56000;
-    private static final int MAX_FILE_CHARS=16000;
+    private static final int MAX_CONTEXT_CHARS=32000;
+    private static final int RETRY_CONTEXT_CHARS=18000;
+    private static final int MAX_FILE_CHARS=12000;
 
     public static final class Result{
         public final boolean ok;
@@ -50,30 +54,11 @@ public final class OfflineCodingBrain {
         File out=new File(io,"edit-plan.json");
 
         try(FileOutputStream os=new FileOutputStream(req,false)){
-            os.write(buildPrompt(workspace,request).getBytes(StandardCharsets.UTF_8));
+            os.write(buildPrompt(workspace,request,MAX_CONTEXT_CHARS,false).getBytes(StandardCharsets.UTF_8));
             os.getFD().sync();
         }catch(Exception e){
             return new Result(false,"Cannot write brain request: "+safe(e),"");
         }
-
-        List<String> cmd=new ArrayList<>();
-        cmd.add(cli.getAbsolutePath());
-        cmd.add("--offline");
-        cmd.add("-m");cmd.add(model.getAbsolutePath());
-        cmd.add("-f");cmd.add(req.getAbsolutePath());
-        cmd.add("-c");cmd.add("16384");
-        cmd.add("-n");cmd.add("4096");
-        cmd.add("--temp");cmd.add("0.15");
-        cmd.add("-st");
-        cmd.add("--simple-io");
-        cmd.add("--no-display-prompt");
-        cmd.add("--no-show-timings");
-        cmd.add("--no-warmup");
-        cmd.add("--log-colors");cmd.add("off");
-        cmd.add("--no-log-prefix");
-        cmd.add("--no-log-timestamps");
-        cmd.add("-lv");cmd.add("1");
-        cmd.add("-jf");cmd.add(schema.getAbsolutePath());
 
         HashMap<String,String> env=new HashMap<>();
         env.put("ANAMIKA_OFFLINE","1");
@@ -81,7 +66,7 @@ public final class OfflineCodingBrain {
         String nativeDir=c.getApplicationInfo().nativeLibraryDir;
         if(nativeDir!=null&&!nativeDir.trim().isEmpty())env.put("LD_LIBRARY_PATH",nativeDir);
 
-        LocalProcessRunner.Result run=LocalProcessRunner.run(cmd,workspace,env,15L*60L*1000L);
+        LocalProcessRunner.Result run=runModel(cli,model,req,schema,workspace,env,"0.10",15L*60L*1000L);
         if(!run.ok())
             return new Result(false,
                     "Offline brain failed. exit="+run.exitCode+(run.timedOut?" timeout":"")+
@@ -89,12 +74,38 @@ public final class OfflineCodingBrain {
 
         try{
             String raw=run.stdout;
+            String plan=extractEditPlanJson(raw);
+            if(plan==null)plan=extractEditPlanJson(run.stderr);
+
+            // Small local models can occasionally emit prose or an empty completion even
+            // with JSON-schema constraints. Retry once with a shorter context and a
+            // stricter JSON-only instruction instead of immediately failing the upgrade.
+            if(plan==null){
+                try(FileOutputStream os=new FileOutputStream(req,false)){
+                    os.write(buildPrompt(workspace,request,RETRY_CONTEXT_CHARS,true).getBytes(StandardCharsets.UTF_8));
+                    os.getFD().sync();
+                }
+                LocalProcessRunner.Result retry=runModel(cli,model,req,schema,workspace,env,"0.00",15L*60L*1000L);
+                raw=raw+"\n\n--- RETRY STDOUT ---\n"+retry.stdout+"\n--- RETRY STDERR ---\n"+retry.stderr;
+                if(retry.ok()){
+                    plan=extractEditPlanJson(retry.stdout);
+                    if(plan==null)plan=extractEditPlanJson(retry.stderr);
+                }else{
+                    return new Result(false,
+                            "Offline brain JSON retry failed. exit="+retry.exitCode+
+                                    (retry.timedOut?" timeout":"")+
+                                    (retry.stderr.isEmpty()?"":"\n"+trim(retry.stderr)),raw);
+                }
+            }
+
             try(FileOutputStream os=new FileOutputStream(out,false)){
                 os.write(raw.getBytes(StandardCharsets.UTF_8));
                 os.getFD().sync();
             }
-            String plan=extractJsonObject(raw);
-            if(plan==null)return new Result(false,"Offline brain output contained no valid JSON object.",raw);
+            if(plan==null)
+                return new Result(false,
+                        "Offline brain ne valid edit-plan JSON nahi diya. Automatic retry bhi fail hua. Diagnostics me raw brain output save hai.",
+                        raw);
             WorkspacePatchApplier.Result applied=WorkspacePatchApplier.apply(workspace,plan);
             return new Result(applied.ok,applied.message,plan);
         }catch(Exception e){
@@ -111,14 +122,42 @@ public final class OfflineCodingBrain {
                 "\nExecution: "+(BrainRuntimePaths.runtimeReady(c)?"ready":"not verified");
     }
 
-    private static String buildPrompt(File workspace,String ownerRequest)throws Exception{
+    private static LocalProcessRunner.Result runModel(
+            File cli,File model,File req,File schema,File workspace,HashMap<String,String> env,
+            String temperature,long timeoutMs){
+        List<String> cmd=new ArrayList<>();
+        cmd.add(cli.getAbsolutePath());
+        cmd.add("--offline");
+        cmd.add("-m");cmd.add(model.getAbsolutePath());
+        cmd.add("-f");cmd.add(req.getAbsolutePath());
+        cmd.add("-c");cmd.add("16384");
+        cmd.add("-n");cmd.add("4096");
+        cmd.add("--temp");cmd.add(temperature);
+        cmd.add("-st");
+        cmd.add("--simple-io");
+        cmd.add("--no-display-prompt");
+        cmd.add("--no-show-timings");
+        cmd.add("--no-warmup");
+        cmd.add("--log-colors");cmd.add("off");
+        cmd.add("--no-log-prefix");
+        cmd.add("--no-log-timestamps");
+        cmd.add("-lv");cmd.add("1");
+        cmd.add("-jf");cmd.add(schema.getAbsolutePath());
+        return LocalProcessRunner.run(cmd,workspace,env,timeoutMs);
+    }
+
+    private static String buildPrompt(File workspace,String ownerRequest,int maxContextChars,boolean retry)throws Exception{
         StringBuilder b=new StringBuilder();
         b.append("You are the offline coding brain for Anamika AI 13.\n")
                 .append("Work ONLY on the provided workspace snapshot. Never use shell commands.\n")
-                .append("Return ONLY JSON matching schema anamika13-edit-plan-v1.\n")
+                .append(retry
+                        ?"A previous attempt did not produce a usable JSON edit plan. This is the only retry. Output one JSON object and nothing else.\\n"
+                        :"")
+                .append("Return ONLY one JSON object matching schema anamika13-edit-plan-v1. No markdown fences, no explanation, no preface, no suffix.\n")
                 .append("Allowed operations: write and delete. For write, content must contain the complete replacement file.\n")
                 .append("Keep package/application identity and existing features unless the owner explicitly requests a change.\n")
-                .append("Do not claim success; the app will run structural and real build checks after applying your edits.\n\n")
+                .append("Do not claim success; the app will run structural and real build checks after applying your edits.\n")
+                .append("Required shape example: {\\\"schema\\\":\\\"anamika13-edit-plan-v1\\\",\\\"edits\\\":[{\\\"op\\\":\\\"write\\\",\\\"path\\\":\\\"app13/src/main/java/...\\\",\\\"content\\\":\\\"complete file text\\\"}]}\n\n")
                 .append("OWNER REQUEST:\n").append(ownerRequest==null?"":ownerRequest).append("\n\n")
                 .append("WORKSPACE FILE TREE:\n");
 
@@ -131,12 +170,12 @@ public final class OfflineCodingBrain {
         List<String> tokens=requestTokens(ownerRequest);
         files.sort((a,z)->Integer.compare(score(z,tokens),score(a,tokens)));
         for(File f:files){
-            if(b.length()>=MAX_CONTEXT_CHARS)break;
+            if(b.length()>=maxContextChars)break;
             if(!isTextCode(f))continue;
             String rel=relative(workspace,f);
             String s=AndroidCompat.readText(f,StandardCharsets.UTF_8);
             if(s.length()>MAX_FILE_CHARS)s=s.substring(0,MAX_FILE_CHARS)+"\n/* truncated for model context */\n";
-            if(b.length()+s.length()+rel.length()+32>MAX_CONTEXT_CHARS)continue;
+            if(b.length()+s.length()+rel.length()+32>maxContextChars)continue;
             b.append("\n--- FILE: ").append(rel).append(" ---\n").append(s).append("\n");
         }
         return b.toString();
@@ -184,25 +223,40 @@ public final class OfflineCodingBrain {
         return f.getName();
     }
 
-    private static String extractJsonObject(String raw){
-        if(raw==null)return null;
-        int start=raw.indexOf('{');
-        if(start<0)return null;
-        boolean inString=false,escape=false;
-        int depth=0;
-        for(int i=start;i<raw.length();i++){
-            char ch=raw.charAt(i);
-            if(inString){
-                if(escape){escape=false;continue;}
-                if(ch=='\\'){escape=true;continue;}
-                if(ch=='"')inString=false;
-                continue;
-            }
-            if(ch=='"'){inString=true;continue;}
-            if(ch=='{')depth++;
-            else if(ch=='}'){
-                depth--;
-                if(depth==0)return raw.substring(start,i+1);
+    private static String extractEditPlanJson(String raw){
+        if(raw==null||raw.isEmpty())return null;
+        int search=0;
+        while(search<raw.length()){
+            int start=raw.indexOf('{',search);
+            if(start<0)return null;
+            boolean inString=false,escape=false;
+            int depth=0;
+            for(int i=start;i<raw.length();i++){
+                char ch=raw.charAt(i);
+                if(inString){
+                    if(escape){escape=false;continue;}
+                    if(ch=='\\'){escape=true;continue;}
+                    if(ch=='"')inString=false;
+                    continue;
+                }
+                if(ch=='"'){inString=true;continue;}
+                if(ch=='{')depth++;
+                else if(ch=='}'){
+                    depth--;
+                    if(depth==0){
+                        String candidate=raw.substring(start,i+1);
+                        try{
+                            JSONObject o=new JSONObject(candidate);
+                            JSONArray edits=o.optJSONArray("edits");
+                            if("anamika13-edit-plan-v1".equals(o.optString("schema",""))
+                                    &&edits!=null&&edits.length()>0)
+                                return candidate;
+                        }catch(Exception ignored){}
+                        search=start+1;
+                        break;
+                    }
+                }
+                if(i==raw.length()-1)search=start+1;
             }
         }
         return null;
