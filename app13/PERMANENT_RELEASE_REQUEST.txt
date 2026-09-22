@@ -1,1 +1,1 @@
-Signer ready screen cleanup and return flow
+Signer-to-components flow and one-tap offline setup
