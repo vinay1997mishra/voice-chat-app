@@ -255,23 +255,40 @@ public final class CommandRouter {
     private static boolean startsSelfRepair(String lower){
         return lower.equals("self repair")||
                 lower.startsWith("self repair ")||
+                lower.startsWith("self repair kr ")||
+                lower.startsWith("self repair kar ")||
                 lower.equals("fix yourself")||
                 lower.startsWith("fix yourself ")||
                 lower.equals("repair yourself")||
                 lower.startsWith("repair yourself ")||
                 lower.equals("khud ko thik karo")||
                 lower.startsWith("khud ko thik karo ")||
+                lower.equals("khud ko thik kr")||
+                lower.startsWith("khud ko thik kr ")||
+                lower.equals("khud ko theek kr")||
+                lower.startsWith("khud ko theek kr ")||
                 lower.equals("apne aap ko thik karo")||
                 lower.startsWith("apne aap ko thik karo ")||
+                lower.equals("apne aap ko thik kr")||
+                lower.startsWith("apne aap ko thik kr ")||
                 lower.equals("anamika khud ko thik karo")||
-                lower.startsWith("anamika khud ko thik karo ");
+                lower.startsWith("anamika khud ko thik karo ")||
+                lower.equals("anamika khud ko thik kr")||
+                lower.startsWith("anamika khud ko thik kr ")||
+                lower.equals("apna code thik kr")||
+                lower.startsWith("apna code thik kr ")||
+                lower.equals("apna code theek kr")||
+                lower.startsWith("apna code theek kr ");
     }
 
     private static String selfRepairProblem(String original){
         String lower=original.toLowerCase(Locale.ROOT);
         String[] prefixes={
-                "self repair","fix yourself","repair yourself",
-                "khud ko thik karo","apne aap ko thik karo","anamika khud ko thik karo"
+                "self repair kr","self repair kar","self repair","fix yourself","repair yourself",
+                "khud ko thik karo","khud ko thik kr","khud ko theek kr",
+                "apne aap ko thik karo","apne aap ko thik kr",
+                "anamika khud ko thik karo","anamika khud ko thik kr",
+                "apna code thik kr","apna code theek kr"
         };
         for(String p:prefixes){
             if(lower.startsWith(p)){
