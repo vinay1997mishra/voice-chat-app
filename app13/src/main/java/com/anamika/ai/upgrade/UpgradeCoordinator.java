@@ -5,6 +5,7 @@ import android.content.Context;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.CodeDoctor;
 import com.anamika.ai.developer.OfflineCodingBrain;
+import com.anamika.ai.diagnostics.DiagnosticsReportStore;
 
 import java.io.File;
 
@@ -56,6 +57,73 @@ public final class UpgradeCoordinator {
         CodeDoctor.Report check=CandidateValidator.validateWorkspace(ws);
         UpgradeJournal.record(c,check.clean?"VALIDATE_PASS":"VALIDATE_FAIL",check.text());
         return r.message+"\n\n"+check.text();
+    }
+
+    /**
+     * Lets Anamika repair her own V13 implementation from inside the app.
+     * The owner describes the problem in normal language. Anamika combines it with the
+     * latest local diagnostics, edits only a disposable self-source workspace, validates
+     * the result, and builds a signed self-update candidate when possible.
+     */
+    public static String selfRepair(Context c,String ownerProblem){
+        String problem=ownerProblem==null?"":ownerProblem.trim();
+        if(problem.isEmpty())
+            problem="Inspect the latest local diagnostics and repair the current Anamika 13 implementation without removing unrelated features.";
+        if(!ComponentPackManager.brainInstalled(c))
+            return "Self repair ke liye Offline Brain runtime + GGUF model READY hona chahiye.";
+
+        try{
+            UpgradeJournal.record(c,"SELF_REPAIR_START",problem);
+            File ws=SourceVault.createWorkspace(c,"self repair: "+problem);
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_WS,ws.getAbsolutePath())
+                    .remove(LAST_CANDIDATE)
+                    .apply();
+
+            String diagnostics=DiagnosticsReportStore.readLatest(c);
+            if(diagnostics.length()>12000)diagnostics=diagnostics.substring(0,12000);
+
+            String request=
+                    "You are repairing Anamika AI 13 from inside Anamika herself. "+
+                    "Use the owner problem statement plus latest local diagnostics to identify the concrete defect. "+
+                    "Repair the existing V13 source in this workspace, preserve unrelated functions and package identity, "+
+                    "connect the repaired behavior to the existing UI/router/runtime where needed, and do not claim success unless the edit plan is valid. "+
+                    "OWNER PROBLEM:\n"+problem+
+                    "\n\nLATEST LOCAL DIAGNOSTICS:\n"+diagnostics;
+
+            OfflineCodingBrain.Result brain=OfflineCodingBrain.repair(c,ws,request);
+            UpgradeJournal.record(c,brain.ok?"SELF_REPAIR_CODE_PASS":"SELF_REPAIR_CODE_FAIL",brain.message);
+            if(!brain.ok)return "Self repair source create nahi ho saka.\n"+brain.message;
+
+            CodeDoctor.Report structural=CandidateValidator.validateWorkspace(ws);
+            UpgradeJournal.record(c,structural.clean?"SELF_REPAIR_VALIDATE_PASS":"SELF_REPAIR_VALIDATE_FAIL",structural.text());
+            if(!structural.clean)
+                return "Self repair edit apply hua, lekin Code Doctor validation fail hui. Build/install block kiya gaya.\n"+structural.text();
+
+            LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
+            if(!cap.ready){
+                return "SELF REPAIR SOURCE READY + VALIDATION PASS\nWorkspace: "+ws.getAbsolutePath()+
+                        "\nAPK build abhi block hai: "+cap.detail+
+                        "\nBuilder/signer ready hote hi 'local build' bolo.";
+            }
+
+            RollbackManager.checkpoint(c);
+            LocalBuildEngine.BuildResult built=LocalBuildEngine.build(c,ws);
+            UpgradeJournal.record(c,built.ok?"SELF_REPAIR_BUILD_PASS":"SELF_REPAIR_BUILD_FAIL",built.log);
+            if(!built.ok)return "Self repair validation PASS tha, lekin real local APK build fail hua.\n"+built.log;
+
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_CANDIDATE,built.apk.getAbsolutePath()).apply();
+
+            return "SELF REPAIR BUILD READY\n"+
+                    "Anamika ne apna source repair + validate + local sign/build kiya.\n"+
+                    built.log+
+                    "\nCandidate: "+built.apk.getAbsolutePath()+
+                    "\nAb 'self update' kholo. Final install Android/owner confirmation ke baad hoga.";
+        }catch(Exception e){
+            UpgradeJournal.record(c,"SELF_REPAIR_FAIL",safe(e));
+            return "Self repair failed: "+safe(e);
+        }
     }
 
     /**
