@@ -1,1 +1,4 @@
-Local Hindi Hinglish understanding update for self-upgrade testing
+Anamika AI 13 local-language incremental update
+Requested: 2026-09-22
+Purpose: Hindi/Hinglish/local speech understanding, shorthand normalization, offline brain intent hints, Hindi wake phrase.
+Update mode: permanent-signed in-place APK update; preserve existing app data.
