@@ -14,6 +14,12 @@ public final class CandidateValidator {
             p.add("Workspace missing.");
             return new CodeDoctor.Report(false,0,p);
         }
-        return CodeDoctor.inspect(workspace);
+        CodeDoctor.Report structural=CodeDoctor.inspect(workspace);
+        UpgradeConsistencyGuard.Report consistency=UpgradeConsistencyGuard.inspect(workspace);
+        if(consistency.clean)return structural;
+        java.util.List<String> merged=new java.util.ArrayList<>();
+        merged.addAll(structural.problems);
+        merged.addAll(consistency.problems);
+        return new CodeDoctor.Report(false,structural.filesChecked,merged);
     }
 }
