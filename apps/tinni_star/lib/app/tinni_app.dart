@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/discover_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/login_screen.dart';
 import '../screens/messages_screen.dart';
 import '../screens/profile_screen.dart';
 import 'tinni_state.dart';
@@ -22,7 +23,9 @@ class TinniStarApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFFB35CFF),
         scaffoldBackgroundColor: const Color(0xFF100615),
       ),
-      home: TinniShell(state: state),
+      home: state.auth.isLoggedIn
+          ? TinniShell(state: state)
+          : LoginScreen(state: state),
     );
   }
 }

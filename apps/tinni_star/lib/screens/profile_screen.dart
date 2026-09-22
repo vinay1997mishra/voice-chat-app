@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import '../auth/auth_service.dart';
 import 'feature_center_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -98,7 +99,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               setState(() {});
             },
             icon: const Icon(Icons.edit_rounded),
-            label: const Text('Demo profile edit'),
+            label: const Text('Edit profile'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () async {
+              widget.state.auth.bind(LoginProvider.google);
+              final account = widget.state.auth.current;
+              if (account != null) {
+                await widget.state.authPersistence?.save(account);
+              }
+              if (mounted) setState(() {});
+            },
+            icon: const Icon(Icons.link_rounded),
+            label: const Text('Bind Google account'),
           ),
         ],
       ),

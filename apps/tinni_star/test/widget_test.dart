@@ -4,13 +4,18 @@ import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 
 void main() {
-  testWidgets('Tinni Star renders home shell', (tester) async {
+  testWidgets('Tinni Star renders login then home shell', (tester) async {
     final state = TinniState(
       runtime: FunctionPackRuntime(
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
     await tester.pumpWidget(TinniStarApp(state: state));
+
+    expect(find.text('Continue with Phone'), findsOneWidget);
+    await tester.tap(find.text('Continue with Phone'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Tinni Star ✨'), findsOneWidget);
     expect(find.text('Recommended'), findsOneWidget);
   });

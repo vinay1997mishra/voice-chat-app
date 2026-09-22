@@ -1,6 +1,7 @@
 import '../activities/activity_service.dart';
 import '../activities/rank_features.dart';
 import '../auth/auth_service.dart';
+import '../auth/auth_persistence.dart';
 import '../background/session_lifecycle.dart';
 import '../background/room_foreground_service.dart';
 import '../background/room_permission_bridge.dart';
@@ -77,7 +78,6 @@ class TinniState {
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
-    auth.loginDemo();
     roomControls.setOwner('10000000');
   }
 
@@ -92,6 +92,11 @@ class TinniState {
   late final GiftService gifts;
   late final InventoryService inventory;
   final AuthService auth;
+  AuthPersistence? authPersistence;
+
+  void attachAuthPersistence(AuthPersistence persistence) {
+    authPersistence = persistence;
+  }
   final DiscoveryService discovery;
   final SocialService social;
   final DynamicFeedService dynamics;
