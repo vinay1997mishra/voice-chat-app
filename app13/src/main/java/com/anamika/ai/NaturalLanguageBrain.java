@@ -26,7 +26,20 @@ public final class NaturalLanguageBrain {
         if(!io.exists()&&!io.mkdirs()) return "Natural chat workspace create nahi ho saka.";
         File prompt=new File(io,"prompt.txt");
         BrainEffortStore.Mode effort=BrainEffortStore.get(c);
-        String memory=MemoryStore.promptContext(c,14,10000);
+        // Natural chat should stay responsive on phones. It does not need the much
+        // larger coding/planning token budget, especially when llama-cli is started
+        // as a fresh local process for each request.
+        int chatContext=effort==BrainEffortStore.Mode.INSTANT?2048:
+                effort==BrainEffortStore.Mode.MEDIUM?4096:6144;
+        int chatTokens=effort==BrainEffortStore.Mode.INSTANT?128:
+                effort==BrainEffortStore.Mode.MEDIUM?256:512;
+        long chatTimeout=effort==BrainEffortStore.Mode.INSTANT?60_000L:
+                effort==BrainEffortStore.Mode.MEDIUM?120_000L:240_000L;
+        int memoryTurns=effort==BrainEffortStore.Mode.INSTANT?6:
+                effort==BrainEffortStore.Mode.MEDIUM?10:14;
+        int memoryChars=effort==BrainEffortStore.Mode.INSTANT?3000:
+                effort==BrainEffortStore.Mode.MEDIUM?6000:10000;
+        String memory=MemoryStore.promptContext(c,memoryTurns,memoryChars);
         String ownerMessage=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerMessage);
         String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerMessage)
@@ -58,8 +71,8 @@ public final class NaturalLanguageBrain {
         cmd.add("--offline");
         cmd.add("-m"); cmd.add(model.getAbsolutePath());
         cmd.add("-f"); cmd.add(prompt.getAbsolutePath());
-        cmd.add("-c"); cmd.add(String.valueOf(Math.min(6144,effort.contextTokens)));
-        cmd.add("-n"); cmd.add(String.valueOf(Math.min(900,effort.maxTokens)));
+        cmd.add("-c"); cmd.add(String.valueOf(chatContext));
+        cmd.add("-n"); cmd.add(String.valueOf(chatTokens));
         cmd.add("--temp"); cmd.add("0.20");
         cmd.add("-st");
         cmd.add("--simple-io");
@@ -77,8 +90,19 @@ public final class NaturalLanguageBrain {
         String nativeDir=c.getApplicationInfo().nativeLibraryDir;
         if(nativeDir!=null&&!nativeDir.trim().isEmpty()) env.put("LD_LIBRARY_PATH",nativeDir);
 
-        LocalProcessRunner.Result r=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
-        if(!r.ok()) return "Offline natural-language reply fail hui. exit="+r.exitCode+(r.timedOut?" timeout":"");
+        LocalProcessRunner.Result r=LocalProcessRunner.run(cmd,io,env,chatTimeout);
+        if(!r.ok()){
+            // A timeout can still contain a usable partial completion. Prefer that
+            // over exposing a raw process error to the owner.
+            String partial=r.stdout==null?"":r.stdout.trim();
+            if(r.timedOut&&!partial.isEmpty()){
+                String cleaned=clean(partial);
+                if(cleaned!=null&&!cleaned.trim().isEmpty())return cleaned;
+            }
+            return r.timedOut
+                    ?"Offline brain ko is reply me zyada time lag gaya. Dobara boliye; Instant mode ab chhote fast replies use karta hai."
+                    :"Offline natural-language reply start nahi ho saki. exit="+r.exitCode;
+        }
         String raw=r.stdout==null?"":r.stdout.trim();
         if(raw.isEmpty()) raw=r.stderr==null?"":r.stderr.trim();
         return clean(raw);
