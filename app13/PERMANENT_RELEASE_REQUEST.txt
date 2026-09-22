@@ -1,1 +1,1 @@
-2026-09-22: Rebuild permanent-signed V13 after fixing Signer Setup with explicit Done/Import step and clear signer-import errors.
+Signer setup password visibility update
