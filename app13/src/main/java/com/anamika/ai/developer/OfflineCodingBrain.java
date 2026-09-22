@@ -98,13 +98,27 @@ public final class OfflineCodingBrain {
                 }
             }
 
+            if(plan==null){
+                try(FileOutputStream os=new FileOutputStream(req,false)){
+                    os.write(buildPrompt(workspace,request,10000,true).getBytes(StandardCharsets.UTF_8));
+                    os.getFD().sync();
+                }
+                LocalProcessRunner.Result finalRetry=runModel(cli,model,req,schema,workspace,env,"0.00",15L*60L*1000L);
+                raw=raw+"\n\n--- FINAL RETRY STDOUT ---\n"+finalRetry.stdout+
+                        "\n--- FINAL RETRY STDERR ---\n"+finalRetry.stderr;
+                if(finalRetry.ok()){
+                    plan=extractEditPlanJson(finalRetry.stdout);
+                    if(plan==null)plan=extractEditPlanJson(finalRetry.stderr);
+                }
+            }
+
             try(FileOutputStream os=new FileOutputStream(out,false)){
                 os.write(raw.getBytes(StandardCharsets.UTF_8));
                 os.getFD().sync();
             }
             if(plan==null)
                 return new Result(false,
-                        "Offline brain ne valid edit-plan JSON nahi diya. Automatic retry bhi fail hua. Raw output workspace me save hai.\nBrain output preview: "+preview(raw),
+                        "Offline brain ne valid edit-plan JSON nahi diya. Multiple automatic JSON retries fail hue. Raw output workspace me save hai.\nBrain output preview: "+preview(raw),
                         raw);
             WorkspacePatchApplier.Result applied=WorkspacePatchApplier.apply(workspace,plan);
             return new Result(applied.ok,applied.message,plan);
