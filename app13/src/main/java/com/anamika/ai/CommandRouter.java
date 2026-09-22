@@ -46,6 +46,14 @@ public final class CommandRouter {
     public static boolean requiresBackgroundFast(String raw){
         String original=raw==null?"":raw.trim();
         if(original.isEmpty())return false;
+        String rawLower=original.toLowerCase(Locale.ROOT);
+        if(startsDirectCode(rawLower)){
+            String code=directCodeBody(original);
+            return UpgradeCoordinator.applyOwnerCode(a,code);
+        }
+
+        String rawLower=original.toLowerCase(Locale.ROOT);
+        if(startsDirectCode(rawLower))return true;
         String text=LanguageCommandInterpreter.normalize(original);
         String l=text.toLowerCase(Locale.ROOT);
         return l.equals("run self test")||l.equals("self test")||l.equals("full diagnostics")||
@@ -238,6 +246,26 @@ public final class CommandRouter {
             if(fallback!=null&&!fallback.trim().isEmpty())return fallback;
         }
         return result;
+    }
+
+    private static boolean startsDirectCode(String lower){
+        return lower.startsWith("apply code ")||lower.startsWith("apply code\n")||
+                lower.startsWith("install code ")||lower.startsWith("install code\n")||
+                lower.startsWith("check code ")||lower.startsWith("check code\n")||
+                lower.startsWith("direct code ")||lower.startsWith("direct code\n")||
+                lower.startsWith("code:");
+    }
+
+    private static String directCodeBody(String original){
+        String lower=original.toLowerCase(Locale.ROOT);
+        String[] prefixes={"apply code","install code","check code","direct code","code:"};
+        for(String p:prefixes){
+            if(lower.startsWith(p)){
+                String body=original.substring(p.length());
+                return body.replaceFirst("^[\\s:=-]+","").trim();
+            }
+        }
+        return original.trim();
     }
 
     private static String safe(Exception e){
