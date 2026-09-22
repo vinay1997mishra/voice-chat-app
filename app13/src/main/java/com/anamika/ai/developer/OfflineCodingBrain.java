@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.runtime.LocalProcessRunner;
+import com.anamika.ai.memory.MemoryStore;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -54,7 +55,7 @@ public final class OfflineCodingBrain {
         File out=new File(io,"edit-plan.json");
 
         try(FileOutputStream os=new FileOutputStream(req,false)){
-            os.write(buildPrompt(workspace,request,MAX_CONTEXT_CHARS,false).getBytes(StandardCharsets.UTF_8));
+            os.write(buildPrompt(c,workspace,request,MAX_CONTEXT_CHARS,false).getBytes(StandardCharsets.UTF_8));
             os.getFD().sync();
         }catch(Exception e){
             return new Result(false,"Cannot write brain request: "+safe(e),"");
@@ -82,7 +83,7 @@ public final class OfflineCodingBrain {
             // stricter JSON-only instruction instead of immediately failing the upgrade.
             if(plan==null){
                 try(FileOutputStream os=new FileOutputStream(req,false)){
-                    os.write(buildPrompt(workspace,request,RETRY_CONTEXT_CHARS,true).getBytes(StandardCharsets.UTF_8));
+                    os.write(buildPrompt(c,workspace,request,RETRY_CONTEXT_CHARS,true).getBytes(StandardCharsets.UTF_8));
                     os.getFD().sync();
                 }
                 LocalProcessRunner.Result retry=runModel(cli,model,req,schema,workspace,env,"0.00",15L*60L*1000L);
@@ -100,7 +101,7 @@ public final class OfflineCodingBrain {
 
             if(plan==null){
                 try(FileOutputStream os=new FileOutputStream(req,false)){
-                    os.write(buildPrompt(workspace,request,10000,true).getBytes(StandardCharsets.UTF_8));
+                    os.write(buildPrompt(c,workspace,request,10000,true).getBytes(StandardCharsets.UTF_8));
                     os.getFD().sync();
                 }
                 LocalProcessRunner.Result finalRetry=runModel(cli,model,req,schema,workspace,env,"0.00",15L*60L*1000L);
@@ -160,7 +161,8 @@ public final class OfflineCodingBrain {
         return LocalProcessRunner.run(cmd,workspace,env,timeoutMs);
     }
 
-    private static String buildPrompt(File workspace,String ownerRequest,int maxContextChars,boolean retry)throws Exception{
+    private static String buildPrompt(Context c,File workspace,String ownerRequest,int maxContextChars,boolean retry)throws Exception{
+        String memory=MemoryStore.promptContext(c,10,7000);
         StringBuilder b=new StringBuilder();
         b.append("You are the offline coding brain for Anamika AI 13.\n")
                 .append("Work ONLY on the provided workspace snapshot. Never use shell commands.\n")
@@ -172,7 +174,8 @@ public final class OfflineCodingBrain {
                 .append("Keep package/application identity and existing features unless the owner explicitly requests a change.\n")
                 .append("Do not claim success; the app will run structural and real build checks after applying your edits.\n")
                 .append("Required shape example: {\"schema\":\"anamika13-edit-plan-v1\",\"edits\":[{\"op\":\"write\",\"path\":\"app13/src/main/java/...\",\"content\":\"complete file text\"}]}\n\n")
-                .append("OWNER REQUEST:\n").append(ownerRequest==null?"":ownerRequest).append("\n\n")
+                .append(memory.isEmpty()?"":"RECENT OWNER CHAT / MEMORY CONTEXT:\n"+memory+"\n\n")
+                .append("CURRENT OWNER REQUEST:\n").append(ownerRequest==null?"":ownerRequest).append("\n\n")
                 .append("WORKSPACE FILE TREE:\n");
 
         List<File> files=new ArrayList<>();
