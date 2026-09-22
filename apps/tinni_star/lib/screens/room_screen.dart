@@ -39,6 +39,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _joinRealtime() async {
+    await widget.state.roomForegroundService.start();
     await widget.state.realtime.enterRoom(widget.room.id, '10000000');
     if (mounted) setState(() => realtimeJoined = true);
   }
@@ -57,6 +58,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.realtime.exitRoom();
+    widget.state.roomForegroundService.stop();
     controller.removeListener(_refresh);
     controller.dispose();
     chat.dispose();

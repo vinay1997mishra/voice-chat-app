@@ -43,6 +43,10 @@
                 <data android:scheme="tinnistar" android:host="anamika" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".TinniRoomForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

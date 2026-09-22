@@ -38,6 +38,9 @@ jobs:
         run: |
           cp tool/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
+          mkdir -p android/app/src/main/kotlin/com/tinnistar/tinni_star
+          cp tool/MainActivity.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/MainActivity.kt
+          cp tool/TinniRoomForegroundService.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/TinniRoomForegroundService.kt
 
       - name: Get packages
         working-directory: apps/tinni_star
