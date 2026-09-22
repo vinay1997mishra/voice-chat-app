@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import 'anamika_connector_screen.dart';
 import '../calls/call_service.dart';
 import '../community/family_service.dart';
 import '../economy/economy.dart';
@@ -339,18 +340,14 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         },
       ),
       _FeatureAction(
-        'Anamika Diagnostics',
+        'Anamika Connector',
         Icons.health_and_safety_rounded,
         () {
-          final data = state.connector.diagnosticSnapshot();
-          final token = state.connectorBridge?.pairingToken ?? 'not-ready';
-          showText(
-            'Schema ' +
-                data['schema'].toString() +
-                ' • seats ' +
-                data['seatCount'].toString() +
-                ' • pairing ' +
-                token,
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AnamikaConnectorScreen(state: state),
+            ),
           );
         },
       ),
