@@ -2,6 +2,7 @@ package com.anamika.ai.voice;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -9,6 +10,7 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 
 import com.anamika.ai.language.LanguageCommandInterpreter;
+import com.anamika.ai.language.LocalLanguageText;
 import com.anamika.ai.messaging.MessageCommandParser;
 
 import java.util.ArrayList;
@@ -46,8 +48,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
 
             Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,recognitionLanguage());
-            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,recognitionLanguage());
+            configureRecognitionLanguages(i);
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
             i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
             listener.onVoiceState("Listening… Hindi / Hinglish / English");
@@ -81,10 +82,28 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         String lang=d.getLanguage();
         String country=d.getCountry();
         if("hi".equalsIgnoreCase(lang))return "hi-IN";
-        if("en".equalsIgnoreCase(lang)&&"IN".equalsIgnoreCase(country))return "en-IN";
-        // For Indian-style mixed commands, en-IN preserves many Roman/English app names.
-        if("IN".equalsIgnoreCase(country))return "en-IN";
+        // Local-language update: on Indian devices prefer the Hindi recognizer.
+        // It still accepts many English app names/Hinglish words, while older Android
+        // versions do not provide true automatic Hindi/English language switching.
+        if("IN".equalsIgnoreCase(country))return "hi-IN";
         return d.toLanguageTag();
+    }
+
+    private void configureRecognitionLanguages(Intent i){
+        String primary=recognitionLanguage();
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,primary);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,primary);
+
+        // Android 14+ can switch/detect Hindi and Indian English during one session.
+        if(Build.VERSION.SDK_INT>=34){
+            ArrayList<String> allowed=new ArrayList<>();
+            allowed.add("hi-IN");
+            allowed.add("en-IN");
+            i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,allowed);
+            i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,allowed);
+            i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,true);
+            i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,RecognizerIntent.LANGUAGE_SWITCH_BALANCED);
+        }
     }
 
     private String bestResult(ArrayList<String> list){
@@ -108,6 +127,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         String normalized=LanguageCommandInterpreter.normalize(candidate);
         if(!normalized.equals(candidate.trim()))score+=3;
         if(MessageCommandParser.parse(candidate)!=null)score+=5;
+        if(LocalLanguageText.likelyHindiOrHinglish(candidate))score+=2;
         String l=normalized.toLowerCase(Locale.ROOT);
         String[] known={"open ","search ","dial ","remember ","research ","scan app ","tap ","type ",
                 "calculate ","save file ","settings","functions","wake ","upgrade ","self update",
