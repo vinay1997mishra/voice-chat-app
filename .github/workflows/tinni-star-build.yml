@@ -56,13 +56,13 @@ jobs:
         working-directory: apps/tinni_star
         run: flutter test
 
-      - name: Build debug APK
+      - name: Build installable APK
         working-directory: apps/tinni_star
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
       - name: Upload Tinni Star APK
         uses: actions/upload-artifact@v4
         with:
-          name: tinni-star-debug-apk
-          path: apps/tinni_star/build/app/outputs/flutter-apk/app-debug.apk
+          name: Tinni-Star
+          path: apps/tinni_star/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
