@@ -1,1 +1,1 @@
-Signer-to-components flow and one-tap offline setup
+Reliable Android GGUF file picker/import flow
