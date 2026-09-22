@@ -35,7 +35,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
-    _openRoom();
+    final session = widget.state.roomSession;
+    if (session.room?.id != widget.room.id || session.controller == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openRoom();
+      });
+    } else {
+      session.resume();
+    }
   }
 
   Future<void> _openRoom() async {
@@ -56,9 +63,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
-    if (widget.state.roomSession.room?.id == widget.room.id) {
-      widget.state.roomSession.minimize();
-    }
     chat.dispose();
     super.dispose();
   }
@@ -370,8 +374,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final config = controller.config;
-    return Scaffold(
+    final session = widget.state.roomSession;
+    final activeController = session.controller;
+    if (activeController == null || session.room?.id != widget.room.id) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.room.title)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final config = activeController.config;
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop || !session.hasRoom) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (session.hasRoom) session.minimize();
+        });
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,6 +591,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
         ],
       ),
+    ),
     );
   }
 }
