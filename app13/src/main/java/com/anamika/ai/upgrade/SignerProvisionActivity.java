@@ -1,10 +1,14 @@
 package com.anamika.ai.upgrade;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Base64;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -24,7 +28,9 @@ public final class SignerProvisionActivity extends Activity {
     private TextView status;
     private TextView selectedFile;
     private EditText password;
+    private EditText base64Input;
     private Button done;
+    private Button importBase64;
     private Uri selectedUri;
 
     @Override protected void onCreate(Bundle state){
@@ -48,9 +54,9 @@ public final class SignerProvisionActivity extends Activity {
         note.setText(
                 "3 steps:\n"+
                 "1) PKCS#12 password enter karo.\n"+
-                "2) Matching .p12/.pfx file select karo.\n"+
+                "2) Matching .p12/.pfx file select karo, YA GitHub jaisa Base64 text direct paste karo.\n"+
                 "3) Done • Import Signer dabao.\n\n"+
-                "Sirf wahi PKCS#12 accept hoga jiska certificate installed permanent-signed Anamika se match kare. File encrypted vault me store hogi.");
+                "Sirf wahi PKCS#12 accept hoga jiska certificate installed permanent-signed Anamika se match kare. Signer encrypted vault me store hoga.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
@@ -70,7 +76,24 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(showPassword);
 
         Button pick=new Button(this);
-        pick.setText("2 • Select PKCS#12");
+        pick.setText("2A • Select PKCS#12 file");
+
+        TextView orText=new TextView(this);
+        orText.setText("OR • direct Base64 paste");
+        orText.setPadding(0,dp(12),0,dp(4));
+
+        base64Input=new EditText(this);
+        base64Input.setHint("Paste PKCS#12 Base64 here (MIIR... / MII...)");
+        base64Input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        base64Input.setSingleLine(false);
+        base64Input.setMinLines(4);
+        base64Input.setMaxLines(8);
+
+        Button pasteBase64=new Button(this);
+        pasteBase64.setText("2B • Paste Base64 from Clipboard");
+
+        importBase64=new Button(this);
+        importBase64.setText("Import Pasted PKCS#12");
 
         selectedFile=new TextView(this);
         selectedFile.setText("No signing file selected.");
@@ -84,6 +107,10 @@ public final class SignerProvisionActivity extends Activity {
         refresh.setText("Refresh Status");
 
         box.addView(pick);
+        box.addView(orText);
+        box.addView(base64Input);
+        box.addView(pasteBase64);
+        box.addView(importBase64);
         box.addView(done);
         box.addView(selectedFile);
         box.addView(refresh);
@@ -95,6 +122,8 @@ public final class SignerProvisionActivity extends Activity {
         box.addView(status);
 
         pick.setOnClickListener(v->pick());
+        pasteBase64.setOnClickListener(v->pasteBase64FromClipboard());
+        importBase64.setOnClickListener(v->importBase64Signer());
         done.setOnClickListener(v->importSelected());
         refresh.setOnClickListener(v->status.setText(SignerVault.status(this)));
 
@@ -144,7 +173,11 @@ public final class SignerProvisionActivity extends Activity {
 
     private void importSelected(){
         if(selectedUri==null){
-            status.setText("PKCS#12 file abhi select nahi hui. Pehle “2 • Select PKCS#12” dabao.");
+            if(base64Input!=null && base64Input.getText().toString().trim().length()>0){
+                importBase64Signer();
+                return;
+            }
+            status.setText("PKCS#12 file select karo YA Base64 paste karke Import Pasted PKCS#12 dabao.");
             done.setEnabled(true);
             return;
         }
@@ -172,6 +205,70 @@ public final class SignerProvisionActivity extends Activity {
             done.setEnabled(true);
         }finally{
             Arrays.fill(pass,'\0');
+        }
+    }
+
+
+    private void pasteBase64FromClipboard(){
+        try{
+            ClipboardManager cb=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+            if(cb==null||!cb.hasPrimaryClip()){
+                status.setText("Clipboard empty hai. GitHub wala PKCS#12 Base64 copy karke phir Paste dabao.");
+                return;
+            }
+            ClipData clip=cb.getPrimaryClip();
+            if(clip==null||clip.getItemCount()==0){
+                status.setText("Clipboard me readable text nahi mila.");
+                return;
+            }
+            CharSequence text=clip.getItemAt(0).coerceToText(this);
+            if(text==null||text.toString().trim().isEmpty()){
+                status.setText("Clipboard me PKCS#12 Base64 text nahi mila.");
+                return;
+            }
+            base64Input.setText(text.toString().trim());
+            base64Input.setSelection(base64Input.length());
+            status.setText("Base64 pasted. Password enter/check karo, phir Import Pasted PKCS#12 dabao.");
+        }catch(Throwable e){
+            status.setText("Clipboard paste failed: "+safe(e));
+        }
+    }
+
+    private void importBase64Signer(){
+        String raw=base64Input==null?"":base64Input.getText().toString();
+        String compact=raw.replaceAll("\\s+","");
+        if(compact.isEmpty()){
+            status.setText("Base64 box empty hai. PKCS#12 Base64 paste karo.");
+            return;
+        }
+
+        char[] pass=password.getText().toString().toCharArray();
+        importBase64.setEnabled(false);
+        done.setEnabled(false);
+        status.setText("Pasted PKCS#12 verify/import kar rahi hu…");
+        byte[] bytes=null;
+        try{
+            bytes=Base64.decode(compact,Base64.DEFAULT);
+            if(bytes.length>16*1024*1024)
+                throw new IllegalArgumentException("Signer data too large.");
+            String result=SignerVault.importPkcs12(this,bytes,pass);
+            status.setText(result+"\n\n"+SignerVault.status(this));
+            if(SignerVault.ready(this)){
+                selectedFile.setText("Signer imported from Base64 • READY");
+                done.setText("Signer READY ✓");
+                base64Input.setText("");
+            }else{
+                done.setText("3 • Retry Import Signer");
+            }
+        }catch(IllegalArgumentException e){
+            status.setText("Base64 invalid hai. GitHub secret wala complete PKCS#12 Base64 copy karke paste karo.");
+        }catch(Throwable e){
+            status.setText("Signer import failed: "+safe(e));
+        }finally{
+            if(bytes!=null)Arrays.fill(bytes,(byte)0);
+            Arrays.fill(pass,'\0');
+            importBase64.setEnabled(true);
+            done.setEnabled(true);
         }
     }
 
