@@ -286,6 +286,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         drawerCommand(list,"Autonomy Status","autonomy status",true);
         drawerCommand(list,"Upgrade Status","upgrade status",true);
         drawerPrefill(list,"Create / Add Function","create function ");
+        drawerPrefill(list,"Apply / Repair Direct Code","apply code\n");
         drawerCommand(list,"Code Doctor / Validate","code doctor",true);
         drawerCommand(list,"Local Build","local build",true);
         drawerCommand(list,"Self Test","self test",true);
