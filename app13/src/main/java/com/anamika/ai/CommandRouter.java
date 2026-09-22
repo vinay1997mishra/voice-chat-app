@@ -227,7 +227,17 @@ public final class CommandRouter {
 
     public static String runBrain(Activity a,String raw){
         BrainCommandEngine.Plan p=BrainCommandEngine.plan(a.getApplicationContext(),raw);
-        return BrainCommandEngine.execute(a,p);
+        if(p==null||!p.ok){
+            String fallback=NaturalLanguageBrain.reply(a.getApplicationContext(),raw);
+            if(fallback!=null&&!fallback.trim().isEmpty())return fallback;
+        }
+        String result=BrainCommandEngine.execute(a,p);
+        if((p==null||p.actions==null||p.actions.length()==0)
+                &&(p==null||p.reply==null||p.reply.trim().isEmpty())){
+            String fallback=NaturalLanguageBrain.reply(a.getApplicationContext(),raw);
+            if(fallback!=null&&!fallback.trim().isEmpty())return fallback;
+        }
+        return result;
     }
 
     private static String safe(Exception e){
