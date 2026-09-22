@@ -3,6 +3,7 @@ import '../activities/rank_features.dart';
 import '../auth/auth_service.dart';
 import '../background/session_lifecycle.dart';
 import '../background/room_foreground_service.dart';
+import '../background/room_permission_bridge.dart';
 import '../billing/billing_adapter.dart';
 import '../calls/call_service.dart';
 import '../community/family_features.dart';
@@ -59,6 +60,7 @@ class TinniState {
         profile = ProfileService(),
         lifecycle = SessionLifecycle(),
         roomForegroundService = const RoomForegroundServiceBridge(),
+        roomPermissions = const RoomPermissionBridge(),
         sharing = ShareService(),
         billing = LocalBillingAdapter(),
         cpFeatures = CpFeatureService(),
@@ -113,6 +115,7 @@ class TinniState {
   final ProfileService profile;
   final SessionLifecycle lifecycle;
   final RoomForegroundServiceBridge roomForegroundService;
+  final RoomPermissionBridge roomPermissions;
   final ShareService sharing;
   final BillingAdapter billing;
   final CpFeatureService cpFeatures;

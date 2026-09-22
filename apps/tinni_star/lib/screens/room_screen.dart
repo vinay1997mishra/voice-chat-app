@@ -28,6 +28,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   late final RoomController controller;
   final chat = TextEditingController();
   bool realtimeJoined = false;
+  String? connectionError;
 
   @override
   void initState() {
@@ -39,9 +40,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _joinRealtime() async {
-    await widget.state.roomForegroundService.start();
-    await widget.state.realtime.enterRoom(widget.room.id, '10000000');
-    if (mounted) setState(() => realtimeJoined = true);
+    try {
+      final granted =
+          await widget.state.roomPermissions.requestVoiceRoomPermissions();
+      if (!granted) {
+        if (mounted) {
+          setState(() => connectionError = 'Microphone permission is required.');
+        }
+        return;
+      }
+      await widget.state.roomForegroundService.start();
+      await widget.state.realtime.enterRoom(widget.room.id, '10000000');
+      if (mounted) {
+        setState(() {
+          realtimeJoined = true;
+          connectionError = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => connectionError = error.toString());
+      }
+    }
   }
 
   @override
@@ -301,7 +321,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           children: [
             Text(widget.room.title),
             Text(
-              'ID ' + widget.room.id + (realtimeJoined ? ' • Connected' : ''),
+              'ID ' +
+                  widget.room.id +
+                  (realtimeJoined
+                      ? ' • Connected'
+                      : connectionError != null
+                          ? ' • Permission needed'
+                          : ' • Connecting'),
               style: const TextStyle(fontSize: 11),
             ),
           ],
