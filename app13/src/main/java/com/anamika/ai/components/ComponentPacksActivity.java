@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
@@ -63,7 +64,7 @@ public final class ComponentPacksActivity extends Activity {
         Button qwen=new Button(this); qwen.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
         Button download=new Button(this); download.setText("Download Component ZIP from URL");
         Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
-        Button importModel=new Button(this); importModel.setText("Import Existing GGUF Model");
+        Button importModel=new Button(this); importModel.setText("Select Downloaded Qwen GGUF from Phone");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
         Button refresh=new Button(this); refresh.setText("Refresh Status");
         box.addView(complete);
@@ -184,16 +185,41 @@ public final class ComponentPacksActivity extends Activity {
     }
 
     private void pickModel(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("*/*");
-        startActivityForResult(i,PICK_GGUF);
+        status.setText("Phone storage picker khol rahi hu… Downloads me apni .gguf file select karo.");
+        Intent open=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        open.addCategory(Intent.CATEGORY_OPENABLE);
+        open.setType("*/*");
+        open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+
+        Intent get=new Intent(Intent.ACTION_GET_CONTENT);
+        get.addCategory(Intent.CATEGORY_OPENABLE);
+        get.setType("*/*");
+        get.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        Intent chooser=Intent.createChooser(open,"Select Qwen GGUF model");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS,new Intent[]{get});
+        try{
+            startActivityForResult(chooser,PICK_GGUF);
+        }catch(Exception first){
+            try{
+                startActivityForResult(get,PICK_GGUF);
+            }catch(Exception second){
+                status.setText("Phone file picker open nahi hua. Files/Downloads app se .gguf file ko share/open-with karke Anamika select karein, ya Qwen download button use karein.");
+            }
+        }
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null){
+            if(requestCode==PICK_GGUF)status.setText("GGUF file selection cancel hui. “Select Downloaded Qwen GGUF from Phone” dobara dabao.");
+            return;
+        }
         Uri uri=data.getData();
+        try{
+            int flags=data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            if(flags!=0)getContentResolver().takePersistableUriPermission(uri,flags);
+        }catch(Throwable ignored){}
         if(requestCode==PICK_ZIP)installZip(uri);
         else if(requestCode==PICK_GGUF)installModel(uri);
     }
@@ -211,7 +237,8 @@ public final class ComponentPacksActivity extends Activity {
     }
 
     private void installModel(Uri uri){
-        status.setText("GGUF model private storage me import ho raha hai… 1+ GB file me time lag sakta hai.");
+        String name=displayName(uri);
+        status.setText("Selected: "+name+"\nGGUF model private storage me import ho raha hai… 1+ GB file me kuch minutes lag sakte hain. Screen close mat karein.");
         new Thread(()->{
             ComponentPackManager.Result r;
             try(InputStream in=getContentResolver().openInputStream(uri)){
@@ -220,6 +247,22 @@ public final class ComponentPacksActivity extends Activity {
             }catch(Exception e){r=new ComponentPackManager.Result(false,"Model import failed: "+safe(e));}
             post(r.message);
         },"anamika-model-import").start();
+    }
+
+    private String displayName(Uri uri){
+        android.database.Cursor c=null;
+        try{
+            c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null);
+            if(c!=null&&c.moveToFirst()){
+                int i=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if(i>=0){
+                    String n=c.getString(i);
+                    if(n!=null&&!n.trim().isEmpty())return n;
+                }
+            }
+        }catch(Exception ignored){}finally{if(c!=null)c.close();}
+        String last=uri==null?null:uri.getLastPathSegment();
+        return last==null||last.trim().isEmpty()?"selected GGUF":last;
     }
 
     private void downloadModel(String raw){
