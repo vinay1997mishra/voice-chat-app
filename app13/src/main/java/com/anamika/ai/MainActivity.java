@@ -576,9 +576,14 @@ public final class MainActivity extends Activity implements VoiceController.List
             }
 
             if(plan.actions==null||plan.actions.length()==0){
-                // No device/app action was selected: answer as a normal conversation
-                // using Qwen with recent chat history + local owner memory context.
-                String reply=NaturalLanguageBrain.reply(appContext,text);
+                // The planner already generated a natural reply for normal conversation.
+                // Reuse it instead of starting the same GGUF model a second time.
+                // The previous double-inference path could reload the ~1.5B model twice
+                // and made slower Android phones hit the natural-language timeout.
+                String plannedReply=plan.reply==null?"":plan.reply.trim();
+                final String reply=plannedReply.isEmpty()
+                        ?NaturalLanguageBrain.reply(appContext,text)
+                        :plannedReply;
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
                     finishReply(reply,connectorCommandId);
