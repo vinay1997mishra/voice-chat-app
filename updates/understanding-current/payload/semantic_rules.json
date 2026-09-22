@@ -1,0 +1,31 @@
+{
+  "schema": "anamika13-understanding-rules-v1",
+  "rules": [
+    {"regex":"^(?:ho gaya|ho gya|hogya|kar diya|done|ready|fix hua|build hua|apk ready|kya hua|kitna hua|ab|aur|fir|phir|kab tak)\\??$","hint":"This is a status/follow-up about the most recent active task. Answer with the latest verified state from recent context."},
+    {"contains_any":["pehle wala","pehle wali","last wala","last wali","abhi wala","abhi wali","upar wala","upar wali","wahi"],"hint":"Resolve this reference to the most recent matching subject or result in conversation history."},
+    {"contains_any":["isme add","usme add","ye bhi add","same me add","aur add","jod do"],"hint":"Add the requested change to the current target while preserving existing accepted features."},
+    {"contains_any":["kuch mat hata","kuch bhi mat hata","functions rehne do","funtions rehne do","pehle ke saare"],"hint":"Preserve all unrelated existing functions; make only the requested incremental change."},
+    {"contains_any":["new update","naya update","sirf update","pura app nahi","dobara install nahi","dubara install nahi"],"hint":"Prefer an incremental/hot update when the change can be represented as a runtime pack; otherwise distinguish in-place APK update from reinstall."},
+    {"contains_any":["self update","khud update","khud ko update","self upgrade","khud upgrade"],"hint":"Interpret this as Anamika's owner-controlled self-upgrade workflow; preserve owner approval for final installation."},
+    {"contains_any":["reply nahi","jawab nahi","samajh nahi","samjh nahi","kuch bhi keh rahi","timeout"],"hint":"Treat this as an understanding/reply defect. Use the newest error plus recent conversation to identify whether parsing, model inference, context or timeout is failing."},
+    {"contains_any":["close ho","band ho ja","20 sec","30 sec","15 sec","crash"],"hint":"Treat this as an app lifecycle/crash issue and use recent diagnostics/status instead of assuming a language problem."},
+    {"contains_any":["hello mika","hello anamika","mika","anamika sun"],"hint":"Interpret this in wake/voice context unless the sentence clearly addresses Anamika conversationally."},
+    {"contains_any":["song","video","voice chat","mic","microphone"],"hint":"Consider wake-listener audio ownership and media/call coexistence when diagnosing the issue."},
+    {"contains_any":["plugin","deep discover","blueprint","accessibility","touch button"],"hint":"Interpret this as app-discovery/automation capability context and preserve existing plugin/accessibility functions."},
+    {"contains_any":["github","ci run","commit","branch","build"],"hint":"Use the latest verified repository/build state. Do not claim success while CI is still queued or running."},
+    {"contains_any":["signer","p12","rsa","key","signature"],"hint":"Interpret this as Android signing/update identity context. Same signing certificate is required for in-place APK updates."},
+    {"contains_any":["aapt2","toolchain","sdk 36","target sdk","android 11","android 14","android 16"],"hint":"Interpret this as Android local-build/toolchain compatibility context and keep min/target/OS-version meanings distinct."},
+    {"contains_any":["code doctor","offline brain","qwen","gguf","coding model"],"hint":"Interpret this as Anamika's local coding/inference stack, not general cloud ChatGPT."},
+    {"contains_any":["sab kuch recheck","saare function check","sab function check","pura check"],"hint":"Recheck the current target comprehensively, but report only checks actually performed."},
+    {"contains_any":["pehle jawab","pehle bta","pehle bata"],"hint":"Answer the immediate question first before continuing implementation details."},
+    {"contains_any":["jaldi","reply bhi kar","kitna sochega","mar kyu"],"hint":"Respond concisely with current result/status and continue the task without mirroring emotional wording."},
+    {"contains_any":["iska 40%","iska 30%","iska 10%","ab kitna","kitne percent","kitna percent","add kar","kam kar"],"hint":"If this is a numeric follow-up, reuse the immediately relevant figures and units from recent turns, then recompute."},
+    {"contains_any":["professional english","english me","in english"],"hint":"Rewrite or translate the immediately relevant prior text into clear professional English."},
+    {"contains_any":["hindi me","in hindi"],"hint":"Translate or rewrite the immediately relevant prior draft into natural Hindi/Hinglish according to context."},
+    {"contains_any":["upar wale me add","isme bhi add","ye line bhi add"],"hint":"Merge the new content into the immediately preceding draft rather than starting a separate message."},
+    {"contains_any":["9:16","lamba karo","logo","name change","background","banner"],"hint":"Treat this as a follow-up to the most recent visual/design target and preserve accepted choices unless explicitly changed."},
+    {"contains_any":["ludo","uno","vip entry","gift recipient","seat","room owner"],"hint":"This likely belongs to the separate voice-chat app context; do not mix it with Anamika core unless explicitly requested."},
+    {"contains_any":["admin","super admin","bd","agency","coin seller","host policy","diamond","coins"],"hint":"Use the current platform/policy context and keep role/rate assumptions from the latest provided policy, not older rates."},
+    {"contains_any":["download link","github link","apk de","download nahi"],"hint":"Interpret this as a request for the latest verified downloadable artifact/link, not a request to rebuild unless the artifact is outdated or broken."}
+  ]
+}
