@@ -1,6 +1,7 @@
-Anamika AI 13 hot Function Pack bridge update
+Anamika AI 13 strict self-update quality + retained-version update
 Requested: 2026-09-22
-Purpose: add runtime-loadable declarative Function Packs so compatible new functions and workflows can be installed/updated without replacing the full APK.
-Includes: verified function-pack manifests, per-pack atomic replacement/rollback preservation, exact/prefix command matching, natural-language Function Pack routing, one-tap Function Pack updater, starter Owner Utilities pack.
-Safety/compatibility: packs cannot ship Java/Dex/native code and cannot invoke self-update/code-generation/raw accessibility tap-type actions; compiled/native/new-permission capabilities still use the signed APK self-upgrade path.
-Update mode: one-time permanent-signed in-place bridge APK; preserve existing app data and all existing functions. Future compatible Function Pack updates use small ZIP packs.
+Purpose: every Anamika update must pass source validation, duplicate-function guard, automatic repair when errors/build failures are detected, real signed APK build and final APK identity/signature/version verification before owner install.
+Uploaded APK path: selected Anamika APKs must expose bundled self_source; Anamika extracts it, validates/repairs it, rebuilds and verifies the fresh candidate instead of trusting a binary-only update.
+Function replacement: existing functions are edited in place; duplicate/shadow implementations such as V2/New/Copy/Updated are rejected when the original implementation still exists.
+Retention: current installed APK + exact source are archived before install. Old versions are NEVER auto-deleted. After the new version passes source/consistency checks and three consecutive healthy launches, Anamika reminds the owner that the old archive can be deleted, but only an explicit owner command deletes it.
+Existing functions/data: preserve all unrelated existing functions, Function Pack system, Understanding Pack system, owner controls and app data.
