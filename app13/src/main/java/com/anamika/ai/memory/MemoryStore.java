@@ -7,6 +7,8 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,7 +57,13 @@ public final class MemoryStore {
         List<String> picked=new ArrayList<>();
         if(f.isFile()){
             try{
-                String raw=new String(java.nio.file.Files.readAllBytes(f.toPath()),StandardCharsets.UTF_8);
+                ByteArrayOutputStream buf=new ByteArrayOutputStream();
+                try(FileInputStream in=new FileInputStream(f)){
+                    byte[] chunk=new byte[8192];
+                    int n;
+                    while((n=in.read(chunk))>0)buf.write(chunk,0,n);
+                }
+                String raw=new String(buf.toByteArray(),StandardCharsets.UTF_8);
                 String[] lines=raw.split("\\r?\\n");
                 for(int i=lines.length-1;i>=0&&picked.size()<turns;i--){
                     String line=lines[i].trim();
