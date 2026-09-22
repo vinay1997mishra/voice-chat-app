@@ -291,7 +291,8 @@ public final class UpgradeCoordinator {
                 "\nBrain: "+(ComponentPackManager.brainInstalled(c)?"READY":"NOT READY")+
                 "\nBuilder: "+(cap.ready?"READY":"NOT READY")+"\n"+cap.detail+
                 "\nSigner: "+(SignerVault.ready(c)?"READY":"NOT READY")+
-                "\nCandidate: "+(apk!=null&&apk.isFile()?apk.getAbsolutePath():"none");
+                "\nCandidate: "+(apk!=null&&apk.isFile()?apk.getAbsolutePath():"none")+
+                "\n\n"+VersionArchiveManager.status(c);
     }
 
     private static String safe(Exception e){
