@@ -47,12 +47,6 @@ public final class CommandRouter {
         String original=raw==null?"":raw.trim();
         if(original.isEmpty())return false;
         String rawLower=original.toLowerCase(Locale.ROOT);
-        if(startsDirectCode(rawLower)){
-            String code=directCodeBody(original);
-            return UpgradeCoordinator.applyOwnerCode(a,code);
-        }
-
-        String rawLower=original.toLowerCase(Locale.ROOT);
         if(startsDirectCode(rawLower))return true;
         String text=LanguageCommandInterpreter.normalize(original);
         String l=text.toLowerCase(Locale.ROOT);
@@ -69,6 +63,12 @@ public final class CommandRouter {
     public static String runFast(Activity a,String raw){
         String original=raw==null?"":raw.trim();
         if(original.isEmpty()) return "Command empty.";
+
+        String rawLower=original.toLowerCase(Locale.ROOT);
+        if(startsDirectCode(rawLower)){
+            String code=directCodeBody(original);
+            return UpgradeCoordinator.applyOwnerCode(a,code);
+        }
 
         // Message parsing uses the untouched owner sentence so the message body is never rewritten.
         MessageCommandParser.Request messageRequest=MessageCommandParser.parse(original);
