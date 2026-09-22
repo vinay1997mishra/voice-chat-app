@@ -35,6 +35,7 @@ import '../relationship/cp_features.dart';
 import '../relationship/cp_service.dart';
 import '../rewards/reward_service.dart';
 import '../room/room_control_service.dart';
+import '../room/active_room_session.dart';
 import '../sharing/share_service.dart';
 import '../social/social.dart';
 
@@ -87,6 +88,12 @@ class TinniState {
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
     roomControls.setOwner('10000000');
+    roomSession = ActiveRoomSession(
+      runtime: runtime,
+      realtime: realtime,
+      foregroundService: roomForegroundService,
+      permissions: roomPermissions,
+    );
   }
 
   final FunctionPackRuntime runtime;
@@ -121,6 +128,7 @@ class TinniState {
   final EffectQueue effects;
   final ModerationService moderation;
   final RoomControlService roomControls;
+  late final ActiveRoomSession roomSession;
   final BackpackService backpack;
   final GiftAtlasService giftAtlas;
   final CustomGiftService customGifts;

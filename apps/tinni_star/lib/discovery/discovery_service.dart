@@ -34,28 +34,30 @@ class RoomSummary {
 
 class DiscoveryService {
   DiscoveryService({List<RoomSummary>? seed})
-      : rooms = seed ??
-            const [
-              RoomSummary(
-                id: '1524843',
-                title: 'India Official Room',
-                country: 'IN',
-                online: 128,
-              ),
-              RoomSummary(
-                id: '10000001',
-                title: 'Night Party',
-                country: 'IN',
-                online: 86,
-                activity: true,
-              ),
-              RoomSummary(
-                id: '10000002',
-                title: 'Music Club',
-                country: 'US',
-                online: 54,
-              ),
-            ];
+      : rooms = List<RoomSummary>.from(
+          seed ??
+              const [
+                RoomSummary(
+                  id: '1524843',
+                  title: 'India Official Room',
+                  country: 'IN',
+                  online: 128,
+                ),
+                RoomSummary(
+                  id: '10000001',
+                  title: 'Night Party',
+                  country: 'IN',
+                  online: 86,
+                  activity: true,
+                ),
+                RoomSummary(
+                  id: '10000002',
+                  title: 'Music Club',
+                  country: 'US',
+                  online: 54,
+                ),
+              ],
+        );
 
   final List<RoomSummary> rooms;
   final List<String> searchHistory = <String>[];

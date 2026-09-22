@@ -20,5 +20,13 @@ void main() {
     await tester.tap(find.text('India Official Room').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Minimize room'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mini-room-bar')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('mini-room-bar')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
   });
 }

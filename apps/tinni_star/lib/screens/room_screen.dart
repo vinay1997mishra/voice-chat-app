@@ -26,43 +26,20 @@ class RoomScreen extends StatefulWidget {
 }
 
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
-  late final RoomController controller;
   final chat = TextEditingController();
-  bool realtimeJoined = false;
-  String? connectionError;
+
+  RoomController get controller => widget.state.roomSession.controller!;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    controller = RoomController(runtime: widget.state.runtime)
-      ..addListener(_refresh);
-    _joinRealtime();
+    widget.state.roomSession.addListener(_refresh);
+    _openRoom();
   }
 
-  Future<void> _joinRealtime() async {
-    try {
-      final granted =
-          await widget.state.roomPermissions.requestVoiceRoomPermissions();
-      if (!granted) {
-        if (mounted) {
-          setState(() => connectionError = 'Microphone permission is required.');
-        }
-        return;
-      }
-      await widget.state.roomForegroundService.start();
-      await widget.state.realtime.enterRoom(widget.room.id, '10000000');
-      if (mounted) {
-        setState(() {
-          realtimeJoined = true;
-          connectionError = null;
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() => connectionError = error.toString());
-      }
-    }
+  Future<void> _openRoom() async {
+    await widget.state.roomSession.open(widget.room);
   }
 
   @override
@@ -78,10 +55,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.state.realtime.exitRoom();
-    widget.state.roomForegroundService.stop();
-    controller.removeListener(_refresh);
-    controller.dispose();
+    widget.state.roomSession.removeListener(_refresh);
+    if (widget.state.roomSession.room?.id == widget.room.id) {
+      widget.state.roomSession.minimize();
+    }
     chat.dispose();
     super.dispose();
   }
@@ -97,9 +74,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<void> _toggleMic() async {
     controller.toggleMic();
-    await widget.state.realtime.setMic(
-      controller.micState == MicState.live,
-    );
+    await widget.state.roomSession.setMicFromController();
     setState(() {});
   }
 
@@ -216,7 +191,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   pack,
                   ownerApproved: true,
                 );
-                controller.refreshFunctionPack();
+                widget.state.roomSession.refreshFunctionPack();
                 Navigator.pop(context);
                 _snack(result.message);
               },
@@ -309,7 +284,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 final result = widget.state.connector.rollback(
                   ownerApproved: true,
                 );
-                controller.refreshFunctionPack();
+                widget.state.roomSession.refreshFunctionPack();
                 Navigator.pop(context);
                 _snack(result.message);
               },
@@ -405,9 +380,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             Text(
               'ID ' +
                   widget.room.id +
-                  (realtimeJoined
+                  (widget.state.roomSession.connected
                       ? ' • Connected'
-                      : connectionError != null
+                      : widget.state.roomSession.connectionError != null
                           ? ' • Permission needed'
                           : ' • Connecting'),
               style: const TextStyle(fontSize: 11),
@@ -415,6 +390,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Minimize room',
+            onPressed: () {
+              widget.state.roomSession.minimize();
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          ),
+          IconButton(
+            tooltip: 'Close room',
+            onPressed: () async {
+              await widget.state.roomSession.close();
+              if (mounted) Navigator.pop(context);
+            },
+            icon: const Icon(Icons.close_rounded),
+          ),
           IconButton(
             onPressed: _showOwnerTools,
             icon: const Icon(Icons.admin_panel_settings_rounded),
