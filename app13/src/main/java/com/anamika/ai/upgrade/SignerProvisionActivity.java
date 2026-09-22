@@ -16,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.core.OwnerStore;
 
 import java.io.ByteArrayOutputStream;
@@ -122,8 +123,8 @@ public final class SignerProvisionActivity extends Activity {
             password.setText("");
             base64Input.setText("");
             selectedFile.setText("Signer already provisioned • READY");
-            done.setText("Signer READY ✓ • Back to Anamika");
-            done.setOnClickListener(v->finish());
+            done.setText("Signer READY ✓ • Continue Setup");
+            done.setOnClickListener(v->openComponentsAndFinish());
         }
         status.setPadding(0,dp(14),0,dp(24));
         box.addView(status);
@@ -201,9 +202,9 @@ public final class SignerProvisionActivity extends Activity {
             if(SignerVault.ready(this)){
                 password.setText("");
                 selectedFile.setText("Signer imported successfully • READY");
-                done.setText("Signer READY ✓ • Back to Anamika");
+                done.setText("Signer READY ✓ • Continue Setup");
                 done.setEnabled(true);
-                done.setOnClickListener(v->finish());
+                done.setOnClickListener(v->openComponentsAndFinish());
             }else{
                 done.setText("3 • Retry Import Signer");
                 done.setEnabled(true);
@@ -281,6 +282,11 @@ public final class SignerProvisionActivity extends Activity {
             importBase64.setEnabled(true);
             done.setEnabled(true);
         }
+    }
+
+    private void openComponentsAndFinish(){
+        startActivity(new Intent(this,ComponentPacksActivity.class));
+        finish();
     }
 
     private byte[] read(Uri uri,int limit)throws Exception{
