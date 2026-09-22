@@ -1,0 +1,57 @@
+name: Tinni Star Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/tinni_star/**'
+      - '.github/workflows/tinni-star-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform shell
+        working-directory: apps/tinni_star
+        run: flutter create . --platforms=android --org com.tinnistar
+
+      - name: Get packages
+        working-directory: apps/tinni_star
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: apps/tinni_star
+        run: flutter analyze
+
+      - name: Test
+        working-directory: apps/tinni_star
+        run: flutter test
+
+      - name: Build debug APK
+        working-directory: apps/tinni_star
+        run: flutter build apk --debug
+
+      - name: Upload Tinni Star APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinni-star-debug-apk
+          path: apps/tinni_star/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
