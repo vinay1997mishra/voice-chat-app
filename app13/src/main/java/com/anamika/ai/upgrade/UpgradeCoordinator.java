@@ -11,6 +11,13 @@ import java.io.File;
 
 /** Coordinates owner-requested V13 source repair, feature creation, build and update staging. */
 public final class UpgradeCoordinator {
+    public static final class UploadedResult {
+        public final boolean ok;
+        public final File apk;
+        public final String message;
+        UploadedResult(boolean ok,File apk,String message){this.ok=ok;this.apk=apk;this.message=message;}
+    }
+
     private static final String PREF="anamika13_upgrade";
     private static final String LAST_WS="last_workspace";
     private static final String LAST_CANDIDATE="last_candidate";
@@ -216,6 +223,53 @@ public final class UpgradeCoordinator {
             return r.log+"\nCandidate: "+r.apk.getAbsolutePath();
         }
         return "Local build/install blocked by strict quality gate.\n"+r.log;
+    }
+
+    /**
+     * Strict path for a manually selected/downloaded Anamika APK.
+     * The APK must contain the bundled self_source snapshot. Anamika extracts that
+     * source, validates it, auto-repairs failures when possible, performs a fresh
+     * signed local build and verifies the rebuilt APK before it can be installed.
+     */
+    public static UploadedResult validateRepairRebuildUploaded(Context c,File uploadedApk){
+        try{
+            ApkVerifier.Result initial=ApkVerifier.verifySelfUpdate(c,uploadedApk);
+            if(!initial.ok)
+                return new UploadedResult(false,null,"Uploaded APK verification failed.\n"+initial.message);
+
+            UpgradeJournal.record(c,"UPLOADED_APK_CHECK_START",
+                    "version="+initial.versionCode+" file="+uploadedApk.getAbsolutePath());
+
+            File ws=UploadedApkWorkspace.create(c,uploadedApk,initial.versionCode);
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_WS,ws.getAbsolutePath())
+                    .remove(LAST_CANDIDATE)
+                    .apply();
+
+            UpgradeQualityGate.Result gated=UpgradeQualityGate.run(
+                    c,ws,
+                    "Validate uploaded Anamika version "+initial.versionCode+
+                    ". Repair any wrong/incomplete code or integration before rebuilding. "+
+                    "Preserve unrelated existing functions and update existing implementations in place without duplicate copies.");
+
+            UpgradeJournal.record(c,gated.ok?"UPLOADED_APK_QUALITY_PASS":"UPLOADED_APK_QUALITY_FAIL",gated.log);
+            if(!gated.ok)
+                return new UploadedResult(false,null,
+                        "Uploaded update failed strict code/build quality gate. Install blocked.\n"+gated.log);
+
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
+
+            return new UploadedResult(true,gated.apk,
+                    "UPLOADED UPDATE QUALITY PASS\n"+
+                    "Bundled source inspected; wrong code would be repaired before use.\n"+
+                    "Duplicate-function guard PASS. Fresh real build + signing + APK verification PASS.\n"+
+                    gated.log);
+        }catch(Exception e){
+            UpgradeJournal.record(c,"UPLOADED_APK_CHECK_FAIL",safe(e));
+            return new UploadedResult(false,null,
+                    "Uploaded update could not be code-verified/rebuilt. Install blocked: "+safe(e));
+        }
     }
 
     public static File latestCandidate(Context c){
