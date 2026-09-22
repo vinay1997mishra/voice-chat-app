@@ -5,6 +5,7 @@ import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.language.LocalLanguageText;
 import com.anamika.ai.language.OwnerConversationProfile;
+import com.anamika.ai.language.UnderstandingPackStore;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.LocalProcessRunner;
 import java.io.File;
@@ -43,7 +44,7 @@ public final class NaturalLanguageBrain {
         String memory=MemoryStore.promptContext(c,memoryTurns,memoryChars);
         String ownerMessage=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerMessage);
-        String conversationHint=OwnerConversationProfile.semanticHint(ownerMessage);
+        String conversationHint=UnderstandingPackStore.semanticHint(c,ownerMessage);
         StringBuilder hintBuilder=new StringBuilder();
         if(!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerMessage))
             hintBuilder.append("LOCAL LANGUAGE INTERPRETATION HINT: ").append(localHint).append("\n")
@@ -62,7 +63,7 @@ public final class NaturalLanguageBrain {
                 "Do not pretend an Android action was executed when it was not.\n"+
                 "If this is normal conversation or a question, answer directly.\n"+
                 "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n"+
-                OwnerConversationProfile.promptGuide()+"\n\n"+
+                UnderstandingPackStore.promptGuide(c)+"\n\n"+
                 (memory.isEmpty()?"":memory+"\n\n")+
                 "CURRENT OWNER MESSAGE: "+ownerMessage+"\n"+
                 hintLine+
