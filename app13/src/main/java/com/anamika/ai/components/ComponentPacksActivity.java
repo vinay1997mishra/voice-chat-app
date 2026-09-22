@@ -29,6 +29,8 @@ public final class ComponentPacksActivity extends Activity {
             "https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-brain-v13-12/AnamikaAI-13-BrainRuntime-arm64.zip";
     private static final String QWEN_MODEL_URL=
             "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true";
+    private static final String UNDERSTANDING_PACK_URL=
+            "https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-understanding-current/AnamikaAI-13-UnderstandingPack.zip";
     private TextView status;
     private EditText url;
     private Button completeButton;
@@ -54,7 +56,7 @@ public final class ComponentPacksActivity extends Activity {
         box.addView(title);
 
         TextView note=new TextView(this);
-        note.setText("Step 1: Offline Brain Runtime install karein.\nStep 2: Qwen2.5-Coder-1.5B-Instruct Q4_K_M model download/import karein.\nStep 3: Android toolchain signed V13 APK ke andar bundled hai aur owner unlock ke baad auto-install hota hai.");
+        note.setText("Step 1: Offline Brain Runtime install karein.\nStep 2: Qwen2.5-Coder-1.5B-Instruct Q4_K_M model download/import karein.\nStep 3: Android toolchain signed V13 APK ke andar bundled hai aur owner unlock ke baad auto-install hota hai.\n\nUnderstanding Pack ko kabhi bhi alag se update kiya ja sakta hai; iske liye full APK reinstall/update nahi chahiye.");
         note.setPadding(0,dp(8),0,dp(12));
         box.addView(note);
 
@@ -66,14 +68,16 @@ public final class ComponentPacksActivity extends Activity {
         completeButton=new Button(this); completeButton.setText("Complete Offline Setup • Toolchain + Brain + Qwen");
         runtimeButton=new Button(this); runtimeButton.setText("Install Offline Brain Runtime");
         qwenButton=new Button(this); qwenButton.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
+        Button understanding=new Button(this); understanding.setText("Install / Update Understanding Pack");
         Button download=new Button(this); download.setText("Advanced • Download Custom Component ZIP from URL");
-        Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
+        Button importZip=new Button(this); importZip.setText("Import Component / Understanding ZIP");
         importModelButton=new Button(this); importModelButton.setText("Select Downloaded Qwen GGUF from Phone");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
         Button refresh=new Button(this); refresh.setText("Refresh Status");
         box.addView(completeButton);
         box.addView(runtimeButton);
         box.addView(qwenButton);
+        box.addView(understanding);
         box.addView(download);
         box.addView(importZip);
         box.addView(importModelButton);
@@ -89,6 +93,7 @@ public final class ComponentPacksActivity extends Activity {
         completeButton.setOnClickListener(v->completeOfflineSetup());
         runtimeButton.setOnClickListener(v->download(BRAIN_RUNTIME_URL));
         qwenButton.setOnClickListener(v->downloadModel(QWEN_MODEL_URL));
+        understanding.setOnClickListener(v->download(UNDERSTANDING_PACK_URL));
         download.setOnClickListener(v->download(url.getText().toString().trim()));
         importZip.setOnClickListener(v->pickZip());
         importModelButton.setOnClickListener(v->pickModel());
