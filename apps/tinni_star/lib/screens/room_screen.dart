@@ -9,6 +9,7 @@ import '../effects/effect_queue.dart';
 import '../games/game_service.dart';
 import '../room/room_controller.dart';
 import '../room/room_models.dart';
+import '../room/room_control_service.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({
@@ -218,6 +219,87 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 controller.refreshFunctionPack();
                 Navigator.pop(context);
                 _snack(result.message);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.public_rounded),
+              title: const Text('Toggle public / private'),
+              subtitle: Text(
+                widget.state.roomControls.settings.visibility.name,
+              ),
+              onTap: () {
+                final current = widget.state.roomControls.settings;
+                widget.state.roomControls.settings = current.copyWith(
+                  visibility:
+                      current.visibility == RoomVisibility.publicRoom
+                          ? RoomVisibility.privateRoom
+                          : RoomVisibility.publicRoom,
+                );
+                Navigator.pop(context);
+                _snack('Room visibility updated.');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.how_to_reg_rounded),
+              title: const Text('Cycle join policy'),
+              subtitle: Text(
+                widget.state.roomControls.settings.joinPolicy.name,
+              ),
+              onTap: () {
+                final current = widget.state.roomControls.settings;
+                final values = JoinPolicy.values;
+                final next = values[
+                    (current.joinPolicy.index + 1) % values.length];
+                widget.state.roomControls.settings =
+                    current.copyWith(joinPolicy: next);
+                Navigator.pop(context);
+                _snack('Join policy: ' + next.name);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.mic_external_on_rounded),
+              title: const Text('Toggle free/apply mic'),
+              subtitle: Text(widget.state.roomControls.settings.micMode.name),
+              onTap: () {
+                final current = widget.state.roomControls.settings;
+                final next = current.micMode == MicMode.apply
+                    ? MicMode.free
+                    : MicMode.apply;
+                widget.state.roomControls.settings =
+                    current.copyWith(micMode: next);
+                Navigator.pop(context);
+                _snack('Mic mode: ' + next.name);
+              },
+            ),
+            SwitchListTile(
+              title: const Text('Only managers can speak'),
+              value:
+                  widget.state.roomControls.settings.onlyManagersCanSpeak,
+              onChanged: (value) {
+                final current = widget.state.roomControls.settings;
+                widget.state.roomControls.settings =
+                    current.copyWith(onlyManagersCanSpeak: value);
+                Navigator.pop(context);
+                _snack('Speaking policy updated.');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.topic_rounded),
+              title: const Text('Set room topic/theme/BGM'),
+              subtitle: Text(
+                widget.state.roomControls.settings.topic.isEmpty
+                    ? 'No topic'
+                    : widget.state.roomControls.settings.topic,
+              ),
+              onTap: () {
+                final current = widget.state.roomControls.settings;
+                widget.state.roomControls.settings = current.copyWith(
+                  topic: 'Tinni Star Official Topic',
+                  backgroundId: 'tinni-purple-room',
+                  bgmId: 'tinni-room-bgm',
+                );
+                Navigator.pop(context);
+                _snack('Topic, room background and BGM state updated.');
               },
             ),
             ListTile(

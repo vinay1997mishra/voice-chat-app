@@ -14,6 +14,22 @@ class RoomSummary {
   final int online;
   final bool locked;
   final bool activity;
+
+  RoomSummary copyWith({
+    String? title,
+    String? country,
+    int? online,
+    bool? locked,
+    bool? activity,
+  }) =>
+      RoomSummary(
+        id: id,
+        title: title ?? this.title,
+        country: country ?? this.country,
+        online: online ?? this.online,
+        locked: locked ?? this.locked,
+        activity: activity ?? this.activity,
+      );
 }
 
 class DiscoveryService {
@@ -45,6 +61,41 @@ class DiscoveryService {
   final List<String> searchHistory = <String>[];
   final List<String> recentRoomIds = <String>[];
   final Set<String> favorites = <String>{};
+  int _nextRoomId = 20000000;
+
+  RoomSummary createRoom({
+    required String title,
+    required String country,
+    bool locked = false,
+  }) {
+    final value = title.trim();
+    if (value.isEmpty) throw StateError('Room title is required');
+    final room = RoomSummary(
+      id: (_nextRoomId++).toString(),
+      title: value,
+      country: country,
+      online: 1,
+      locked: locked,
+    );
+    rooms.insert(0, room);
+    return room;
+  }
+
+  bool editRoom(
+    String roomId, {
+    String? title,
+    bool? locked,
+    bool? activity,
+  }) {
+    final index = rooms.indexWhere((room) => room.id == roomId);
+    if (index < 0) return false;
+    rooms[index] = rooms[index].copyWith(
+      title: title?.trim().isEmpty == true ? null : title,
+      locked: locked,
+      activity: activity,
+    );
+    return true;
+  }
 
   List<RoomSummary> recommend({String? country}) {
     final filtered = country == null
