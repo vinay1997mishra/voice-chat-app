@@ -26,7 +26,7 @@ public final class ComponentPacksActivity extends Activity {
     private static final int PICK_ZIP=1320;
     private static final int PICK_GGUF=1321;
     private static final String BRAIN_RUNTIME_URL=
-            "https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-brain-v13-2/AnamikaAI-13-BrainRuntime-arm64.zip";
+            "https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-brain-v13-12/AnamikaAI-13-BrainRuntime-arm64.zip";
     private static final String QWEN_MODEL_URL=
             "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true";
     private TextView status;
