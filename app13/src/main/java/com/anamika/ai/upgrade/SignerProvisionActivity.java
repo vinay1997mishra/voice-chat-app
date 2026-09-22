@@ -287,7 +287,7 @@ public final class SignerProvisionActivity extends Activity {
     }
 
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
-    private static String safe(Exception e){
+    private static String safe(Throwable e){
         String m=e.getMessage();
         return m==null||m.trim().isEmpty()?e.getClass().getSimpleName():m;
     }
