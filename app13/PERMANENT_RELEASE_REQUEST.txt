@@ -1,4 +1,5 @@
-Anamika AI 13 recent-conversation understanding update
+Anamika AI 13 hot-understanding-pack bridge update
 Requested: 2026-09-22
-Purpose: improve Hindi/Hinglish shorthand, short follow-up resolution, recent-context references, update/install intent, calculation follow-ups, and owner conversation style understanding based on the recent working pattern.
-Update mode: permanent-signed in-place APK update; preserve existing functions and app data.
+Purpose: add runtime-loadable understanding/context component packs so future language, follow-up and conversation-rule updates can be installed without replacing the full APK.
+Includes: one-tap Understanding Pack updater, verified manifest hashes, atomic pack rollback/preservation, runtime prompt/rule loading.
+Update mode: one-time permanent-signed in-place bridge APK; preserve existing app data and functions. Future understanding updates use the small component ZIP.
