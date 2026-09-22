@@ -2,6 +2,7 @@ package com.anamika.ai.upgrade;
 
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
@@ -159,10 +160,66 @@ public final class SelfUpdateActivity extends Activity {
         if(staged.exists()&&!staged.delete()){partial.delete();status.setText("Cannot replace previous candidate.");return;}
         if(!partial.renameTo(staged)){partial.delete();status.setText("Cannot finalize candidate.");return;}
 
-        ApkVerifier.Result r=ApkVerifier.verifySelfUpdate(this,staged);
-        verified=r.ok;
-        installButton().setEnabled(verified);
-        status.setText(r.message+(verified?"\nReady for Android system confirmation.":"\nUpdate rejected."));
+        ApkVerifier.Result initial=ApkVerifier.verifySelfUpdate(this,staged);
+        if(!initial.ok){
+            verified=false;
+            installButton().setEnabled(false);
+            status.setText(initial.message+"\nUpdate rejected.");
+            return;
+        }
+
+        verified=false;
+        installButton().setEnabled(false);
+        status.setText(initial.message+
+                "\n\nBundled source code check → auto-repair if needed → fresh signed build chal raha hai…");
+        final Context app=getApplicationContext();
+        new Thread(()->{
+            UpgradeCoordinator.UploadedResult checked=
+                    UpgradeCoordinator.validateRepairRebuildUploaded(app,staged);
+            if(!checked.ok||checked.apk==null||!checked.apk.isFile()){
+                runOnUiThread(()->{
+                    verified=false;
+                    installButton().setEnabled(false);
+                    status.setText(checked.message);
+                });
+                return;
+            }
+
+            String replace=replaceStagedWith(checked.apk);
+            ApkVerifier.Result finalCheck=replace.isEmpty()
+                    ?ApkVerifier.verifySelfUpdate(app,staged)
+                    :new ApkVerifier.Result(false,replace,-1);
+            runOnUiThread(()->{
+                verified=finalCheck.ok;
+                installButton().setEnabled(verified);
+                status.setText(checked.message+
+                        (replace.isEmpty()?"":"\n"+replace)+
+                        "\n\n"+finalCheck.message+
+                        (verified?"\nSTRICT CODE/BUILD CHECK PASS • Ready for owner/Android confirmation."
+                                :"\nUpdate rejected."));
+            });
+        },"anamika-uploaded-update-quality-gate").start();
+    }
+
+    private String replaceStagedWith(File source){
+        if(source==null||!source.isFile())return "Rebuilt candidate missing.";
+        File dir=staged.getParentFile();
+        File partial=new File(dir,"candidate.rebuilt.partial");
+        try(InputStream in=new FileInputStream(source);OutputStream out=new FileOutputStream(partial,false)){
+            byte[] buf=new byte[128*1024];int n;long total=0;
+            while((n=in.read(buf))>0){
+                total+=n;
+                if(total>2L*1024L*1024L*1024L)throw new IllegalStateException("Rebuilt APK exceeds 2 GB.");
+                out.write(buf,0,n);
+            }
+            if(total<1024)throw new IllegalStateException("Rebuilt APK is empty.");
+        }catch(Exception e){
+            partial.delete();
+            return "Cannot stage rebuilt candidate: "+safe(e);
+        }
+        if(staged.exists()&&!staged.delete()){partial.delete();return "Cannot replace uploaded candidate.";}
+        if(!partial.renameTo(staged)){partial.delete();return "Cannot finalize rebuilt candidate.";}
+        return "";
     }
 
     private void install(){
