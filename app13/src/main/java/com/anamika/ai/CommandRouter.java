@@ -47,7 +47,7 @@ public final class CommandRouter {
         String original=raw==null?"":raw.trim();
         if(original.isEmpty())return false;
         String rawLower=original.toLowerCase(Locale.ROOT);
-        if(startsDirectCode(rawLower))return true;
+        if(startsDirectCode(rawLower)||startsSelfRepair(rawLower))return true;
         String text=LanguageCommandInterpreter.normalize(original);
         String l=text.toLowerCase(Locale.ROOT);
         return l.equals("run self test")||l.equals("self test")||l.equals("full diagnostics")||
@@ -68,6 +68,10 @@ public final class CommandRouter {
         if(startsDirectCode(rawLower)){
             String code=directCodeBody(original);
             return UpgradeCoordinator.applyOwnerCode(a,code);
+        }
+
+        if(startsSelfRepair(rawLower)){
+            return UpgradeCoordinator.selfRepair(a,selfRepairProblem(original));
         }
 
         // Message parsing uses the untouched owner sentence so the message body is never rewritten.
@@ -246,6 +250,36 @@ public final class CommandRouter {
             if(fallback!=null&&!fallback.trim().isEmpty())return fallback;
         }
         return result;
+    }
+
+    private static boolean startsSelfRepair(String lower){
+        return lower.equals("self repair")||
+                lower.startsWith("self repair ")||
+                lower.equals("fix yourself")||
+                lower.startsWith("fix yourself ")||
+                lower.equals("repair yourself")||
+                lower.startsWith("repair yourself ")||
+                lower.equals("khud ko thik karo")||
+                lower.startsWith("khud ko thik karo ")||
+                lower.equals("apne aap ko thik karo")||
+                lower.startsWith("apne aap ko thik karo ")||
+                lower.equals("anamika khud ko thik karo")||
+                lower.startsWith("anamika khud ko thik karo ");
+    }
+
+    private static String selfRepairProblem(String original){
+        String lower=original.toLowerCase(Locale.ROOT);
+        String[] prefixes={
+                "self repair","fix yourself","repair yourself",
+                "khud ko thik karo","apne aap ko thik karo","anamika khud ko thik karo"
+        };
+        for(String p:prefixes){
+            if(lower.startsWith(p)){
+                String body=original.substring(p.length()).replaceFirst("^[\\s:=-]+","").trim();
+                return body.isEmpty()?original:body;
+            }
+        }
+        return original;
     }
 
     private static boolean startsDirectCode(String lower){
