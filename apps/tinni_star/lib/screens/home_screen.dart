@@ -192,7 +192,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: const Key('create-room-country'),
-              value: country,
+              initialValue: country,
               decoration: const InputDecoration(
                 labelText: 'Country',
                 border: OutlineInputBorder(),
