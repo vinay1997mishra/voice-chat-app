@@ -28,6 +28,7 @@ import com.anamika.ai.phone.CalculatorEngine;
 import com.anamika.ai.phone.PhoneActions;
 import com.anamika.ai.plugins.AppAutomationAccessibilityService;
 import com.anamika.ai.plugins.BlueprintStore;
+import com.anamika.ai.plugins.FunctionPackStore;
 import com.anamika.ai.plugins.PluginManagerActivity;
 import com.anamika.ai.research.ResearchStore;
 import com.anamika.ai.runtime.LocalProcessRunner;
@@ -74,6 +75,10 @@ public final class BrainCommandEngine {
     }
 
     public static Plan plan(Context c,String ownerInstruction){
+        FunctionPackStore.Match packed=FunctionPackStore.match(c,ownerInstruction);
+        if(packed!=null)
+            return new Plan(true,"FUNCTION_PACK:"+packed.packId+"/"+packed.functionId,packed.actions,packed.reply);
+
         if(!ready(c))
             return new Plan(false,
                     "Offline brain abhi ready nahi hai. Runtime aur GGUF model Components me install karein.",
@@ -260,11 +265,32 @@ public final class BrainCommandEngine {
             case "recovery_checkpoint": return RollbackManager.checkpoint(a);
             case "rollback_status": return RollbackManager.status(a);
             case "signer_status": return SignerVault.status(a);
+            case "run_function_pack": return runFunctionPack(a,arg1,text);
             case "device_info":
                 return "Android "+Build.VERSION.RELEASE+" (API "+Build.VERSION.SDK_INT+")\nDevice: "+
                         Build.MANUFACTURER+" "+Build.MODEL+"\nABI: "+joinAbis();
             default: return "Unsupported brain action ignored: "+action;
         }
+    }
+
+    private static String runFunctionPack(Activity a,String functionId,String input){
+        FunctionPackStore.Match packed=FunctionPackStore.byId(a,functionId,input);
+        if(packed==null)return "Function Pack function nahi mila: "+functionId;
+        StringBuilder out=new StringBuilder();
+        if(packed.reply!=null&&!packed.reply.trim().isEmpty())out.append(packed.reply.trim());
+        int limit=Math.min(8,packed.actions.length());
+        for(int i=0;i<limit;i++){
+            JSONObject x=packed.actions.optJSONObject(i);
+            if(x==null)continue;
+            String action=x.optString("action","").trim().toLowerCase(Locale.ROOT);
+            if("run_function_pack".equals(action))continue;
+            String r=executeOne(a,action,x.optString("arg1",""),x.optString("arg2",""),x.optString("text",""));
+            if(r!=null&&!r.trim().isEmpty()){
+                if(out.length()>0)out.append("\n");
+                out.append(r);
+            }
+        }
+        return out.length()==0?"Function Pack command complete.":out.toString();
     }
 
     private static String buildRetryPrompt(Context c,String instruction){
@@ -284,6 +310,7 @@ public final class BrainCommandEngine {
                 "actions must be an array. Each action item must contain action, arg1, arg2 and text.\n"+
                 "For normal conversation or a normal question, return actions=[] and put the natural answer in reply.\n"+
                 "For a supported device/app command, choose only an action allowed by the JSON schema.\n"+
+                "If an installed Function Pack matches the request, use run_function_pack with arg1=function id and text=the remaining owner input.\n"+
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed-language sentences, shorthand and common speech-to-text mistakes.\n"+
                 "Treat local forms such as nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as normal language.\n"+
                 "Do not require exact command wording. Use recent chat history and owner memory to resolve references/follow-ups such as ye, isme, usme, ab and pehle wala.\n"+
@@ -323,7 +350,8 @@ public final class BrainCommandEngine {
                 "diagnostics; self_test; diagnostics_report; message(arg1=app,arg2=recipient,text=message); message_status; cancel_message; "+
                 "scan_app(arg1=app); stop_scan; blueprint_status; research(text=query); stop_research; research_status; tap(text=visible control); type(text); back; "+
                 "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); self_repair(text=problem); local_build; prepare_upgrade(text=request); create_function(text=request); "+
-                "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; device_info.\n\n"+
+                "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; run_function_pack(arg1=function_id,text=input); device_info.\n\n"+
+                "INSTALLED FUNCTION PACKS:\n"+FunctionPackStore.catalog(c)+"\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
                 (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
                 hintLine+
