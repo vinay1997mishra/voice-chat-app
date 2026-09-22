@@ -1,1 +1,1 @@
-Component screen cleanup for installed state and optional URL clarity
+Use latest verified Brain Runtime pack
