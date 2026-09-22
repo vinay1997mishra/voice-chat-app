@@ -17,6 +17,7 @@ import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.files.LocalVault;
+import com.anamika.ai.language.LocalLanguageText;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.messaging.MessageCommandParser;
 import com.anamika.ai.messaging.MessagingAutomationEngine;
@@ -266,6 +267,11 @@ public final class BrainCommandEngine {
 
     private static String buildRetryPrompt(Context c,String instruction){
         String memory=MemoryStore.promptContext(c,10,7000);
+        String ownerInstruction=instruction==null?"":instruction.trim();
+        String localHint=LocalLanguageText.intentHint(ownerInstruction);
+        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction)
+                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"
+                :"";
         return "You are Anamika AI 13 command planner.\n"+
                 "Return exactly ONE JSON object and nothing else.\n"+
                 "Required top-level keys: actions and reply.\n"+
@@ -276,11 +282,17 @@ public final class BrainCommandEngine {
                 "Treat local forms such as nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as normal language.\n"+
                 "Do not require exact command wording. Use recent chat history and owner memory to resolve references/follow-ups such as ye, isme, usme, ab and pehle wala.\n"+
                 (memory.isEmpty()?"":"\n"+memory+"\n")+
-                "CURRENT OWNER INSTRUCTION: "+(instruction==null?"":instruction);
+                hintLine+
+                "CURRENT OWNER INSTRUCTION: "+ownerInstruction;
     }
 
     private static String buildPrompt(Context c,String instruction){
         String memory=MemoryStore.promptContext(c,12,9000);
+        String ownerInstruction=instruction==null?"":instruction.trim();
+        String localHint=LocalLanguageText.intentHint(ownerInstruction);
+        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction)
+                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"
+                :"";
         return "You are Anamika AI 13's OFFLINE command planner.\n"+
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed app names, shorthand, imperfect grammar, speech-to-text mistakes, short commands and multi-step owner instructions.\n"+
                 "Do not require exact command words. Infer intent from natural local phrasing. Treat nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as ordinary equivalent forms.\n"+
@@ -302,7 +314,9 @@ public final class BrainCommandEngine {
                 "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; device_info.\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
                 (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
-                "CURRENT OWNER INSTRUCTION:\n"+(instruction==null?"":instruction)+"\n\n"+
+                hintLine+
+                "The local hint is semantic only; preserve exact names, numbers, URLs and message text from the original instruction.\n"+
+                "CURRENT OWNER INSTRUCTION:\n"+ownerInstruction+"\n\n"+
                 "Return JSON only.";
     }
 
