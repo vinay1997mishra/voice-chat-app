@@ -104,7 +104,7 @@ public final class OfflineCodingBrain {
             }
             if(plan==null)
                 return new Result(false,
-                        "Offline brain ne valid edit-plan JSON nahi diya. Automatic retry bhi fail hua. Diagnostics me raw brain output save hai.",
+                        "Offline brain ne valid edit-plan JSON nahi diya. Automatic retry bhi fail hua. Raw output workspace me save hai.\nBrain output preview: "+preview(raw),
                         raw);
             WorkspacePatchApplier.Result applied=WorkspacePatchApplier.apply(workspace,plan);
             return new Result(applied.ok,applied.message,plan);
@@ -151,20 +151,23 @@ public final class OfflineCodingBrain {
         b.append("You are the offline coding brain for Anamika AI 13.\n")
                 .append("Work ONLY on the provided workspace snapshot. Never use shell commands.\n")
                 .append(retry
-                        ?"A previous attempt did not produce a usable JSON edit plan. This is the only retry. Output one JSON object and nothing else.\\n"
+                        ?"A previous attempt did not produce a usable JSON edit plan. This is the only retry. Output one JSON object and nothing else.\n"
                         :"")
                 .append("Return ONLY one JSON object matching schema anamika13-edit-plan-v1. No markdown fences, no explanation, no preface, no suffix.\n")
                 .append("Allowed operations: write and delete. For write, content must contain the complete replacement file.\n")
                 .append("Keep package/application identity and existing features unless the owner explicitly requests a change.\n")
                 .append("Do not claim success; the app will run structural and real build checks after applying your edits.\n")
-                .append("Required shape example: {\\\"schema\\\":\\\"anamika13-edit-plan-v1\\\",\\\"edits\\\":[{\\\"op\\\":\\\"write\\\",\\\"path\\\":\\\"app13/src/main/java/...\\\",\\\"content\\\":\\\"complete file text\\\"}]}\n\n")
+                .append("Required shape example: {\"schema\":\"anamika13-edit-plan-v1\",\"edits\":[{\"op\":\"write\",\"path\":\"app13/src/main/java/...\",\"content\":\"complete file text\"}]}\n\n")
                 .append("OWNER REQUEST:\n").append(ownerRequest==null?"":ownerRequest).append("\n\n")
                 .append("WORKSPACE FILE TREE:\n");
 
         List<File> files=new ArrayList<>();
         collect(workspace,workspace,files);
         files.sort(Comparator.comparing(f->relative(workspace,f)));
-        for(File f:files)b.append(relative(workspace,f)).append("\n");
+        for(File f:files){
+            if(b.length()>=Math.max(6000,maxContextChars/3))break;
+            b.append(relative(workspace,f)).append("\n");
+        }
 
         b.append("\nSELECTED FILE CONTENTS:\n");
         List<String> tokens=requestTokens(ownerRequest);
@@ -260,6 +263,12 @@ public final class OfflineCodingBrain {
             }
         }
         return null;
+    }
+
+    private static String preview(String s){
+        if(s==null||s.trim().isEmpty())return "(empty output)";
+        String v=s.replace('\n',' ').replaceAll("\\s+"," ").trim();
+        return v.length()>700?v.substring(0,700)+"…":v;
     }
 
     private static String trim(String s){return s.length()>2000?s.substring(0,2000):s;}
