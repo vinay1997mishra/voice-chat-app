@@ -41,7 +41,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (mounted) _openRoom();
       });
     } else {
-      session.resume();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) session.resume();
+      });
     }
   }
 
