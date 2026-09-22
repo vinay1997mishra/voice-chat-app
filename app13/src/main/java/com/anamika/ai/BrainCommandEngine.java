@@ -272,8 +272,9 @@ public final class BrainCommandEngine {
                 "actions must be an array. Each action item must contain action, arg1, arg2 and text.\n"+
                 "For normal conversation or a normal question, return actions=[] and put the natural answer in reply.\n"+
                 "For a supported device/app command, choose only an action allowed by the JSON schema.\n"+
-                "Understand Hindi, Hinglish/Roman Hindi, English and mixed-language sentences.\n"+
-                "Use recent chat history and owner memory only when relevant to resolve references/follow-ups.\n"+
+                "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed-language sentences, shorthand and common speech-to-text mistakes.\n"+
+                "Treat local forms such as nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as normal language.\n"+
+                "Do not require exact command wording. Use recent chat history and owner memory to resolve references/follow-ups such as ye, isme, usme, ab and pehle wala.\n"+
                 (memory.isEmpty()?"":"\n"+memory+"\n")+
                 "CURRENT OWNER INSTRUCTION: "+(instruction==null?"":instruction);
     }
@@ -281,7 +282,9 @@ public final class BrainCommandEngine {
     private static String buildPrompt(Context c,String instruction){
         String memory=MemoryStore.promptContext(c,12,9000);
         return "You are Anamika AI 13's OFFLINE command planner.\n"+
-                "Understand Hindi, Hinglish/Roman Hindi, English, mixed app names, short commands and multi-step owner instructions.\n"+
+                "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed app names, shorthand, imperfect grammar, speech-to-text mistakes, short commands and multi-step owner instructions.\n"+
+                "Do not require exact command words. Infer intent from natural local phrasing. Treat nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as ordinary equivalent forms.\n"+
+                "Use conversation history for references such as ye, isme, usme, ab, pehle wala and jo abhi bola.\n"+
                 "Convert the owner's request into ONLY the allowed structured actions below.\n"+
                 "Never invent shell commands, hidden permissions, root access, or capabilities outside this list.\n"+
                 "Do not bypass Android confirmation or permission screens. Keep names, message bodies, URLs and numbers exactly as intended.\n"+
