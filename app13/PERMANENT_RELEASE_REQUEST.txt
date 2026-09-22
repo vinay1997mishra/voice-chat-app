@@ -1,1 +1,1 @@
-Internal Anamika self-repair connected to diagnostics Qwen validation and local signed build
+ChatGPT MCP connector pairing UI background bridge and remote command relay
