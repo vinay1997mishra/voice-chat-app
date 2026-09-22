@@ -1,1 +1,1 @@
-Retry direct PKCS12 Base64 paste/import signer UI build
+Signer ready screen cleanup and return flow
