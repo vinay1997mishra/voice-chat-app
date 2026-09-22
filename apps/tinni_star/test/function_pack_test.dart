@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/core/function_pack.dart';
+import 'package:tinni_star/core/function_pack.dart';
 
 void main() {
   test('owner approval is mandatory', () {

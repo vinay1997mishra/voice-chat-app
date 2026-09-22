@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import '../core/function_pack.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';

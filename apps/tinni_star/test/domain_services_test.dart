@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/tinni_state.dart';
-import '../lib/community/family_service.dart';
-import '../lib/core/function_pack.dart';
-import '../lib/economy/economy.dart';
-import '../lib/games/game_service.dart';
-import '../lib/infra/realtime.dart';
+import 'package:tinni_star/app/tinni_state.dart';
+import 'package:tinni_star/community/family_service.dart';
+import 'package:tinni_star/core/function_pack.dart';
+import 'package:tinni_star/economy/economy.dart';
+import 'package:tinni_star/games/game_service.dart';
+import 'package:tinni_star/infra/realtime.dart';
 
 void main() {
   TinniState makeState() => TinniState(

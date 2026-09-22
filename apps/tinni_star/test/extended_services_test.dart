@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/tinni_state.dart';
-import '../lib/calls/call_service.dart';
-import '../lib/core/function_pack.dart';
-import '../lib/rewards/reward_service.dart';
+import 'package:tinni_star/app/tinni_state.dart';
+import 'package:tinni_star/calls/call_service.dart';
+import 'package:tinni_star/core/function_pack.dart';
+import 'package:tinni_star/rewards/reward_service.dart';
 
 void main() {
   TinniState makeState() => TinniState(
