@@ -28,6 +28,7 @@ import com.anamika.ai.upgrade.SelfUpdateActivity;
 import com.anamika.ai.upgrade.RollbackManager;
 import com.anamika.ai.upgrade.SignerVault;
 import com.anamika.ai.upgrade.UpgradeCoordinator;
+import com.anamika.ai.upgrade.VersionArchiveManager;
 import com.anamika.ai.voice.WakeService;
 
 import java.util.Locale;
@@ -109,6 +110,10 @@ public final class CommandRouter {
             return SignerVault.status(a);
         if(l.equals("rollback status"))
             return RollbackManager.status(a);
+        if(l.equals("version archive status")||l.equals("old version status")||l.equals("archive status"))
+            return VersionArchiveManager.status(a);
+        if(l.equals("delete old versions")||l.equals("delete old version")||l.equals("purane version delete karo"))
+            return VersionArchiveManager.deleteOldVersions(a);
         if(l.equals("create recovery checkpoint")||l.equals("recovery checkpoint"))
             return RollbackManager.checkpoint(a);
 
