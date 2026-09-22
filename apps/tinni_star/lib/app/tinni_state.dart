@@ -7,6 +7,7 @@ import '../calls/call_service.dart';
 import '../community/family_features.dart';
 import '../community/family_service.dart';
 import '../core/anamika_connector.dart';
+import '../core/anamika_link_bridge.dart';
 import '../core/function_pack.dart';
 import '../custom_gift/custom_gift_service.dart';
 import '../discovery/discovery_service.dart';
@@ -73,6 +74,11 @@ class TinniState {
 
   final FunctionPackRuntime runtime;
   final AnamikaConnector connector;
+  AnamikaLinkBridge? connectorBridge;
+
+  void attachConnectorBridge(AnamikaLinkBridge bridge) {
+    connectorBridge = bridge;
+  }
   final WalletService wallet;
   late final GiftService gifts;
   late final InventoryService inventory;

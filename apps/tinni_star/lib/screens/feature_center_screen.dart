@@ -343,13 +343,14 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         Icons.health_and_safety_rounded,
         () {
           final data = state.connector.diagnosticSnapshot();
+          final token = state.connectorBridge?.pairingToken ?? 'not-ready';
           showText(
             'Schema ' +
                 data['schema'].toString() +
                 ' • seats ' +
                 data['seatCount'].toString() +
-                ' • pack ' +
-                (data['activePackVersion'] ?? 'base').toString(),
+                ' • pairing ' +
+                token,
           );
         },
       ),

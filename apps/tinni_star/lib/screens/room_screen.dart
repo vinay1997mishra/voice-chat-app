@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../core/function_pack.dart';
+import '../core/connector_security.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
@@ -162,27 +163,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 '18 seats + free-seat + KTV + Games',
               ),
               onTap: () {
-                final result = widget.state.connector.installValidatedPack(
-                  const FunctionPack(
-                    id: 'room-core',
-                    version: 1,
-                    minSchema: 1,
-                    maxSchema: 1,
-                    summary: 'Expanded room runtime',
-                    signature: 'TINNI_DEV_SIGNED',
-                    config: TinniFunctionConfig(
-                      seatCount: 18,
-                      inviteMode: false,
-                      seatLockEnabled: true,
-                      roomChatEnabled: true,
-                      giftsEnabled: true,
-                      maxGiftCombo: 1000,
-                      ktvEnabled: true,
-                      gamesEnabled: true,
-                      cpEnabled: true,
-                      familyEnabled: true,
-                    ),
+                var pack = const FunctionPack(
+                  id: 'room-core',
+                  version: 1,
+                  minSchema: 1,
+                  maxSchema: 1,
+                  summary: 'Expanded room runtime',
+                  signature: '',
+                  config: TinniFunctionConfig(
+                    seatCount: 18,
+                    inviteMode: false,
+                    seatLockEnabled: true,
+                    roomChatEnabled: true,
+                    giftsEnabled: true,
+                    maxGiftCombo: 1000,
+                    ktvEnabled: true,
+                    gamesEnabled: true,
+                    cpEnabled: true,
+                    familyEnabled: true,
                   ),
+                );
+                final verifier = widget.state.runtime.signatureVerifier;
+                if (verifier is PairingHmacSignatureVerifier) {
+                  pack = verifier.sign(pack);
+                } else {
+                  pack = pack.withSignature('TINNI_DEV_SIGNED');
+                }
+                final result = widget.state.connector.installValidatedPack(
+                  pack,
                   ownerApproved: true,
                 );
                 controller.refreshFunctionPack();

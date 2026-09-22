@@ -33,6 +33,12 @@ jobs:
         working-directory: apps/tinni_star
         run: flutter create . --platforms=android --org com.tinnistar
 
+      - name: Configure Tinni Star Android
+        working-directory: apps/tinni_star
+        run: |
+          cp tool/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
+
       - name: Get packages
         working-directory: apps/tinni_star
         run: flutter pub get

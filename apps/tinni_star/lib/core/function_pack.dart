@@ -44,6 +44,16 @@ class FunctionPack {
   final String summary;
   final String signature;
   final TinniFunctionConfig config;
+
+  FunctionPack withSignature(String value) => FunctionPack(
+        id: id,
+        version: version,
+        minSchema: minSchema,
+        maxSchema: maxSchema,
+        summary: summary,
+        signature: value,
+        config: config,
+      );
 }
 
 abstract interface class FunctionPackSignatureVerifier {
