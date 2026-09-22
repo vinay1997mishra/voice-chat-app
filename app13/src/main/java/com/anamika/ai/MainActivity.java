@@ -25,6 +25,10 @@ import android.widget.Toast;
 
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.components.ComponentPacksActivity;
+import com.anamika.ai.connector.ChatGptConnectorActivity;
+import com.anamika.ai.connector.ChatGptConnectorClient;
+import com.anamika.ai.connector.ChatGptConnectorService;
+import com.anamika.ai.connector.ChatGptConnectorStore;
 import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.OwnerStore;
@@ -67,12 +71,14 @@ public final class MainActivity extends Activity implements VoiceController.List
         showEntry();
         getWindow().getDecorView().postDelayed(()->RuntimeWatchdog.markHealthy(this),4000);
         handleWakeCommand();
+        handleConnectorCommand();
     }
 
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);
         setIntent(intent);
         handleWakeCommand();
+        handleConnectorCommand();
     }
 
     private void showEntry(){
@@ -126,6 +132,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                     Toast.makeText(this,"Owner verified",Toast.LENGTH_SHORT).show();
                     showAssistant();
                     maybeOfferStartupSetup();
+                    handleConnectorCommand();
                 }else Toast.makeText(this,"Wrong Owner PIN",Toast.LENGTH_LONG).show();
             }catch(Exception e){
                 Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
@@ -273,6 +280,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
         drawerSection(list,"Core");
         drawerActivity(list,"Components",ComponentPacksActivity.class);
+        drawerActivity(list,"ChatGPT Connector",ChatGptConnectorActivity.class);
         drawerActivity(list,"Plugins / Accessibility",PluginManagerActivity.class);
         drawerActivity(list,"Diagnostics",DiagnosticsActivity.class);
         drawerActivity(list,"Self Update",SelfUpdateActivity.class);
@@ -490,6 +498,9 @@ public final class MainActivity extends Activity implements VoiceController.List
                     (Build.VERSION.SDK_INT<23||AndroidCompat.hasPermission(this,Manifest.permission.RECORD_AUDIO))){
                 WakeService.enable(this);
             }
+            if(ChatGptConnectorStore.enabled(this)&&ChatGptConnectorStore.configured(this))
+                ChatGptConnectorService.start(this);
+            handleConnectorCommand();
             if(status!=null)getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,900);
         }
     }
@@ -521,6 +532,10 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private void runCommand(String text){
+        runCommand(text,null);
+    }
+
+    private void runCommand(String text,String connectorCommandId){
         append("You",text);
         MemoryStore.appendTurn(this,"owner",text);
 
@@ -531,7 +546,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 String reply=CommandRouter.runFast(this,command);
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
-                    finishReply(reply==null?"Command could not be completed.":reply);
+                    finishReply(reply==null?"Command could not be completed.":reply,connectorCommandId);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
             },"anamika-heavy-command").start();
@@ -540,7 +555,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
         String fast=CommandRouter.runFast(this,text);
         if(fast!=null){
-            finishReply(fast);
+            finishReply(fast,connectorCommandId);
             return;
         }
 
@@ -554,7 +569,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 String reply=NaturalLanguageBrain.reply(appContext,text);
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
-                    finishReply(reply);
+                    finishReply(reply,connectorCommandId);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
                 return;
@@ -566,7 +581,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 String reply=NaturalLanguageBrain.reply(appContext,text);
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
-                    finishReply(reply);
+                    finishReply(reply,connectorCommandId);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
                 return;
@@ -576,14 +591,14 @@ public final class MainActivity extends Activity implements VoiceController.List
                 String reply=BrainCommandEngine.execute(this,plan);
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
-                    finishReply(reply);
+                    finishReply(reply,connectorCommandId);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
             }else{
                 runOnUiThread(()->{
                     if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
                     String reply=BrainCommandEngine.execute(this,plan);
-                    finishReply(reply);
+                    finishReply(reply,connectorCommandId);
                     if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
                 });
             }
@@ -591,9 +606,15 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private void finishReply(String reply){
+        finishReply(reply,null);
+    }
+
+    private void finishReply(String reply,String connectorCommandId){
         append("Anamika",reply);
         MemoryStore.appendTurn(this,"anamika",reply);
         voice.speak(reply);
+        if(connectorCommandId!=null&&!connectorCommandId.trim().isEmpty())
+            ChatGptConnectorClient.postResult(this,connectorCommandId,reply);
     }
 
     private void append(String who,String text){
@@ -611,6 +632,17 @@ public final class MainActivity extends Activity implements VoiceController.List
         lp.gravity=who.equals("You")?Gravity.END:Gravity.START;
         messages.addView(bubble,lp);
         if(chatScroll!=null)chatScroll.post(()->chatScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void handleConnectorCommand(){
+        if(!OwnerStore.isTrusted(this)||messages==null||getIntent()==null)return;
+        String id=getIntent().getStringExtra("connector_command_id");
+        String command=getIntent().getStringExtra("connector_command");
+        if(id==null||id.trim().isEmpty()||command==null||command.trim().isEmpty())return;
+        getIntent().removeExtra("connector_command_id");
+        getIntent().removeExtra("connector_command");
+        append("Anamika","ChatGPT Connector se command received.");
+        runCommand(command.trim(),id.trim());
     }
 
     private void handleWakeCommand(){
