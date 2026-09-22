@@ -167,8 +167,23 @@ public final class SelfUpdateActivity extends Activity {
 
     private void install(){
         if(!verified){status.setText("No verified candidate is ready.");return;}
+
+        ApkVerifier.Result finalCheck=ApkVerifier.verifySelfUpdate(this,staged);
+        if(!finalCheck.ok){
+            verified=false;
+            installButton().setEnabled(false);
+            status.setText("Final APK verification failed. Install blocked.\n"+finalCheck.message);
+            return;
+        }
+
+        String archive=VersionArchiveManager.beforeInstall(this,finalCheck.versionCode);
+        if(!archive.startsWith("Old version ")){
+            status.setText("Update blocked because current version could not be archived safely.\n"+archive);
+            return;
+        }
+
         if(!AndroidCompat.canRequestPackageInstalls(this)){
-            status.setText("Enable “Install unknown apps” for Anamika first.");
+            status.setText(archive+"\n\nEnable “Install unknown apps” for Anamika first.");
             openPermission();
             return;
         }
@@ -190,7 +205,7 @@ public final class SelfUpdateActivity extends Activity {
             PendingIntent pi=PendingIntent.getActivity(this,id,callback,
                     AndroidCompat.mutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
             session.commit(pi.getIntentSender());
-            status.setText("Update handed to Android. Complete the system confirmation.");
+            status.setText(archive+"\n\nUpdate handed to Android. Complete the system confirmation. Old version archive automatic delete nahi hoga.");
         }catch(Exception e){
             status.setText("Install request failed: "+safe(e));
             if(session!=null)try{session.abandon();}catch(Exception ignored){}
@@ -206,7 +221,7 @@ public final class SelfUpdateActivity extends Activity {
             Intent confirm=intent.getParcelableExtra(Intent.EXTRA_INTENT);
             if(confirm!=null)startActivity(confirm);
         }else if(result==PackageInstaller.STATUS_SUCCESS){
-            status.setText("Anamika update installed successfully.");
+            status.setText("Anamika update installed successfully. Next launches par post-update source/regression verification chalegi. Purana version owner command ke bina delete nahi hoga.");
         }else{
             status.setText("Update failed/cancelled. Status="+result+"\n"+intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
         }
