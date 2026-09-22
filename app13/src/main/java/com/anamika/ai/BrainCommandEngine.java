@@ -18,6 +18,7 @@ import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.language.LocalLanguageText;
+import com.anamika.ai.language.OwnerConversationProfile;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.messaging.MessageCommandParser;
 import com.anamika.ai.messaging.MessagingAutomationEngine;
@@ -269,9 +270,13 @@ public final class BrainCommandEngine {
         String memory=MemoryStore.promptContext(c,10,7000);
         String ownerInstruction=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerInstruction);
-        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction)
-                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"
-                :"";
+        String conversationHint=OwnerConversationProfile.semanticHint(ownerInstruction);
+        StringBuilder hintBuilder=new StringBuilder();
+        if(!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction))
+            hintBuilder.append("LOCAL LANGUAGE INTERPRETATION HINT: ").append(localHint).append("\n");
+        if(!conversationHint.isEmpty())
+            hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
+        String hintLine=hintBuilder.toString();
         return "You are Anamika AI 13 command planner.\n"+
                 "Return exactly ONE JSON object and nothing else.\n"+
                 "Required top-level keys: actions and reply.\n"+
@@ -281,6 +286,7 @@ public final class BrainCommandEngine {
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed-language sentences, shorthand and common speech-to-text mistakes.\n"+
                 "Treat local forms such as nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as normal language.\n"+
                 "Do not require exact command wording. Use recent chat history and owner memory to resolve references/follow-ups such as ye, isme, usme, ab and pehle wala.\n"+
+                OwnerConversationProfile.promptGuide()+"\n"+
                 (memory.isEmpty()?"":"\n"+memory+"\n")+
                 hintLine+
                 "CURRENT OWNER INSTRUCTION: "+ownerInstruction;
@@ -290,13 +296,18 @@ public final class BrainCommandEngine {
         String memory=MemoryStore.promptContext(c,12,9000);
         String ownerInstruction=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerInstruction);
-        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction)
-                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"
-                :"";
+        String conversationHint=OwnerConversationProfile.semanticHint(ownerInstruction);
+        StringBuilder hintBuilder=new StringBuilder();
+        if(!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerInstruction))
+            hintBuilder.append("LOCAL LANGUAGE INTERPRETATION HINT: ").append(localHint).append("\n");
+        if(!conversationHint.isEmpty())
+            hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
+        String hintLine=hintBuilder.toString();
         return "You are Anamika AI 13's OFFLINE command planner.\n"+
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed app names, shorthand, imperfect grammar, speech-to-text mistakes, short commands and multi-step owner instructions.\n"+
                 "Do not require exact command words. Infer intent from natural local phrasing. Treat nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as ordinary equivalent forms.\n"+
                 "Use conversation history for references such as ye, isme, usme, ab, pehle wala and jo abhi bola.\n"+
+                OwnerConversationProfile.promptGuide()+"\n"+
                 "Convert the owner's request into ONLY the allowed structured actions below.\n"+
                 "Never invent shell commands, hidden permissions, root access, or capabilities outside this list.\n"+
                 "Do not bypass Android confirmation or permission screens. Keep names, message bodies, URLs and numbers exactly as intended.\n"+
