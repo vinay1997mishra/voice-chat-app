@@ -3,6 +3,7 @@ package com.anamika.ai;
 import android.content.Context;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.BrainRuntimePaths;
+import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.LocalProcessRunner;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,12 +25,15 @@ public final class NaturalLanguageBrain {
         if(!io.exists()&&!io.mkdirs()) return "Natural chat workspace create nahi ho saka.";
         File prompt=new File(io,"prompt.txt");
         BrainEffortStore.Mode effort=BrainEffortStore.get(c);
+        String memory=MemoryStore.promptContext(c,14,10000);
         String p="You are Anamika AI 13, the owner personal offline assistant.\n"+
                 "Understand Hindi, Hinglish Roman Hindi, English and mixed-language sentences naturally.\n"+
                 "Reply in the same language style as the owner. Be concise but useful.\n"+
                 "Do not pretend an Android action was executed when it was not.\n"+
-                "If this is normal conversation or a question, answer directly.\n\n"+
-                "OWNER: "+(instruction==null?"":instruction)+"\nANAMIKA:";
+                "If this is normal conversation or a question, answer directly.\n"+
+                "Use recent chat history and owner memory only when relevant. Do not blindly repeat it.\n\n"+
+                (memory.isEmpty()?"":memory+"\n\n")+
+                "CURRENT OWNER MESSAGE: "+(instruction==null?"":instruction)+"\nANAMIKA:";
         try(FileOutputStream out=new FileOutputStream(prompt,false)){
             out.write(p.getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
