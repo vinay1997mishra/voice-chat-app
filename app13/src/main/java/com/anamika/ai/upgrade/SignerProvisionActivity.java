@@ -118,6 +118,13 @@ public final class SignerProvisionActivity extends Activity {
         status=new TextView(this);
         status.setText(SignerVault.status(this));
         status.setTextIsSelectable(true);
+        if(SignerVault.ready(this)){
+            password.setText("");
+            base64Input.setText("");
+            selectedFile.setText("Signer already provisioned • READY");
+            done.setText("Signer READY ✓ • Back to Anamika");
+            done.setOnClickListener(v->finish());
+        }
         status.setPadding(0,dp(14),0,dp(24));
         box.addView(status);
 
@@ -192,9 +199,11 @@ public final class SignerProvisionActivity extends Activity {
             Arrays.fill(bytes,(byte)0);
             status.setText(result+"\n\n"+SignerVault.status(this));
             if(SignerVault.ready(this)){
+                password.setText("");
                 selectedFile.setText("Signer imported successfully • READY");
-                done.setText("Signer READY ✓");
+                done.setText("Signer READY ✓ • Back to Anamika");
                 done.setEnabled(true);
+                done.setOnClickListener(v->finish());
             }else{
                 done.setText("3 • Retry Import Signer");
                 done.setEnabled(true);
@@ -254,8 +263,10 @@ public final class SignerProvisionActivity extends Activity {
             String result=SignerVault.importPkcs12(this,bytes,pass);
             status.setText(result+"\n\n"+SignerVault.status(this));
             if(SignerVault.ready(this)){
+                password.setText("");
                 selectedFile.setText("Signer imported from Base64 • READY");
-                done.setText("Signer READY ✓");
+                done.setText("Signer READY ✓ • Back to Anamika");
+                done.setOnClickListener(v->finish());
                 base64Input.setText("");
             }else{
                 done.setText("3 • Retry Import Signer");
