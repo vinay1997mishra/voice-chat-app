@@ -44,10 +44,14 @@ public final class LanguageCommandInterpreter {
                 "offline brain status","ऑटोनॉमी स्टेटस","सेल्फ रिपेयर स्टेटस"))
             return "autonomy status";
 
-        if(any(l,"brain status","offline brain","coding brain status","ब्रेन स्टेटस","ऑफलाइन ब्रेन"))
+        if(any(l,"brain status","brain ka status","offline brain","offline brain status",
+                "coding brain status","brain ready hai","brain ready hai kya",
+                "ब्रेन स्टेटस","ब्रेन का स्टेटस","ऑफलाइन ब्रेन"))
             return "brain status";
 
-        if(any(l,"signer status","signing status","साइनर स्टेटस","साइनिंग स्टेटस"))
+        if(any(l,"signer status","singer status","signing status","signer ka status",
+                "singer ka status","release signer status","key status","signing key status",
+                "signer ready hai","signer ready hai kya","साइनर स्टेटस","साइनिंग स्टेटस"))
             return "signer status";
 
         if(any(l,"rollback status","recovery status","रोलबैक स्टेटस","रिकवरी स्टेटस"))
