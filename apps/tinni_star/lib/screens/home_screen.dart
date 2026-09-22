@@ -15,87 +15,37 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Future<void> createRoom() async {
-    final title = TextEditingController();
-    String country = 'IN';
-    final room = await showModalBottomSheet<RoomSummary>(
+    final result = await showModalBottomSheet<_CreateRoomResult>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, updateSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            MediaQuery.viewInsetsOf(context).bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Create room',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: title,
-                decoration: const InputDecoration(
-                  labelText: 'Room name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: country,
-                decoration: const InputDecoration(
-                  labelText: 'Country',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'IN', child: Text('🇮🇳 India')),
-                  DropdownMenuItem(value: 'US', child: Text('🇺🇸 United States')),
-                  DropdownMenuItem(value: 'VN', child: Text('🇻🇳 Vietnam')),
-                  DropdownMenuItem(value: 'SG', child: Text('🇸🇬 Singapore')),
-                ],
-                onChanged: (value) {
-                  if (value != null) updateSheet(() => country = value);
-                },
-              ),
-              const SizedBox(height: 14),
-              FilledButton.icon(
-                onPressed: () {
-                  final value = title.text.trim();
-                  if (value.isEmpty) return;
-                  Navigator.pop(
-                    sheetContext,
-                    widget.state.discovery.createRoom(
-                      title: value,
-                      country: country,
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.add_home_rounded),
-                label: const Text('Create room'),
-              ),
-            ],
-          ),
-        ),
+      useSafeArea: true,
+      builder: (_) => const _CreateRoomSheet(),
+    );
+
+    if (!mounted || result == null) return;
+
+    // Important: mutate room state only after the modal overlay has fully
+    // returned, never while its inherited widgets are being deactivated.
+    final room = widget.state.discovery.createRoom(
+      title: result.title,
+      country: result.country,
+    );
+    widget.state.discovery.visit(room.id);
+
+    // Give Flutter one frame to finish removing the modal route before
+    // pushing the voice-room route. This avoids InheritedElement teardown
+    // assertions such as _dependents.isEmpty.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RoomScreen(state: widget.state, room: room),
       ),
     );
-    title.dispose();
 
-    if (room != null && mounted) {
-      setState(() {});
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RoomScreen(state: widget.state, room: room),
-        ),
-      );
-    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -163,6 +113,112 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: createRoom,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Room'),
+      ),
+    );
+  }
+}
+
+class _CreateRoomResult {
+  const _CreateRoomResult({
+    required this.title,
+    required this.country,
+  });
+
+  final String title;
+  final String country;
+}
+
+class _CreateRoomSheet extends StatefulWidget {
+  const _CreateRoomSheet();
+
+  @override
+  State<_CreateRoomSheet> createState() => _CreateRoomSheetState();
+}
+
+class _CreateRoomSheetState extends State<_CreateRoomSheet> {
+  final TextEditingController titleController = TextEditingController();
+  String country = 'IN';
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    final title = titleController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Room name is required.')),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pop(
+      _CreateRoomResult(title: title, country: country),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      padding: EdgeInsets.fromLTRB(16, 4, 16, bottomInset + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Create room',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('create-room-name'),
+              controller: titleController,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => submit(),
+              decoration: const InputDecoration(
+                labelText: 'Room name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: const Key('create-room-country'),
+              value: country,
+              decoration: const InputDecoration(
+                labelText: 'Country',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'IN', child: Text('🇮🇳 India')),
+                DropdownMenuItem(value: 'US', child: Text('🇺🇸 United States')),
+                DropdownMenuItem(value: 'VN', child: Text('🇻🇳 Vietnam')),
+                DropdownMenuItem(value: 'SG', child: Text('🇸🇬 Singapore')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => country = value);
+              },
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const Key('create-room-submit'),
+                onPressed: submit,
+                icon: const Icon(Icons.add_home_rounded),
+                label: const Text('Create room'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
