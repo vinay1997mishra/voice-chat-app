@@ -1,1 +1,1 @@
-Natural signer status typo understanding fix
+Offline coding JSON retry and parser fix
