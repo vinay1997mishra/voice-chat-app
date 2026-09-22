@@ -31,6 +31,10 @@ public final class ComponentPacksActivity extends Activity {
             "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf?download=true";
     private TextView status;
     private EditText url;
+    private Button completeButton;
+    private Button runtimeButton;
+    private Button qwenButton;
+    private Button importModelButton;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -55,24 +59,24 @@ public final class ComponentPacksActivity extends Activity {
         box.addView(note);
 
         url=new EditText(this);
-        url.setHint("HTTPS component-pack ZIP URL");
+        url.setHint("Optional custom component-pack ZIP URL (normal setup ke liye blank chhodo)");
         url.setSingleLine(true);
         box.addView(url);
 
-        Button complete=new Button(this); complete.setText("Complete Offline Setup • Toolchain + Brain + Qwen");
-        Button runtime=new Button(this); runtime.setText("Install Offline Brain Runtime");
-        Button qwen=new Button(this); qwen.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
+        completeButton=new Button(this); completeButton.setText("Complete Offline Setup • Toolchain + Brain + Qwen");
+        runtimeButton=new Button(this); runtimeButton.setText("Install Offline Brain Runtime");
+        qwenButton=new Button(this); qwenButton.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
         Button download=new Button(this); download.setText("Download Component ZIP from URL");
         Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
-        Button importModel=new Button(this); importModel.setText("Select Downloaded Qwen GGUF from Phone");
+        importModelButton=new Button(this); importModelButton.setText("Select Downloaded Qwen GGUF from Phone");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
         Button refresh=new Button(this); refresh.setText("Refresh Status");
-        box.addView(complete);
-        box.addView(runtime);
-        box.addView(qwen);
+        box.addView(completeButton);
+        box.addView(runtimeButton);
+        box.addView(qwenButton);
         box.addView(download);
         box.addView(importZip);
-        box.addView(importModel);
+        box.addView(importModelButton);
         box.addView(signer);
         box.addView(refresh);
 
@@ -82,18 +86,43 @@ public final class ComponentPacksActivity extends Activity {
         status.setPadding(0,dp(14),0,dp(24));
         box.addView(status);
 
-        complete.setOnClickListener(v->completeOfflineSetup());
-        runtime.setOnClickListener(v->download(BRAIN_RUNTIME_URL));
-        qwen.setOnClickListener(v->downloadModel(QWEN_MODEL_URL));
+        completeButton.setOnClickListener(v->completeOfflineSetup());
+        runtimeButton.setOnClickListener(v->download(BRAIN_RUNTIME_URL));
+        qwenButton.setOnClickListener(v->downloadModel(QWEN_MODEL_URL));
         download.setOnClickListener(v->download(url.getText().toString().trim()));
         importZip.setOnClickListener(v->pickZip());
-        importModel.setOnClickListener(v->pickModel());
+        importModelButton.setOnClickListener(v->pickModel());
         signer.setOnClickListener(v->startActivity(new Intent(this,SignerProvisionActivity.class)));
-        refresh.setOnClickListener(v->status.setText(ComponentPackManager.status(this)));
+        refresh.setOnClickListener(v->{status.setText(ComponentPackManager.status(this));updateInstalledUi();});
+
+        updateInstalledUi();
 
         ScrollView scroll=new ScrollView(this);
         scroll.addView(box);
         setContentView(scroll);
+    }
+
+    private void updateInstalledUi(){
+        boolean tool=ComponentPackManager.toolchainInstalled(this);
+        boolean brain=ComponentPackManager.brainRuntimeInstalled(this);
+        boolean model=ComponentPackManager.modelInstalled(this);
+
+        if(runtimeButton!=null){
+            runtimeButton.setText(brain?"Brain Runtime ✓ Installed":"Install Offline Brain Runtime");
+            runtimeButton.setEnabled(!brain);
+        }
+        if(qwenButton!=null){
+            qwenButton.setText(model?"Qwen Model ✓ Installed":"Download Qwen2.5-Coder 1.5B Q4_K_M");
+            qwenButton.setEnabled(!model);
+        }
+        if(importModelButton!=null){
+            importModelButton.setText(model?"Replace / Re-import Qwen GGUF":"Select Downloaded Qwen GGUF from Phone");
+        }
+        if(completeButton!=null){
+            boolean ready=tool&&brain&&model;
+            completeButton.setText(ready?"Offline Setup READY ✓":"Complete Offline Setup • Toolchain + Brain + Qwen");
+            completeButton.setEnabled(!ready);
+        }
     }
 
     private void completeOfflineSetup(){
@@ -174,7 +203,10 @@ public final class ComponentPacksActivity extends Activity {
     }
 
     private void postProgress(String text){
-        new Handler(Looper.getMainLooper()).post(()->status.setText(text+"\n\n"+ComponentPackManager.status(this)));
+        new Handler(Looper.getMainLooper()).post(()->{
+            status.setText(text+"\n\n"+ComponentPackManager.status(this));
+            updateInstalledUi();
+        });
     }
 
     private void pickZip(){
@@ -319,7 +351,10 @@ public final class ComponentPacksActivity extends Activity {
     }
 
     private void post(String text){
-        new Handler(Looper.getMainLooper()).post(()->status.setText(text+"\n\n"+ComponentPackManager.status(this)));
+        new Handler(Looper.getMainLooper()).post(()->{
+            status.setText(text+"\n\n"+ComponentPackManager.status(this));
+            updateInstalledUi();
+        });
     }
 
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
