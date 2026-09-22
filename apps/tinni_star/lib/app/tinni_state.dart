@@ -1,5 +1,8 @@
 import '../activities/activity_service.dart';
 import '../auth/auth_service.dart';
+import '../background/session_lifecycle.dart';
+import '../billing/billing_adapter.dart';
+import '../calls/call_service.dart';
 import '../community/family_service.dart';
 import '../core/anamika_connector.dart';
 import '../core/function_pack.dart';
@@ -13,7 +16,10 @@ import '../identity/identity.dart';
 import '../infra/realtime.dart';
 import '../media/ktv_service.dart';
 import '../moderation/moderation_service.dart';
+import '../profile/profile_service.dart';
 import '../relationship/cp_service.dart';
+import '../rewards/reward_service.dart';
+import '../sharing/share_service.dart';
 import '../social/social.dart';
 
 class TinniState {
@@ -34,6 +40,12 @@ class TinniState {
         effects = EffectQueue(),
         moderation = ModerationService(),
         customGifts = CustomGiftService(),
+        rewards = RewardService(),
+        calls = CallService(),
+        profile = ProfileService(),
+        lifecycle = SessionLifecycle(),
+        sharing = ShareService(),
+        billing = LocalBillingAdapter(),
         realtime = RealtimeCoordinator(
           rtc: LocalRtcAdapter(),
           im: LocalImAdapter(),
@@ -61,5 +73,11 @@ class TinniState {
   final EffectQueue effects;
   final ModerationService moderation;
   final CustomGiftService customGifts;
+  final RewardService rewards;
+  final CallService calls;
+  final ProfileService profile;
+  final SessionLifecycle lifecycle;
+  final ShareService sharing;
+  final BillingAdapter billing;
   final RealtimeCoordinator realtime;
 }
