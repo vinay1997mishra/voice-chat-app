@@ -1,4 +1,4 @@
-Anamika AI 13 offline reply timeout fix
+Anamika AI 13 recent-conversation understanding update
 Requested: 2026-09-22
-Purpose: reuse planner natural reply instead of duplicate GGUF inference; speed up natural-chat fallback on slower Android phones; recover usable partial timeout replies.
-Update mode: permanent-signed in-place APK update; preserve existing app data.
+Purpose: improve Hindi/Hinglish shorthand, short follow-up resolution, recent-context references, update/install intent, calculation follow-ups, and owner conversation style understanding based on the recent working pattern.
+Update mode: permanent-signed in-place APK update; preserve existing functions and app data.
