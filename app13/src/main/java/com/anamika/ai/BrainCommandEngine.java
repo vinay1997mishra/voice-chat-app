@@ -125,6 +125,17 @@ public final class BrainCommandEngine {
                         (run.stderr.isEmpty()?"":"\n"+trim(run.stderr)),new JSONArray(),"");
 
             String json=extractJsonObject(run.stdout);
+            if(json==null)json=extractJsonObject(run.stderr);
+
+            if(json==null){
+                write(promptFile,buildRetryPrompt(ownerInstruction));
+                LocalProcessRunner.Result retry=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
+                if(retry.ok()){
+                    json=extractJsonObject(retry.stdout);
+                    if(json==null)json=extractJsonObject(retry.stderr);
+                }
+            }
+
             if(json==null)
                 return new Plan(false,"Offline brain ne valid action plan nahi diya.",new JSONArray(),"");
 
@@ -252,6 +263,17 @@ public final class BrainCommandEngine {
         }
     }
 
+    private static String buildRetryPrompt(String instruction){
+        return "You are Anamika AI 13 command planner.\n"+
+                "Return exactly ONE JSON object and nothing else.\n"+
+                "Required top-level keys: actions and reply.\n"+
+                "actions must be an array. Each action item must contain action, arg1, arg2 and text.\n"+
+                "For normal conversation or a normal question, return actions=[] and put the natural answer in reply.\n"+
+                "For a supported device/app command, choose only an action allowed by the JSON schema.\n"+
+                "Understand Hindi, Hinglish/Roman Hindi, English and mixed-language sentences.\n"+
+                "OWNER INSTRUCTION: "+(instruction==null?"":instruction);
+    }
+
     private static String buildPrompt(Context c,String instruction){
         return "You are Anamika AI 13's OFFLINE command planner.\n"+
                 "Understand Hindi, Hinglish/Roman Hindi, English, mixed app names, short commands and multi-step owner instructions.\n"+
@@ -259,6 +281,7 @@ public final class BrainCommandEngine {
                 "Never invent shell commands, hidden permissions, root access, or capabilities outside this list.\n"+
                 "Do not bypass Android confirmation or permission screens. Keep names, message bodies, URLs and numbers exactly as intended.\n"+
                 "If one request needs multiple steps, return them in order, max 8 actions.\n"+
+                "If the owner is chatting or asking a normal question, return actions=[] and answer naturally in reply.\n"+
                 "If nothing can be executed, return no actions and explain briefly in reply.\n"+
                 "For self-upgrade requests, use prepare_upgrade/offline_repair/local_build/validate_upgrade/install_update only; existing owner confirmation remains mandatory.\n\n"+
                 "ACTIONS:\n"+
