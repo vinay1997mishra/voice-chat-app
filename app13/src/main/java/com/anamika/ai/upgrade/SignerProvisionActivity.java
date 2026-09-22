@@ -78,14 +78,14 @@ public final class SignerProvisionActivity extends Activity {
 
         done=new Button(this);
         done.setText("3 • Done • Import Signer");
-        done.setEnabled(false);
+        done.setEnabled(true);
 
         Button refresh=new Button(this);
         refresh.setText("Refresh Status");
 
         box.addView(pick);
-        box.addView(selectedFile);
         box.addView(done);
+        box.addView(selectedFile);
         box.addView(refresh);
 
         status=new TextView(this);
@@ -116,6 +116,7 @@ public final class SignerProvisionActivity extends Activity {
 
         if(resultCode!=RESULT_OK||data==null||data.getData()==null){
             status.setText("File selection cancelled. Password aur PKCS#12 file select karke Done dabao.");
+            done.setEnabled(true);
             return;
         }
 
@@ -133,13 +134,18 @@ public final class SignerProvisionActivity extends Activity {
         if(name==null||name.trim().isEmpty())name="selected PKCS#12";
         selectedFile.setText("Selected: "+name);
         done.setEnabled(true);
-        status.setText("File selected. Ab password check karo aur “Done • Import Signer” dabao.");
+        if(password.getText().length()>0){
+            status.setText("File selected. Password bhi entered hai, signer import check kar rahi hu…");
+            importSelected();
+        }else{
+            status.setText("File selected. Password enter karo, phir “Done • Import Signer” dabao.");
+        }
     }
 
     private void importSelected(){
         if(selectedUri==null){
-            status.setText("No PKCS#12 file selected.");
-            done.setEnabled(false);
+            status.setText("PKCS#12 file abhi select nahi hui. Pehle “2 • Select PKCS#12” dabao.");
+            done.setEnabled(true);
             return;
         }
 
@@ -153,15 +159,16 @@ public final class SignerProvisionActivity extends Activity {
             Arrays.fill(bytes,(byte)0);
             status.setText(result+"\n\n"+SignerVault.status(this));
             if(SignerVault.ready(this)){
-                password.setText("");
-                selectedUri=null;
-                selectedFile.setText("Signer imported successfully.");
-                done.setEnabled(false);
+                selectedFile.setText("Signer imported successfully • READY");
+                done.setText("Signer READY ✓");
+                done.setEnabled(true);
             }else{
+                done.setText("3 • Retry Import Signer");
                 done.setEnabled(true);
             }
         }catch(Exception e){
-            status.setText("Signer import failed: "+safe(e));
+            status.setText("Signer import failed: "+safe(e)+"\n\nFile selected rahegi. Password check karke Retry Import Signer dabao.");
+            done.setText("3 • Retry Import Signer");
             done.setEnabled(true);
         }finally{
             Arrays.fill(pass,'\0');
