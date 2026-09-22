@@ -18,6 +18,7 @@ import '../effects/effect_queue.dart';
 import '../games/game_service.dart';
 import '../identity/identity.dart';
 import '../infra/realtime.dart';
+import '../infra/platform_services.dart';
 import '../media/ktv_features.dart';
 import '../media/ktv_service.dart';
 import '../moderation/moderation_service.dart';
@@ -60,6 +61,10 @@ class TinniState {
         billing = LocalBillingAdapter(),
         cpFeatures = CpFeatureService(),
         parties = PartyService(),
+        push = LocalPushAdapter(),
+        analytics = LocalAnalyticsAdapter(),
+        crashReporter = LocalCrashReporter(),
+        remoteConfig = LocalRemoteConfigAdapter(),
         realtime = RealtimeCoordinator(
           rtc: LocalRtcAdapter(),
           im: LocalImAdapter(),
@@ -109,5 +114,9 @@ class TinniState {
   final BillingAdapter billing;
   final CpFeatureService cpFeatures;
   final PartyService parties;
+  final PushAdapter push;
+  final AnalyticsAdapter analytics;
+  final CrashReporter crashReporter;
+  final RemoteConfigAdapter remoteConfig;
   final RealtimeCoordinator realtime;
 }
