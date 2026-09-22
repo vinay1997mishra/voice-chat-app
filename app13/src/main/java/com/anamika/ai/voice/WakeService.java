@@ -13,6 +13,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.media.AudioManager;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -34,6 +35,9 @@ public final class WakeService extends Service implements RecognitionListener {
     private static final int NOTIFICATION_ID=1313;
     private static final String CHANNEL="anamika13_wake";
     public static final String ACTION_STOP="com.anamika.ai.v13.STOP_WAKE";
+    public static final String ACTION_PAUSE="com.anamika.ai.v13.PAUSE_WAKE";
+    public static final String ACTION_RESUME="com.anamika.ai.v13.RESUME_WAKE";
+    private static final String KEY_PAUSE_UNTIL="wake_pause_until_ms";
 
     private final Handler handler=new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
@@ -60,6 +64,25 @@ public final class WakeService extends Service implements RecognitionListener {
 
     public static boolean isRunning(){return running;}
 
+    /** Temporarily releases the microphone for Anamika foreground speech recognition. */
+    public static void pauseFor(Context c,long ms){
+        long until=System.currentTimeMillis()+Math.max(1000L,ms);
+        c.getSharedPreferences(PREF,MODE_PRIVATE).edit().putLong(KEY_PAUSE_UNTIL,until).apply();
+        try{
+            Intent i=new Intent(c,WakeService.class).setAction(ACTION_PAUSE);
+            if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i); else c.startService(i);
+        }catch(Throwable ignored){}
+    }
+
+    public static void resume(Context c){
+        c.getSharedPreferences(PREF,MODE_PRIVATE).edit().remove(KEY_PAUSE_UNTIL).apply();
+        if(!isEnabled(c))return;
+        try{
+            Intent i=new Intent(c,WakeService.class).setAction(ACTION_RESUME);
+            if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i); else c.startService(i);
+        }catch(Throwable ignored){}
+    }
+
     public static void disable(Context c){
         c.getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(KEY,false).apply();
         Intent i=new Intent(c,WakeService.class).setAction(ACTION_STOP);
@@ -77,9 +100,22 @@ public final class WakeService extends Service implements RecognitionListener {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&ACTION_STOP.equals(intent.getAction())){
             stopping=true;
-            getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(KEY,false).apply();
+            getSharedPreferences(PREF,MODE_PRIVATE).edit()
+                    .putBoolean(KEY,false)
+                    .remove(KEY_PAUSE_UNTIL)
+                    .apply();
             stopSelf();
             return START_NOT_STICKY;
+        }
+        if(intent!=null&&ACTION_PAUSE.equals(intent.getAction())){
+            destroyRecognizer();
+            update("Wake on • mic released temporarily");
+            schedule(1200);
+            return START_STICKY;
+        }
+        if(intent!=null&&ACTION_RESUME.equals(intent.getAction())){
+            handler.post(this::startListening);
+            return START_STICKY;
         }
         if(!isEnabled(this)){
             stopSelf();
@@ -91,6 +127,25 @@ public final class WakeService extends Service implements RecognitionListener {
 
     private void startListening(){
         if(stopping||!isEnabled(this))return;
+
+        long pauseUntil=getSharedPreferences(PREF,MODE_PRIVATE).getLong(KEY_PAUSE_UNTIL,0L);
+        long now=System.currentTimeMillis();
+        if(pauseUntil>now){
+            destroyRecognizer();
+            update("Wake on • temporarily paused");
+            schedule(Math.min(2000L,Math.max(600L,pauseUntil-now)));
+            return;
+        }else if(pauseUntil!=0L){
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().remove(KEY_PAUSE_UNTIL).apply();
+        }
+
+        if(shouldYieldAudio()){
+            destroyRecognizer();
+            update("Wake on • media/call active, mic released");
+            schedule(1500);
+            return;
+        }
+
         if(!SpeechRecognizer.isRecognitionAvailable(this)){
             update("Speech recognizer unavailable");
             schedule(5000);
@@ -133,6 +188,19 @@ public final class WakeService extends Service implements RecognitionListener {
                     .putExtra("wake_command",tail);
             startActivity(open);
             update(tail.isEmpty()?"Wake phrase heard":"Command received");
+        }
+    }
+
+    private boolean shouldYieldAudio(){
+        try{
+            AudioManager am=(AudioManager)getSystemService(AUDIO_SERVICE);
+            if(am==null)return false;
+            int mode=am.getMode();
+            if(mode==AudioManager.MODE_IN_CALL||mode==AudioManager.MODE_IN_COMMUNICATION)
+                return true;
+            return am.isMusicActive();
+        }catch(Throwable ignored){
+            return false;
         }
     }
 
