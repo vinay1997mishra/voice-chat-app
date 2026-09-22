@@ -1,1 +1,1 @@
-Signer import retry and auto-import fix
+Direct PKCS12 Base64 paste/import signer UI
