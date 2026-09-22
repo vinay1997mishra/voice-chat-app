@@ -5,6 +5,7 @@ import android.os.Build;
 
 import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.developer.BrainRuntimePaths;
+import com.anamika.ai.language.UnderstandingPackStore;
 
 import org.json.JSONObject;
 
@@ -26,6 +27,7 @@ import java.util.zip.ZipInputStream;
  * - brain-runtime: llama.cpp based Android runtime, no model bundled
  * - brain: legacy combined runtime + model pack
  * - toolchain: Android local builder toolchain
+ * - understanding: hot-swappable owner conversation/context rules
  *
  * The model can also be imported separately as a raw GGUF file.
  */
@@ -90,8 +92,8 @@ public final class ComponentPackManager {
 
             String type=manifest.optString("type","").trim().toLowerCase(Locale.ROOT);
             String version=manifest.optString("version","").trim();
-            if(!("brain".equals(type)||"brain-runtime".equals(type)||"toolchain".equals(type)))
-                return new Result(false,"Component type must be brain, brain-runtime or toolchain.");
+            if(!("brain".equals(type)||"brain-runtime".equals(type)||"toolchain".equals(type)||"understanding".equals(type)))
+                return new Result(false,"Component type must be brain, brain-runtime, toolchain or understanding.");
             if(version.isEmpty())return new Result(false,"Component version missing.");
 
             JSONObject files=manifest.optJSONObject("files");
@@ -115,6 +117,8 @@ public final class ComponentPackManager {
 
             if("brain".equals(type)||"brain-runtime".equals(type))
                 return installBrainPayload(c,staging,type,version);
+            if("understanding".equals(type))
+                return installUnderstandingPayload(c,staging,version);
 
             return installToolchainPayload(c,staging,version);
         }catch(Exception e){
@@ -217,6 +221,33 @@ public final class ComponentPackManager {
         return new Result(true,"Offline brain runtime installed. Version: "+version+"\nBrain state: "+state);
     }
 
+    private static Result installUnderstandingPayload(Context c,File staging,String version)throws Exception{
+        File payload=new File(staging,"payload");
+        if(!payload.isDirectory())payload=staging;
+
+        File target=UnderstandingPackStore.root(c);
+        File backup=new File(c.getFilesDir(),"v13_understanding.previous");
+        File temp=new File(c.getFilesDir(),"v13_understanding.installing");
+        deleteTree(temp);
+        copyTree(payload,temp);
+        new File(temp,"manifest.json").delete();
+
+        deleteTree(backup);
+        if(target.exists()&&!target.renameTo(backup)){
+            deleteTree(temp);
+            return new Result(false,"Cannot preserve previous understanding pack.");
+        }
+        if(!temp.renameTo(target)){
+            deleteTree(target);
+            if(backup.exists())backup.renameTo(target);
+            return new Result(false,"Cannot activate understanding pack.");
+        }
+        writeText(new File(target,"component.version"),version);
+        deleteTree(backup);
+        return new Result(true,"Understanding pack installed. Version: "+version+
+                "\nNo APK reinstall required for this understanding update.");
+    }
+
     private static Result installToolchainPayload(Context c,File staging,String version)throws Exception{
         File payload=new File(staging,"payload");
         if(!payload.isDirectory())payload=staging;
@@ -278,6 +309,7 @@ public final class ComponentPackManager {
         return "Brain runtime: "+(brainRuntimeInstalled(c)?describeVersion(brain):"NOT INSTALLED")+
                 "\nCoding model: "+(modelInstalled(c)?(model.length()/1024/1024)+" MB GGUF":"NOT INSTALLED")+
                 "\nToolchain: "+(toolchainInstalled(c)?describeVersion(new File(c.getFilesDir(),"v13_toolchain")):"NOT INSTALLED")+
+                "\n"+UnderstandingPackStore.status(c)+
                 "\nOffline coding: "+(brainInstalled(c)?"READY":"COMPONENTS REQUIRED");
     }
 
@@ -294,6 +326,12 @@ public final class ComponentPackManager {
                 return "Brain pack requires model.gguf larger than 16 MB.";
             String[] req={"runtime.ready","edit-plan.schema.json"};
             for(String rel:req)if(!new File(base,rel).isFile())return "Brain pack missing: "+rel;
+            return null;
+        }
+
+        if("understanding".equals(type)){
+            String[] req={"owner_context_profile.txt","semantic_rules.json"};
+            for(String rel:req)if(!new File(base,rel).isFile())return "Understanding pack missing: "+rel;
             return null;
         }
 
