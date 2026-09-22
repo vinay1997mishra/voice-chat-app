@@ -39,6 +39,7 @@ import com.anamika.ai.runtime.RuntimeWatchdog;
 import com.anamika.ai.upgrade.SelfUpdateActivity;
 import com.anamika.ai.upgrade.SignerProvisionActivity;
 import com.anamika.ai.upgrade.SignerVault;
+import com.anamika.ai.upgrade.VersionArchiveManager;
 import com.anamika.ai.voice.VoiceController;
 import com.anamika.ai.voice.WakeService;
 
@@ -67,9 +68,11 @@ public final class MainActivity extends Activity implements VoiceController.List
         super.onCreate(state);
         CrashJournal.install(this);
         RuntimeWatchdog.recordLaunch(this);
+        VersionArchiveManager.onLaunch(this);
         voice=new VoiceController(this,this);
         showEntry();
         getWindow().getDecorView().postDelayed(()->RuntimeWatchdog.markHealthy(this),4000);
+        getWindow().getDecorView().postDelayed(this::maybeHandlePostUpdateStability,6500);
         handleWakeCommand();
         handleConnectorCommand();
     }
@@ -302,6 +305,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         drawerCommand(list,"Diagnostics Report","diagnostics report",true);
         drawerCommand(list,"Recovery Checkpoint","recovery checkpoint",true);
         drawerCommand(list,"Rollback Status","rollback status",true);
+        drawerCommand(list,"Version Archive Status","version archive status",true);
         drawerCommand(list,"Signer Status","signer status",true);
 
         drawerSection(list,"Phone & Apps");
@@ -502,7 +506,21 @@ public final class MainActivity extends Activity implements VoiceController.List
                 ChatGptConnectorService.start(this);
             handleConnectorCommand();
             if(status!=null)getWindow().getDecorView().postDelayed(this::maybeOfferStartupSetup,900);
+            getWindow().getDecorView().postDelayed(this::maybeHandlePostUpdateStability,7000);
         }
+    }
+
+    private void maybeHandlePostUpdateStability(){
+        VersionArchiveManager.recordHealthyLaunch(this);
+        if(!OwnerStore.isTrusted(this))return;
+        String reminder=VersionArchiveManager.consumeReminder(this);
+        if(reminder==null||reminder.trim().isEmpty())return;
+        if(messages!=null)append("Anamika",reminder);
+        new AlertDialog.Builder(this)
+                .setTitle("Old Version Reminder")
+                .setMessage(reminder)
+                .setPositiveButton("Keep Old Version",(d,w)->{})
+                .show();
     }
 
     private void startVoice(){
