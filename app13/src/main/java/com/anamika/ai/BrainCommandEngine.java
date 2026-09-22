@@ -37,6 +37,7 @@ import com.anamika.ai.upgrade.RollbackManager;
 import com.anamika.ai.upgrade.SelfUpdateActivity;
 import com.anamika.ai.upgrade.SignerVault;
 import com.anamika.ai.upgrade.UpgradeCoordinator;
+import com.anamika.ai.upgrade.VersionArchiveManager;
 import com.anamika.ai.voice.WakeService;
 
 import org.json.JSONArray;
@@ -264,6 +265,8 @@ public final class BrainCommandEngine {
                 a.startActivity(new Intent(a,SelfUpdateActivity.class)); return "Verified self-update installer khol rahi hu.";
             case "recovery_checkpoint": return RollbackManager.checkpoint(a);
             case "rollback_status": return RollbackManager.status(a);
+            case "version_archive_status": return VersionArchiveManager.status(a);
+            case "delete_old_versions": return VersionArchiveManager.deleteOldVersions(a);
             case "signer_status": return SignerVault.status(a);
             case "run_function_pack": return runFunctionPack(a,arg1,text);
             case "device_info":
@@ -350,7 +353,7 @@ public final class BrainCommandEngine {
                 "diagnostics; self_test; diagnostics_report; message(arg1=app,arg2=recipient,text=message); message_status; cancel_message; "+
                 "scan_app(arg1=app); stop_scan; blueprint_status; research(text=query); stop_research; research_status; tap(text=visible control); type(text); back; "+
                 "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); self_repair(text=problem); local_build; prepare_upgrade(text=request); create_function(text=request); "+
-                "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; run_function_pack(arg1=function_id,text=input); device_info.\n\n"+
+                "validate_upgrade; install_update; recovery_checkpoint; rollback_status; version_archive_status; delete_old_versions; signer_status; run_function_pack(arg1=function_id,text=input); device_info.\n\n"+
                 "INSTALLED FUNCTION PACKS:\n"+FunctionPackStore.catalog(c)+"\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
                 (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
