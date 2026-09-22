@@ -13,11 +13,15 @@ import '../core/anamika_connector.dart';
 import '../core/anamika_link_bridge.dart';
 import '../core/function_pack.dart';
 import '../custom_gift/custom_gift_service.dart';
+import '../custom_gift/custom_gift_validation.dart';
 import '../discovery/discovery_service.dart';
 import '../dynamic/dynamic_feed.dart';
 import '../economy/economy.dart';
+import '../economy/entitlement_service.dart';
+import '../economy/recharge_service.dart';
 import '../economy/gift_features.dart';
 import '../effects/effect_queue.dart';
+import '../effects/effect_players.dart';
 import '../games/game_service.dart';
 import '../identity/identity.dart';
 import '../infra/realtime.dart';
@@ -56,6 +60,9 @@ class TinniState {
         backpack = BackpackService(),
         giftAtlas = GiftAtlasService(),
         customGifts = CustomGiftService(),
+        customGiftValidator = const CustomGiftValidator(),
+        entitlements = EntitlementService(),
+        effectRouter = EffectRouter(),
         rewards = RewardService(),
         calls = CallService(),
         profile = ProfileService(),
@@ -75,6 +82,7 @@ class TinniState {
           im: LocalImAdapter(),
         ) {
     gifts = GiftService(wallet);
+    recharge = RechargeService(wallet);
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
@@ -90,6 +98,7 @@ class TinniState {
   }
   final WalletService wallet;
   late final GiftService gifts;
+  late final RechargeService recharge;
   late final InventoryService inventory;
   final AuthService auth;
   AuthPersistence? authPersistence;
@@ -115,6 +124,9 @@ class TinniState {
   final BackpackService backpack;
   final GiftAtlasService giftAtlas;
   final CustomGiftService customGifts;
+  final CustomGiftValidator customGiftValidator;
+  final EntitlementService entitlements;
+  final EffectRouter effectRouter;
   final RewardService rewards;
   final CallService calls;
   final ProfileService profile;
