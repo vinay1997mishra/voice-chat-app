@@ -58,6 +58,7 @@ public final class ComponentPacksActivity extends Activity {
         url.setSingleLine(true);
         box.addView(url);
 
+        Button complete=new Button(this); complete.setText("Complete Offline Setup • Toolchain + Brain + Qwen");
         Button runtime=new Button(this); runtime.setText("Install Offline Brain Runtime");
         Button qwen=new Button(this); qwen.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
         Button download=new Button(this); download.setText("Download Component ZIP from URL");
@@ -65,6 +66,7 @@ public final class ComponentPacksActivity extends Activity {
         Button importModel=new Button(this); importModel.setText("Import Existing GGUF Model");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
         Button refresh=new Button(this); refresh.setText("Refresh Status");
+        box.addView(complete);
         box.addView(runtime);
         box.addView(qwen);
         box.addView(download);
@@ -79,6 +81,7 @@ public final class ComponentPacksActivity extends Activity {
         status.setPadding(0,dp(14),0,dp(24));
         box.addView(status);
 
+        complete.setOnClickListener(v->completeOfflineSetup());
         runtime.setOnClickListener(v->download(BRAIN_RUNTIME_URL));
         qwen.setOnClickListener(v->downloadModel(QWEN_MODEL_URL));
         download.setOnClickListener(v->download(url.getText().toString().trim()));
@@ -90,6 +93,87 @@ public final class ComponentPacksActivity extends Activity {
         ScrollView scroll=new ScrollView(this);
         scroll.addView(box);
         setContentView(scroll);
+    }
+
+    private void completeOfflineSetup(){
+        status.setText("Full offline setup start ho raha hai… Toolchain → Brain Runtime → Qwen model.");
+        new Thread(()->{
+            try{
+                if(!ComponentPackManager.toolchainInstalled(this)){
+                    postProgress("Bundled Android toolchain install ho raha hai…");
+                    ComponentPackManager.Result tool=ComponentPackManager.installBundledToolchainIfNeeded(this);
+                    if(!tool.ok){post("Full setup stopped: "+tool.message);return;}
+                }
+
+                if(!ComponentPackManager.brainRuntimeInstalled(this)){
+                    postProgress("Offline Brain Runtime download/install ho raha hai…");
+                    ComponentPackManager.Result brain=downloadZipBlocking(BRAIN_RUNTIME_URL);
+                    if(!brain.ok){post("Full setup stopped: "+brain.message);return;}
+                }
+
+                if(!ComponentPackManager.modelInstalled(this)){
+                    postProgress("Qwen2.5-Coder-1.5B Q4_K_M download ho raha hai… 1 GB+ file hai.");
+                    ComponentPackManager.Result model=downloadModelBlocking(QWEN_MODEL_URL);
+                    if(!model.ok){post("Full setup stopped: "+model.message);return;}
+                }
+
+                post("FULL OFFLINE SETUP READY\nToolchain: READY\nBrain Runtime: READY\nQwen Model: READY");
+            }catch(Exception e){
+                post("Full offline setup failed: "+safe(e));
+            }
+        },"anamika-full-offline-setup").start();
+    }
+
+    private ComponentPackManager.Result downloadZipBlocking(String raw){
+        HttpURLConnection con=null;
+        try{
+            URL u=new URL(raw);
+            con=(HttpURLConnection)u.openConnection();
+            con.setConnectTimeout(20000);
+            con.setReadTimeout(120000);
+            con.setInstanceFollowRedirects(true);
+            con.setRequestProperty("User-Agent","AnamikaAI13-ComponentInstaller");
+            int code=con.getResponseCode();
+            if(code<200||code>=300)return new ComponentPackManager.Result(false,"Component download HTTP "+code);
+            long len=con.getContentLengthLong();
+            if(len>8L*1024L*1024L*1024L)
+                return new ComponentPackManager.Result(false,"Component pack exceeds 8 GB safety limit.");
+            try(InputStream in=new BufferedInputStream(con.getInputStream())){
+                return ComponentPackManager.installZip(this,in);
+            }
+        }catch(Exception e){
+            return new ComponentPackManager.Result(false,"Component download/install failed: "+safe(e));
+        }finally{
+            if(con!=null)con.disconnect();
+        }
+    }
+
+    private ComponentPackManager.Result downloadModelBlocking(String raw){
+        HttpURLConnection con=null;
+        try{
+            URL u=new URL(raw);
+            con=(HttpURLConnection)u.openConnection();
+            con.setConnectTimeout(20000);
+            con.setReadTimeout(120000);
+            con.setInstanceFollowRedirects(true);
+            con.setRequestProperty("User-Agent","AnamikaAI13-ModelInstaller");
+            int code=con.getResponseCode();
+            if(code<200||code>=300)return new ComponentPackManager.Result(false,"Qwen download HTTP "+code);
+            long len=con.getContentLengthLong();
+            if(len>8L*1024L*1024L*1024L)
+                return new ComponentPackManager.Result(false,"Model exceeds 8 GB safety limit.");
+            try(InputStream in=new BufferedInputStream(con.getInputStream())){
+                return ComponentPackManager.installModel(this,in);
+            }
+        }catch(Exception e){
+            return new ComponentPackManager.Result(false,"Qwen model download/import failed: "+safe(e));
+        }finally{
+            if(con!=null)con.disconnect();
+        }
+    }
+
+    private void postProgress(String text){
+        new Handler(Looper.getMainLooper()).post(()->status.setText(text+"\n\n"+ComponentPackManager.status(this)));
     }
 
     private void pickZip(){
