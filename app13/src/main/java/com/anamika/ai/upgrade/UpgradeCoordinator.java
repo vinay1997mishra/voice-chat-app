@@ -112,6 +112,71 @@ public final class UpgradeCoordinator {
         }
     }
 
+    /**
+     * Accepts owner-supplied source/code text, asks the offline coding brain to inspect it
+     * against the current V13 workspace, repair it when needed, integrate it, validate it,
+     * and produce a signed local APK candidate when the builder/signer are ready.
+     */
+    public static String applyOwnerCode(Context c,String suppliedCode){
+        String code=suppliedCode==null?"":suppliedCode.trim();
+        if(code.isEmpty())return "Direct code empty hai. 'apply code' ke baad code paste karo.";
+        if(code.length()>48000)
+            return "Direct code bahut bada hai. Ek baar me 48,000 characters tak paste karo ya code ko parts me do.";
+        if(!ComponentPackManager.brainInstalled(c))
+            return "Direct code check/repair ke liye Offline Brain runtime + GGUF model install hona chahiye.";
+
+        try{
+            UpgradeJournal.record(c,"DIRECT_CODE_START","Owner supplied "+code.length()+" chars.");
+            File ws=SourceVault.createWorkspace(c,"owner supplied direct code");
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_WS,ws.getAbsolutePath())
+                    .remove(LAST_CANDIDATE)
+                    .apply();
+
+            String request=
+                    "The owner supplied code directly for Anamika 13. Inspect it against the current V13 source. "+
+                    "Determine what function/change the code is intended to provide. Validate syntax, imports, APIs, package names, logic and integration. "+
+                    "If the supplied code is wrong or incomplete, repair it before integrating. Preserve unrelated existing features and package identity. "+
+                    "Create or modify only the files needed, connect the change to command/router/UI when appropriate, and return a valid edit plan. "+
+                    "OWNER-SUPPLIED CODE START\n"+code+"\nOWNER-SUPPLIED CODE END";
+
+            OfflineCodingBrain.Result brain=OfflineCodingBrain.repair(c,ws,request);
+            UpgradeJournal.record(c,brain.ok?"DIRECT_CODE_REPAIR_PASS":"DIRECT_CODE_REPAIR_FAIL",brain.message);
+            if(!brain.ok)
+                return "Direct code integrate/repair nahi ho saka.\n"+brain.message;
+
+            CodeDoctor.Report structural=CandidateValidator.validateWorkspace(ws);
+            UpgradeJournal.record(c,structural.clean?"DIRECT_CODE_VALIDATE_PASS":"DIRECT_CODE_VALIDATE_FAIL",structural.text());
+            if(!structural.clean)
+                return "Code apply hua, lekin Code Doctor validation fail hui. Build/install block kiya gaya.\n"+structural.text();
+
+            LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
+            if(!cap.ready){
+                return "DIRECT CODE VALIDATION PASS\nWorkspace: "+ws.getAbsolutePath()+
+                        "\nAPK build abhi block hai: "+cap.detail+
+                        "\nToolchain/signer ready hone ke baad 'local build' bolo.";
+            }
+
+            RollbackManager.checkpoint(c);
+            LocalBuildEngine.BuildResult built=LocalBuildEngine.build(c,ws);
+            UpgradeJournal.record(c,built.ok?"DIRECT_CODE_BUILD_PASS":"DIRECT_CODE_BUILD_FAIL",built.log);
+            if(!built.ok)
+                return "Code Doctor PASS tha, lekin real local APK build fail hua.\n"+built.log;
+
+            c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_CANDIDATE,built.apk.getAbsolutePath()).apply();
+
+            return "DIRECT CODE BUILD READY\n"+
+                    "Code checked + repaired/integrated + validated + signed candidate ready.\n"+
+                    built.log+
+                    "\nCandidate: "+built.apk.getAbsolutePath()+
+                    "\nAb 'self update' kholo. Final install Android/owner confirmation ke baad hoga.";
+        }catch(Exception e){
+            UpgradeJournal.record(c,"DIRECT_CODE_FAIL",safe(e));
+            return "Direct code workflow failed: "+safe(e);
+        }
+    }
+
     public static String buildLatest(Context c){
         File ws=latestWorkspace(c);
         if(ws==null||!ws.isDirectory())return "Create an upgrade workspace first.";
