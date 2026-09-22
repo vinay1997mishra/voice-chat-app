@@ -3,6 +3,7 @@ package com.anamika.ai;
 import android.content.Context;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.BrainRuntimePaths;
+import com.anamika.ai.language.LocalLanguageText;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.LocalProcessRunner;
 import java.io.File;
@@ -26,6 +27,12 @@ public final class NaturalLanguageBrain {
         File prompt=new File(io,"prompt.txt");
         BrainEffortStore.Mode effort=BrainEffortStore.get(c);
         String memory=MemoryStore.promptContext(c,14,10000);
+        String ownerMessage=instruction==null?"":instruction.trim();
+        String localHint=LocalLanguageText.intentHint(ownerMessage);
+        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerMessage)
+                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"+
+                 "The hint is only for meaning. ORIGINAL OWNER MESSAGE remains authoritative for names, numbers and exact content.\n"
+                :"";
         String p="You are Anamika AI 13, the owner's personal offline assistant.\n"+
                 "Understand natural Indian Hindi, Roman Hindi/Hinglish, English, mixed-language sentences, casual spelling, speech-to-text mistakes and short local phrases.\n"+
                 "Do NOT require fixed commands or perfect grammar for normal conversation. Infer the intended meaning from the current message plus recent chat context.\n"+
@@ -38,7 +45,9 @@ public final class NaturalLanguageBrain {
                 "If this is normal conversation or a question, answer directly.\n"+
                 "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n\n"+
                 (memory.isEmpty()?"":memory+"\n\n")+
-                "CURRENT OWNER MESSAGE: "+(instruction==null?"":instruction)+"\nANAMIKA:";
+                "CURRENT OWNER MESSAGE: "+ownerMessage+"\n"+
+                hintLine+
+                "ANAMIKA:";
         try(FileOutputStream out=new FileOutputStream(prompt,false)){
             out.write(p.getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
