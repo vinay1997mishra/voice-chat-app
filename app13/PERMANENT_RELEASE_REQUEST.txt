@@ -1,1 +1,1 @@
-Natural conversation fallback plus robust planner and coding JSON retries
+Recent chat history and memory context for all Qwen prompts
