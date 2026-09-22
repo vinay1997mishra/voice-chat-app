@@ -6,8 +6,10 @@ import '../community/family_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
 import '../games/game_service.dart';
+import '../party/party_service.dart';
 import '../relationship/cp_service.dart';
 import '../rewards/reward_service.dart';
+import '../sharing/share_service.dart';
 
 class FeatureCenterScreen extends StatefulWidget {
   const FeatureCenterScreen({super.key, required this.state});
@@ -33,9 +35,7 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         Icons.account_balance_wallet_rounded,
         () async {
           final products = await state.billing.products();
-          showText(
-            'Billing adapter ready: ' + products.length.toString() + ' products',
-          );
+          showText('Billing adapter ready: ' + products.length.toString() + ' products');
         },
       ),
       _FeatureAction(
@@ -80,9 +80,23 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
             state.cp.selectRing('star-ring');
             state.cp.addMemory('First Tinni Star memory');
           }
+          state.cpFeatures.startHeartbeat();
+          state.cpFeatures.chooseHeartbeat('star');
+          state.cpFeatures.resolveHeartbeat(matched: true);
           showText(
-            'CP level ' + (state.cp.relationship?.level ?? 0).toString(),
+            'CP level ' +
+                (state.cp.relationship?.level ?? 0).toString() +
+                ' • heartbeat matched',
           );
+        },
+      ),
+      _FeatureAction(
+        'CP Disconnect Flow',
+        Icons.heart_broken_rounded,
+        () {
+          state.cpFeatures.requestDisconnect('10000000');
+          state.cpFeatures.respondDisconnect(accept: false);
+          showText('Disconnect request refused safely.');
         },
       ),
       _FeatureAction(
@@ -107,14 +121,11 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
               ),
             );
             state.family.appoint('20000000', FamilyRole.assistant);
-            state.family.deposit(1000);
           }
-          showText(
-            (state.family.name ?? 'Family') +
-                ' • ' +
-                state.family.members.length.toString() +
-                ' members',
-          );
+          state.familyFeatures.signIn('10000000');
+          state.familyFeatures.recordGiftContribution(1200);
+          final reward = state.familyFeatures.draw(2);
+          showText((state.family.name ?? 'Family') + ' • lottery ' + reward.label);
         },
       ),
       _FeatureAction(
@@ -123,6 +134,11 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         () {
           state.ktv.addToQueue(state.ktv.library.first, '10000000');
           final entry = state.ktv.startNext();
+          state.ktvFeatures.reportSong(
+            songId: entry?.song.id ?? 'none',
+            kind: 'demo',
+            details: 'KTV feedback pipeline ready',
+          );
           showText('Now singing: ' + (entry?.song.title ?? 'none'));
         },
       ),
@@ -162,8 +178,26 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
             state.wallet.creditCoins(reward.amount, reward.label);
           }
           state.rewards.launchRocket(1000);
+          state.rewards.addRebate(50);
           showText(
-            'Rocket Lv.' + state.rewards.rocket.level.toString(),
+            'Rocket Lv.' +
+                state.rewards.rocket.level.toString() +
+                ' • rebate ' +
+                state.rewards.rebateCoins.toString(),
+          );
+        },
+      ),
+      _FeatureAction(
+        'Gift Backpack / Atlas',
+        Icons.backpack_rounded,
+        () {
+          state.backpack.add('rose', 5);
+          state.backpack.consume('rose', 1);
+          state.giftAtlas.recordObtained('rose');
+          showText(
+            'Rose backpack ' +
+                (state.backpack.items['rose']?.quantity ?? 0).toString() +
+                ' • atlas lit',
           );
         },
       ),
@@ -178,14 +212,16 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
           );
           state.dynamics.moderate(post.id, approve: true);
           state.dynamics.like(post.id);
-          showText('Dynamic published and liked.');
+          state.dynamics.comment(post.id, 'Welcome!');
+          showText('Dynamic published, liked and commented.');
         },
       ),
       _FeatureAction(
         'Custom Gift Creator',
         Icons.draw_rounded,
         () {
-          final id = 'gift-' + (state.customGifts.gifts.length + 1).toString();
+          final id =
+              'gift-' + (state.customGifts.gifts.length + 1).toString();
           state.customGifts.create(
             id: id,
             name: 'Custom Star',
@@ -204,9 +240,14 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         () {
           state.activities.addCharm('10000000', 2000);
           state.activities.addGiftScore('10000000', 3000);
+          state.ranks.addCp('cp-1', 1500);
+          state.ranks.addFamily('tinni-family', 2200);
+          state.ranks.addRoom('1524843', 5000);
+          state.ranks.addSignIn('10000000', 30);
+          state.ranks.promoteHallOfFame('10000000');
           showText(
-            'Charm rank score ' +
-                state.activities.charmRank().first.score.toString(),
+            'Room rank ' +
+                state.ranks.rank(state.ranks.room).first.score.toString(),
           );
         },
       ),
@@ -215,7 +256,17 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         Icons.cake_rounded,
         () {
           state.activities.join('birthday', '10000000');
-          showText('Birthday activity joined.');
+          final party = state.parties.parties['birthday-demo'] ??
+              state.parties.create(
+                id: 'birthday-demo',
+                type: PartyType.birthday,
+                ownerId: '10000000',
+                title: 'Tinni Birthday',
+              );
+          party.join('10000000');
+          party.start();
+          state.parties.setDressUp(party.id, 'birthday-premium');
+          showText('Birthday party active with premium dress-up.');
         },
       ),
       _FeatureAction(
@@ -234,12 +285,27 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         },
       ),
       _FeatureAction(
+        'Room Controls',
+        Icons.meeting_room_rounded,
+        () {
+          state.roomControls.invite('20000000');
+          state.roomControls.applyForMic('20000000', 2);
+          state.roomControls.approveMic('20000000');
+          state.roomControls.setAdmin('20000000', true);
+          state.roomControls.setHostSeat(0);
+          state.roomControls.setBossSeat(1);
+          showText('Invite, mic, admin, host/boss seat controls updated.');
+        },
+      ),
+      _FeatureAction(
         'Moderation',
         Icons.shield_rounded,
         () {
           state.moderation.addAdmin('20000000');
           state.moderation.banMic('30000000');
-          showText('Admin and mic-ban state updated.');
+          state.roomControls.banMic('30000000');
+          state.roomControls.blacklist('40000000');
+          showText('Admin, mic-ban and room blacklist updated.');
         },
       ),
       _FeatureAction(
@@ -259,6 +325,20 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         },
       ),
       _FeatureAction(
+        'Sharing',
+        Icons.share_rounded,
+        () {
+          final value = state.sharing.prepare(
+            ShareTarget.whatsapp,
+            const SharePayload(
+              title: 'Join Tinni Star room',
+              link: 'https://tinni.star/room/1524843',
+            ),
+          );
+          showText(value);
+        },
+      ),
+      _FeatureAction(
         'Anamika Diagnostics',
         Icons.health_and_safety_rounded,
         () {
@@ -267,7 +347,9 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
             'Schema ' +
                 data['schema'].toString() +
                 ' • seats ' +
-                data['seatCount'].toString(),
+                data['seatCount'].toString() +
+                ' • pack ' +
+                (data['activePackVersion'] ?? 'base').toString(),
           );
         },
       ),
