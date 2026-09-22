@@ -95,30 +95,17 @@ public final class UpgradeCoordinator {
             UpgradeJournal.record(c,brain.ok?"SELF_REPAIR_CODE_PASS":"SELF_REPAIR_CODE_FAIL",brain.message);
             if(!brain.ok)return "Self repair source create nahi ho saka.\n"+brain.message;
 
-            CodeDoctor.Report structural=CandidateValidator.validateWorkspace(ws);
-            UpgradeJournal.record(c,structural.clean?"SELF_REPAIR_VALIDATE_PASS":"SELF_REPAIR_VALIDATE_FAIL",structural.text());
-            if(!structural.clean)
-                return "Self repair edit apply hua, lekin Code Doctor validation fail hui. Build/install block kiya gaya.\n"+structural.text();
-
-            LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
-            if(!cap.ready){
-                return "SELF REPAIR SOURCE READY + VALIDATION PASS\nWorkspace: "+ws.getAbsolutePath()+
-                        "\nAPK build abhi block hai: "+cap.detail+
-                        "\nBuilder/signer ready hote hi 'local build' bolo.";
-            }
-
-            RollbackManager.checkpoint(c);
-            LocalBuildEngine.BuildResult built=LocalBuildEngine.build(c,ws);
-            UpgradeJournal.record(c,built.ok?"SELF_REPAIR_BUILD_PASS":"SELF_REPAIR_BUILD_FAIL",built.log);
-            if(!built.ok)return "Self repair validation PASS tha, lekin real local APK build fail hua.\n"+built.log;
+            UpgradeQualityGate.Result gated=UpgradeQualityGate.run(c,ws,problem);
+            UpgradeJournal.record(c,gated.ok?"SELF_REPAIR_QUALITY_PASS":"SELF_REPAIR_QUALITY_FAIL",gated.log);
+            if(!gated.ok)return "Self repair strict quality gate fail hua. Install blocked.\n"+gated.log;
 
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
-                    .putString(LAST_CANDIDATE,built.apk.getAbsolutePath()).apply();
+                    .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
 
             return "SELF REPAIR BUILD READY\n"+
-                    "Anamika ne apna source repair + validate + local sign/build kiya.\n"+
-                    built.log+
-                    "\nCandidate: "+built.apk.getAbsolutePath()+
+                    "Source repair + duplicate-function check + real signed build + APK verification PASS.\n"+
+                    gated.log+
+                    "\nCandidate: "+gated.apk.getAbsolutePath()+
                     "\nAb 'self update' kholo. Final install Android/owner confirmation ke baad hoga.";
         }catch(Exception e){
             UpgradeJournal.record(c,"SELF_REPAIR_FAIL",safe(e));
@@ -152,28 +139,15 @@ public final class UpgradeCoordinator {
             UpgradeJournal.record(c,brain.ok?"AUTO_FEATURE_CODE_PASS":"AUTO_FEATURE_CODE_FAIL",brain.message);
             if(!brain.ok)return "Function source create nahi ho saka.\n"+brain.message;
 
-            CodeDoctor.Report structural=CandidateValidator.validateWorkspace(ws);
-            UpgradeJournal.record(c,structural.clean?"AUTO_FEATURE_VALIDATE_PASS":"AUTO_FEATURE_VALIDATE_FAIL",structural.text());
-            if(!structural.clean)
-                return "Brain ne source change kiya, lekin validation fail hui. Install/build block kiya gaya.\n"+structural.text();
-
-            LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
-            if(!cap.ready){
-                return "Function ka source create + structural validation PASS hai.\nWorkspace: "+ws.getAbsolutePath()+
-                        "\nAPK build abhi block hai: "+cap.detail+
-                        "\nToolchain/signer ready hote hi 'local build' bolo.";
-            }
-
-            RollbackManager.checkpoint(c);
-            LocalBuildEngine.BuildResult built=LocalBuildEngine.build(c,ws);
-            UpgradeJournal.record(c,built.ok?"AUTO_FEATURE_BUILD_PASS":"AUTO_FEATURE_BUILD_FAIL",built.log);
-            if(!built.ok)return "Function source ready tha, lekin real APK build fail hua.\n"+built.log;
+            UpgradeQualityGate.Result gated=UpgradeQualityGate.run(c,ws,r);
+            UpgradeJournal.record(c,gated.ok?"AUTO_FEATURE_QUALITY_PASS":"AUTO_FEATURE_QUALITY_FAIL",gated.log);
+            if(!gated.ok)return "Function update strict quality gate fail hua. Install blocked.\n"+gated.log;
 
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
-                    .putString(LAST_CANDIDATE,built.apk.getAbsolutePath()).apply();
-            return "NEW FUNCTION BUILD READY\n"+built.log+
-                    "\nCandidate: "+built.apk.getAbsolutePath()+
-                    "\nAb 'self update' kholo. Installation owner/Android confirmation ke bina nahi hogi.";
+                    .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
+            return "NEW FUNCTION BUILD READY\n"+gated.log+
+                    "\nCandidate: "+gated.apk.getAbsolutePath()+
+                    "\nExisting implementation ko in-place update kiya gaya; duplicate guard PASS. Final install owner/Android confirmation ke bina nahi hogi.";
         }catch(Exception e){
             UpgradeJournal.record(c,"AUTO_FEATURE_FAIL",safe(e));
             return "Automatic function upgrade failed: "+safe(e);
@@ -213,31 +187,17 @@ public final class UpgradeCoordinator {
             if(!brain.ok)
                 return "Direct code integrate/repair nahi ho saka.\n"+brain.message;
 
-            CodeDoctor.Report structural=CandidateValidator.validateWorkspace(ws);
-            UpgradeJournal.record(c,structural.clean?"DIRECT_CODE_VALIDATE_PASS":"DIRECT_CODE_VALIDATE_FAIL",structural.text());
-            if(!structural.clean)
-                return "Code apply hua, lekin Code Doctor validation fail hui. Build/install block kiya gaya.\n"+structural.text();
-
-            LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
-            if(!cap.ready){
-                return "DIRECT CODE VALIDATION PASS\nWorkspace: "+ws.getAbsolutePath()+
-                        "\nAPK build abhi block hai: "+cap.detail+
-                        "\nToolchain/signer ready hone ke baad 'local build' bolo.";
-            }
-
-            RollbackManager.checkpoint(c);
-            LocalBuildEngine.BuildResult built=LocalBuildEngine.build(c,ws);
-            UpgradeJournal.record(c,built.ok?"DIRECT_CODE_BUILD_PASS":"DIRECT_CODE_BUILD_FAIL",built.log);
-            if(!built.ok)
-                return "Code Doctor PASS tha, lekin real local APK build fail hua.\n"+built.log;
+            UpgradeQualityGate.Result gated=UpgradeQualityGate.run(c,ws,"owner supplied direct code");
+            UpgradeJournal.record(c,gated.ok?"DIRECT_CODE_QUALITY_PASS":"DIRECT_CODE_QUALITY_FAIL",gated.log);
+            if(!gated.ok)return "Direct code strict quality gate fail hua. Install blocked.\n"+gated.log;
 
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
-                    .putString(LAST_CANDIDATE,built.apk.getAbsolutePath()).apply();
+                    .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
 
             return "DIRECT CODE BUILD READY\n"+
-                    "Code checked + repaired/integrated + validated + signed candidate ready.\n"+
-                    built.log+
-                    "\nCandidate: "+built.apk.getAbsolutePath()+
+                    "Code checked/repaired + duplicate guard + real build + APK verification PASS.\n"+
+                    gated.log+
+                    "\nCandidate: "+gated.apk.getAbsolutePath()+
                     "\nAb 'self update' kholo. Final install Android/owner confirmation ke baad hoga.";
         }catch(Exception e){
             UpgradeJournal.record(c,"DIRECT_CODE_FAIL",safe(e));
@@ -248,26 +208,14 @@ public final class UpgradeCoordinator {
     public static String buildLatest(Context c){
         File ws=latestWorkspace(c);
         if(ws==null||!ws.isDirectory())return "Create an upgrade workspace first.";
-        CodeDoctor.Report check=CandidateValidator.validateWorkspace(ws);
-        if(!check.clean){
-            UpgradeJournal.record(c,"BUILD_BLOCKED",check.text());
-            return "Build blocked because structural validation failed.\n"+check.text();
-        }
-        LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
-        if(!cap.ready){
-            UpgradeJournal.record(c,"BUILD_BLOCKED",cap.detail);
-            return "Local build blocked: "+cap.detail;
-        }
-        RollbackManager.checkpoint(c);
-        UpgradeJournal.record(c,"LOCAL_BUILD_START",ws.getAbsolutePath());
-        LocalBuildEngine.BuildResult r=LocalBuildEngine.build(c,ws);
-        UpgradeJournal.record(c,r.ok?"LOCAL_BUILD_PASS":"LOCAL_BUILD_FAIL",r.log);
+        UpgradeQualityGate.Result r=UpgradeQualityGate.run(c,ws,"build latest prepared update");
+        UpgradeJournal.record(c,r.ok?"LOCAL_BUILD_QUALITY_PASS":"LOCAL_BUILD_QUALITY_FAIL",r.log);
         if(r.ok){
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
                     .putString(LAST_CANDIDATE,r.apk.getAbsolutePath()).apply();
             return r.log+"\nCandidate: "+r.apk.getAbsolutePath();
         }
-        return r.log;
+        return "Local build/install blocked by strict quality gate.\n"+r.log;
     }
 
     public static File latestCandidate(Context c){
