@@ -6,6 +6,7 @@ import android.os.Build;
 import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.language.UnderstandingPackStore;
+import com.anamika.ai.plugins.FunctionPackStore;
 
 import org.json.JSONObject;
 
@@ -28,6 +29,7 @@ import java.util.zip.ZipInputStream;
  * - brain: legacy combined runtime + model pack
  * - toolchain: Android local builder toolchain
  * - understanding: hot-swappable owner conversation/context rules
+ * - function-pack: hot-swappable declarative workflows using existing safe actions
  *
  * The model can also be imported separately as a raw GGUF file.
  */
@@ -92,8 +94,9 @@ public final class ComponentPackManager {
 
             String type=manifest.optString("type","").trim().toLowerCase(Locale.ROOT);
             String version=manifest.optString("version","").trim();
-            if(!("brain".equals(type)||"brain-runtime".equals(type)||"toolchain".equals(type)||"understanding".equals(type)))
-                return new Result(false,"Component type must be brain, brain-runtime, toolchain or understanding.");
+            if(!("brain".equals(type)||"brain-runtime".equals(type)||"toolchain".equals(type)||
+                    "understanding".equals(type)||"function-pack".equals(type)))
+                return new Result(false,"Component type must be brain, brain-runtime, toolchain, understanding or function-pack.");
             if(version.isEmpty())return new Result(false,"Component version missing.");
 
             JSONObject files=manifest.optJSONObject("files");
@@ -119,6 +122,8 @@ public final class ComponentPackManager {
                 return installBrainPayload(c,staging,type,version);
             if("understanding".equals(type))
                 return installUnderstandingPayload(c,staging,version);
+            if("function-pack".equals(type))
+                return installFunctionPackPayload(c,staging,version);
 
             return installToolchainPayload(c,staging,version);
         }catch(Exception e){
@@ -248,6 +253,40 @@ public final class ComponentPackManager {
                 "\nNo APK reinstall required for this understanding update.");
     }
 
+    private static Result installFunctionPackPayload(Context c,File staging,String version)throws Exception{
+        File payload=new File(staging,"payload");
+        if(!payload.isDirectory())payload=staging;
+
+        FunctionPackStore.Validation validation=FunctionPackStore.validatePayload(payload);
+        if(!validation.ok)return new Result(false,validation.message);
+
+        File root=FunctionPackStore.root(c);
+        if(!root.exists()&&!root.mkdirs())
+            return new Result(false,"Cannot create function-pack storage.");
+
+        File target=new File(root,validation.packId);
+        File backup=new File(root,validation.packId+".previous");
+        File temp=new File(root,validation.packId+".installing");
+        deleteTree(temp);
+        copyTree(payload,temp);
+        new File(temp,"manifest.json").delete();
+
+        deleteTree(backup);
+        if(target.exists()&&!target.renameTo(backup)){
+            deleteTree(temp);
+            return new Result(false,"Cannot preserve previous function pack.");
+        }
+        if(!temp.renameTo(target)){
+            deleteTree(target);
+            if(backup.exists())backup.renameTo(target);
+            return new Result(false,"Cannot activate function pack.");
+        }
+        writeText(new File(target,"component.version"),version);
+        deleteTree(backup);
+        return new Result(true,"Function pack installed: "+validation.packId+" • "+version+
+                "\nCompatible functions/workflows are active without replacing the APK.");
+    }
+
     private static Result installToolchainPayload(Context c,File staging,String version)throws Exception{
         File payload=new File(staging,"payload");
         if(!payload.isDirectory())payload=staging;
@@ -310,6 +349,7 @@ public final class ComponentPackManager {
                 "\nCoding model: "+(modelInstalled(c)?(model.length()/1024/1024)+" MB GGUF":"NOT INSTALLED")+
                 "\nToolchain: "+(toolchainInstalled(c)?describeVersion(new File(c.getFilesDir(),"v13_toolchain")):"NOT INSTALLED")+
                 "\n"+UnderstandingPackStore.status(c)+
+                "\n"+FunctionPackStore.status(c)+
                 "\nOffline coding: "+(brainInstalled(c)?"READY":"COMPONENTS REQUIRED");
     }
 
@@ -333,6 +373,12 @@ public final class ComponentPackManager {
             String[] req={"owner_context_profile.txt","semantic_rules.json"};
             for(String rel:req)if(!new File(base,rel).isFile())return "Understanding pack missing: "+rel;
             return null;
+        }
+
+        if("function-pack".equals(type)){
+            if(!new File(base,"functions.json").isFile())return "Function pack missing: functions.json";
+            FunctionPackStore.Validation validation=FunctionPackStore.validatePayload(base);
+            return validation.ok?null:validation.message;
         }
 
         String[] req={"bin/anamika-builder","lib/java-compiler.jar","lib/d8.jar",
