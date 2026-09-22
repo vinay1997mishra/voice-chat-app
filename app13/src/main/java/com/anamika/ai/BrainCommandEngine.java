@@ -128,7 +128,7 @@ public final class BrainCommandEngine {
             if(json==null)json=extractJsonObject(run.stderr);
 
             if(json==null){
-                write(promptFile,buildRetryPrompt(ownerInstruction));
+                write(promptFile,buildRetryPrompt(c,ownerInstruction));
                 LocalProcessRunner.Result retry=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
                 if(retry.ok()){
                     json=extractJsonObject(retry.stdout);
@@ -263,7 +263,8 @@ public final class BrainCommandEngine {
         }
     }
 
-    private static String buildRetryPrompt(String instruction){
+    private static String buildRetryPrompt(Context c,String instruction){
+        String memory=MemoryStore.promptContext(c,10,7000);
         return "You are Anamika AI 13 command planner.\n"+
                 "Return exactly ONE JSON object and nothing else.\n"+
                 "Required top-level keys: actions and reply.\n"+
@@ -271,10 +272,13 @@ public final class BrainCommandEngine {
                 "For normal conversation or a normal question, return actions=[] and put the natural answer in reply.\n"+
                 "For a supported device/app command, choose only an action allowed by the JSON schema.\n"+
                 "Understand Hindi, Hinglish/Roman Hindi, English and mixed-language sentences.\n"+
-                "OWNER INSTRUCTION: "+(instruction==null?"":instruction);
+                "Use recent chat history and owner memory only when relevant to resolve references/follow-ups.\n"+
+                (memory.isEmpty()?"":"\n"+memory+"\n")+
+                "CURRENT OWNER INSTRUCTION: "+(instruction==null?"":instruction);
     }
 
     private static String buildPrompt(Context c,String instruction){
+        String memory=MemoryStore.promptContext(c,12,9000);
         return "You are Anamika AI 13's OFFLINE command planner.\n"+
                 "Understand Hindi, Hinglish/Roman Hindi, English, mixed app names, short commands and multi-step owner instructions.\n"+
                 "Convert the owner's request into ONLY the allowed structured actions below.\n"+
@@ -292,7 +296,8 @@ public final class BrainCommandEngine {
                 "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); local_build; prepare_upgrade(text=request); create_function(text=request); "+
                 "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; device_info.\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
-                "OWNER INSTRUCTION:\n"+(instruction==null?"":instruction)+"\n\n"+
+                (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
+                "CURRENT OWNER INSTRUCTION:\n"+(instruction==null?"":instruction)+"\n\n"+
                 "Return JSON only.";
     }
 
