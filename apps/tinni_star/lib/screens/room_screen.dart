@@ -402,7 +402,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             tooltip: 'Close room',
             onPressed: () async {
               await widget.state.roomSession.close();
-              if (mounted) Navigator.pop(context);
+              if (!context.mounted) return;
+              Navigator.pop(context);
             },
             icon: const Icon(Icons.close_rounded),
           ),
