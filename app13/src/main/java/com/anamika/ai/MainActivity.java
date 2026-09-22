@@ -547,6 +547,28 @@ public final class MainActivity extends Activity implements VoiceController.List
         final Context appContext=getApplicationContext();
         new Thread(()->{
             BrainCommandEngine.Plan plan=BrainCommandEngine.plan(appContext,text);
+
+            if(plan==null||!plan.ok){
+                String reply=NaturalLanguageBrain.reply(appContext,text);
+                runOnUiThread(()->{
+                    if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
+                    finishReply(reply);
+                    if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
+                });
+                return;
+            }
+
+            if((plan.actions==null||plan.actions.length()==0)
+                    &&(plan.reply==null||plan.reply.trim().isEmpty())){
+                String reply=NaturalLanguageBrain.reply(appContext,text);
+                runOnUiThread(()->{
+                    if(isFinishing()||(Build.VERSION.SDK_INT>=17&&isDestroyed()))return;
+                    finishReply(reply);
+                    if(status!=null)status.setText("Owner verified • "+BrainEffortStore.describe(this));
+                });
+                return;
+            }
+
             if(BrainCommandEngine.requiresBackground(plan)){
                 String reply=BrainCommandEngine.execute(this,plan);
                 runOnUiThread(()->{
