@@ -17,7 +17,8 @@ public final class LanguageCommandInterpreter {
         if(raw==null)return "";
         String s=raw.trim().replaceAll("\\s+"," ");
         if(s.isEmpty())return "";
-        String l=s.toLowerCase(Locale.ROOT);
+        String normalized=LocalLanguageText.intentHint(s);
+        String l=normalized.toLowerCase(Locale.ROOT);
 
         // Exact intent phrases.
         if(any(l,"kya kar sakti ho","kya kya kar sakti ho","tum kya kar sakti ho",
@@ -134,7 +135,7 @@ public final class LanguageCommandInterpreter {
                 "लोकल बिल्ड","एपीके बिल्ड करो"))
             return "local build";
 
-        String repairArg=matchArg(s,
+        String repairArg=matchArg(normalized,
                 "^(?iu)(?:offline repair|code repair|khud ka code thik karo|khud ko thik karo|ऑफलाइन रिपेयर|कोड ठीक करो)\\s+(.+)$");
         if(repairArg!=null)return "offline repair "+repairArg;
 
@@ -155,72 +156,72 @@ public final class LanguageCommandInterpreter {
         // Prefix/suffix intents with preserved arguments.
         String arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:open|khol|kholo|khol do|खोलो|खोल दो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:open kar do|open karo|open kar|open|khol|kholo|khol do|chalao|chala do|chala de|खोलो|खोल दो|चालू करो)\\s+(.+)$");
         if(arg!=null)return "open "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(.+?)\\s+(?:open karo|open kar do|khol|kholo|khol do|खोलो|खोल दो)$");
+        arg=matchArg(normalized,
+                "^(?iu)(.+?)\\s+(?:open karo|open kar do|open kar|khol|kholo|khol do|chalao|chala do|chala de|खोलो|खोल दो|चालू करो)$");
         if(arg!=null&&!looksLikeSettings(arg))return "open "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:app\\s+)?(.+?)\\s+(?:app\\s+)?(?:open karo|khol do|kholo)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:app\\s+)?(.+?)\\s+(?:app\\s+)?(?:open karo|open kar do|open kar|khol do|kholo|chalao|chala do)$");
         if(arg!=null)return "open "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:search|google|dhundo|dhoondo|khojo|खोजो|ढूंढो|सर्च करो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:search kar do|search karo|search kar|search|google|dhundo|dhoondo|khojo|खोजो|ढूंढो|सर्च करो)\\s+(.+)$");
         if(arg!=null)return "search "+arg;
 
-        arg=matchArg(s,
+        arg=matchArg(normalized,
                 "^(?iu)(?:google|गूगल)(?:\\s+par|\\s+pe|\\s+पे|\\s+पर)?\\s+(.+?)\\s+(?:search karo|search kar|dhundo|dhoondo|khojo|सर्च करो|खोजो|ढूंढो)$");
         if(arg!=null)return "search "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(.+?)\\s+(?:search karo|search kar do|dhundo|dhoondo|khojo|सर्च करो|खोजो|ढूंढो)$");
+        arg=matchArg(normalized,
+                "^(?iu)(.+?)\\s+(?:search karo|search kar do|search kar|dhundo|dhoondo|khojo|सर्च करो|खोजो|ढूंढो)$");
         if(arg!=null)return "search "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:dial|call|phone karo|number lagao|कॉल करो|डायल करो|नंबर लगाओ)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:call kar do|call karo|call kar|dial|call|phone karo|phone kar|number lagao|कॉल करो|डायल करो|नंबर लगाओ)\\s+(.+)$");
         if(arg!=null)return "dial "+arg;
 
-        arg=matchArg(s,
+        arg=matchArg(normalized,
                 "^(?iu)(?:remember|yaad rakh|yaad rakho|yaad rakhna|याद रखो|याद रखना)\\s+(.+)$");
         if(arg!=null)return "remember "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:research|research karo|रिसर्च|रिसर्च करो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:research karo|research kar|research|रिसर्च|रिसर्च करो)\\s+(.+)$");
         if(arg!=null)return "research "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:scan app|app scan karo|scan karo|स्कैन करो|ऐप स्कैन करो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:scan app|app scan karo|app scan kar|scan karo|scan kar|स्कैन करो|ऐप स्कैन करो)\\s+(.+)$");
         if(arg!=null)return "scan app "+arg;
 
-        arg=matchArg(s,
+        arg=matchArg(normalized,
                 "^(?iu)(.+?)\\s+(?:ka scan karo|ko scan karo|स्कैन करो)$");
         if(arg!=null)return "scan app "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:tap|touch|dabao|click karo|टैप करो|टच करो|दबाओ)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:click karo|click kar|tap|touch|dabao|टैप करो|टच करो|दबाओ)\\s+(.+)$");
         if(arg!=null)return "tap "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:type|likho|likh do|टाइप करो|लिखो|लिख दो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:type karo|type kar|type|likho|likh do|टाइप करो|लिखो|लिख दो)\\s+(.+)$");
         if(arg!=null)return "type "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:calculate|calc|hisab karo|hisaab karo|गणना करो|हिसाब करो)\\s+(.+)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:calculate karo|calculate kar|calculate|calc|hisab karo|hisab kar|hisaab karo|hisaab kar|गणना करो|हिसाब करो)\\s+(.+)$");
         if(arg!=null)return "calculate "+normalizeMathWords(arg);
 
-        arg=matchArg(s,
+        arg=matchArg(normalized,
                 "^(?iu)(?:open url|website kholo|site kholo|वेबसाइट खोलो|साइट खोलो)\\s+(.+)$");
         if(arg!=null)return "open url "+arg;
 
-        arg=matchArg(s,
-                "^(?iu)(?:prepare upgrade|upgrade ready karo|upgrade taiyar karo|अपग्रेड तैयार करो)\\s*(.*)$");
+        arg=matchArg(normalized,
+                "^(?iu)(?:prepare upgrade|upgrade ready karo|upgrade ready kar|upgrade taiyar karo|upgrade taiyar kar|अपग्रेड तैयार करो)\\s*(.*)$");
         if(arg!=null)return "prepare upgrade"+(arg.isEmpty()?"":" "+arg);
 
         // File save: "file X me Y save karo" / "save file X | Y".
-        Matcher fm=Pattern.compile("(?iu)^file\\s+(.+?)\\s+(?:me|mein|में)\\s+(.+?)\\s+(?:save karo|save kar do|सेव करो)$").matcher(s);
+        Matcher fm=Pattern.compile("(?iu)^file\\s+(.+?)\\s+(?:me|mein|में)\\s+(.+?)\\s+(?:save karo|save kar do|save kar|सेव करो)$").matcher(s);
         if(fm.matches())return "save file "+fm.group(1).trim()+" | "+fm.group(2).trim();
 
         // Keep canonical/unknown text untouched so future parsers/AI can see the original meaning.
