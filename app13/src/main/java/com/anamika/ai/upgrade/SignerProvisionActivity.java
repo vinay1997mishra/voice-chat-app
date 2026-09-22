@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -57,6 +58,16 @@ public final class SignerProvisionActivity extends Activity {
         password.setHint("PKCS#12 password (leave empty if none)");
         password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         box.addView(password);
+
+        CheckBox showPassword=new CheckBox(this);
+        showPassword.setText("Show password");
+        showPassword.setOnCheckedChangeListener((buttonView,isChecked)->{
+            int type=InputType.TYPE_CLASS_TEXT|
+                    (isChecked?InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            password.setInputType(type);
+            password.setSelection(password.getText().length());
+        });
+        box.addView(showPassword);
 
         Button pick=new Button(this);
         pick.setText("2 • Select PKCS#12");
