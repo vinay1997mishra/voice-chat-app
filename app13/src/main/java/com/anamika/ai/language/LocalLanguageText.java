@@ -38,6 +38,20 @@ public final class LocalLanguageText {
         s=token(s,"bna","bana");
         s=token(s,"hta","hata");
         s=token(s,"lgao","lagao");
+        s=token(s,"gya","gaya");
+        s=token(s,"gye","gaye");
+        s=token(s,"gyi","gayi");
+        s=token(s,"kru","karu");
+        s=token(s,"kru?","karu");
+        s=token(s,"pdega|padega","padega");
+        s=token(s,"pdegi|padegi","padegi");
+        s=token(s,"chahiye|chaiye|chahie","chahiye");
+        s=token(s,"dubara|dobara","dobara");
+        s=token(s,"hoga|huga","hoga");
+        s=token(s,"huye|hue","hue");
+        s=token(s,"faliure|failuer","failure");
+        s=token(s,"funtion|funtions","function");
+        s=token(s,"funtions|functions","functions");
 
         // Frequent casual command endings.
         s=s.replaceAll("(?iu)\\b(?:khol|khul)\\s+(?:de|do)\\b","kholo");
@@ -52,6 +66,12 @@ public final class LocalLanguageText {
             s=s.replaceFirst("(?iu)^(?:anamika|mika)[, ]+","");
         s=s.replaceFirst("(?iu)^(?:please|pls|plz|zara|jara)\\s+","");
         s=s.replaceFirst("(?iu)\\s+(?:please|pls|plz)$","");
+
+        // Frequent compressed follow-up forms from fast mobile typing.
+        s=s.replaceAll("(?iu)\\bho\\s+gaya\\b","ho gaya");
+        s=s.replaceAll("(?iu)\\bkar\\s+diya\\b","kar diya");
+        s=s.replaceAll("(?iu)\\bnew\\s+update\\b","new update");
+        s=s.replaceAll("(?iu)\\bsab\\s+kuch\\s+(?:re)?check\\s+kar(?:o)?\\b","sab kuch recheck karo");
 
         return s.replaceAll("\\s+"," ").trim();
     }
