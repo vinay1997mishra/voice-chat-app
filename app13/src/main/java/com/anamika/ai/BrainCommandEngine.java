@@ -157,7 +157,7 @@ public final class BrainCommandEngine {
             JSONObject x=p.actions.optJSONObject(i);
             if(x==null)continue;
             String a=x.optString("action","").toLowerCase(Locale.ROOT);
-            if(a.equals("create_function")||a.equals("offline_repair")||a.equals("local_build")||
+            if(a.equals("create_function")||a.equals("offline_repair")||a.equals("self_repair")||a.equals("local_build")||
                     a.equals("self_test")||a.equals("prepare_upgrade")||a.equals("validate_upgrade")||
                     a.equals("recovery_checkpoint"))return true;
         }
@@ -247,6 +247,7 @@ public final class BrainCommandEngine {
             case "watchdog": return RuntimeWatchdog.status(a);
             case "upgrade_status": return UpgradeCoordinator.status(a);
             case "offline_repair": return UpgradeCoordinator.repairLatestOffline(a,text.isEmpty()?arg1:text);
+            case "self_repair": return UpgradeCoordinator.selfRepair(a,text.isEmpty()?arg1:text);
             case "local_build": return UpgradeCoordinator.buildLatest(a);
             case "prepare_upgrade": return UpgradeCoordinator.prepare(a,text.isEmpty()?arg1:text);
             case "create_function": return UpgradeCoordinator.createOrUpgradeFunction(a,text.isEmpty()?arg1:text);
@@ -287,13 +288,14 @@ public final class BrainCommandEngine {
                 "If one request needs multiple steps, return them in order, max 8 actions.\n"+
                 "If the owner is chatting or asking a normal question, return actions=[] and answer naturally in reply.\n"+
                 "If nothing can be executed, return no actions and explain briefly in reply.\n"+
-                "For self-upgrade requests, use prepare_upgrade/offline_repair/local_build/validate_upgrade/install_update only; existing owner confirmation remains mandatory.\n\n"+
+                "For self-upgrade requests, use prepare_upgrade/offline_repair/self_repair/local_build/validate_upgrade/install_update only; existing owner confirmation remains mandatory.\n"+
+                "If the owner asks Anamika to fix herself, repair her own functions, or correct a broken internal behavior, use self_repair with the problem description.\n\n"+
                 "ACTIONS:\n"+
                 "reply(text); open_app(arg1=app); search_web(text=query); open_url(arg1=url); open_settings; open_app_settings; dial(arg1=number); calculate(text=expression); "+
                 "remember(text); memory_status; save_file(arg1=filename,text=content); vault_status; open_plugins; open_components; component_status; autonomy_status; brain_status; "+
                 "diagnostics; self_test; diagnostics_report; message(arg1=app,arg2=recipient,text=message); message_status; cancel_message; "+
                 "scan_app(arg1=app); stop_scan; blueprint_status; research(text=query); stop_research; research_status; tap(text=visible control); type(text); back; "+
-                "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); local_build; prepare_upgrade(text=request); create_function(text=request); "+
+                "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); self_repair(text=problem); local_build; prepare_upgrade(text=request); create_function(text=request); "+
                 "validate_upgrade; install_update; recovery_checkpoint; rollback_status; signer_status; device_info.\n\n"+
                 "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
                 (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
@@ -329,7 +331,7 @@ public final class BrainCommandEngine {
                 "\"type\":\"object\",\"additionalProperties\":false,"+
                 "\"required\":[\"action\",\"arg1\",\"arg2\",\"text\"],"+
                 "\"properties\":{"+
-                "\"action\":{\"enum\":[\"reply\",\"open_app\",\"search_web\",\"open_url\",\"open_settings\",\"open_app_settings\",\"dial\",\"calculate\",\"remember\",\"memory_status\",\"save_file\",\"vault_status\",\"open_plugins\",\"open_components\",\"component_status\",\"autonomy_status\",\"brain_status\",\"diagnostics\",\"self_test\",\"diagnostics_report\",\"message\",\"message_status\",\"cancel_message\",\"scan_app\",\"stop_scan\",\"blueprint_status\",\"research\",\"stop_research\",\"research_status\",\"tap\",\"type\",\"back\",\"wake_on\",\"wake_off\",\"health\",\"last_crash\",\"watchdog\",\"upgrade_status\",\"offline_repair\",\"local_build\",\"prepare_upgrade\",\"create_function\",\"validate_upgrade\",\"install_update\",\"recovery_checkpoint\",\"rollback_status\",\"signer_status\",\"device_info\"]},"+
+                "\"action\":{\"enum\":[\"reply\",\"open_app\",\"search_web\",\"open_url\",\"open_settings\",\"open_app_settings\",\"dial\",\"calculate\",\"remember\",\"memory_status\",\"save_file\",\"vault_status\",\"open_plugins\",\"open_components\",\"component_status\",\"autonomy_status\",\"brain_status\",\"diagnostics\",\"self_test\",\"diagnostics_report\",\"message\",\"message_status\",\"cancel_message\",\"scan_app\",\"stop_scan\",\"blueprint_status\",\"research\",\"stop_research\",\"research_status\",\"tap\",\"type\",\"back\",\"wake_on\",\"wake_off\",\"health\",\"last_crash\",\"watchdog\",\"upgrade_status\",\"offline_repair\",\"self_repair\",\"local_build\",\"prepare_upgrade\",\"create_function\",\"validate_upgrade\",\"install_update\",\"recovery_checkpoint\",\"rollback_status\",\"signer_status\",\"device_info\"]},"+
                 "\"arg1\":{\"type\":\"string\"},\"arg2\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"}"+
                 "}}}}}";
     }
