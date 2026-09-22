@@ -34,6 +34,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     }
 
     public void listen(){
+        WakeService.pauseFor(activity,30000L);
         if(!SpeechRecognizer.isRecognitionAvailable(activity)){
             listener.onVoiceState("Speech recognition is unavailable on this phone.");
             return;
@@ -54,6 +55,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         }catch(Throwable e){
             stopRecognizer();
             listener.onVoiceState("Voice start failed: "+safe(e));
+            WakeService.resume(activity);
         }
     }
 
@@ -70,6 +72,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
 
     public void close(){
         stopRecognizer();
+        WakeService.resume(activity);
         if(tts!=null){tts.stop();tts.shutdown();tts=null;}
     }
 
@@ -143,11 +146,13 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     @Override public void onError(int error){
         listener.onVoiceState("Voice recognition stopped ("+error+"). Mic dubara tap karein.");
         stopRecognizer();
+        WakeService.resume(activity);
     }
     @Override public void onResults(Bundle results){
         ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         String text=bestResult(list);
         stopRecognizer();
+        WakeService.resume(activity);
         if(!text.isEmpty())listener.onVoiceText(text);
         else listener.onVoiceState("Command clear nahi mili.");
     }
