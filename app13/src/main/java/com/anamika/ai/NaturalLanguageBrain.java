@@ -4,6 +4,7 @@ import android.content.Context;
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.BrainRuntimePaths;
 import com.anamika.ai.language.LocalLanguageText;
+import com.anamika.ai.language.OwnerConversationProfile;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.runtime.LocalProcessRunner;
 import java.io.File;
@@ -42,10 +43,14 @@ public final class NaturalLanguageBrain {
         String memory=MemoryStore.promptContext(c,memoryTurns,memoryChars);
         String ownerMessage=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerMessage);
-        String hintLine=!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerMessage)
-                ?"LOCAL LANGUAGE INTERPRETATION HINT: "+localHint+"\n"+
-                 "The hint is only for meaning. ORIGINAL OWNER MESSAGE remains authoritative for names, numbers and exact content.\n"
-                :"";
+        String conversationHint=OwnerConversationProfile.semanticHint(ownerMessage);
+        StringBuilder hintBuilder=new StringBuilder();
+        if(!localHint.isEmpty()&&!localHint.equalsIgnoreCase(ownerMessage))
+            hintBuilder.append("LOCAL LANGUAGE INTERPRETATION HINT: ").append(localHint).append("\n")
+                    .append("The hint is only for meaning. ORIGINAL OWNER MESSAGE remains authoritative for names, numbers and exact content.\n");
+        if(!conversationHint.isEmpty())
+            hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
+        String hintLine=hintBuilder.toString();
         String p="You are Anamika AI 13, the owner's personal offline assistant.\n"+
                 "Understand natural Indian Hindi, Roman Hindi/Hinglish, English, mixed-language sentences, casual spelling, speech-to-text mistakes and short local phrases.\n"+
                 "Do NOT require fixed commands or perfect grammar for normal conversation. Infer the intended meaning from the current message plus recent chat context.\n"+
@@ -56,7 +61,8 @@ public final class NaturalLanguageBrain {
                 "For coding questions, explain what will happen, why, risks and next steps conversationally before code when that is what the owner is asking.\n"+
                 "Do not pretend an Android action was executed when it was not.\n"+
                 "If this is normal conversation or a question, answer directly.\n"+
-                "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n\n"+
+                "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n"+
+                OwnerConversationProfile.promptGuide()+"\n\n"+
                 (memory.isEmpty()?"":memory+"\n\n")+
                 "CURRENT OWNER MESSAGE: "+ownerMessage+"\n"+
                 hintLine+
