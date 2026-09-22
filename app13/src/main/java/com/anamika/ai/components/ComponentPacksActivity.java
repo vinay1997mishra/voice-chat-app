@@ -66,7 +66,7 @@ public final class ComponentPacksActivity extends Activity {
         completeButton=new Button(this); completeButton.setText("Complete Offline Setup • Toolchain + Brain + Qwen");
         runtimeButton=new Button(this); runtimeButton.setText("Install Offline Brain Runtime");
         qwenButton=new Button(this); qwenButton.setText("Download Qwen2.5-Coder 1.5B Q4_K_M");
-        Button download=new Button(this); download.setText("Download Component ZIP from URL");
+        Button download=new Button(this); download.setText("Advanced • Download Custom Component ZIP from URL");
         Button importZip=new Button(this); importZip.setText("Import Runtime/Toolchain ZIP");
         importModelButton=new Button(this); importModelButton.setText("Select Downloaded Qwen GGUF from Phone");
         Button signer=new Button(this); signer.setText("Setup Release Signer");
