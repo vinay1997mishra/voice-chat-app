@@ -1,5 +1,6 @@
-Anamika AI 13 hot-understanding-pack bridge update
+Anamika AI 13 hot Function Pack bridge update
 Requested: 2026-09-22
-Purpose: add runtime-loadable understanding/context component packs so future language, follow-up and conversation-rule updates can be installed without replacing the full APK.
-Includes: one-tap Understanding Pack updater, verified manifest hashes, atomic pack rollback/preservation, runtime prompt/rule loading.
-Update mode: one-time permanent-signed in-place bridge APK; preserve existing app data and functions. Future understanding updates use the small component ZIP.
+Purpose: add runtime-loadable declarative Function Packs so compatible new functions and workflows can be installed/updated without replacing the full APK.
+Includes: verified function-pack manifests, per-pack atomic replacement/rollback preservation, exact/prefix command matching, natural-language Function Pack routing, one-tap Function Pack updater, starter Owner Utilities pack.
+Safety/compatibility: packs cannot ship Java/Dex/native code and cannot invoke self-update/code-generation/raw accessibility tap-type actions; compiled/native/new-permission capabilities still use the signed APK self-upgrade path.
+Update mode: one-time permanent-signed in-place bridge APK; preserve existing app data and all existing functions. Future compatible Function Pack updates use small ZIP packs.
