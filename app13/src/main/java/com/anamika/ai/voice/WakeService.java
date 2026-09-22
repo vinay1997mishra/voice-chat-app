@@ -157,7 +157,7 @@ public final class WakeService extends Service implements RecognitionListener {
             recognizer.setRecognitionListener(this);
             Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault().toLanguageTag());
+            configureRecognitionLanguages(i);
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,false);
             i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
             recognizer.startListening(i);
@@ -179,8 +179,12 @@ public final class WakeService extends Service implements RecognitionListener {
         int pos=lower.indexOf("hello anamika");
         int len="hello anamika".length();
         if(pos<0){pos=lower.indexOf("hello mika");len="hello mika".length();}
+        if(pos<0){pos=lower.indexOf("हेलो अनामिका");len="हेलो अनामिका".length();}
+        if(pos<0){pos=lower.indexOf("हेलो मीका");len="हेलो मीका".length();}
         if(pos<0){pos=lower.indexOf("anamika");len="anamika".length();}
         if(pos<0){pos=lower.indexOf("mika");len="mika".length();}
+        if(pos<0){pos=lower.indexOf("अनामिका");len="अनामिका".length();}
+        if(pos<0){pos=lower.indexOf("मीका");len="मीका".length();}
         if(pos>=0){
             String tail=raw.substring(Math.min(raw.length(),pos+len)).trim();
             Intent open=new Intent(this,MainActivity.class)
@@ -188,6 +192,28 @@ public final class WakeService extends Service implements RecognitionListener {
                     .putExtra("wake_command",tail);
             startActivity(open);
             update(tail.isEmpty()?"Wake phrase heard":"Command received");
+        }
+    }
+
+    private String recognitionLanguage(){
+        Locale d=Locale.getDefault();
+        if("hi".equalsIgnoreCase(d.getLanguage()))return "hi-IN";
+        if("IN".equalsIgnoreCase(d.getCountry()))return "hi-IN";
+        return d.toLanguageTag();
+    }
+
+    private void configureRecognitionLanguages(Intent i){
+        String primary=recognitionLanguage();
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,primary);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,primary);
+        if(Build.VERSION.SDK_INT>=34){
+            ArrayList<String> allowed=new ArrayList<>();
+            allowed.add("hi-IN");
+            allowed.add("en-IN");
+            i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,allowed);
+            i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,allowed);
+            i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,true);
+            i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,RecognizerIntent.LANGUAGE_SWITCH_BALANCED);
         }
     }
 
