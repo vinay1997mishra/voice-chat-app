@@ -60,6 +60,7 @@ void main() {
 
     final roomCard = find.byKey(const Key('room-card-1524843'));
     await tester.ensureVisible(roomCard);
+    await tester.pumpAndSettle();
     await tester.tap(roomCard);
     await tester.pumpAndSettle();
 
@@ -85,6 +86,7 @@ void main() {
 
     final roomCard = find.byKey(const Key('room-card-1524843'));
     await tester.ensureVisible(roomCard);
+    await tester.pumpAndSettle();
     await tester.tap(roomCard);
     await tester.pumpAndSettle();
 
