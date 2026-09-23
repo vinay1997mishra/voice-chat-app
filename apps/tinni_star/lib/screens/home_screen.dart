@@ -744,11 +744,11 @@ class _RoomArtwork extends StatelessWidget {
           ),
         ),
         child: hasLocalPhoto
-            ? Image.file(
-                File(path),
-                width: width,
-                height: height,
-                fit: BoxFit.cover,
+            ? SizedBox.expand(
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.cover,
+                ),
               )
             : fallback != null
                 ? Text(
