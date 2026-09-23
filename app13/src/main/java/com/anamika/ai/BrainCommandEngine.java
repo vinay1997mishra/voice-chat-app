@@ -99,7 +99,7 @@ public final class BrainCommandEngine {
 
         try{
             BrainEffortStore.Mode effort=BrainEffortStore.get(c);
-            write(promptFile,buildPrompt(c,ownerInstruction)+"\n\nLOCAL EFFORT MODE: "+effort.label+"\n");
+            write(promptFile,buildPrompt(c,ownerInstruction,effort)+"\n\nLOCAL EFFORT MODE: "+effort.label+"\n");
             write(schemaFile,schema());
 
             List<String> cmd=new ArrayList<>();
@@ -137,7 +137,7 @@ public final class BrainCommandEngine {
             if(json==null)json=extractJsonObject(run.stderr);
 
             if(json==null){
-                write(promptFile,buildRetryPrompt(c,ownerInstruction));
+                write(promptFile,buildRetryPrompt(c,ownerInstruction,effort));
                 LocalProcessRunner.Result retry=LocalProcessRunner.run(cmd,io,env,effort.timeoutMs);
                 if(retry.ok()){
                     json=extractJsonObject(retry.stdout);
@@ -296,8 +296,13 @@ public final class BrainCommandEngine {
         return out.length()==0?"Function Pack command complete.":out.toString();
     }
 
-    private static String buildRetryPrompt(Context c,String instruction){
-        String memory=MemoryStore.promptContext(c,10,7000);
+    private static String buildRetryPrompt(Context c,String instruction,BrainEffortStore.Mode effort){
+        int memoryChars=effort==BrainEffortStore.Mode.INSTANT?1400:
+                effort==BrainEffortStore.Mode.MEDIUM?2800:4500;
+        int guideChars=effort==BrainEffortStore.Mode.INSTANT?2200:
+                effort==BrainEffortStore.Mode.MEDIUM?4000:6000;
+        String memory=MemoryStore.promptContext(c,effort==BrainEffortStore.Mode.INSTANT?5:10,memoryChars);
+        String guide=UnderstandingPackStore.promptGuide(c,guideChars);
         String ownerInstruction=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerInstruction);
         String conversationHint=UnderstandingPackStore.semanticHint(c,ownerInstruction);
@@ -317,14 +322,25 @@ public final class BrainCommandEngine {
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed-language sentences, shorthand and common speech-to-text mistakes.\n"+
                 "Treat local forms such as nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as normal language.\n"+
                 "Do not require exact command wording. Use recent chat history and owner memory to resolve references/follow-ups such as ye, isme, usme, ab and pehle wala.\n"+
-                UnderstandingPackStore.promptGuide(c)+"\n"+
+                guide+"\n"+
                 (memory.isEmpty()?"":"\n"+memory+"\n")+
                 hintLine+
                 "CURRENT OWNER INSTRUCTION: "+ownerInstruction;
     }
 
-    private static String buildPrompt(Context c,String instruction){
-        String memory=MemoryStore.promptContext(c,12,9000);
+    private static String buildPrompt(Context c,String instruction,BrainEffortStore.Mode effort){
+        int memoryChars=effort==BrainEffortStore.Mode.INSTANT?1800:
+                effort==BrainEffortStore.Mode.MEDIUM?3800:6500;
+        int guideChars=effort==BrainEffortStore.Mode.INSTANT?2600:
+                effort==BrainEffortStore.Mode.MEDIUM?5000:7000;
+        int appChars=effort==BrainEffortStore.Mode.INSTANT?2400:
+                effort==BrainEffortStore.Mode.MEDIUM?3800:5200;
+        int functionChars=effort==BrainEffortStore.Mode.INSTANT?1600:
+                effort==BrainEffortStore.Mode.MEDIUM?2600:3600;
+        String memory=MemoryStore.promptContext(c,effort==BrainEffortStore.Mode.INSTANT?6:12,memoryChars);
+        String guide=UnderstandingPackStore.promptGuide(c,guideChars);
+        String functions=clip(FunctionPackStore.catalog(c),functionChars);
+        String apps=installedApps(c,appChars);
         String ownerInstruction=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerInstruction);
         String conversationHint=UnderstandingPackStore.semanticHint(c,ownerInstruction);
@@ -338,7 +354,7 @@ public final class BrainCommandEngine {
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed app names, shorthand, imperfect grammar, speech-to-text mistakes, short commands and multi-step owner instructions.\n"+
                 "Do not require exact command words. Infer intent from natural local phrasing. Treat nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as ordinary equivalent forms.\n"+
                 "Use conversation history for references such as ye, isme, usme, ab, pehle wala and jo abhi bola.\n"+
-                UnderstandingPackStore.promptGuide(c)+"\n"+
+                guide+"\n"+
                 "Convert the owner's request into ONLY the allowed structured actions below.\n"+
                 "Never invent shell commands, hidden permissions, root access, or capabilities outside this list.\n"+
                 "Do not bypass Android confirmation or permission screens. Keep names, message bodies, URLs and numbers exactly as intended.\n"+
@@ -354,8 +370,8 @@ public final class BrainCommandEngine {
                 "scan_app(arg1=app); stop_scan; blueprint_status; research(text=query); stop_research; research_status; tap(text=visible control); type(text); back; "+
                 "wake_on; wake_off; health; last_crash; watchdog; upgrade_status; offline_repair(text=request); self_repair(text=problem); local_build; prepare_upgrade(text=request); create_function(text=request); "+
                 "validate_upgrade; install_update; recovery_checkpoint; rollback_status; version_archive_status; delete_old_versions; signer_status; run_function_pack(arg1=function_id,text=input); device_info.\n\n"+
-                "INSTALLED FUNCTION PACKS:\n"+FunctionPackStore.catalog(c)+"\n\n"+
-                "INSTALLED LAUNCHABLE APPS:\n"+installedApps(c)+"\n\n"+
+                "INSTALLED FUNCTION PACKS:\n"+functions+"\n\n"+
+                "INSTALLED LAUNCHABLE APPS:\n"+apps+"\n\n"+
                 (memory.isEmpty()?"":"CONVERSATION/MEMORY CONTEXT:\n"+memory+"\n\n")+
                 hintLine+
                 "The local hint is semantic only; preserve exact names, numbers, URLs and message text from the original instruction.\n"+
@@ -363,7 +379,7 @@ public final class BrainCommandEngine {
                 "Return JSON only.";
     }
 
-    private static String installedApps(Context c){
+    private static String installedApps(Context c,int maxChars){
         try{
             PackageManager pm=c.getPackageManager();
             List<ApplicationInfo> list;
@@ -374,8 +390,10 @@ public final class BrainCommandEngine {
             int count=0;
             for(ApplicationInfo info:list){
                 if(pm.getLaunchIntentForPackage(info.packageName)==null)continue;
-                if(count++>=120)break;
-                b.append(pm.getApplicationLabel(info)).append(" | ").append(info.packageName).append("\n");
+                if(count++>=80)break;
+                String line=pm.getApplicationLabel(info)+" | "+info.packageName+"\n";
+                if(b.length()+line.length()>maxChars)break;
+                b.append(line);
             }
             return b.toString();
         }catch(Exception e){return "(app list unavailable)";}
@@ -426,6 +444,13 @@ public final class BrainCommandEngine {
         StringBuilder b=new StringBuilder();
         for(String abi:Build.SUPPORTED_ABIS){if(b.length()>0)b.append(", ");b.append(abi);}
         return b.toString();
+    }
+
+    private static String clip(String s,int max){
+        if(s==null)return "";
+        String x=s.trim();
+        if(x.length()<=max)return x;
+        return x.substring(0,Math.max(0,max-18))+"\n[clipped]";
     }
 
     private static String trim(String s){return s.length()>2000?s.substring(0,2000):s;}
