@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../core/function_pack.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
@@ -403,7 +402,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required int row,
     required SeatLayoutSpec spec,
     required double seatDiameter,
-    required TinniFunctionConfig config,
   }) {
     final range = spec.rangeForRow(row);
     return Row(
@@ -415,7 +413,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _buildSeat(
             index: index,
             seatDiameter: seatDiameter,
-            config: config,
           ),
       ],
     );
@@ -424,7 +421,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Widget _buildSeat({
     required int index,
     required double seatDiameter,
-    required TinniFunctionConfig config,
   }) {
     final seat = controller.seats[index];
     final occupied = seat.userName != null;
@@ -631,7 +627,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           row: row,
                           spec: seatSpec,
                           seatDiameter: seatDiameter,
-                          config: config,
                         ),
                       ),
                   ],
