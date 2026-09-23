@@ -19,7 +19,7 @@ public final class AutonomyComponents {
         boolean modelReady=model.isFile()&&model.length()>16L*1024L*1024L;
         boolean runtimeReady=BrainRuntimePaths.runtimeReady(c);
 
-        return "Anamika 13 autonomy components"+
+        return "Anamika autonomy components"+
                 "\nLocal builder: "+(build.ready?"READY":"NOT READY")+
                 "\n"+build.detail+
                 "\nSigner: "+(SignerVault.ready(c)?"READY":"NOT READY")+
