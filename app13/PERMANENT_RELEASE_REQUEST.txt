@@ -1,27 +1,20 @@
-Anamika identity + media-friendly wake + continuous language learning release
+Anamika updater + offline prompt-budget fix release
 Requested: 2026-09-23
 
-User-facing identity:
-- App/launcher/display name is Anamika, not Anamika AI 13 / Anamika 13.
-- Natural chat, command planner, diagnostics, setup, connector, plugin, signer and self-update UI identify the assistant as Anamika.
-- Internal package/schema/pref identifiers stay compatible with existing installs, data and packs.
+Self Update fix:
+- Show current installed version and explicitly require a higher-version APK/local candidate.
+- After APK selection show two-stage progress: package/signature/version verification, then bundled source/duplicate/core validation.
+- For a clean already-compiled permanent-signed APK, do not waste time rebuilding it locally; unlock Install Verified Update after source validation passes.
+- If bundled source validation fails, preserve the strict behavior: repair the source, real-build/sign it locally, verify it, and only then allow installation.
+- Keep owner/Android final install confirmation and old-version archive behavior.
 
-Media-friendly Wake ON:
-- Keep owner Wake ON setting enabled while temporarily yielding the microphone during active media/calls/voice-chat/social recording.
-- Observe Android playback changes and release the wake SpeechRecognizer as soon as active playback appears.
-- Observe recording configurations and yield for competing recording sources while ignoring VOICE_RECOGNITION used by the wake recognizer.
-- Retry/resume wake listening automatically after media/communication activity ends.
-- Preserve explicit foreground voice capture behavior and Android/OEM limitations.
-
-Continuous language learning:
-- Add a local/private AdaptiveLanguageLearner enabled by default.
-- Learn recurring owner Hinglish/mobile-typing phrases and explicitly stated vocabulary meanings from normal conversation.
-- Exclude likely code, URLs/emails, long numbers and password/PIN/OTP/key material from adaptive phrase storage.
-- Feed the learned profile into UnderstandingPackStore so both natural chat and command planning use it.
-- Use learned vocabulary as an additional signal when choosing among voice-recognition transcript candidates.
-- Add language-learning status/on/off/reset owner commands.
-- This is runtime contextual learning, not GGUF model-weight fine-tuning, and it remains local app data.
+Offline brain context fix:
+- Hard-budget Understanding Pack guidance by local inference effort.
+- Reduce Instant natural-chat memory/profile payload so a 2048-token chat context cannot be flooded by the large one-month language profile.
+- Budget BrainCommandEngine owner profile, recent memory, Function Pack catalog and installed-app catalog against Instant/Medium/Hard context sizes.
+- Preserve adaptive language learning while clipping prompt context safely.
+- Fix the observed error where a ~35,850-token request exceeded the 2,048-token Instant natural-chat context.
 
 Preservation:
-- Keep Function Pack, Understanding Pack, strict self-update quality gate, duplicate guard, Code Doctor, old-version archive, update scorecard, signer and all prior functions.
-- Same package/signing identity; install as an in-place permanent-signed update over the existing Anamika app.
+- Keep Anamika identity, media-friendly Wake ON, continuous language learning, Function Pack, Understanding Pack, Code Doctor, duplicate guard, update scorecard, signer and all prior functions.
+- Same package/signing identity; install as an in-place update.
