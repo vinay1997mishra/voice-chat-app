@@ -99,8 +99,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'Game',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GamesScreen(state: widget.state))),
               ),
-              _MineTile(icon: Icons.groups_rounded, label: 'Family', onTap: () {}),
-              _MineTile(icon: Icons.favorite_rounded, label: 'CP', onTap: () {}),
+              _MineTile(
+                icon: Icons.groups_rounded,
+                label: 'Family',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FeatureCenterScreen(state: widget.state),
+                  ),
+                ).then((_) => setState(() {})),
+              ),
+              _MineTile(
+                icon: Icons.favorite_rounded,
+                label: 'CP',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FeatureCenterScreen(state: widget.state),
+                  ),
+                ).then((_) => setState(() {})),
+              ),
               _MineTile(
                 icon: Icons.grid_view_rounded,
                 label: 'More',
