@@ -17,7 +17,6 @@ import android.media.AudioManager;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecordingConfiguration;
 import android.media.MediaRecorder;
-import android.os.Process;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -234,7 +233,7 @@ public final class WakeService extends Service implements RecognitionListener {
             if(mode==AudioManager.MODE_IN_CALL||mode==AudioManager.MODE_IN_COMMUNICATION)
                 return true;
             if(am.isMusicActive())return true;
-            if(Build.VERSION.SDK_INT>=29&&hasCompetingRecording(am.getActiveRecordingConfigurations()))
+            if(Build.VERSION.SDK_INT>=24&&hasCompetingRecording(am.getActiveRecordingConfigurations()))
                 return true;
             return false;
         }catch(Throwable ignored){
@@ -261,7 +260,7 @@ public final class WakeService extends Service implements RecognitionListener {
                 audioManager.registerAudioPlaybackCallback(playbackCallback,handler);
             }
 
-            if(Build.VERSION.SDK_INT>=29){
+            if(Build.VERSION.SDK_INT>=24){
                 recordingCallback=new AudioManager.AudioRecordingCallback(){
                     @Override public void onRecordingConfigChanged(List<AudioRecordingConfiguration> configs){
                         if(stopping||!isEnabled(WakeService.this))return;
@@ -282,8 +281,7 @@ public final class WakeService extends Service implements RecognitionListener {
         for(AudioPlaybackConfiguration x:configs){
             if(x==null)continue;
             try{
-                if(x.getPlayerState()!=AudioPlaybackConfiguration.PLAYER_STATE_STARTED)continue;
-                if(Build.VERSION.SDK_INT>=29&&x.getClientUid()==Process.myUid())continue;
+                if(!x.isActive())continue;
                 return true;
             }catch(Throwable ignored){}
         }
@@ -295,10 +293,8 @@ public final class WakeService extends Service implements RecognitionListener {
         for(AudioRecordingConfiguration x:configs){
             if(x==null)continue;
             try{
-                if(x.getClientUid()==Process.myUid())continue;
                 int source=x.getClientAudioSource();
-                if(source==MediaRecorder.AudioSource.VOICE_RECOGNITION||
-                        source==MediaRecorder.AudioSource.HOTWORD)
+                if(source==MediaRecorder.AudioSource.VOICE_RECOGNITION)
                     continue;
                 return true;
             }catch(Throwable ignored){}
@@ -318,7 +314,7 @@ public final class WakeService extends Service implements RecognitionListener {
                 audioManager.unregisterAudioPlaybackCallback(playbackCallback);
         }catch(Throwable ignored){}
         try{
-            if(audioManager!=null&&recordingCallback!=null&&Build.VERSION.SDK_INT>=29)
+            if(audioManager!=null&&recordingCallback!=null&&Build.VERSION.SDK_INT>=24)
                 audioManager.unregisterAudioRecordingCallback(recordingCallback);
         }catch(Throwable ignored){}
         playbackCallback=null;
