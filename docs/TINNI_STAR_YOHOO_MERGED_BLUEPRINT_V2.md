@@ -267,15 +267,20 @@ Core:
 - seat/mic.
 - chat.
 - gift.
-- room tools.
 - KTV.
 - game.
 - BGM/music.
 - share.
-- settings.
 - room theme.
 - moderation.
 - activities.
+
+### Room Settings entry point — LOCKED
+- The 4-box / grid icon in the room toolbar is the Room Settings button.
+- Tapping that 4-box icon opens the room-wide Settings / Tools panel.
+- This control must not be treated as a generic overflow menu.
+- Kick Out / Block are not shown in this Room Settings panel.
+- User-specific moderation is opened by tapping the target user's ID / avatar / occupied seat / user card.
 
 Room chat and seat area must coexist without one covering the other.
 
@@ -560,7 +565,7 @@ Highest-priority reference gaps:
 4. Owner seat behavior: whether Owner has a fixed seat, special frame, crown/badge, auto-seat, and what happens when Owner leaves mic but stays in room.
 5. Admin behavior: how Owner appoints/removes Admin, admin count limit, admin badge/frame, exact controls visible to Admin.
 6. Room member list and member card: exact tabs, online/on-mic sorting, action menu and profile popup.
-7. Room Settings / More drawer: exact controls, grouping and every room-wide toggle/action. Kick Out / Block are explicitly excluded from this surface and belong to the user-specific action sheet.
+7. Room Settings panel opened from the 4-box/grid room-toolbar icon: exact internal controls, grouping and every room-wide toggle/action. Kick Out / Block are explicitly excluded from this surface and belong to the user-specific action sheet.
 8. Free-mic vs apply-mic room UX: request queue, invite popup, approval/rejection, timeout and seat assignment animation.
 9. Seat lock/move UX: long-press/tap behavior, move user between seats, locked-seat appearance, reserved-seat behavior.
 10. Gift panel exact interaction: recipient selection, multi-select, combo window, quantity selector, backpack, gift categories and effect preview.
