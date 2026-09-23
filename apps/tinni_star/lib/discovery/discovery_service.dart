@@ -84,6 +84,7 @@ class DiscoveryService {
         activity: true,
         seatCount: 12,
         createdAt: now.subtract(const Duration(days: 60)),
+        ownerId: '1524843',
       ),
       RoomSummary(
         id: '10000001',
@@ -93,6 +94,7 @@ class DiscoveryService {
         activity: true,
         seatCount: 15,
         createdAt: now.subtract(const Duration(days: 5)),
+        ownerId: '10000001',
       ),
       RoomSummary(
         id: '10000002',
@@ -101,6 +103,7 @@ class DiscoveryService {
         online: 54,
         seatCount: 10,
         createdAt: now.subtract(const Duration(days: 25)),
+        ownerId: '10000002',
       ),
       RoomSummary(
         id: '10000003',
@@ -109,6 +112,7 @@ class DiscoveryService {
         online: 44,
         seatCount: 12,
         createdAt: now.subtract(const Duration(days: 2)),
+        ownerId: '10000003',
       ),
       RoomSummary(
         id: '10000004',
@@ -117,6 +121,7 @@ class DiscoveryService {
         online: 24,
         seatCount: 8,
         createdAt: now.subtract(const Duration(days: 10)),
+        ownerId: '10000004',
       ),
     ];
   }
