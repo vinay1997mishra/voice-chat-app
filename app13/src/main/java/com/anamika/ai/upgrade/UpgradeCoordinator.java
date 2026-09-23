@@ -252,24 +252,41 @@ public final class UpgradeCoordinator {
                     .remove(LAST_CANDIDATE)
                     .apply();
 
+            com.anamika.ai.developer.CodeDoctor.Report sourceCheck=CandidateValidator.validateWorkspace(ws);
+            UpgradeJournal.record(c,sourceCheck.clean?"UPLOADED_SOURCE_CLEAN":"UPLOADED_SOURCE_REPAIR_NEEDED",
+                    sourceCheck.text());
+
+            if(sourceCheck.clean){
+                c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                        .putString(LAST_CANDIDATE,uploadedApk.getAbsolutePath()).apply();
+                return new UploadedResult(true,uploadedApk,
+                        "UPLOADED UPDATE SOURCE CHECK PASS\n"+
+                        "Package/signature/version: PASS\n"+
+                        "Bundled source + duplicate/core checks: PASS\n"+
+                        "APK already compiled and signed correctly, isliye unnecessary phone rebuild skip kiya gaya.\n"+
+                        "Agar source check fail hota to Anamika repair + fresh signed build karti.");
+            }
+
             UpgradeQualityGate.Result gated=UpgradeQualityGate.run(
                     c,ws,
                     "Validate uploaded Anamika version "+initial.versionCode+
-                    ". Repair any wrong/incomplete code or integration before rebuilding. "+
-                    "Preserve unrelated existing functions and update existing implementations in place without duplicate copies.");
+                    ". Source validation failed, so repair every wrong/incomplete code or integration before rebuilding. "+
+                    "Preserve unrelated existing functions and update existing implementations in place without duplicate copies. "+
+                    "Initial validation failures:\n"+sourceCheck.text());
 
             UpgradeJournal.record(c,gated.ok?"UPLOADED_APK_QUALITY_PASS":"UPLOADED_APK_QUALITY_FAIL",gated.log);
             if(!gated.ok)
                 return new UploadedResult(false,null,
-                        "Uploaded update failed strict code/build quality gate. Install blocked.\n"+gated.log);
+                        "Uploaded update source me problem mili aur strict repair/build quality gate fail hua. Install blocked.\n"+
+                        sourceCheck.text()+"\n"+gated.log);
 
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
                     .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
 
             return new UploadedResult(true,gated.apk,
-                    "UPLOADED UPDATE QUALITY PASS\n"+
-                    "Bundled source inspected; wrong code would be repaired before use.\n"+
-                    "Duplicate-function guard PASS. Fresh real build + signing + APK verification PASS.\n"+
+                    "UPLOADED UPDATE REPAIRED + QUALITY PASS\n"+
+                    "Initial source issue detect hui; Anamika ne repair karke fresh signed build banaya.\n"+
+                    "Duplicate-function guard + real build + APK verification PASS.\n"+
                     gated.log);
         }catch(Exception e){
             UpgradeJournal.record(c,"UPLOADED_APK_CHECK_FAIL",safe(e));
