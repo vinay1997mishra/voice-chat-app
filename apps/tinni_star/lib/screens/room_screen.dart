@@ -260,15 +260,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               return;
                             }
                             Navigator.pop(context);
-                            widget.state.effects.enqueue(
-                              EffectRequest(
-                                id:
-                                    'gift-${widget.state.gifts.sent.length}',
-                                kind: EffectKind.gift,
-                                asset: '${gift.effectKind}:${gift.id}',
-                                priority: 50,
-                              ),
-                            );
+                            if (widget.state.roomControls.effectsEnabled) {
+                              widget.state.effects.enqueue(
+                                EffectRequest(
+                                  id:
+                                      'gift-${widget.state.gifts.sent.length}',
+                                  kind: EffectKind.gift,
+                                  asset: '${gift.effectKind}:${gift.id}',
+                                  priority: 50,
+                                ),
+                              );
+                            }
                             widget.state.activities
                                 .addGiftScore(senderId, tx.totalCost);
                             widget.state.identity
