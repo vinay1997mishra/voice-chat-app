@@ -244,7 +244,7 @@ class _UnoScreenState extends State<UnoScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 scrollDirection: Axis.horizontal,
                 itemCount: game.playerHand.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 7),
+                separatorBuilder: (_, _) => const SizedBox(width: 7),
                 itemBuilder: (_, index) {
                   final card = game.playerHand[index];
                   return GestureDetector(
