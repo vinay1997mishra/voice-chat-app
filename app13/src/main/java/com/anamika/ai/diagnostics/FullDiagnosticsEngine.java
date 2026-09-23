@@ -92,7 +92,7 @@ public final class FullDiagnosticsEngine {
 
         public String summary(){
             StringBuilder b=new StringBuilder();
-            b.append("Anamika 13 • Full Functional Diagnostics")
+            b.append("Anamika • Full Functional Diagnostics")
                     .append("\nPASS: ").append(count(State.PASS))
                     .append(" | FAIL: ").append(count(State.FAIL))
                     .append(" | LIVE TEST: ").append(count(State.LIVE_TEST_REQUIRED))
