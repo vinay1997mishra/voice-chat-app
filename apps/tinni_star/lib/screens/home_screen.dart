@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -708,6 +710,65 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class _RoomArtwork extends StatelessWidget {
+  const _RoomArtwork({
+    required this.room,
+    required this.width,
+    required this.height,
+    this.icon,
+    this.fallback,
+  });
+
+  final RoomSummary room;
+  final double width;
+  final double height;
+  final IconData? icon;
+  final String? fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = room.photoPath;
+    final hasLocalPhoto =
+        path != null && path.isNotEmpty && File(path).existsSync();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: width,
+        height: height,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: RoyalPalette.gold),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF382608), Color(0xFF090704)],
+          ),
+        ),
+        child: hasLocalPhoto
+            ? Image.file(
+                File(path),
+                width: width,
+                height: height,
+                fit: BoxFit.cover,
+              )
+            : fallback != null
+                ? Text(
+                    fallback!,
+                    style: const TextStyle(
+                      color: RoyalPalette.gold,
+                      fontSize: 40,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  )
+                : Icon(
+                    icon ?? Icons.graphic_eq_rounded,
+                    color: RoyalPalette.gold,
+                    size: 34,
+                  ),
+      ),
+    );
+  }
+}
+
 class _MineRoomCard extends StatelessWidget {
   const _MineRoomCard({
     super.key,
@@ -725,25 +786,11 @@ class _MineRoomCard extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       child: Row(
         children: [
-          Container(
+          _RoomArtwork(
+            room: room,
             width: 88,
             height: 88,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF4A3308), Color(0xFF0B0905)],
-              ),
-              border: Border.all(color: RoyalPalette.gold),
-            ),
-            child: Text(
-              room.title.characters.first.toUpperCase(),
-              style: const TextStyle(
-                color: RoyalPalette.gold,
-                fontSize: 44,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            fallback: room.title.characters.first.toUpperCase(),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -811,20 +858,11 @@ class _RecentRoomTile extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: Container(
+            child: _RoomArtwork(
+              room: room,
               width: double.infinity,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF382608), Color(0xFF090704)],
-                ),
-              ),
-              child: Icon(
-                Icons.graphic_eq_rounded,
-                color: RoyalPalette.gold,
-                size: 34,
-              ),
+              height: double.infinity,
+              icon: Icons.graphic_eq_rounded,
             ),
           ),
           const SizedBox(height: 6),
@@ -1050,21 +1088,11 @@ class _RoomListCard extends StatelessWidget {
         onTap: onTap,
         child: Row(
           children: [
-            Container(
+            _RoomArtwork(
+              room: room,
               width: 74,
               height: 74,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: RoyalPalette.gold),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF31210A), Color(0xFF0A0805)],
-                ),
-              ),
-              child: const Icon(
-                Icons.graphic_eq_rounded,
-                color: RoyalPalette.gold,
-                size: 34,
-              ),
+              icon: Icons.graphic_eq_rounded,
             ),
             const SizedBox(width: 11),
             Expanded(
