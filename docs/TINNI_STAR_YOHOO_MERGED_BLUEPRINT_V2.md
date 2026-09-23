@@ -284,6 +284,40 @@ Core:
 
 Room chat and seat area must coexist without one covering the other.
 
+## 13A. Room Level / Kickout List — LOCKED FROM REFERENCE
+
+Room Settings contains a Room Level / management area that includes Kickout List.
+
+Kickout List is a room-level moderation history/audit surface, not the same thing as the user-specific Kick Out action.
+
+Each Kickout record must show:
+- Kicked user's display name.
+- Kicked user's user ID.
+- Kick date.
+- Kick time.
+- Admin/moderator who performed the kick: display name.
+- Admin/moderator who performed the kick: user ID.
+- Kickout status/action label visible against the record.
+
+Interaction split:
+- To kick a user now: Owner/Admin taps that user's ID/avatar/occupied seat/user card, then uses the user-specific action menu.
+- To review past kicks: Owner/Admin opens the 4-box Room Settings panel, then opens Kickout List.
+- Kickout List is therefore historical/audit information, while user-action Kick Out is an immediate moderation command.
+
+Data model recommendation:
+RoomKickRecord {
+  roomId
+  targetUserId
+  targetUserName
+  kickedByUserId
+  kickedByUserName
+  kickedAt
+  reason? 
+  status
+}
+
+The backend should be authoritative for this audit history so reconnect/reinstall does not erase it.
+
 ## 14. Member/user action sheet — LOCKED AT INTERACTION-ENTRY LEVEL
 
 Entry rule:
@@ -610,6 +644,6 @@ Still video-dependent:
 - exact control placement.
 - exact seat visual modes.
 - exact frame compositing.
-- exact owner/admin settings control list and admin permission boundary. User-specific Kick/Block entry point is now locked.
+- exact remaining Room Settings option list and admin permission boundary. 4-box Room Settings entry, user-specific Kick/Block entry, and room-level Kickout List audit fields are now locked.
 - exact dialogs/animations.
 - exact state transitions visible to users.
