@@ -29,6 +29,7 @@ import '../infra/platform_services.dart';
 import '../media/ktv_features.dart';
 import '../media/ktv_service.dart';
 import '../moderation/moderation_service.dart';
+import '../owner/owner_panel_service.dart';
 import '../party/party_service.dart';
 import '../profile/profile_service.dart';
 import '../relationship/cp_features.dart';
@@ -57,6 +58,7 @@ class TinniState {
         ranks = RankFeatureService(),
         effects = EffectQueue(),
         moderation = ModerationService(),
+        ownerPanel = OwnerPanelService(),
         roomControls = RoomControlService(),
         backpack = BackpackService(),
         giftAtlas = GiftAtlasService(),
@@ -127,6 +129,7 @@ class TinniState {
   final RankFeatureService ranks;
   final EffectQueue effects;
   final ModerationService moderation;
+  final OwnerPanelService ownerPanel;
   final RoomControlService roomControls;
   late final ActiveRoomSession roomSession;
   final BackpackService backpack;
