@@ -45,6 +45,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> createRoom() async {
+    final ownerId = widget.state.auth.current?.userId ?? '10000000';
+    final existing = widget.state.discovery.ownedRooms(ownerId);
+    if (existing.isNotEmpty) {
+      openRoom(existing.first);
+      return;
+    }
+
     final result = await showModalBottomSheet<_CreateRoomResult>(
       context: context,
       isScrollControlled: true,
@@ -55,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted || result == null) return;
 
-    final ownerId = widget.state.auth.current?.userId ?? '10000000';
     final room = widget.state.discovery.createRoom(
       title: result.title,
       country: result.country,
