@@ -173,6 +173,7 @@ Room Admin:
 - CAN remove a user from a seat / send user down from mic.
 - CAN lock/unlock seats.
 - CAN mute/unmute seats.
+- CAN directly take an empty seat / go on mic without submitting Apply Mic, even when the room is in Apply Mic mode.
 
 All permission checks must also be enforced server-side; hiding a button in UI is not sufficient.
 
@@ -463,6 +464,7 @@ Admin-visible moderation is intentionally limited:
 - Remove user from seat / send user down from mic.
 - Seat lock/unlock.
 - Seat mute/unmute.
+- Directly take an empty seat / go on mic without Apply Mic.
 
 Admin must not receive room-wide Settings controls or Kickout List/Unkick controls.
 
@@ -481,7 +483,7 @@ Admin must not receive room-wide Settings controls or Kickout List/Unkick contro
 | Remove user from seat | YES | YES |
 | Lock / unlock seat | YES | YES |
 | Mute / unmute seat | YES | YES |
-| Directly take empty seat | YES | YES |
+| Directly take empty seat / go on mic without Apply Mic | YES | YES |
 
 This matrix is authoritative for Tinni Star unless the owner later changes it.
 
