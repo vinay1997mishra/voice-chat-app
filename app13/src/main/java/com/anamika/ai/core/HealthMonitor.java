@@ -24,7 +24,7 @@ public final class HealthMonitor {
         int battery=bm==null?-1:bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
 
         return String.format(Locale.US,
-                "Anamika 13 health\nRAM available: %.1f GB\nLow-memory: %s\nPrivate storage free: %.1f GB / %.1f GB\nBattery: %s",
+                "Anamika health\nRAM available: %.1f GB\nLow-memory: %s\nPrivate storage free: %.1f GB / %.1f GB\nBattery: %s",
                 mi.availMem/1073741824.0,
                 mi.lowMemory?"YES":"no",
                 free/1073741824.0,
