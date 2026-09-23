@@ -79,6 +79,19 @@ class RoomControlService {
   int? luckyNumber;
   String themeId = 'royal-dark';
 
+  void configureForRoom(String ownerUserId) {
+    roles.clear();
+    roomBlacklist.clear();
+    invitedUsers.clear();
+    micBans.clear();
+    lockedSeats.clear();
+    seatUsers.clear();
+    micApplications.clear();
+    hostSeat = null;
+    bossSeat = null;
+    roles[ownerUserId] = RoomRole.owner;
+  }
+
   void setOwner(String userId) => roles[userId] = RoomRole.owner;
 
   void setAdmin(String userId, bool enabled) {
