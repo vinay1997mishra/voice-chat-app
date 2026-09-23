@@ -1,0 +1,24 @@
+name: Tinni Star Blueprint Export
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md'
+      - '.github/workflows/tinni-star-blueprint-export.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload blueprint
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tinni-Star-Complete-Blueprint
+          path: docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md
+          if-no-files-found: error
+          retention-days: 90
