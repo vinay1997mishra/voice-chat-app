@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../games/game_service.dart';
 import '../ui/royal_theme.dart';
+import 'ludo_screen.dart';
+import 'uno_screen.dart';
 
 class GamesScreen extends StatefulWidget {
   const GamesScreen({super.key, required this.state});
@@ -30,10 +32,22 @@ class _GamesScreenState extends State<GamesScreen> {
   @override
   Widget build(BuildContext context) {
     final games = [
-      ('Lucky 777', GameType.lucky777, Icons.casino_rounded),
-      ('Blackjack', GameType.blackjack, Icons.style_rounded),
-      ('Gift Draw', GameType.giftDraw, Icons.card_giftcard_rounded),
-      ('Guessing', GameType.guessing, Icons.psychology_alt_rounded),
+      ('Ludo', Icons.grid_4x4_rounded, () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LudoScreen()),
+        );
+      }),
+      ('UNO', Icons.style_rounded, () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UnoScreen()),
+        );
+      }),
+      ('Lucky 777', Icons.casino_rounded, () => play(GameType.lucky777)),
+      ('Blackjack', Icons.style_rounded, () => play(GameType.blackjack)),
+      ('Gift Draw', Icons.card_giftcard_rounded, () => play(GameType.giftDraw)),
+      ('Guessing', Icons.psychology_alt_rounded, () => play(GameType.guessing)),
     ];
     return Scaffold(
       appBar: AppBar(title: const Text('Game Center')),
@@ -108,7 +122,7 @@ class _GamesScreenState extends State<GamesScreen> {
             itemBuilder: (_, index) {
               final game = games[index];
               return RoyalPanel(
-                onTap: () => play(game.$2),
+                onTap: game.$3,
                 gradient: LinearGradient(
                   colors: [
                     RoyalPalette.panel2,
@@ -118,7 +132,7 @@ class _GamesScreenState extends State<GamesScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(game.$3, color: RoyalPalette.gold, size: 38),
+                    Icon(game.$2, color: RoyalPalette.gold, size: 38),
                     const SizedBox(height: 8),
                     Text(
                       game.$1,
