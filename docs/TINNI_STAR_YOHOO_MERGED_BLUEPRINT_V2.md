@@ -502,7 +502,9 @@ This matrix is authoritative for Tinni Star unless the owner later changes it.
 A normal user entering someone else's room receives only self-scoped room controls.
 
 Normal-user rule:
-- Any room setting shown to a normal user applies only to that user's own experience/session.
+- Any room setting shown while a user is inside SOMEONE ELSE'S room applies only to that user's own experience/session.
+- Those controls must never modify that other room's owner-level configuration.
+- To change the user's own room configuration, the user must enter/open THEIR OWN room and use Room Settings there.
 - A normal user cannot change room-wide settings.
 - A normal user cannot change another user's seat/mic state.
 - A normal user cannot lock/unlock seats for others.
@@ -522,6 +524,11 @@ Examples of normal-user self-scoped controls may include:
 - gift/chat/member/profile interactions
 - personal audio/effect/display preferences shown in the room UI
 
+### Context rule: own room vs someone else's room — LOCKED
+- Inside another user's room: visible personal settings are self-scoped only.
+- Inside the user's own room: Owner-level Room Settings become available.
+- A user's own Room Settings are not editable remotely from someone else's room.
+
 ### Personal Block / Unblock — LOCKED
 
 Blocking another user is a personal social/privacy action, not a room-wide moderation action.
@@ -536,23 +543,57 @@ Unblock flow:
 - User can also open their own profile/account Blocklist and remove that blocked user from the Blocklist.
 - Both paths must update the same underlying personal block state.
 
+### Asymmetric block behavior — LOCKED
+
+Example:
+User A blocks User B.
+
+After A blocks B:
+- B CANNOT enter A's room.
+- B CANNOT send a direct message to A.
+- A CANNOT send a direct message to B.
+- A CAN still enter B's room.
+- The room-entry restriction applies to the blocked user trying to enter the blocker's room.
+- The blocker is not automatically prevented from entering the blocked user's room.
+
+Therefore:
+- Messaging restriction is mutual while the block is active.
+- Room-entry restriction is directional:
+  blockedUser -> blocker's room = DENIED
+  blocker -> blockedUser's room = ALLOWED
+
+Unblock:
+- Restores direct messaging eligibility according to the normal social/message rules.
+- Restores the previously blocked user's ability to enter the blocker's room unless another independent room restriction exists.
+
 Important distinction:
 - Personal Block does NOT equal Room Kickout.
 - Personal Block belongs to the acting user's own social/privacy state.
 - Room Kickout belongs to Owner/Admin moderation state for that specific room.
-- A user can be personally blocked without being kicked from the room, and a kicked user can exist without being personally blocked unless a separate action explicitly does both.
+- Personal Block affects access to the blocker's owned room plus mutual direct messaging.
+- Room Kickout affects the target room only for the selected kick duration.
 
 Recommended model:
 UserBlockRelation {
-  ownerUserId
+  ownerUserId      // blocker
   blockedUserId
   blockedAt
   status // blocked | unblocked
 }
 
-The same relation must drive both:
+Access rule:
+canEnterRoom(viewerId, roomOwnerId):
+  deny if UserBlockRelation(ownerUserId=roomOwnerId, blockedUserId=viewerId) is active
+
+Direct-message rule:
+canDirectMessage(a, b):
+  deny if either active relation A->B or B->A exists
+
+The same relation must drive:
 1. Block/Unblock on the target user's profile/action sheet.
 2. The user's own Blocklist screen.
+3. Blocked-user admission check for the blocker's owned room.
+4. Direct-message eligibility.
 
 ## 15. Gifts — MERGED FROM YOHOO
 
