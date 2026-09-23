@@ -11,6 +11,7 @@ import com.anamika.ai.components.ComponentPacksActivity;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.developer.AutonomyComponents;
+import com.anamika.ai.developer.CodeIntakeAnalyzer;
 import com.anamika.ai.files.LocalVault;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.memory.MemoryStore;
@@ -48,7 +49,7 @@ public final class CommandRouter {
         String original=raw==null?"":raw.trim();
         if(original.isEmpty())return false;
         String rawLower=original.toLowerCase(Locale.ROOT);
-        if(startsDirectCode(rawLower)||startsSelfRepair(rawLower))return true;
+        if(startsDirectCode(rawLower)||startsSelfRepair(rawLower)||CodeIntakeAnalyzer.looksLikeCode(original))return true;
         String text=LanguageCommandInterpreter.normalize(original);
         String l=text.toLowerCase(Locale.ROOT);
         return l.equals("run self test")||l.equals("self test")||l.equals("full diagnostics")||
@@ -70,6 +71,9 @@ public final class CommandRouter {
             String code=directCodeBody(original);
             return UpgradeCoordinator.applyOwnerCode(a,code);
         }
+
+        if(CodeIntakeAnalyzer.looksLikeCode(original))
+            return UpgradeCoordinator.applyOwnerCode(a,original);
 
         if(startsSelfRepair(rawLower)){
             return UpgradeCoordinator.selfRepair(a,selfRepairProblem(original));
@@ -112,6 +116,8 @@ public final class CommandRouter {
             return RollbackManager.status(a);
         if(l.equals("version archive status")||l.equals("old version status")||l.equals("archive status"))
             return VersionArchiveManager.status(a);
+        if(l.equals("update scorecard")||l.equals("update quality")||l.equals("new version score"))
+            return com.anamika.ai.upgrade.UpdateScorecard.status(a);
         if(l.equals("delete old versions")||l.equals("delete old version")||l.equals("purane version delete karo"))
             return VersionArchiveManager.deleteOldVersions(a);
         if(l.equals("create recovery checkpoint")||l.equals("recovery checkpoint"))
