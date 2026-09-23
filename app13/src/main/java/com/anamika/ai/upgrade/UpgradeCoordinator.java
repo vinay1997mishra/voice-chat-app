@@ -76,7 +76,7 @@ public final class UpgradeCoordinator {
     public static String selfRepair(Context c,String ownerProblem){
         String problem=ownerProblem==null?"":ownerProblem.trim();
         if(problem.isEmpty())
-            problem="Inspect the latest local diagnostics and repair the current Anamika 13 implementation without removing unrelated features.";
+            problem="Inspect the latest local diagnostics and repair the current Anamika implementation without removing unrelated features.";
         if(!ComponentPackManager.brainInstalled(c))
             return "Self repair ke liye Offline Brain runtime + GGUF model READY hona chahiye.";
 
@@ -92,7 +92,7 @@ public final class UpgradeCoordinator {
             if(diagnostics.length()>12000)diagnostics=diagnostics.substring(0,12000);
 
             String request=
-                    "You are repairing Anamika AI 13 from inside Anamika herself. "+
+                    "You are repairing Anamika from inside Anamika herself. "+
                     "Use the owner problem statement plus latest local diagnostics to identify the concrete defect. "+
                     "Repair the existing V13 source in this workspace, preserve unrelated functions and package identity, "+
                     "connect the repaired behavior to the existing UI/router/runtime where needed, and do not claim success unless the edit plan is valid. "+
@@ -141,7 +141,7 @@ public final class UpgradeCoordinator {
                     .apply();
 
             OfflineCodingBrain.Result brain=OfflineCodingBrain.repair(c,ws,
-                    "Owner wants a new or changed Anamika 13 function. Implement the complete requested capability in the existing V13 architecture. "+
+                    "Owner wants a new or changed Anamika function. Implement the complete requested capability in the existing V13 architecture. "+
                     "Create any missing Java/XML/config files needed, connect the feature to the command/router/UI where appropriate, preserve package identity, "+
                     "and do not remove unrelated existing features. Owner request: "+r);
             UpgradeJournal.record(c,brain.ok?"AUTO_FEATURE_CODE_PASS":"AUTO_FEATURE_CODE_FAIL",brain.message);
@@ -188,7 +188,7 @@ public final class UpgradeCoordinator {
                     .apply();
 
             String request=
-                    "The owner supplied code directly for Anamika 13. Inspect it against the current V13 source. "+
+                    "The owner supplied code directly for Anamika. Inspect it against the current V13 source. "+
                     "Determine what function/change the code is intended to provide. Validate syntax, imports, APIs, package names, logic and integration. "+
                     "If the supplied code is wrong or incomplete, repair it before integrating. Preserve unrelated existing features and package identity. "+
                     "Create or modify only the files needed, connect the change to command/router/UI when appropriate, and return a valid edit plan. "+
@@ -292,7 +292,7 @@ public final class UpgradeCoordinator {
         File ws=latestWorkspace(c);
         LocalBuildEngine.Capability cap=LocalBuildEngine.capability(c);
         File apk=latestCandidate(c);
-        return "Anamika 13 local self-upgrade\nWorkspace: "+
+        return "Anamika local self-upgrade\nWorkspace: "+
                 (ws!=null&&ws.isDirectory()?ws.getAbsolutePath():"not created")+
                 "\nBrain: "+(ComponentPackManager.brainInstalled(c)?"READY":"NOT READY")+
                 "\nBuilder: "+(cap.ready?"READY":"NOT READY")+"\n"+cap.detail+
