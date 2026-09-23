@@ -164,7 +164,7 @@ public final class OfflineCodingBrain {
     private static String buildPrompt(Context c,File workspace,String ownerRequest,int maxContextChars,boolean retry)throws Exception{
         String memory=MemoryStore.promptContext(c,10,7000);
         StringBuilder b=new StringBuilder();
-        b.append("You are the offline coding brain for Anamika AI 13.\n")
+        b.append("You are the offline coding brain for Anamika.\n")
                 .append("Work ONLY on the provided workspace snapshot. Never use shell commands.\n")
                 .append(retry
                         ?"A previous attempt did not produce a usable JSON edit plan. This is the only retry. Output one JSON object and nothing else.\n"
