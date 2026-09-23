@@ -26,7 +26,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="Anamika AI 13"
+        android:label="Anamika"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
