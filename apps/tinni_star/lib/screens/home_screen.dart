@@ -894,41 +894,6 @@ class _InteractiveTopTabs extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoyalPanel(
-      onTap: onTap,
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: RoyalPalette.gold, size: 31),
-          const SizedBox(height: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard({
     super.key,
