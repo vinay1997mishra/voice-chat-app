@@ -105,30 +105,36 @@ class _LudoScreenState extends State<LudoScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: AspectRatio(
                   aspectRatio: 1,
-                  child: CustomPaint(
-                    painter: _LudoBoardPainter(
-                      game: game,
-                      playerColor: _playerColor,
-                    ),
-                    child: Stack(
-                      children: [
-                        for (final player in LudoPlayer.values)
-                          for (final token in game.tokens[player]!)
-                            _TokenButton(
-                              token: token,
-                              game: game,
-                              color: _playerColor(player),
-                              enabled:
-                                  player == game.currentPlayer &&
-                                  movable.contains(token.index),
-                              onTap: () {
-                                if (game.move(token.index)) {
-                                  setState(() {});
-                                }
-                              },
-                            ),
-                      ],
-                    ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final side = constraints.biggest.shortestSide;
+                      return CustomPaint(
+                        painter: _LudoBoardPainter(
+                          game: game,
+                          playerColor: _playerColor,
+                        ),
+                        child: Stack(
+                          children: [
+                            for (final player in LudoPlayer.values)
+                              for (final token in game.tokens[player]!)
+                                _TokenButton(
+                                  token: token,
+                                  game: game,
+                                  boardSize: side,
+                                  color: _playerColor(player),
+                                  enabled:
+                                      player == game.currentPlayer &&
+                                      movable.contains(token.index),
+                                  onTap: () {
+                                    if (game.move(token.index)) {
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -186,6 +192,7 @@ class _TokenButton extends StatelessWidget {
   const _TokenButton({
     required this.token,
     required this.game,
+    required this.boardSize,
     required this.color,
     required this.enabled,
     required this.onTap,
@@ -193,13 +200,14 @@ class _TokenButton extends StatelessWidget {
 
   final LudoToken token;
   final LudoGame game;
+  final double boardSize;
   final Color color;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final position = _LudoGeometry.positionFor(token, game);
+    final position = _LudoGeometry.positionFor(token, game, boardSize);
     return Positioned(
       left: position.dx - 13,
       top: position.dy - 13,
@@ -262,8 +270,11 @@ class _LudoGeometry {
     return cells;
   }
 
-  static Offset positionFor(LudoToken token, LudoGame game) {
-    final size = _lastSize;
+  static Offset positionFor(
+    LudoToken token,
+    LudoGame game,
+    double size,
+  ) {
     final cell = size / boardCells;
 
     if (token.isHome) {
@@ -311,8 +322,6 @@ class _LudoGeometry {
     );
   }
 
-  static double _lastSize = 350;
-  static void setSize(double size) => _lastSize = size;
 }
 
 class _LudoBoardPainter extends CustomPainter {
@@ -327,7 +336,6 @@ class _LudoBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final side = size.shortestSide;
-    _LudoGeometry.setSize(side);
     final cell = side / _LudoGeometry.boardCells;
 
     final background = Paint()..color = const Color(0xFFF4EAD2);
