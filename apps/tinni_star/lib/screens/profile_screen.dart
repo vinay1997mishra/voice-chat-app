@@ -7,7 +7,6 @@ import 'feature_center_screen.dart';
 import 'gifts_screen.dart';
 import 'games_screen.dart';
 import 'vip_screen.dart';
-import 'owner_panel_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -128,15 +127,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   MaterialPageRoute(builder: (_) => FeatureCenterScreen(state: widget.state)),
                 ).then((_) => setState(() {})),
               ),
-              if (widget.state.ownerPanel.isOwner(widget.state.auth.current?.userId))
-                _MineTile(
-                  icon: Icons.admin_panel_settings_rounded,
-                  label: 'Owner',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => OwnerPanelScreen(state: widget.state)),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 14),
