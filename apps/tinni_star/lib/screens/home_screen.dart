@@ -308,6 +308,7 @@ class _TopRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RoyalPanel(
+      key: Key('room-card-' + room.id),
       padding: const EdgeInsets.all(6),
       onTap: onTap,
       child: Column(

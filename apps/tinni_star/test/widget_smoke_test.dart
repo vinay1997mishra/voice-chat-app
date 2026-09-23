@@ -17,7 +17,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('India Official Room'), findsOneWidget);
 
-    await tester.tap(find.text('India Official Room').last);
+    final roomCard = find.byKey(const Key('room-card-1524843'));
+    await tester.ensureVisible(roomCard);
+    await tester.pumpAndSettle();
+    await tester.tap(roomCard);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
 
