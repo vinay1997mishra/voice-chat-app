@@ -112,14 +112,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final senderId = widget.state.auth.current?.userId ?? '10000000';
 
     List<(String, String)> recipients() {
-      final values = <(String, String)>[(ownerId, 'Room Owner')];
+      final values = <(String, String)>[];
+      if (ownerId != senderId) {
+        values.add((ownerId, 'Room Owner'));
+      }
       for (var index = 0; index < controller.seats.length; index++) {
         final seat = controller.seats[index];
         final name = seat.userName;
         if (name == null) continue;
         final id = name == 'You' ? senderId : 'seat-${index + 1}';
         if (id == senderId) continue;
+        if (values.any((item) => item.$1 == id)) continue;
         values.add((id, name));
+      }
+      _selectedGiftRecipients.removeWhere(
+        (id) => !values.any((item) => item.$1 == id),
+      );
+      if (_selectedGiftRecipients.isEmpty && values.isNotEmpty) {
+        _selectedGiftRecipients.add(values.first.$1);
       }
       return values;
     }
@@ -160,10 +170,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    key: const Key('gift-recipient-strip'),
-                    height: 88,
-                    child: ListView.separated(
+                  if (roomRecipients.isEmpty)
+                    const SizedBox(
+                      key: Key('gift-recipient-strip'),
+                      height: 88,
+                      child: Center(
+                        child: Text(
+                          'No other user is available for gifting.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      key: const Key('gift-recipient-strip'),
+                      height: 88,
+                      child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       scrollDirection: Axis.horizontal,
                       itemCount: roomRecipients.length,
@@ -241,8 +263,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         );
                       },
+                      ),
                     ),
-                  ),
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
@@ -259,6 +281,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
                           onTap: () {
+                            if (_selectedGiftRecipients.isEmpty) {
+                              _snack('Select at least one recipient.');
+                              return;
+                            }
                             final tx = widget.state.gifts.send(
                               gift: gift,
                               quantity: 1,
@@ -595,7 +621,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final numberController = TextEditingController(
       text: controls.luckyNumber?.toString() ?? '',
     );
-    final result = await showDialog<int?>(
+    final result = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Lucky Number'),
@@ -836,7 +862,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             children: [
               Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
               Text(
-                'ID ' + widget.room.id + ' • ' + widget.room.partyMode + (session.connected ? ' • Connected' : ' • Connecting'),
+                'ID ' +
+                    widget.room.id +
+                    ' • ' +
+                    (widget.state.roomControls.roomMode == 'event'
+                        ? 'Event hosting mode'
+                        : 'Friends-making Party') +
+                    (session.connected ? ' • Connected' : ' • Connecting'),
                 style: const TextStyle(fontSize: 10, color: RoyalPalette.muted),
               ),
             ],
