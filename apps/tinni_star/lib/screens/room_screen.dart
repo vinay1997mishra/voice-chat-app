@@ -189,7 +189,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       scrollDirection: Axis.horizontal,
                       itemCount: roomRecipients.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
                       itemBuilder: (_, index) {
                         final recipient = roomRecipients[index];
                         final selected =
