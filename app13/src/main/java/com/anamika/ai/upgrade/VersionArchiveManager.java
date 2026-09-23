@@ -45,6 +45,7 @@ public final class VersionArchiveManager {
             long current=currentVersion(c);
             if(candidateVersion<=current)
                 return "Archive preparation rejected: candidate version is not newer.";
+            String baseline=UpdateScorecard.captureBaseline(c);
             File archived=archiveCurrent(c,"before update to "+candidateVersion);
             SharedPreferences.Editor e=prefs(c).edit()
                     .putLong(EXPECTED_FROM,current)
@@ -58,7 +59,7 @@ public final class VersionArchiveManager {
             e.apply();
             UpgradeJournal.record(c,"OLD_VERSION_ARCHIVED",
                     "v"+current+" -> "+archived.getAbsolutePath()+"; expecting v"+candidateVersion);
-            return "Old version "+current+" archived safely. It will NOT be deleted automatically.";
+            return "Old version "+current+" archived safely. It will NOT be deleted automatically.\n"+baseline;
         }catch(Exception e){
             return "Could not archive current version; install must stay blocked: "+safe(e);
         }
@@ -143,7 +144,7 @@ public final class VersionArchiveManager {
             if(!verify.startsWith("PASS")){
                 prefs(c).edit().putInt(HEALTHY,0).putBoolean(STABLE,false)
                         .putString(VERIFY_STATUS,verify).apply();
-                return verify;
+                return verify+"\n\n"+UpdateScorecard.refresh(c,0,false,false,false);
             }
 
             File crash=CrashJournal.file(c);
@@ -157,7 +158,8 @@ public final class VersionArchiveManager {
                         .putString(VERIFY_STATUS,"New version had a recorded crash; healthy-launch count reset.")
                         .apply();
                 UpgradeJournal.record(c,"POST_UPDATE_CRASH","version="+current+" crash_ms="+crashMs);
-                return "New version had a recorded crash; stability count reset.";
+                return "New version had a recorded crash; stability count reset.\n\n"+
+                        UpdateScorecard.refresh(c,0,false,true,true);
             }
 
             int healthy=prefs(c).getInt(HEALTHY,0)+1;
@@ -170,9 +172,10 @@ public final class VersionArchiveManager {
             UpgradeJournal.record(c,stable?"POST_UPDATE_STABLE":"POST_UPDATE_HEALTHY",
                     "version="+current+" healthy="+healthy);
 
+            String score=UpdateScorecard.refresh(c,healthy,stable,false,true);
             if(stable)
-                return "New version "+current+" is stable-verified after source checks and 3 healthy launches.";
-            return "Post-update healthy launch "+healthy+"/3.";
+                return "New version "+current+" is stable-verified after source checks and 3 healthy launches.\n\n"+score;
+            return "Post-update healthy launch "+healthy+"/3.\n\n"+score;
         }catch(Exception e){
             return "Post-update healthy check failed: "+safe(e);
         }
@@ -189,7 +192,8 @@ public final class VersionArchiveManager {
             p.edit().putBoolean(REMINDER,true).apply();
             return "New version "+current+" source/consistency checks aur 3 healthy launches PASS kar chuki hai. "+
                     "Old version "+old+" abhi bhi safe archive me hai. Agar aap chaho to 'delete old versions' bolo. "+
-                    "Main aapke order ke bina old version delete nahi karungi.";
+                    "Main aapke order ke bina old version delete nahi karungi.\n\n"+
+                    UpdateScorecard.status(c);
         }catch(Exception e){return "";}
     }
 
@@ -206,7 +210,8 @@ public final class VersionArchiveManager {
                 "\nPost-update: "+p.getString(VERIFY_STATUS,"not pending")+
                 "\nHealthy launches: "+p.getInt(HEALTHY,0)+"/3"+
                 "\nStable verified: "+(p.getBoolean(STABLE,false)?"YES":"NO")+
-                "\nAuto-delete old versions: NEVER";
+                "\nAuto-delete old versions: NEVER"+
+                "\n\n"+UpdateScorecard.status(c);
     }
 
     /** Explicit owner action only. Deletes all archives older than the installed version. */
