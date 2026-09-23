@@ -53,7 +53,7 @@ public final class ComponentPacksActivity extends Activity {
         box.setPadding(p,p,p,p);
 
         TextView title=new TextView(this);
-        title.setText("Anamika 13 • Offline Components");
+        title.setText("Anamika • Offline Components");
         title.setTextSize(23);
         box.addView(title);
 
