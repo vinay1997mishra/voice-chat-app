@@ -42,7 +42,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _openRoom() async => widget.state.roomSession.open(widget.room);
+  Future<void> _openRoom() async => widget.state.roomSession.open(
+        widget.room,
+        userId: widget.state.auth.current?.userId ?? '10000000',
+      );
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
