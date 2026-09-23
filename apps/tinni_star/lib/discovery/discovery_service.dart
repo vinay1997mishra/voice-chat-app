@@ -72,7 +72,6 @@ class DiscoveryService {
   final List<String> recentRoomIds = <String>[];
   final Set<String> favorites = <String>{};
   final Set<String> followingRoomIds = <String>{};
-  int _nextRoomId = 20000000;
 
   static List<RoomSummary> _defaultRooms() {
     final now = DateTime.now();
