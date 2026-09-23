@@ -124,7 +124,7 @@ public final class SignerVault {
             String candidate=sha256(cert.getEncoded());
             String installed=installedCertSha256(c);
             if(!candidate.equalsIgnoreCase(EXPECTED_RELEASE_CERT_SHA256))
-                return "Signer rejected: this is not the pinned Anamika 13 permanent release key.";
+                return "Signer rejected: this is not the pinned Anamika permanent release key.";
             if(!candidate.equalsIgnoreCase(installed))
                 return "Signer rejected: certificate does not match installed Anamika.";
 
