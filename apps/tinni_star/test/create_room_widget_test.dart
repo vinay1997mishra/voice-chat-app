@@ -25,7 +25,10 @@ void main() {
       find.byKey(const Key('create-room-name')),
       'My Safe Room',
     );
-    await tester.tap(find.byKey(const Key('create-room-submit')));
+    final submit = find.byKey(const Key('create-room-submit'));
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
 
     // Finish modal removal + deferred room route push.
     await tester.pump();
