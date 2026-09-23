@@ -1,0 +1,124 @@
+name: Build Anamika Brain ARM64
+
+on:
+  push:
+    branches: [ anamika-v13-local-self-upgrade ]
+    paths:
+      - 'tools/anamika-brain/**'
+      - '.github/workflows/anamika-brain-arm64.yml'
+      - 'app13/src/main/java/com/anamika/ai/components/**'
+      - 'app13/src/main/java/com/anamika/ai/developer/OfflineCodingBrain.java'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checkout pinned llama.cpp
+        uses: actions/checkout@v5
+        with:
+          repository: ggml-org/llama.cpp
+          ref: v0.4.1
+          path: third_party/llama.cpp
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android NDK
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;28.2.13676358"
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$SDKROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Build portable arm64 llama-cli
+        id: native
+        run: |
+          set -euo pipefail
+          build_one() {
+            local API="$1"
+            rm -rf build-arm64
+            cmake -S third_party/llama.cpp -B build-arm64               -DCMAKE_BUILD_TYPE=Release               -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake"               -DANDROID_ABI=arm64-v8a               -DANDROID_PLATFORM="android-$API"               -DANDROID_STL=c++_static               -DBUILD_SHARED_LIBS=OFF               -DGGML_NATIVE=OFF               -DGGML_OPENMP=OFF               -DGGML_LLAMAFILE=OFF               -DGGML_CPU_KLEIDIAI=OFF               -DLLAMA_OPENSSL=OFF               -DLLAMA_CURL=OFF               -DLLAMA_BUILD_TESTS=OFF               -DLLAMA_BUILD_EXAMPLES=OFF               -DLLAMA_BUILD_TOOLS=ON
+            cmake --build build-arm64 --config Release --target llama-cli --parallel 2
+            test -x build-arm64/bin/llama-cli
+          }
+
+          if build_one 21; then
+            echo "min_api=21" >> "$GITHUB_OUTPUT"
+          else
+            echo "API 21 native build failed; retrying supported portable baseline API 28."
+            build_one 28
+            echo "min_api=28" >> "$GITHUB_OUTPUT"
+          fi
+
+          file build-arm64/bin/llama-cli
+          stat -c%s build-arm64/bin/llama-cli
+
+      - name: Package Anamika Brain runtime component
+        env:
+          MIN_API: ${{ steps.native.outputs.min_api }}
+        run: |
+          set -euo pipefail
+          rm -rf brain-pack
+          mkdir -p brain-pack/payload/bin
+          cp build-arm64/bin/llama-cli brain-pack/payload/bin/llama-cli
+          cp tools/anamika-brain/anamika-brain brain-pack/payload/bin/anamika-brain
+          cp tools/anamika-brain/edit-plan.schema.json brain-pack/payload/edit-plan.schema.json
+          printf 'llama.cpp v0.4.1\n' > brain-pack/payload/runtime.ready
+          printf '%s\n' "$MIN_API" > brain-pack/payload/runtime.min_api
+          chmod +x brain-pack/payload/bin/llama-cli brain-pack/payload/bin/anamika-brain
+
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path("brain-pack")
+          files={}
+          for p in sorted((root/"payload").rglob("*")):
+              if p.is_file():
+                  files[str(p.relative_to(root)).replace("\\","/")]=hashlib.sha256(p.read_bytes()).hexdigest()
+          manifest={
+              "schema":"anamika13-component-pack-v1",
+              "type":"brain-runtime",
+              "version":"llama.cpp-v0.4.1-arm64",
+              "files":files,
+          }
+          (root/"manifest.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
+          PY
+
+          (cd brain-pack && zip -9 -r ../AnamikaAI-13-BrainRuntime-arm64.zip manifest.json payload)
+          sha256sum AnamikaAI-13-BrainRuntime-arm64.zip | tee AnamikaAI-13-BrainRuntime-arm64.zip.sha256
+          unzip -tq AnamikaAI-13-BrainRuntime-arm64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13-BrainRuntime-arm64
+          compression-level: 0
+          path: |
+            AnamikaAI-13-BrainRuntime-arm64.zip
+            AnamikaAI-13-BrainRuntime-arm64.zip.sha256
+
+      - name: Publish runtime prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/anamika-v13-local-self-upgrade'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIN_API: ${{ steps.native.outputs.min_api }}
+        run: |
+          set -euo pipefail
+          TAG="anamika-brain-v13-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             AnamikaAI-13-BrainRuntime-arm64.zip             AnamikaAI-13-BrainRuntime-arm64.zip.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika 13 Brain Runtime ARM64 • ${GITHUB_RUN_NUMBER}"             --notes "Pinned llama.cpp v0.4.1 ARM64 runtime for Anamika 13. Minimum native runtime API: $MIN_API. Import this ZIP from Anamika > Components, then import your GGUF model separately."             --prerelease

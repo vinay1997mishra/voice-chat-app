@@ -1,0 +1,113 @@
+name: Build Anamika 13 Clean
+
+on:
+  push:
+    branches: [ anamika-v13-local-self-upgrade ]
+    paths:
+      - 'app13/**'
+      - 'settings.gradle'
+      - 'build.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/anamika-v13-build.yml'
+      - 'tools/anamika-toolchain/**'
+      - 'tools/anamika-brain/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Install Android SDK 36
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDKROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Stage embedded ARM64 AAPT2
+        run: |
+          set -euo pipefail
+          bash tools/anamika-toolchain/stage-embedded-aapt2.sh
+          test -f app13/src/main/jniLibs/arm64-v8a/libanamika_aapt2.so
+
+      - name: Stage embedded ARM64 Brain runtime
+        run: |
+          set -euo pipefail
+          bash tools/anamika-brain/stage-embedded-brain.sh
+          test -f app13/src/main/jniLibs/arm64-v8a/libanamika_llama_cli.so
+
+      - name: Bundle verified Toolchain 13
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_URL="https://github.com/vinay1997mishra/voice-chat-app/releases/download/anamika-toolchain-v13-16/AnamikaAI-13-Toolchain-arm64.zip"
+          TOOLCHAIN_SHA="1f7a459b928892fce004f7b00ecc311944514a5695b8ce911246977cda022dbf"
+          mkdir -p app13/src/main/assets/components
+          curl -fL "$TOOLCHAIN_URL" -o app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip
+          echo "$TOOLCHAIN_SHA  app13/src/main/assets/components/AnamikaAI-13-Toolchain-arm64.zip" | sha256sum -c -
+
+      - name: Build clean V13 APK
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app13:assembleDebug
+          test -f app13/build/outputs/apk/debug/app13-debug.apk
+          unzip -tq app13/build/outputs/apk/debug/app13-debug.apk
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          "$AAPT" dump badging app13/build/outputs/apk/debug/app13-debug.apk | tee /tmp/badging.txt
+          grep -q "sdkVersion:'21'" /tmp/badging.txt
+          unzip -l app13/build/outputs/apk/debug/app13-debug.apk > /tmp/apk-files.txt
+          grep -q "assets/self_source/FILE_INVENTORY.txt" /tmp/apk-files.txt
+          grep -q "lib/arm64-v8a/libanamika_aapt2.so" /tmp/apk-files.txt
+          grep -q "lib/arm64-v8a/libanamika_llama_cli.so" /tmp/apk-files.txt
+          grep -q "assets/components/AnamikaAI-13-Toolchain-arm64.zip" /tmp/apk-files.txt
+          SOURCE_COUNT="$(grep -c 'assets/self_source/app13/src/main/java/.*\.java' /tmp/apk-files.txt)"
+          test "$SOURCE_COUNT" -ge 45
+          echo "Bundled V13 Java source files: $SOURCE_COUNT"
+
+      - name: APK size
+        run: |
+          du -h app13/build/outputs/apk/debug/app13-debug.apk
+          stat -c%s app13/build/outputs/apk/debug/app13-debug.apk
+
+      - name: Prepare downloadable APK
+        run: |
+          cp app13/build/outputs/apk/debug/app13-debug.apk AnamikaAI-13.apk
+          sha256sum AnamikaAI-13.apk | tee AnamikaAI-13.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13
+          compression-level: 0
+          path: |
+            AnamikaAI-13.apk
+            AnamikaAI-13.apk.sha256
+
+      - name: Publish GitHub prerelease APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/anamika-v13-local-self-upgrade'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="anamika-v13-dev-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             AnamikaAI-13.apk             AnamikaAI-13.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Anamika AI 13 Full Installer DEV • ${GITHUB_RUN_NUMBER}"             --notes "Full V13 test installer from commit $GITHUB_SHA with embedded ARM64 AAPT2, bundled verified Toolchain 13, full-screen chat UI, effort selector and startup Brain/Qwen setup. Offline Brain Runtime and Qwen model are downloaded/imported after owner approval. This is debug-signed and cannot be the final permanent self-upgrade signing identity."             --prerelease

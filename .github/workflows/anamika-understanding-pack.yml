@@ -1,0 +1,73 @@
+name: Publish Anamika Understanding Pack
+
+on:
+  push:
+    branches:
+      - anamika-v13-local-self-upgrade
+    paths:
+      - "updates/understanding-current/**"
+      - ".github/workflows/anamika-understanding-pack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build verified understanding pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/pack/payload
+          cp updates/understanding-current/payload/owner_context_profile.txt dist/pack/payload/
+          cp updates/understanding-current/payload/semantic_rules.json dist/pack/payload/
+
+          PROFILE_SHA="$(sha256sum dist/pack/payload/owner_context_profile.txt | awk '{print $1}')"
+          RULES_SHA="$(sha256sum dist/pack/payload/semantic_rules.json | awk '{print $1}')"
+          VERSION="2026.09.23.2"
+
+          cat > dist/pack/manifest.json <<EOF
+          {
+            "schema": "anamika13-component-pack-v1",
+            "type": "understanding",
+            "version": "$VERSION",
+            "files": {
+              "payload/owner_context_profile.txt": "$PROFILE_SHA",
+              "payload/semantic_rules.json": "$RULES_SHA"
+            }
+          }
+          EOF
+
+          (cd dist/pack && zip -q -r ../AnamikaAI-13-UnderstandingPack.zip manifest.json payload)
+          (cd dist && sha256sum AnamikaAI-13-UnderstandingPack.zip > AnamikaAI-13-UnderstandingPack.zip.sha256)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13-UnderstandingPack
+          path: |
+            dist/AnamikaAI-13-UnderstandingPack.zip
+            dist/AnamikaAI-13-UnderstandingPack.zip.sha256
+          if-no-files-found: error
+
+      - name: Publish stable understanding-pack release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="anamika-understanding-current"
+          gh release delete "$TAG" --cleanup-tag -y >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$TAG" >/dev/null 2>&1 || true
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Anamika AI 13 Understanding Pack • Current" \
+            --notes "One-month conversation-style language/context update v2026.09.23.2. Improves Hinglish/mobile typing, short follow-ups, owner corrections, project-context separation, build/update language, calculations and translation continuity. Import from Anamika Components; no APK replacement is needed." \
+            --prerelease
+          gh release upload "$TAG" \
+            dist/AnamikaAI-13-UnderstandingPack.zip \
+            dist/AnamikaAI-13-UnderstandingPack.zip.sha256

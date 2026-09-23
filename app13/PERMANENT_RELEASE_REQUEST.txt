@@ -1,0 +1,20 @@
+Anamika updater + offline prompt-budget fix release
+Requested: 2026-09-23
+
+Self Update fix:
+- Show current installed version and explicitly require a higher-version APK/local candidate.
+- After APK selection show two-stage progress: package/signature/version verification, then bundled source/duplicate/core validation.
+- For a clean already-compiled permanent-signed APK, do not waste time rebuilding it locally; unlock Install Verified Update after source validation passes.
+- If bundled source validation fails, preserve the strict behavior: repair the source, real-build/sign it locally, verify it, and only then allow installation.
+- Keep owner/Android final install confirmation and old-version archive behavior.
+
+Offline brain context fix:
+- Hard-budget Understanding Pack guidance by local inference effort.
+- Reduce Instant natural-chat memory/profile payload so a 2048-token chat context cannot be flooded by the large one-month language profile.
+- Budget BrainCommandEngine owner profile, recent memory, Function Pack catalog and installed-app catalog against Instant/Medium/Hard context sizes.
+- Preserve adaptive language learning while clipping prompt context safely.
+- Fix the observed error where a ~35,850-token request exceeded the 2,048-token Instant natural-chat context.
+
+Preservation:
+- Keep Anamika identity, media-friendly Wake ON, continuous language learning, Function Pack, Understanding Pack, Code Doctor, duplicate guard, update scorecard, signer and all prior functions.
+- Same package/signing identity; install as an in-place update.
