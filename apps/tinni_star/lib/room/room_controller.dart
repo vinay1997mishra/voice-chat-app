@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/function_pack.dart';
+import '../core/seat_policy.dart';
 import 'room_models.dart';
 
 class RoomController extends ChangeNotifier {
@@ -93,8 +94,10 @@ class RoomController extends ChangeNotifier {
   }
 
   void _rebuildSeats() {
+    final requested = seatCountOverride ?? config.seatCount;
+    final normalized = normalizeSeatCount(requested);
     seats = List.generate(
-      seatCountOverride ?? config.seatCount,
+      normalized,
       (index) => RoomSeat(index: index),
     );
   }

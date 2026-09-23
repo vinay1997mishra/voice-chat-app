@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
+import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
@@ -1066,7 +1067,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final seatOptions = [8, 10, 12, 15, 18, 20, 30, 40];
+    const seatOptions = supportedSeatCounts;
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 150),

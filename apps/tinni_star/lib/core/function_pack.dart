@@ -1,3 +1,5 @@
+import 'seat_policy.dart';
+
 enum PackApplyStatus { applied, rejected, rolledBack }
 
 class TinniFunctionConfig {
@@ -168,8 +170,10 @@ class FunctionPackRuntime {
   }
 
   String? _validateConfig(TinniFunctionConfig config) {
-    if (config.seatCount < 2 || config.seatCount > 30) {
-      return 'seatCount must be between 2 and 30.';
+    if (!isSupportedSeatCount(config.seatCount)) {
+      return 'seatCount must be one of: ' +
+          supportedSeatCounts.join(', ') +
+          '.';
     }
     if (config.maxGiftCombo < 1 || config.maxGiftCombo > 10000) {
       return 'maxGiftCombo must be between 1 and 10000.';
