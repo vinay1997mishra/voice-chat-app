@@ -14,6 +14,10 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
+import android.media.AudioRecordingConfiguration;
+import android.media.MediaRecorder;
+import android.os.Process;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -23,6 +27,7 @@ import com.anamika.ai.core.AndroidCompat;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.List;
 
 /**
  * Owner-enabled foreground wake listener.
@@ -42,6 +47,9 @@ public final class WakeService extends Service implements RecognitionListener {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
     private boolean stopping;
+    private AudioManager audioManager;
+    private AudioManager.AudioPlaybackCallback playbackCallback;
+    private AudioManager.AudioRecordingCallback recordingCallback;
     private static volatile boolean running;
 
     public static boolean isEnabled(Context c){
@@ -55,7 +63,7 @@ public final class WakeService extends Service implements RecognitionListener {
         Intent i=new Intent(c,WakeService.class);
         try{
             if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i); else c.startService(i);
-            return "Wake listener start requested. Keep Anamika unrestricted from battery optimization for better reliability.";
+            return "Wake listener ON. Media-friendly mode active hai: song/video/call/voice-chat ke waqt Anamika mic release karegi aur baad me wake listener retry karegi. Battery optimization me Anamika ko unrestricted rakhna reliability ke liye better hai.";
         }catch(Throwable e){
             return "Wake listener setting saved, but Android blocked background microphone service start: "+safe(e)+
                     ". Open Anamika and enable wake while the app is visible.";
@@ -93,6 +101,7 @@ public final class WakeService extends Service implements RecognitionListener {
         super.onCreate();
         running=true;
         createChannel();
+        registerAudioObservers();
         startForeground(NOTIFICATION_ID,notification("Wake listener starting…"));
         handler.post(this::startListening);
     }
@@ -219,15 +228,102 @@ public final class WakeService extends Service implements RecognitionListener {
 
     private boolean shouldYieldAudio(){
         try{
-            AudioManager am=(AudioManager)getSystemService(AUDIO_SERVICE);
+            AudioManager am=audioManager!=null?audioManager:(AudioManager)getSystemService(AUDIO_SERVICE);
             if(am==null)return false;
             int mode=am.getMode();
             if(mode==AudioManager.MODE_IN_CALL||mode==AudioManager.MODE_IN_COMMUNICATION)
                 return true;
-            return am.isMusicActive();
+            if(am.isMusicActive())return true;
+            if(Build.VERSION.SDK_INT>=29&&hasCompetingRecording(am.getActiveRecordingConfigurations()))
+                return true;
+            return false;
         }catch(Throwable ignored){
             return false;
         }
+    }
+
+    private void registerAudioObservers(){
+        try{
+            audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
+            if(audioManager==null)return;
+
+            if(Build.VERSION.SDK_INT>=26){
+                playbackCallback=new AudioManager.AudioPlaybackCallback(){
+                    @Override public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs){
+                        if(stopping||!isEnabled(WakeService.this))return;
+                        if(hasActivePlayback(configs)){
+                            releaseForExternalAudio("media playback");
+                        }else{
+                            schedule(700);
+                        }
+                    }
+                };
+                audioManager.registerAudioPlaybackCallback(playbackCallback,handler);
+            }
+
+            if(Build.VERSION.SDK_INT>=29){
+                recordingCallback=new AudioManager.AudioRecordingCallback(){
+                    @Override public void onRecordingConfigChanged(List<AudioRecordingConfiguration> configs){
+                        if(stopping||!isEnabled(WakeService.this))return;
+                        if(hasCompetingRecording(configs)){
+                            releaseForExternalAudio("voice/camera/social recording");
+                        }else{
+                            schedule(700);
+                        }
+                    }
+                };
+                audioManager.registerAudioRecordingCallback(recordingCallback,handler);
+            }
+        }catch(Throwable ignored){}
+    }
+
+    private boolean hasActivePlayback(List<AudioPlaybackConfiguration> configs){
+        if(configs==null)return false;
+        for(AudioPlaybackConfiguration x:configs){
+            if(x==null)continue;
+            try{
+                if(x.getPlayerState()!=AudioPlaybackConfiguration.PLAYER_STATE_STARTED)continue;
+                if(Build.VERSION.SDK_INT>=29&&x.getClientUid()==Process.myUid())continue;
+                return true;
+            }catch(Throwable ignored){}
+        }
+        return false;
+    }
+
+    private boolean hasCompetingRecording(List<AudioRecordingConfiguration> configs){
+        if(Build.VERSION.SDK_INT<29||configs==null)return false;
+        for(AudioRecordingConfiguration x:configs){
+            if(x==null)continue;
+            try{
+                if(x.getClientUid()==Process.myUid())continue;
+                int source=x.getClientAudioSource();
+                if(source==MediaRecorder.AudioSource.VOICE_RECOGNITION||
+                        source==MediaRecorder.AudioSource.HOTWORD)
+                    continue;
+                return true;
+            }catch(Throwable ignored){}
+        }
+        return false;
+    }
+
+    private void releaseForExternalAudio(String reason){
+        destroyRecognizer();
+        update("Wake on • "+reason+" active, mic released");
+        schedule(1200);
+    }
+
+    private void unregisterAudioObservers(){
+        try{
+            if(audioManager!=null&&playbackCallback!=null&&Build.VERSION.SDK_INT>=26)
+                audioManager.unregisterAudioPlaybackCallback(playbackCallback);
+        }catch(Throwable ignored){}
+        try{
+            if(audioManager!=null&&recordingCallback!=null&&Build.VERSION.SDK_INT>=29)
+                audioManager.unregisterAudioRecordingCallback(recordingCallback);
+        }catch(Throwable ignored){}
+        playbackCallback=null;
+        recordingCallback=null;
+        audioManager=null;
     }
 
     private void createChannel(){
@@ -244,7 +340,7 @@ public final class WakeService extends Service implements RecognitionListener {
                 AndroidCompat.immutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
         Notification.Builder b=Build.VERSION.SDK_INT>=26
                 ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        return b.setContentTitle("Anamika AI 13")
+        return b.setContentTitle("Anamika")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentIntent(pi)
@@ -270,6 +366,7 @@ public final class WakeService extends Service implements RecognitionListener {
         stopping=true;
         handler.removeCallbacksAndMessages(null);
         destroyRecognizer();
+        unregisterAudioObservers();
         super.onDestroy();
     }
 
