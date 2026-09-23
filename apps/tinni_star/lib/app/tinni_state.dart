@@ -87,7 +87,6 @@ class TinniState {
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
-    roomControls.setOwner('10000000');
     roomSession = ActiveRoomSession(
       runtime: runtime,
       realtime: realtime,
