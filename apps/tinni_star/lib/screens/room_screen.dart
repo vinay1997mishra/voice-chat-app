@@ -9,6 +9,7 @@ import '../effects/effect_queue.dart';
 import '../room/room_control_service.dart';
 import '../room/room_controller.dart';
 import '../room/room_models.dart';
+import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -305,6 +306,118 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildSeatRow({
+    required int row,
+    required SeatLayoutSpec spec,
+    required double seatDiameter,
+    required TinniFunctionConfig config,
+  }) {
+    final range = spec.rangeForRow(row);
+    return Row(
+      key: Key('seat-row-' + row.toString()),
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var index = range.$1; index < range.$2; index++)
+          _buildSeat(
+            index: index,
+            seatDiameter: seatDiameter,
+            config: config,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeat({
+    required int index,
+    required double seatDiameter,
+    required TinniFunctionConfig config,
+  }) {
+    final seat = controller.seats[index];
+    final occupied = seat.userName != null;
+    final compact = seatDiameter < 44;
+    final labelWidth = (seatDiameter + (compact ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+
+    return SizedBox(
+      key: Key('seat-' + index.toString()),
+      width: labelWidth,
+      child: GestureDetector(
+        onTap: () {
+          final text = controller.requestOrJoinSeat(index);
+          if (config.inviteMode && controller.mySeat == null) {
+            controller.ownerApproveMySeat(index);
+          }
+          _snack(text);
+        },
+        onLongPress: () => controller.toggleSeatLock(index),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: seatDiameter,
+              height: seatDiameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF10161C),
+                border: Border.all(
+                  color: occupied
+                      ? RoyalPalette.gold
+                      : RoyalPalette.deepGold,
+                  width: occupied ? 3 : 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: RoyalPalette.gold.withValues(
+                      alpha: occupied ? 0.28 : 0.08,
+                    ),
+                    blurRadius: compact ? 6 : 12,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: seat.locked
+                    ? Icon(
+                        Icons.lock_rounded,
+                        color: RoyalPalette.gold,
+                        size: seatDiameter * 0.42,
+                      )
+                    : occupied
+                        ? Text(
+                            seat.userName!.characters.first,
+                            style: TextStyle(
+                              color: RoyalPalette.gold,
+                              fontWeight: FontWeight.w900,
+                              fontSize: seatDiameter * 0.34,
+                            ),
+                          )
+                        : Icon(
+                            Icons.star_rounded,
+                            color: RoyalPalette.deepGold,
+                            size: seatDiameter * 0.42,
+                          ),
+              ),
+            ),
+            SizedBox(height: compact ? 2 : 4),
+            Text(
+              occupied ? seat.userName! : 'Mic ' + (index + 1).toString(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: occupied ? RoyalPalette.cream : RoyalPalette.muted,
+                fontSize: compact ? 7.5 : 9.5,
+                height: 1.0,
+                fontWeight: occupied ? FontWeight.w800 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.state.roomSession;
@@ -317,7 +430,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     final config = activeController.config;
-    final columns = controller.seats.length <= 10 ? 5 : 4;
+    final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
+    final screenSize = MediaQuery.sizeOf(context);
+    final seatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
+    final seatAreaHeight = seatSpec
+        .preferredHeight(seatDiameter)
+        .clamp(130.0, screenSize.height * 0.38)
+        .toDouble();
 
     return PopScope(
       canPop: true,
@@ -404,80 +523,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            Expanded(
-              flex: 5,
-              child: GridView.builder(
-                key: const Key('tinni-seat-grid'),
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                itemCount: controller.seats.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  childAspectRatio: 0.82,
-                  mainAxisSpacing: 5,
-                  crossAxisSpacing: 5,
+            SizedBox(
+              key: const Key('tinni-seat-grid'),
+              height: seatAreaHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Column(
+                  children: [
+                    for (var row = 0; row < seatSpec.rows; row++)
+                      Expanded(
+                        child: _buildSeatRow(
+                          row: row,
+                          spec: seatSpec,
+                          seatDiameter: seatDiameter,
+                          config: config,
+                        ),
+                      ),
+                  ],
                 ),
-                itemBuilder: (context, index) {
-                  final seat = controller.seats[index];
-                  final occupied = seat.userName != null;
-                  return GestureDetector(
-                    onTap: () {
-                      final text = controller.requestOrJoinSeat(index);
-                      if (config.inviteMode && controller.mySeat == null) {
-                        controller.ownerApproveMySeat(index);
-                      }
-                      _snack(text);
-                    },
-                    onLongPress: () => controller.toggleSeatLock(index),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF10161C),
-                            border: Border.all(
-                              color: occupied ? RoyalPalette.gold : RoyalPalette.deepGold,
-                              width: occupied ? 3 : 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: RoyalPalette.gold.withValues(alpha: occupied ? 0.28 : 0.08),
-                                blurRadius: 12,
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: seat.locked
-                                ? const Icon(Icons.lock_rounded, color: RoyalPalette.gold)
-                                : occupied
-                                    ? Text(
-                                        seat.userName!.characters.first,
-                                        style: const TextStyle(
-                                          color: RoyalPalette.gold,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 20,
-                                        ),
-                                      )
-                                    : const Icon(Icons.star_rounded, color: RoyalPalette.deepGold, size: 22),
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          occupied ? seat.userName! : 'Mic ' + (index + 1).toString(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: occupied ? RoyalPalette.cream : RoyalPalette.muted,
-                            fontSize: 10,
-                            fontWeight: occupied ? FontWeight.w800 : FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
               ),
             ),
             Container(
@@ -504,8 +567,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
             Expanded(
-              flex: 2,
               child: ListView.builder(
+                key: const Key('room-message-list'),
                 padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
                 itemCount: controller.messages.length,
                 itemBuilder: (_, index) {
