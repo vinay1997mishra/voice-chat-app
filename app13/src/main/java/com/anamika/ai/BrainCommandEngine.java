@@ -307,7 +307,7 @@ public final class BrainCommandEngine {
         if(!conversationHint.isEmpty())
             hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
         String hintLine=hintBuilder.toString();
-        return "You are Anamika AI 13 command planner.\n"+
+        return "You are Anamika command planner.\n"+
                 "Return exactly ONE JSON object and nothing else.\n"+
                 "Required top-level keys: actions and reply.\n"+
                 "actions must be an array. Each action item must contain action, arg1, arg2 and text.\n"+
@@ -334,7 +334,7 @@ public final class BrainCommandEngine {
         if(!conversationHint.isEmpty())
             hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
         String hintLine=hintBuilder.toString();
-        return "You are Anamika AI 13's OFFLINE command planner.\n"+
+        return "You are Anamika's OFFLINE command planner.\n"+
                 "Understand Hindi, casual Roman Hindi/Hinglish, English, mixed app names, shorthand, imperfect grammar, speech-to-text mistakes, short commands and multi-step owner instructions.\n"+
                 "Do not require exact command words. Infer intent from natural local phrasing. Treat nhi/nahi, kr/kar/karo, bta/batao, kyu/kyun, mje/mujhe, kse/kaise, thik/theek, chl/chal, bna/bana, hta/hata as ordinary equivalent forms.\n"+
                 "Use conversation history for references such as ye, isme, usme, ab, pehle wala and jo abhi bola.\n"+
