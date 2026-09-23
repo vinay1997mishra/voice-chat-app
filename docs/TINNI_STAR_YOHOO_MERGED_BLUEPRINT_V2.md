@@ -474,24 +474,85 @@ Admin must not receive room-wide Settings controls or Kickout List/Unkick contro
 
 ## 14A. Room Owner / Admin permission matrix — LOCKED
 
-| Capability | Owner | Admin |
-|---|---:|---:|
-| Open/change Room Settings | YES | NO |
-| Edit room DP/name/description/member list | YES | NO |
-| Change Mic Mode / seat count | YES | NO |
-| Change Seat Design | YES | NO |
-| Change Room Theme / Background | YES | NO |
-| View Room Level / Kickout List | YES | NO |
-| Unkick active kickout | YES | NO |
-| Kick Out user | YES | YES |
-| Invite user to seat / mic | YES | YES |
-| Accept/reject Apply Mic request | YES | YES |
-| Remove user from seat | YES | YES |
-| Lock / unlock seat | YES | YES |
-| Mute / unmute seat | YES | YES |
-| Directly take empty seat / go on mic without Apply Mic | YES | YES |
+| Capability | Owner | Admin | Normal User |
+|---|---:|---:|---:|
+| Open/change Room Settings | YES | NO | NO |
+| Edit room DP/name/description/member list | YES | NO | NO |
+| Change Mic Mode / seat count | YES | NO | NO |
+| Change Seat Design | YES | NO | NO |
+| Change Room Theme / Background | YES | NO | NO |
+| View Room Level / Kickout List | YES | NO | NO |
+| Unkick active kickout | YES | NO | NO |
+| Kick Out user | YES | YES | NO |
+| Invite user to seat / mic | YES | YES | NO |
+| Accept/reject Apply Mic request | YES | YES | NO |
+| Remove another user from seat | YES | YES | NO |
+| Lock / unlock seat | YES | YES | NO |
+| Mute / unmute seat | YES | YES | NO |
+| Directly take empty seat / go on mic without Apply Mic | YES | YES | ONLY WHEN FREE MIC |
+| Apply Mic request in Apply Mic mode | NOT REQUIRED | NOT REQUIRED | REQUIRED |
+| Change own self-scoped settings | YES | YES | YES |
+| Personal Block / Unblock another user | YES | YES | YES |
+| Remove user from own Blocklist | YES | YES | YES |
 
 This matrix is authoritative for Tinni Star unless the owner later changes it.
+
+## 14B. Normal user room controls — LOCKED
+
+A normal user entering someone else's room receives only self-scoped room controls.
+
+Normal-user rule:
+- Any room setting shown to a normal user applies only to that user's own experience/session.
+- A normal user cannot change room-wide settings.
+- A normal user cannot change another user's seat/mic state.
+- A normal user cannot lock/unlock seats for others.
+- A normal user cannot mute/unmute seats for others.
+- A normal user cannot approve/reject Apply Mic requests.
+- A normal user cannot invite other users to mic as a moderation action.
+- A normal user cannot kickout or unkick users.
+- A normal user cannot open the room Kickout List.
+- A normal user cannot edit Room Information, Seat Design, Mic Mode, Room Theme/Background, or other Owner-only settings.
+
+Examples of normal-user self-scoped controls may include:
+- leave/minimize room
+- self mute/unmute where permitted
+- apply for mic / cancel own request
+- go to seat directly when Free Mic permits
+- leave own seat
+- gift/chat/member/profile interactions
+- personal audio/effect/display preferences shown in the room UI
+
+### Personal Block / Unblock — LOCKED
+
+Blocking another user is a personal social/privacy action, not a room-wide moderation action.
+
+Block flow:
+- User opens another user's ID/profile/action surface.
+- User selects Block.
+- The same action location changes to Unblock for that blocked user.
+
+Unblock flow:
+- User can unblock from the same user ID/profile/action surface where Block was originally performed.
+- User can also open their own profile/account Blocklist and remove that blocked user from the Blocklist.
+- Both paths must update the same underlying personal block state.
+
+Important distinction:
+- Personal Block does NOT equal Room Kickout.
+- Personal Block belongs to the acting user's own social/privacy state.
+- Room Kickout belongs to Owner/Admin moderation state for that specific room.
+- A user can be personally blocked without being kicked from the room, and a kicked user can exist without being personally blocked unless a separate action explicitly does both.
+
+Recommended model:
+UserBlockRelation {
+  ownerUserId
+  blockedUserId
+  blockedAt
+  status // blocked | unblocked
+}
+
+The same relation must drive both:
+1. Block/Unblock on the target user's profile/action sheet.
+2. The user's own Blocklist screen.
 
 ## 15. Gifts — MERGED FROM YOHOO
 
@@ -635,7 +696,9 @@ Game economy/state must be server-authoritative.
 - direct messages.
 - friends.
 - follow.
-- blacklist.
+- blacklist / blocklist.
+- Blocklist is user-owned personal social state.
+- A blocked user can be removed either from that user's profile/action surface via Unblock or from the acting user's own Blocklist.
 - user search.
 - room search.
 - recent rooms.
@@ -797,6 +860,6 @@ Still video-dependent:
 - exact control placement.
 - exact seat-design visuals/assets.
 - exact frame compositing.
-- exact remaining Room Settings option list. Owner/Admin permission boundary is now locked: Admin has no Room Settings/Kickout List/Unkick access and only limited seat + kick moderation.
+- exact remaining Room Settings option list. Owner/Admin/Normal User permission boundary is now substantially locked; personal Block/Unblock is separated from room Kickout moderation.
 - exact dialogs/animations.
 - exact state transitions visible to users.
