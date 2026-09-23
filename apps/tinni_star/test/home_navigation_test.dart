@@ -33,11 +33,9 @@ void main() {
       expect(find.text('My Test Room'), findsOneWidget);
       expect(find.text('Recents'), findsOneWidget);
       expect(find.text('My followings'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Night Kings'),
-        220,
-        scrollable: find.byType(Scrollable).first,
-      );
+      final minePage = find.byKey(const Key('home-mine-page'));
+      await tester.drag(minePage, const Offset(0, -450));
+      await tester.pumpAndSettle();
       expect(find.text('Night Kings'), findsOneWidget);
       expect(find.text('Royal Center'), findsNothing);
     },
