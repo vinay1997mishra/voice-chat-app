@@ -18,7 +18,7 @@ import java.util.Locale;
  * prompt guidance and semantic follow-up rules without replacing the APK.
  */
 public final class UnderstandingPackStore {
-    private static final int MAX_PROFILE_CHARS=24000;
+    private static final int MAX_PROFILE_CHARS=12000;
     private static final int MAX_RULES=120;
 
     private UnderstandingPackStore(){}
@@ -43,6 +43,15 @@ public final class UnderstandingPackStore {
     }
 
     public static String promptGuide(Context c){
+        return promptGuide(c,6000);
+    }
+
+    /**
+     * Returns an effort-sized understanding guide. The installed owner profile can be
+     * much larger than a small local-model context window, so callers must budget it.
+     */
+    public static String promptGuide(Context c,int maxChars){
+        int budget=Math.max(600,Math.min(MAX_PROFILE_CHARS,maxChars));
         String base="";
         File f=new File(root(c),"owner_context_profile.txt");
         if(f.isFile()){
@@ -52,8 +61,15 @@ public final class UnderstandingPackStore {
             }catch(Exception ignored){}
         }
         if(base.isEmpty())base=OwnerConversationProfile.promptGuide();
+
         String adaptive=AdaptiveLanguageLearner.promptGuide(c);
-        return adaptive.isEmpty()?base:base+"\n\n"+adaptive;
+        int adaptiveBudget=adaptive.isEmpty()?0:Math.min(1400,Math.max(350,budget/3));
+        int baseBudget=Math.max(250,budget-adaptiveBudget-(adaptiveBudget>0?2:0));
+
+        String b=clip(base,baseBudget);
+        if(adaptiveBudget<=0)return b;
+        String a=clip(adaptive,adaptiveBudget);
+        return a.isEmpty()?b:b+"\n\n"+a;
     }
 
     public static String semanticHint(Context c,String raw){
@@ -99,6 +115,14 @@ public final class UnderstandingPackStore {
             }
         }catch(Exception ignored){}
         return "";
+    }
+
+    private static String clip(String s,int max){
+        if(s==null)return "";
+        String x=s.trim();
+        if(x.length()<=max)return x;
+        int cut=Math.max(0,max-24);
+        return x.substring(0,cut)+"\n[profile clipped]";
     }
 
     public static String status(Context c){
