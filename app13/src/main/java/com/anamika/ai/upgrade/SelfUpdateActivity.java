@@ -53,12 +53,12 @@ public final class SelfUpdateActivity extends Activity {
         box.setPadding(pad,pad,pad,pad);
 
         TextView title=new TextView(this);
-        title.setText("Anamika 13 • Verified Self Update");
+        title.setText("Anamika • Verified Self Update");
         title.setTextSize(22);
         box.addView(title,new LinearLayout.LayoutParams(-1,-2));
 
         status=new TextView(this);
-        status.setText("Select a newer Anamika 13 APK. It will be accepted only if package name and signing certificate match.");
+        status.setText("Select a newer Anamika APK. It will be accepted only if package name and signing certificate match.");
         status.setTextIsSelectable(true);
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,0,1);
         sp.topMargin=dp(16);
