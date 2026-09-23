@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.anamika.ai.components.ComponentPackManager;
 import com.anamika.ai.developer.CodeDoctor;
+import com.anamika.ai.developer.CodeIntakeAnalyzer;
 import com.anamika.ai.developer.OfflineCodingBrain;
 import com.anamika.ai.diagnostics.DiagnosticsReportStore;
 
@@ -168,14 +169,18 @@ public final class UpgradeCoordinator {
      */
     public static String applyOwnerCode(Context c,String suppliedCode){
         String code=suppliedCode==null?"":suppliedCode.trim();
-        if(code.isEmpty())return "Direct code empty hai. 'apply code' ke baad code paste karo.";
+        if(code.isEmpty())return "Direct code empty hai.";
         if(code.length()>48000)
-            return "Direct code bahut bada hai. Ek baar me 48,000 characters tak paste karo ya code ko parts me do.";
+            return "Direct code bahut bada hai. Ek baar me 48,000 characters tak paste karo; large code ke liye Source Update ZIP use karo.";
+        CodeIntakeAnalyzer.Analysis analysis=CodeIntakeAnalyzer.analyze(code);
+        UpdateScorecard.recordPlannedCode(c,analysis);
         if(!ComponentPackManager.brainInstalled(c))
-            return "Direct code check/repair ke liye Offline Brain runtime + GGUF model install hona chahiye.";
+            return analysis.ownerReport()+"\n\nDirect code check/repair ke liye Offline Brain runtime + GGUF model install hona chahiye.";
 
         try{
-            UpgradeJournal.record(c,"DIRECT_CODE_START","Owner supplied "+code.length()+" chars.");
+            UpgradeJournal.record(c,"DIRECT_CODE_START",
+                    "Owner supplied "+code.length()+" chars; targets="+analysis.targets+
+                            "; estimated_benefit="+analysis.estimatedBenefitPercent+"%");
             File ws=SourceVault.createWorkspace(c,"owner supplied direct code");
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
                     .putString(LAST_WS,ws.getAbsolutePath())
@@ -192,23 +197,24 @@ public final class UpgradeCoordinator {
             OfflineCodingBrain.Result brain=OfflineCodingBrain.repair(c,ws,request);
             UpgradeJournal.record(c,brain.ok?"DIRECT_CODE_REPAIR_PASS":"DIRECT_CODE_REPAIR_FAIL",brain.message);
             if(!brain.ok)
-                return "Direct code integrate/repair nahi ho saka.\n"+brain.message;
+                return analysis.ownerReport()+"\n\nDirect code integrate/repair nahi ho saka.\n"+brain.message;
 
             UpgradeQualityGate.Result gated=UpgradeQualityGate.run(c,ws,"owner supplied direct code");
             UpgradeJournal.record(c,gated.ok?"DIRECT_CODE_QUALITY_PASS":"DIRECT_CODE_QUALITY_FAIL",gated.log);
-            if(!gated.ok)return "Direct code strict quality gate fail hua. Install blocked.\n"+gated.log;
+            if(!gated.ok)return analysis.ownerReport()+
+                    "\n\nDirect code strict quality gate fail hua. Install blocked.\n"+gated.log;
 
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
                     .putString(LAST_CANDIDATE,gated.apk.getAbsolutePath()).apply();
 
-            return "DIRECT CODE BUILD READY\n"+
+            return analysis.ownerReport()+"\n\nDIRECT CODE BUILD READY\n"+
                     "Code checked/repaired + duplicate guard + real build + APK verification PASS.\n"+
                     gated.log+
                     "\nCandidate: "+gated.apk.getAbsolutePath()+
                     "\nAb 'self update' kholo. Final install Android/owner confirmation ke baad hoga.";
         }catch(Exception e){
             UpgradeJournal.record(c,"DIRECT_CODE_FAIL",safe(e));
-            return "Direct code workflow failed: "+safe(e);
+            return analysis.ownerReport()+"\n\nDirect code workflow failed: "+safe(e);
         }
     }
 
