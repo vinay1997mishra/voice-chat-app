@@ -126,14 +126,18 @@ CREATE_ROOM(userId)
 Owner authority is split into two surfaces:
 
 A. Room Settings / Room Management
-- Edit room metadata.
-- Change room mode.
-- Change mic mode.
-- Lock/unlock seats.
+- Room Information / Edit Room.
+- Mic Mode.
+- Seat count / seat behavior.
+- Seat design / seat layout selection.
+- Lock/unlock/mute empty seats.
 - Manage admins where supported.
-- Room theme/settings.
-- Room activity controls.
-- Other room-wide settings shown in the room Settings/More surface.
+- Room Theme / Background.
+- Room Level / Kickout List.
+- Room activity controls where present.
+- Other room-wide settings shown in the 4-box Room Settings panel.
+
+Room Mode is NOT required as a separate Tinni Star setting unless a later reference explicitly confirms it.
 
 B. User-specific moderation
 - Kick Out is NOT a Room Settings item.
@@ -203,43 +207,64 @@ Visual rule:
 - Chat area must remain usable below seats.
 - Minimum target: about 4 room-message lines visible above the typing/control bar.
 
-## 10. Seat/Mic state — MERGED FROM YOHOO
+## 10. Seat/Mic state — LOCKED CORE BEHAVIOR
 
-Audience:
+### Mic Mode
+Mic Mode contains both seat-count control and seat-entry policy.
+
+Seat-count control:
+- Owner can increase or decrease the number of seats/mics using the supported Tinni Star seat-count rules.
+
+Free Mic:
+- A normal user may enter the room and tap any empty, unlocked seat.
+- If the seat is available, the user can sit on that seat directly.
+- No Owner/Admin approval is required for the normal user in Free Mic mode.
+
+Apply Mic:
+- A normal user entering the room cannot directly occupy an empty seat.
+- The user must Apply for Mic / request a seat.
+- Owner or Admin receives the request.
+- Owner/Admin accepts or rejects whether that user is allowed onto a seat.
+- Only after approval is the user added to a seat.
+
+Owner/Admin exception:
+- Free Mic / Apply Mic restriction does not block Owner or Admin from taking an empty seat.
+- When Owner/Admin taps an empty seat, the seat-action menu includes:
+  - Seat Lock
+  - Seat Mute
+  - Go to Seat
+- Go to Seat lets Owner/Admin occupy the empty seat directly.
+- Owner/Admin does not need to submit an Apply Mic request for themself.
+
+Normal-user state:
 AUDIENCE
-→ apply/free mic
-→ MIC_REQUESTED or direct seat
-→ ON_MIC
-→ MUTED / UNMUTED
-→ REMOVED / LEAVE
+→ [Free Mic: tap empty seat] → ON_SEAT
+or
+AUDIENCE
+→ [Apply Mic: request] → MIC_REQUESTED
+→ Owner/Admin ACCEPT → ON_SEAT
+→ Owner/Admin REJECT → AUDIENCE
 
-Seat:
+Seat state:
 FREE
-→ OCCUPIED
-→ optional LOCKED
-→ release/move
-→ FREE
+→ LOCKED / MUTED_BY_ROOM / OCCUPIED
+→ unlock/unmute/release/move as permitted.
 
-Confirmed control families:
-- apply mic.
-- cancel request.
-- approve/reject.
-- invite to mic.
-- kick from mic.
-- ban mic.
-- open mic.
-- free-mic / apply-mic mode.
+Other confirmed control families:
+- cancel mic request.
+- invite user to mic.
+- remove user from mic.
+- mute/unmute.
 - lock/unlock.
-- move/assign user.
+- move/assign user where supported.
 
-## 11. Two seat visual families — PARTIALLY CLEAR
+## 11. Seat Design / Seat Layout — LOCKED CONCEPT
 
-Reference videos show two seat presentation families according to the user.
-Blueprint requirement:
-- Seat renderer must support at least two visual/layout modes.
-- Both modes use the same underlying SeatState / MicState.
-- Room mode/layout selection must not fork business logic.
-- Exact visual definition and switching rule are still VIDEO NEEDED.
+- Tinni Star must ship with multiple seat designs/layout styles inside the app.
+- Room Owner gets an option in Room Settings to choose the seat design used by that room.
+- Changing seat design changes the visual presentation only; SeatState / MicState / permissions remain the same.
+- The room must remember the selected seat design.
+- Exact available designs, thumbnails, animation style and visual differences still need reference/video confirmation.
 
 ## 12. User seat identity/frame — PARTIALLY CLEAR
 
@@ -283,6 +308,57 @@ Core:
 - User-specific moderation is opened by tapping the target user's ID / avatar / occupied seat / user card.
 
 Room chat and seat area must coexist without one covering the other.
+
+## 13B. Room Information / Edit Room — LOCKED
+
+Room Settings > Room Information has an Edit action.
+
+Owner can edit:
+- Room DP / room avatar.
+- Room Name.
+- Room Description.
+- Room Member List.
+
+Room Member List management:
+- Owner can open the room member list from Room Information.
+- Owner can remove a member from that room member list.
+- This member-list removal control is separate from the immediate Kick Out action opened from a user's room ID/avatar/seat.
+
+Changes should update the room metadata for other users after synchronization.
+
+## 13C. Room Theme / Background — LOCKED BUSINESS RULE
+
+Room Settings includes Room Theme / Background.
+
+Built-in backgrounds:
+- The app contains room wallpaper/background choices.
+- Owner can select an available built-in room background subject to its entitlement/rules.
+
+Custom uploaded background:
+- Room Owner can upload a background/wallpaper of their choice where the feature permits.
+- Custom room background is NOT free.
+- It requires coins.
+- The purchasable validity choices are:
+  - 7 days
+  - 10 days
+  - 15 days
+  - 30 days
+  - Permanent
+- Exact coin price for each duration is not yet locked.
+- After purchase/activation, the chosen/uploaded wallpaper becomes the room wall/background for the purchased validity.
+- Expiring backgrounds must have entitlement expiry state; Permanent does not expire.
+
+Recommended entitlement model:
+RoomBackgroundEntitlement {
+  roomId
+  backgroundId
+  sourceType // built_in | owner_upload
+  purchasedByUserId
+  coinPrice
+  activatedAt
+  expiresAt? // null for permanent
+  status
+}
 
 ## 13A. Room Level / Kickout List — LOCKED FROM REFERENCE
 
@@ -602,14 +678,14 @@ APK/native update still required for:
 ## 28. VIDEO NEEDED — exact behavior still not locked
 
 Highest-priority reference gaps:
-1. The two exact seat layout types: visual difference, when each is selected, and whether owner chooses it at room creation or room settings.
+1. Exact seat-design catalog: every available design, thumbnail, animation and visual difference. Owner selection from Room Settings is now locked.
 2. Occupied-seat layering: avatar, frame, name, mic state, owner/admin badge, VIP/Noble badge, speaking animation and lock icon order.
 3. Individual user-frame system: where frame comes from, how selected/equipped, static vs animated, VIP/purchased/role priority.
 4. Owner seat behavior: whether Owner has a fixed seat, special frame, crown/badge, auto-seat, and what happens when Owner leaves mic but stays in room.
 5. Admin behavior: how Owner appoints/removes Admin, admin count limit, admin badge/frame, exact controls visible to Admin.
 6. Room member list and member card: exact tabs, online/on-mic sorting, action menu and profile popup.
-7. Room Settings panel opened from the 4-box/grid room-toolbar icon: exact internal controls, grouping and every room-wide toggle/action. Kick Out / Block are explicitly excluded from this surface and belong to the user-specific action sheet.
-8. Free-mic vs apply-mic room UX: request queue, invite popup, approval/rejection, timeout and seat assignment animation.
+7. Remaining Room Settings options and their exact ordering. Room Information, Mic Mode, Seat Design, Room Theme/Background, Room Level and Kickout List behavior are now substantially locked.
+8. Apply-Mic request UI details still needed: exact queue screen, request popup, timeout behavior and approval/rejection animation. Core Free Mic vs Apply Mic permissions are locked.
 9. Seat lock/move UX: long-press/tap behavior, move user between seats, locked-seat appearance, reserved-seat behavior.
 10. Gift panel exact interaction: recipient selection, multi-select, combo window, quantity selector, backpack, gift categories and effect preview.
 11. Room entry/join effects: user entry banner/vehicle/animal/VIP frame sequence and priority when many users enter.
@@ -651,7 +727,7 @@ Clear at feature level but not exact UI:
 
 Still video-dependent:
 - exact control placement.
-- exact seat visual modes.
+- exact seat-design visuals/assets.
 - exact frame compositing.
 - exact remaining Room Settings option list and admin permission boundary. 4-box Room Settings entry, user-specific Kick/Block entry, and room-level Kickout List audit fields are now locked.
 - exact dialogs/animations.
