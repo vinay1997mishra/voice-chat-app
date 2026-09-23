@@ -123,16 +123,23 @@ CREATE_ROOM(userId)
 → creator receives Owner role
 → Owner controls become available for that room only
 
-Owner authority includes the room-management family:
+Owner authority is split into two surfaces:
+
+A. Room Settings / Room Management
 - Edit room metadata.
 - Change room mode.
 - Change mic mode.
-- Invite/remove mic users.
 - Lock/unlock seats.
-- Manage admins.
-- Kick/blacklist room users.
+- Manage admins where supported.
 - Room theme/settings.
 - Room activity controls.
+- Other room-wide settings shown in the room Settings/More surface.
+
+B. User-specific moderation
+- Kick Out is NOT a Room Settings item.
+- Block/blacklist is NOT a Room Settings item.
+- These actions appear only after the Owner/Admin taps a user's ID / avatar / occupied seat / user card and opens that user's action menu.
+- User-specific mic actions also belong to that user context when applicable.
 
 Exact role boundary between Owner and Admin must be server-authoritative.
 
@@ -272,9 +279,15 @@ Core:
 
 Room chat and seat area must coexist without one covering the other.
 
-## 14. Member/user action sheet — CLEAR AT FEATURE LEVEL
+## 14. Member/user action sheet — LOCKED AT INTERACTION-ENTRY LEVEL
 
-Tap room user/avatar:
+Entry rule:
+- Kick/Block controls do not live in Room Settings.
+- The Owner/Admin first taps a user's ID, avatar, occupied seat, or user card.
+- That opens the user-specific action sheet.
+- Only then are moderation actions such as Kick Out / Block exposed.
+
+User action family:
 - profile.
 - follow/unfollow.
 - private message.
@@ -282,11 +295,11 @@ Tap room user/avatar:
 - remove from mic.
 - mute/ban mic.
 - kick from room.
-- room blacklist.
-- user blacklist.
+- room blacklist / block where applicable.
+- user blacklist where applicable.
 - report.
 
-Visibility depends on role.
+Visibility depends on current role and the target user.
 
 ## 15. Gifts — MERGED FROM YOHOO
 
@@ -547,7 +560,7 @@ Highest-priority reference gaps:
 4. Owner seat behavior: whether Owner has a fixed seat, special frame, crown/badge, auto-seat, and what happens when Owner leaves mic but stays in room.
 5. Admin behavior: how Owner appoints/removes Admin, admin count limit, admin badge/frame, exact controls visible to Admin.
 6. Room member list and member card: exact tabs, online/on-mic sorting, action menu and profile popup.
-7. Room settings / More drawer: exact controls, grouping and every toggle/action.
+7. Room Settings / More drawer: exact controls, grouping and every room-wide toggle/action. Kick Out / Block are explicitly excluded from this surface and belong to the user-specific action sheet.
 8. Free-mic vs apply-mic room UX: request queue, invite popup, approval/rejection, timeout and seat assignment animation.
 9. Seat lock/move UX: long-press/tap behavior, move user between seats, locked-seat appearance, reserved-seat behavior.
 10. Gift panel exact interaction: recipient selection, multi-select, combo window, quantity selector, backpack, gift categories and effect preview.
@@ -592,6 +605,6 @@ Still video-dependent:
 - exact control placement.
 - exact seat visual modes.
 - exact frame compositing.
-- exact owner/admin UX.
+- exact owner/admin settings control list and admin permission boundary. User-specific Kick/Block entry point is now locked.
 - exact dialogs/animations.
 - exact state transitions visible to users.
