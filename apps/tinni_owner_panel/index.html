@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090909" />
+  <title>Tinni Star — Owner Panel</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">TS</div>
+        <div class="brand-copy">
+          <strong>Tinni Star</strong>
+          <span>Owner Control Center</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-view="dashboard"><span>◈</span>Dashboard</button>
+        <button class="nav-item" data-view="users"><span>◎</span>Users</button>
+        <button class="nav-item" data-view="rooms"><span>▣</span>Rooms</button>
+        <button class="nav-item" data-view="wallets"><span>◫</span>Wallets</button>
+        <button class="nav-item" data-view="hierarchy"><span>⌘</span>BD / Agency / Host</button>
+        <button class="nav-item" data-view="roles"><span>✦</span>Tags / Roles / Posts</button>
+        <button class="nav-item" data-view="vip"><span>♛</span>VIP</button>
+        <button class="nav-item" data-view="gifts"><span>◆</span>Gifts</button>
+        <button class="nav-item" data-view="assets"><span>◉</span>Entries / Frames</button>
+        <button class="nav-item" data-view="banners"><span>▰</span>Banners</button>
+        <button class="nav-item" data-view="games"><span>♟</span>Games</button>
+        <button class="nav-item" data-view="policies"><span>⚙</span>Policies</button>
+        <button class="nav-item" data-view="panels"><span>▦</span>Custom Panels</button>
+        <button class="nav-item" data-view="audit"><span>↺</span>Audit Log</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="owner-chip">
+          <span class="status-dot"></span>
+          <div><strong>Platform Owner</strong><small>Not a room owner</small></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="menuBtn">☰</button>
+        <label class="global-search">
+          <span>⌕</span>
+          <input id="globalSearch" placeholder="Search current ID, old ID, room ID, transaction…" />
+        </label>
+        <div class="top-actions">
+          <span class="api-status" id="apiStatus"><i></i>Checking server…</span>
+          <button class="btn secondary" id="refreshBtn">Refresh</button>
+          <button class="btn primary" id="quickActionBtn">+ Quick Action</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <h1 id="pageTitle">Dashboard</h1>
+            <p id="pageSubtitle">Live platform overview and owner-only controls.</p>
+          </div>
+          <div class="pill">Owner-only web panel</div>
+        </div>
+
+        <section class="view active" id="view-dashboard">
+          <div class="stats-grid">
+            <article class="stat-card"><span>Online Users</span><strong id="statOnline">—</strong><small>Live sessions</small></article>
+            <article class="stat-card"><span>Active Rooms</span><strong id="statRooms">—</strong><small>Voice rooms</small></article>
+            <article class="stat-card"><span>Sending Today</span><strong id="statSending">—</strong><small>Coins received</small></article>
+            <article class="stat-card"><span>Owner Treasury</span><strong id="statTreasury">0</strong><small>Tinni coins</small></article>
+          </div>
+
+          <div class="grid two">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Owner Treasury Wallet</h2><p>Separate from every normal user wallet.</p></div><span class="badge gold">Owner only</span></div>
+              <div class="wallet-balance"><strong id="treasuryBalance">0</strong><span>coins</span></div>
+              <div class="button-row">
+                <button class="btn primary" data-action="treasury-add">Add Coins</button>
+                <button class="btn secondary" data-action="treasury-send">Send Coins</button>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head"><div><h2>Master Feature Switches</h2><p>Turn configurable systems on/off.</p></div><span class="badge">Live config</span></div>
+              <div class="switch-list" id="featureSwitches"></div>
+            </article>
+          </div>
+
+          <article class="panel">
+            <div class="panel-head"><div><h2>A-to-Z Owner Controls</h2><p>Every account is a normal user first; posts and tags are additional.</p></div></div>
+            <div class="module-grid" id="moduleGrid"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-users">
+          <article class="panel">
+            <div class="panel-head"><div><h2>User Search & Investigation</h2><p>Current ID + old ID lookup with live account data.</p></div><button class="btn primary" data-action="user-search">Search</button></div>
+            <div class="form-grid three">
+              <label><span>User / old ID</span><input id="userSearchId" placeholder="e.g. 10000001" /></label>
+              <label><span>Country</span><select><option>All countries</option><option>India</option><option>Philippines</option></select></label>
+              <label><span>Status</span><select><option>Any status</option><option>Online</option><option>Offline</option><option>Banned</option></select></label>
+            </div>
+          </article>
+          <div class="grid two">
+            <article class="panel">
+              <div class="panel-head"><h2>Live User Details</h2><span class="badge">Server data</span></div>
+              <div class="empty-state" id="userDetails">Search a user to view online duration, room ID, sending, purchases, diamonds, dollar value, game bets, profit/loss and activity history.</div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><h2>Owner Overrides</h2></div>
+              <div class="action-list">
+                <button data-action="user-ban">ID Ban / Unban</button>
+                <button data-action="device-ban">Device Ban / Unban</button>
+                <button data-action="user-invisible">Invisible ID</button>
+                <button data-action="locked-bypass">Locked-room Bypass</button>
+                <button data-action="id-change">Change Public ID</button>
+                <button data-action="vip-grant">VIP Add / Remove</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-rooms">
+          <div class="grid two">
+            <article class="panel"><div class="panel-head"><h2>Room Control</h2></div><div class="action-list">
+              <button data-action="room-ban">Room Ban / Unban</button>
+              <button data-action="room-name">Change Room Name</button>
+              <button data-action="room-dp">Change Room DP</button>
+              <button data-action="room-bg">Add / Remove Background</button>
+              <button data-action="room-live">View Live Users / Seats</button>
+            </div></article>
+            <article class="panel"><div class="panel-head"><h2>Room Search</h2></div><label><span>Room ID</span><input placeholder="Room ID = user public ID" /></label><div class="empty-state">Room activity, owner, users, seats, level, EXP and recent activity will load from the server.</div></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-wallets">
+          <div class="grid three">
+            <article class="panel"><h2>Normal User Wallet</h2><p class="muted">Credit/debit/ban any user's normal wallet.</p><button class="btn primary" data-action="wallet-normal">Manage</button></article>
+            <article class="panel"><h2>Coin Seller Wallet</h2><p class="muted">Create, credit, debit, ban/unban seller inventory wallet.</p><button class="btn primary" data-action="wallet-seller">Manage</button></article>
+            <article class="panel"><h2>Merchant Wallet</h2><p class="muted">Create, credit, debit, ban/unban merchant wallet.</p><button class="btn primary" data-action="wallet-merchant">Manage</button></article>
+          </div>
+          <article class="panel"><div class="panel-head"><h2>Owner Treasury Distribution</h2><span class="badge gold">2,000,000 coins = $1</span></div><p class="muted">Send Owner Treasury coins to a normal user wallet, Coin Seller wallet or Merchant wallet. Every movement is audit logged.</p><button class="btn primary" data-action="treasury-send">Send Coins</button></article>
+        </section>
+
+        <section class="view" id="view-hierarchy">
+          <div class="grid two">
+            <article class="panel"><div class="panel-head"><h2>BD Portal Control</h2></div><div class="action-list">
+              <button data-action="bd-activate">Activate / Remove BD</button>
+              <button data-action="agency-to-bd">Add Agency to any BD</button>
+              <button data-action="agency-from-bd">Remove Agency from BD</button>
+              <button data-action="bd-target">BD Targets / Commission</button>
+            </div></article>
+            <article class="panel"><div class="panel-head"><h2>Agency / Host Override</h2></div><div class="action-list">
+              <button data-action="agency-activate">Activate / Remove Agency</button>
+              <button data-action="host-add">Add Host to any Agency</button>
+              <button data-action="host-remove">Remove Host without date restriction</button>
+              <button data-action="complaints">Exit Requests / Complaints</button>
+            </div></article>
+          </div>
+          <article class="panel"><h2>Current rules</h2><div class="rule-grid" id="hierarchyRules"></div></article>
+        </section>
+
+        <section class="view" id="view-roles">
+          <article class="panel"><div class="panel-head"><div><h2>Tags / Roles / Posts</h2><p>Multiple tags/posts can exist on the same ID.</p></div><button class="btn primary" data-action="role-new">+ New Tag / Post</button></div><div class="chips" id="roleChips"></div></article>
+        </section>
+
+        <section class="view" id="view-vip">
+          <article class="panel">
+            <div class="panel-head"><div><h2>VIP Manager</h2><p>Create new VIP levels or change every function of an existing VIP.</p></div><button class="btn primary" data-action="vip-new">+ New VIP</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Level</th><th>Name</th><th>Status</th><th>Entry</th><th>Frame</th><th>Price</th><th>Actions</th></tr></thead><tbody id="vipTable"></tbody></table></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-gifts">
+          <article class="panel"><div class="panel-head"><div><h2>Gift Catalog</h2><p>Add, edit, remove, enable/disable and schedule gifts.</p></div><button class="btn primary" data-action="gift-new">+ Add Gift</button></div><div class="empty-state">Gift asset upload, coin price, animation/video, category, order and status controls will be managed here.</div></article>
+        </section>
+
+        <section class="view" id="view-assets">
+          <div class="grid two"><article class="panel"><h2>Vehicle / Animal / 3D Entries</h2><p class="muted">Add new entry assets, edit old entries, assign to VIP and remove/disable them.</p><button class="btn primary" data-action="entry-new">+ Add Entry</button></article><article class="panel"><h2>Frames</h2><p class="muted">Profile, seat and VIP frames with full add/edit/remove controls.</p><button class="btn primary" data-action="frame-new">+ Add Frame</button></article></div>
+        </section>
+
+        <section class="view" id="view-banners">
+          <article class="panel"><div class="panel-head"><div><h2>Banner Scheduler</h2><p>Start date/time + automatic removal date/time + manual removal.</p></div><button class="btn primary" data-action="banner-new">+ New Banner</button></div><div class="empty-state">Active, scheduled, expired and manually removed banners will appear here.</div></article>
+        </section>
+
+        <section class="view" id="view-games">
+          <div class="stats-grid">
+            <article class="stat-card"><span>Total Bets</span><strong>—</strong><small>Server data</small></article>
+            <article class="stat-card"><span>User Profit</span><strong>—</strong><small>Server data</small></article>
+            <article class="stat-card"><span>User Loss</span><strong>—</strong><small>Server data</small></article>
+            <article class="stat-card"><span>Game Status</span><strong>ON</strong><small>Master switch</small></article>
+          </div>
+          <article class="panel"><h2>Game Controls</h2><div class="action-list"><button data-action="game-switch">Enable / Disable Games</button><button data-action="game-limits">Bet Limits</button><button data-action="game-stats">User Betting Investigation</button></div></article>
+        </section>
+
+        <section class="view" id="view-policies">
+          <article class="panel"><div class="panel-head"><div><h2>Policy & Economy Editor</h2><p>Change rules without editing Worker code.</p></div><button class="btn primary" data-action="policy-new">+ New Setting</button></div><div id="policyList" class="policy-list"></div></article>
+        </section>
+
+        <section class="view" id="view-panels">
+          <article class="panel"><div class="panel-head"><div><h2>Custom Panels</h2><p>Create 10–20+ separate staff panels and select exact permissions.</p></div><button class="btn primary" data-action="panel-new">+ Create Panel</button></div><div id="customPanels" class="empty-state">No custom panels loaded from server yet.</div></article>
+        </section>
+
+        <section class="view" id="view-audit">
+          <article class="panel"><div class="panel-head"><div><h2>Owner Audit Log</h2><p>Every sensitive action should include actor, target, before/after values, reason and time.</p></div><button class="btn secondary" data-action="audit-export">Export</button></div><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="auditTable"><tr><td colspan="4" class="muted">Waiting for server audit API.</td></tr></tbody></table></div></article>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="actionDialog">
+    <form method="dialog" id="actionForm">
+      <div class="dialog-head"><div><h3 id="dialogTitle">Owner Action</h3><p id="dialogHelp"></p></div><button class="icon-btn" value="cancel">✕</button></div>
+      <div id="dialogFields" class="dialog-fields"></div>
+      <div class="dialog-actions"><button class="btn secondary" value="cancel">Cancel</button><button class="btn primary" id="dialogSubmit" value="default">Confirm</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
