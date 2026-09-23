@@ -69,6 +69,30 @@ class RoomControlService {
   int? hostSeat;
   int? bossSeat;
 
+  bool soundEnabled = true;
+  bool effectsEnabled = true;
+  bool noticesVisible = true;
+  bool publicScreenEnabled = false;
+  bool groupPkEnabled = false;
+  bool eventActive = false;
+  bool luckyNumberEnabled = false;
+  int? luckyNumber;
+  String themeId = 'royal-dark';
+  String roomMode = 'friends';
+
+  void configureForRoom(String ownerUserId) {
+    roles.clear();
+    roomBlacklist.clear();
+    invitedUsers.clear();
+    micBans.clear();
+    lockedSeats.clear();
+    seatUsers.clear();
+    micApplications.clear();
+    hostSeat = null;
+    bossSeat = null;
+    roles[ownerUserId] = RoomRole.owner;
+  }
+
   void setOwner(String userId) => roles[userId] = RoomRole.owner;
 
   void setAdmin(String userId, bool enabled) {
@@ -154,6 +178,37 @@ class RoomControlService {
 
   void setHostSeat(int seat) => hostSeat = seat;
   void setBossSeat(int seat) => bossSeat = seat;
+
+  bool toggleSound() => soundEnabled = !soundEnabled;
+  bool toggleEffects() => effectsEnabled = !effectsEnabled;
+  bool toggleNotices() => noticesVisible = !noticesVisible;
+  bool togglePublicScreen() => publicScreenEnabled = !publicScreenEnabled;
+  bool toggleGroupPk() => groupPkEnabled = !groupPkEnabled;
+  bool toggleEvent() => eventActive = !eventActive;
+
+  bool toggleLuckyNumber() {
+    luckyNumberEnabled = !luckyNumberEnabled;
+    if (!luckyNumberEnabled) luckyNumber = null;
+    return luckyNumberEnabled;
+  }
+
+  void setLuckyNumber(int value) {
+    if (value < 0) throw ArgumentError.value(value, 'value');
+    luckyNumberEnabled = true;
+    luckyNumber = value;
+  }
+
+  String toggleRoomMode() {
+    roomMode = roomMode == 'friends' ? 'event' : 'friends';
+    return roomMode;
+  }
+
+  String cycleTheme() {
+    const themes = <String>['royal-dark', 'night-blue', 'rose-gold'];
+    final current = themes.indexOf(themeId);
+    themeId = themes[(current + 1) % themes.length];
+    return themeId;
+  }
 
   bool canSpeak(String userId) {
     if (micBans.contains(userId)) return false;

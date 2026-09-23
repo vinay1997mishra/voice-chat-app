@@ -30,7 +30,10 @@ class ActiveRoomSession extends ChangeNotifier {
 
   bool get hasRoom => room != null && controller != null;
 
-  Future<void> open(RoomSummary nextRoom) async {
+  Future<void> open(
+    RoomSummary nextRoom, {
+    String userId = '10000000',
+  }) async {
     if (room?.id == nextRoom.id && controller != null) {
       minimized = false;
       notifyListeners();
@@ -62,7 +65,7 @@ class ActiveRoomSession extends ChangeNotifier {
       }
 
       await foregroundService.start();
-      await realtime.enterRoom(nextRoom.id, '10000000');
+      await realtime.enterRoom(nextRoom.id, userId);
       connected = true;
       connecting = false;
       connectionError = null;

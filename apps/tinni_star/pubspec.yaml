@@ -12,6 +12,7 @@ dependencies:
   app_links: ^7.2.1
   shared_preferences: ^2.5.5
   crypto: ^3.0.7
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

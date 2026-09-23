@@ -19,8 +19,10 @@ class RoomController extends ChangeNotifier {
   late List<RoomSeat> seats;
   int? mySeat;
   MicState micState = MicState.offSeat;
+  bool? inviteModeOverride;
 
   TinniFunctionConfig get config => runtime.config;
+  bool get inviteMode => inviteModeOverride ?? config.inviteMode;
 
   void refreshFunctionPack() {
     final oldSeat = mySeat;
@@ -42,7 +44,7 @@ class RoomController extends ChangeNotifier {
     if (seat.locked) return 'Seat ' + (index + 1).toString() + ' is locked.';
     if (seat.occupied) return 'Seat ' + (index + 1).toString() + ' is occupied.';
     if (mySeat != null) return 'Leave your current seat first.';
-    if (config.inviteMode) {
+    if (inviteMode) {
       messages.add(RoomMessage('System', 'Seat ' + (index + 1).toString() + ' request sent.'));
       notifyListeners();
       return 'Request sent to Owner/Admin.';
@@ -69,6 +71,11 @@ class RoomController extends ChangeNotifier {
     seats[index] = seats[index].copyWith(clearUser: true);
     mySeat = null;
     micState = MicState.offSeat;
+    notifyListeners();
+  }
+
+  void setInviteMode(bool enabled) {
+    inviteModeOverride = enabled;
     notifyListeners();
   }
 

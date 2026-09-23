@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
@@ -44,6 +47,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> createRoom() async {
+    final ownerId = widget.state.auth.current?.userId ?? '10000000';
+    final existing = widget.state.discovery.ownedRooms(ownerId);
+    if (existing.isNotEmpty) {
+      openRoom(existing.first);
+      return;
+    }
+
     final result = await showModalBottomSheet<_CreateRoomResult>(
       context: context,
       isScrollControlled: true,
@@ -57,6 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final room = widget.state.discovery.createRoom(
       title: result.title,
       country: result.country,
+      ownerId: ownerId,
+      photoPath: result.photoPath,
       seatCount: result.seatCount,
       partyMode: result.partyMode,
     );
@@ -197,7 +209,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMinePage() {
-    final owned = widget.state.discovery.ownedRooms('10000000');
+    final currentUserId = widget.state.auth.current?.userId ?? '10000000';
+    final owned = widget.state.discovery.ownedRooms(currentUserId);
     final myRoom = owned.isEmpty ? null : owned.first;
 
     final byId = <String, RoomSummary>{
@@ -697,6 +710,65 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class _RoomArtwork extends StatelessWidget {
+  const _RoomArtwork({
+    required this.room,
+    required this.width,
+    required this.height,
+    this.icon,
+    this.fallback,
+  });
+
+  final RoomSummary room;
+  final double width;
+  final double height;
+  final IconData? icon;
+  final String? fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = room.photoPath;
+    final hasLocalPhoto =
+        path != null && path.isNotEmpty && File(path).existsSync();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: width,
+        height: height,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: RoyalPalette.gold),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF382608), Color(0xFF090704)],
+          ),
+        ),
+        child: hasLocalPhoto
+            ? SizedBox.expand(
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.cover,
+                ),
+              )
+            : fallback != null
+                ? Text(
+                    fallback!,
+                    style: const TextStyle(
+                      color: RoyalPalette.gold,
+                      fontSize: 40,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  )
+                : Icon(
+                    icon ?? Icons.graphic_eq_rounded,
+                    color: RoyalPalette.gold,
+                    size: 34,
+                  ),
+      ),
+    );
+  }
+}
+
 class _MineRoomCard extends StatelessWidget {
   const _MineRoomCard({
     super.key,
@@ -714,25 +786,11 @@ class _MineRoomCard extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       child: Row(
         children: [
-          Container(
+          _RoomArtwork(
+            room: room,
             width: 88,
             height: 88,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF4A3308), Color(0xFF0B0905)],
-              ),
-              border: Border.all(color: RoyalPalette.gold),
-            ),
-            child: Text(
-              room.title.characters.first.toUpperCase(),
-              style: const TextStyle(
-                color: RoyalPalette.gold,
-                fontSize: 44,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            fallback: room.title.characters.first.toUpperCase(),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -800,20 +858,11 @@ class _RecentRoomTile extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: Container(
+            child: _RoomArtwork(
+              room: room,
               width: double.infinity,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF382608), Color(0xFF090704)],
-                ),
-              ),
-              child: Icon(
-                Icons.graphic_eq_rounded,
-                color: RoyalPalette.gold,
-                size: 34,
-              ),
+              height: double.infinity,
+              icon: Icons.graphic_eq_rounded,
             ),
           ),
           const SizedBox(height: 6),
@@ -1039,21 +1088,11 @@ class _RoomListCard extends StatelessWidget {
         onTap: onTap,
         child: Row(
           children: [
-            Container(
+            _RoomArtwork(
+              room: room,
               width: 74,
               height: 74,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: RoyalPalette.gold),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF31210A), Color(0xFF0A0805)],
-                ),
-              ),
-              child: const Icon(
-                Icons.graphic_eq_rounded,
-                color: RoyalPalette.gold,
-                size: 34,
-              ),
+              icon: Icons.graphic_eq_rounded,
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -1135,12 +1174,14 @@ class _CreateRoomResult {
     required this.country,
     required this.seatCount,
     required this.partyMode,
+    this.photoPath,
   });
 
   final String title;
   final String country;
   final int seatCount;
   final String partyMode;
+  final String? photoPath;
 }
 
 class _CreateRoomSheet extends StatefulWidget {
@@ -1152,9 +1193,11 @@ class _CreateRoomSheet extends StatefulWidget {
 
 class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   final TextEditingController titleController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
   String country = 'IN';
   int seatCount = 12;
   String partyMode = 'Friends-making Party';
+  String? photoPath;
 
   @override
   void dispose() {
@@ -1178,8 +1221,43 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
         country: country,
         seatCount: seatCount,
         partyMode: partyMode,
+        photoPath: photoPath,
       ),
     );
+  }
+
+  Future<void> _chooseRoomPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('create-room-photo-gallery'),
+              leading: const Icon(Icons.photo_library_rounded, color: RoyalPalette.gold),
+              title: const Text('Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            ListTile(
+              key: const Key('create-room-photo-camera'),
+              leading: const Icon(Icons.photo_camera_rounded, color: RoyalPalette.gold),
+              title: const Text('Camera'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final image = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 88,
+      maxWidth: 1600,
+    );
+    if (image == null || !mounted) return;
+    setState(() => photoPath = image.path);
   }
 
   @override
@@ -1204,6 +1282,41 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
               ),
             ),
             const SizedBox(height: 14),
+            Center(
+              child: InkWell(
+                key: const Key('create-room-photo-button'),
+                onTap: _chooseRoomPhoto,
+                borderRadius: BorderRadius.circular(48),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 42,
+                      backgroundColor: RoyalPalette.panel2,
+                      child: Icon(
+                        photoPath == null
+                            ? Icons.add_a_photo_rounded
+                            : Icons.check_circle_rounded,
+                        color: RoyalPalette.gold,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      photoPath == null ? 'Add room photo' : 'Room photo selected',
+                      style: const TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Text(
+                      'Tap to choose Gallery or Camera',
+                      style: TextStyle(color: RoyalPalette.muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Choose party mode',
               style: TextStyle(
