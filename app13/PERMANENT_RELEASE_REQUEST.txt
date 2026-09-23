@@ -1,7 +1,6 @@
-Anamika AI 13 strict self-update quality + retained-version update
-Requested: 2026-09-22
-Purpose: every Anamika update must pass source validation, duplicate-function guard, automatic repair when errors/build failures are detected, real signed APK build and final APK identity/signature/version verification before owner install.
-Uploaded APK path: selected Anamika APKs must expose bundled self_source; Anamika extracts it, validates/repairs it, rebuilds and verifies the fresh candidate instead of trusting a binary-only update.
-Function replacement: existing functions are edited in place; duplicate/shadow implementations such as V2/New/Copy/Updated are rejected when the original implementation still exists.
-Retention: current installed APK + exact source are archived before install. Old versions are NEVER auto-deleted. After the new version passes source/consistency checks and three consecutive healthy launches, Anamika reminds the owner that the old archive can be deleted, but only an explicit owner command deletes it.
-Existing functions/data: preserve all unrelated existing functions, Function Pack system, Understanding Pack system, owner controls and app data.
+Anamika AI 13 direct-code auto-intake + update scorecard release
+Requested: 2026-09-23
+Purpose: allow code-only messages to automatically start Anamika's direct-code repair/build workflow; explain detected language, likely target functions/classes and estimated benefit before/with the result.
+Post-update verification: capture old-version baseline before install, compare deterministic core probes on the new version, combine that with source verification, crash evidence and three healthy launches, and report Update Quality %, Problem/Regression %, core-probe delta vs old version and planned benefit estimate.
+Preservation: all prior Function Pack, Understanding Pack, strict quality gate, duplicate guard, uploaded-APK repair/rebuild, old-version archive and owner-only deletion behavior remain enabled.
+Update mode: permanent-signed in-place APK update; preserve existing app data/functions.
