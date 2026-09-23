@@ -75,7 +75,7 @@ public final class SelfTestEngine {
 
         public String summary(){
             StringBuilder b=new StringBuilder();
-            b.append("Anamika 13 Self-Test\n")
+            b.append("Anamika Self-Test\n")
                     .append("Passed: ").append(passed()).append("/").append(items.size())
                     .append("\nRequired failures: ").append(failedRequired());
             for(Item i:items){
