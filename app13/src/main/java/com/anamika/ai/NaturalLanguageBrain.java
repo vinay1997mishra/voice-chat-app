@@ -37,11 +37,14 @@ public final class NaturalLanguageBrain {
                 effort==BrainEffortStore.Mode.MEDIUM?256:512;
         long chatTimeout=effort==BrainEffortStore.Mode.INSTANT?60_000L:
                 effort==BrainEffortStore.Mode.MEDIUM?120_000L:240_000L;
-        int memoryTurns=effort==BrainEffortStore.Mode.INSTANT?6:
-                effort==BrainEffortStore.Mode.MEDIUM?10:14;
-        int memoryChars=effort==BrainEffortStore.Mode.INSTANT?3000:
-                effort==BrainEffortStore.Mode.MEDIUM?6000:10000;
+        int memoryTurns=effort==BrainEffortStore.Mode.INSTANT?4:
+                effort==BrainEffortStore.Mode.MEDIUM?8:12;
+        int memoryChars=effort==BrainEffortStore.Mode.INSTANT?1200:
+                effort==BrainEffortStore.Mode.MEDIUM?2600:4500;
+        int understandingChars=effort==BrainEffortStore.Mode.INSTANT?1800:
+                effort==BrainEffortStore.Mode.MEDIUM?3500:5500;
         String memory=MemoryStore.promptContext(c,memoryTurns,memoryChars);
+        String understanding=UnderstandingPackStore.promptGuide(c,understandingChars);
         String ownerMessage=instruction==null?"":instruction.trim();
         String localHint=LocalLanguageText.intentHint(ownerMessage);
         String conversationHint=UnderstandingPackStore.semanticHint(c,ownerMessage);
@@ -63,7 +66,7 @@ public final class NaturalLanguageBrain {
                 "Do not pretend an Android action was executed when it was not.\n"+
                 "If this is normal conversation or a question, answer directly.\n"+
                 "Use recent chat history and owner memory when relevant to references such as 'ye', 'isme', 'usme', 'ab', 'pehle wala'. Do not blindly repeat history.\n"+
-                UnderstandingPackStore.promptGuide(c)+"\n\n"+
+                understanding+"\n\n"+
                 (memory.isEmpty()?"":memory+"\n\n")+
                 "CURRENT OWNER MESSAGE: "+ownerMessage+"\n"+
                 hintLine+
