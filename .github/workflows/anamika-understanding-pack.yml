@@ -61,9 +61,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="anamika-understanding-current"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG"               dist/AnamikaAI-13-UnderstandingPack.zip               dist/AnamikaAI-13-UnderstandingPack.zip.sha256               --clobber
-            gh release edit "$TAG"               --title "Anamika AI 13 Understanding Pack • Current"               --notes "One-month conversation-style language/context update. Improves Hinglish/mobile-typing normalization, short follow-up resolution, owner corrections, Anamika-vs-voice-chat context separation, build/update language, calculations and translation continuity. Import from Anamika Components; no APK replacement is needed."
-          else
-            gh release create "$TAG"               dist/AnamikaAI-13-UnderstandingPack.zip               dist/AnamikaAI-13-UnderstandingPack.zip.sha256               --target "$GITHUB_SHA"               --title "Anamika AI 13 Understanding Pack • Current"               --notes "Hot-update conversation/language/context rules. Import from Anamika Components; no APK replacement is needed after the bridge update."               --prerelease
-          fi
+          gh release delete "$TAG" --cleanup-tag -y >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$TAG" >/dev/null 2>&1 || true
+          gh release create "$TAG" \
+            dist/AnamikaAI-13-UnderstandingPack.zip \
+            dist/AnamikaAI-13-UnderstandingPack.zip.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "Anamika AI 13 Understanding Pack • Current" \
+            --notes "One-month conversation-style language/context update v2026.09.23.2. Improves Hinglish/mobile typing, short follow-ups, owner corrections, project-context separation, build/update language, calculations and translation continuity. Import from Anamika Components; no APK replacement is needed." \
+            --prerelease
