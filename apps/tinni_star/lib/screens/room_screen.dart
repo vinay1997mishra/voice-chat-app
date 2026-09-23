@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../core/connector_security.dart';
-import '../core/function_pack.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
@@ -23,6 +21,7 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
+  final Set<String> _selectedGiftRecipients = <String>{};
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -30,6 +29,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
+    _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,174 +78,224 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showGiftSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: 360,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Row(
-                  children: [
-                    Text('Gift', style: TextStyle(color: RoyalPalette.gold, fontSize: 20, fontWeight: FontWeight.w900)),
-                    Spacer(),
-                    Text('Normal   Popular   Luxury', style: TextStyle(color: RoyalPalette.muted, fontSize: 11)),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: GiftService.catalog.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 0.82,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                  ),
-                  itemBuilder: (_, index) {
-                    final gift = GiftService.catalog[index];
-                    return RoyalPanel(
-                      padding: const EdgeInsets.all(8),
-                      onTap: () {
-                        final tx = widget.state.gifts.send(
-                          gift: gift,
-                          quantity: 1,
-                          maxCombo: controller.config.maxGiftCombo,
-                          senderId: '10000000',
-                          receiverIds: const ['room-owner'],
-                        );
-                        Navigator.pop(context);
-                        if (tx == null) {
-                          _snack('Gift failed or balance is insufficient.');
-                          return;
-                        }
-                        widget.state.effects.enqueue(
-                          EffectRequest(
-                            id: 'gift-' + widget.state.gifts.sent.length.toString(),
-                            kind: EffectKind.gift,
-                            asset: gift.effectKind + ':' + gift.id,
-                            priority: 50,
-                          ),
-                        );
-                        widget.state.activities.addGiftScore('10000000', tx.totalCost);
-                        widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-                        _snack(gift.name + ' sent.');
-                        setState(() {});
-                      },
-                      child: Column(
-                        children: [
-                          const Expanded(
-                            child: Icon(Icons.card_giftcard_rounded, color: RoyalPalette.gold, size: 38),
-                          ),
-                          Text(gift.name, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w800)),
-                          Text('🪙 ' + gift.price.toString(), style: const TextStyle(color: RoyalPalette.gold, fontSize: 10)),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+    final ownerId = widget.room.ownerId ?? widget.room.id;
+    final senderId = widget.state.auth.current?.userId ?? '10000000';
 
-  void _showOwnerTools() {
+    List<(String, String)> recipients() {
+      final values = <(String, String)>[(ownerId, 'Room Owner')];
+      for (var index = 0; index < controller.seats.length; index++) {
+        final seat = controller.seats[index];
+        final name = seat.userName;
+        if (name == null) continue;
+        final id = name == 'You' ? senderId : 'seat-${index + 1}';
+        if (id == senderId) continue;
+        values.add((id, name));
+      }
+      return values;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.all(12),
-          children: [
-            const ListTile(
-              title: Text('Owner / Admin Controls', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.extension_rounded, color: RoyalPalette.gold),
-              title: const Text('Apply room-core Function Pack v1'),
-              subtitle: const Text('18 seats + free-seat + KTV + Games'),
-              onTap: () {
-                var pack = const FunctionPack(
-                  id: 'room-core',
-                  version: 1,
-                  minSchema: 1,
-                  maxSchema: 1,
-                  summary: 'Expanded room runtime',
-                  signature: '',
-                  config: TinniFunctionConfig(
-                    seatCount: 18,
-                    inviteMode: false,
-                    seatLockEnabled: true,
-                    roomChatEnabled: true,
-                    giftsEnabled: true,
-                    maxGiftCombo: 1000,
-                    ktvEnabled: true,
-                    gamesEnabled: true,
-                    cpEnabled: true,
-                    familyEnabled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final roomRecipients = recipients();
+          return SafeArea(
+            child: SizedBox(
+              height: 470,
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Gift',
+                          style: TextStyle(
+                            color: RoyalPalette.gold,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Spacer(),
+                        Text(
+                          'Normal   Popular   Luxury',
+                          style: TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-                final verifier = widget.state.runtime.signatureVerifier;
-                if (verifier is PairingHmacSignatureVerifier) {
-                  pack = verifier.sign(pack);
-                } else {
-                  pack = pack.withSignature('TINNI_DEV_SIGNED');
-                }
-                final result = widget.state.connector.installValidatedPack(pack, ownerApproved: true);
-                widget.state.roomSession.refreshFunctionPack();
-                Navigator.pop(context);
-                _snack(result.message);
-              },
+                  SizedBox(
+                    key: const Key('gift-recipient-strip'),
+                    height: 88,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: roomRecipients.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      itemBuilder: (_, index) {
+                        final recipient = roomRecipients[index];
+                        final selected =
+                            _selectedGiftRecipients.contains(recipient.$1);
+                        return InkWell(
+                          key: Key('gift-recipient-${recipient.$1}'),
+                          onTap: () {
+                            setSheetState(() {
+                              if (selected) {
+                                if (_selectedGiftRecipients.length > 1) {
+                                  _selectedGiftRecipients.remove(recipient.$1);
+                                }
+                              } else {
+                                _selectedGiftRecipients.add(recipient.$1);
+                              }
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(32),
+                          child: SizedBox(
+                            width: 66,
+                            child: Column(
+                              children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: RoyalPalette.panel2,
+                                    border: Border.all(
+                                      color: selected
+                                          ? RoyalPalette.gold
+                                          : RoyalPalette.bronze,
+                                      width: selected ? 3 : 1.5,
+                                    ),
+                                    boxShadow: selected
+                                        ? [
+                                            BoxShadow(
+                                              color: RoyalPalette.gold
+                                                  .withValues(alpha: 0.28),
+                                              blurRadius: 10,
+                                            ),
+                                          ]
+                                        : const [],
+                                  ),
+                                  child: Icon(
+                                    index == 0
+                                        ? Icons.workspace_premium_rounded
+                                        : Icons.person_rounded,
+                                    color: RoyalPalette.gold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  recipient.$2,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: selected
+                                        ? RoyalPalette.cream
+                                        : RoyalPalette.muted,
+                                    fontSize: 9,
+                                    fontWeight: selected
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: GiftService.catalog.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        childAspectRatio: 0.82,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                      ),
+                      itemBuilder: (_, index) {
+                        final gift = GiftService.catalog[index];
+                        return RoyalPanel(
+                          padding: const EdgeInsets.all(8),
+                          onTap: () {
+                            final tx = widget.state.gifts.send(
+                              gift: gift,
+                              quantity: 1,
+                              maxCombo: controller.config.maxGiftCombo,
+                              senderId: senderId,
+                              receiverIds:
+                                  _selectedGiftRecipients.toList(growable: false),
+                            );
+                            if (tx == null) {
+                              _snack(
+                                'Gift failed, select a recipient or check balance.',
+                              );
+                              return;
+                            }
+                            Navigator.pop(context);
+                            widget.state.effects.enqueue(
+                              EffectRequest(
+                                id:
+                                    'gift-${widget.state.gifts.sent.length}',
+                                kind: EffectKind.gift,
+                                asset: '${gift.effectKind}:${gift.id}',
+                                priority: 50,
+                              ),
+                            );
+                            widget.state.activities
+                                .addGiftScore(senderId, tx.totalCost);
+                            widget.state.identity
+                                .gainVipExperience(tx.totalCost ~/ 10);
+                            _snack(
+                              '${gift.name} sent to ${tx.receiverIds.length} user(s).',
+                            );
+                            setState(() {});
+                          },
+                          child: Column(
+                            children: [
+                              const Expanded(
+                                child: Icon(
+                                  Icons.card_giftcard_rounded,
+                                  color: RoyalPalette.gold,
+                                  size: 38,
+                                ),
+                              ),
+                              Text(
+                                gift.name,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                '🪙 ${gift.price}',
+                                style: const TextStyle(
+                                  color: RoyalPalette.gold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.public_rounded, color: RoyalPalette.gold),
-              title: const Text('Toggle public / private'),
-              subtitle: Text(widget.state.roomControls.settings.visibility.name),
-              onTap: () {
-                final current = widget.state.roomControls.settings;
-                widget.state.roomControls.settings = current.copyWith(
-                  visibility: current.visibility == RoomVisibility.publicRoom
-                      ? RoomVisibility.privateRoom
-                      : RoomVisibility.publicRoom,
-                );
-                Navigator.pop(context);
-                _snack('Room visibility updated.');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.mic_external_on_rounded, color: RoyalPalette.gold),
-              title: const Text('Toggle free/apply mic'),
-              subtitle: Text(widget.state.roomControls.settings.micMode.name),
-              onTap: () {
-                final current = widget.state.roomControls.settings;
-                final next = current.micMode == MicMode.apply ? MicMode.free : MicMode.apply;
-                widget.state.roomControls.settings = current.copyWith(micMode: next);
-                Navigator.pop(context);
-                _snack('Mic mode: ' + next.name);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.undo_rounded, color: RoyalPalette.gold),
-              title: const Text('Rollback Function Pack'),
-              onTap: () {
-                final result = widget.state.connector.rollback(ownerApproved: true);
-                widget.state.roomSession.refreshFunctionPack();
-                Navigator.pop(context);
-                _snack(result.message);
-              },
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -306,6 +356,48 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _showSeatControls(int index) {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: Icon(
+                seat.locked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                color: RoyalPalette.gold,
+              ),
+              title: Text(seat.locked ? 'Unlock seat' : 'Lock seat'),
+              subtitle: const Text('Manual room control only'),
+              onTap: () {
+                Navigator.pop(context);
+                controller.toggleSeatLock(index);
+                _snack(
+                  seat.locked
+                      ? 'Seat ${index + 1} unlocked.'
+                      : 'Seat ${index + 1} locked.',
+                );
+              },
+            ),
+            if (controller.mySeat == index)
+              ListTile(
+                leading: const Icon(Icons.logout_rounded, color: RoyalPalette.gold),
+                title: const Text('Leave this seat'),
+                onTap: () {
+                  Navigator.pop(context);
+                  controller.leaveSeat();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSeatRow({
     required int row,
     required SeatLayoutSpec spec,
@@ -346,12 +438,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () {
           final text = controller.requestOrJoinSeat(index);
-          if (config.inviteMode && controller.mySeat == null) {
-            controller.ownerApproveMySeat(index);
-          }
           _snack(text);
         },
-        onLongPress: () => controller.toggleSeatLock(index),
+        onLongPress: () => _showSeatControls(index),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -486,10 +575,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 Navigator.pop(context);
               },
               icon: const Icon(Icons.close_rounded, color: RoyalPalette.gold),
-            ),
-            IconButton(
-              onPressed: _showOwnerTools,
-              icon: const Icon(Icons.admin_panel_settings_rounded, color: RoyalPalette.gold),
             ),
           ],
         ),
