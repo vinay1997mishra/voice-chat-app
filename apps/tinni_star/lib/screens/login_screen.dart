@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../auth/auth_service.dart';
 import '../app/tinni_app.dart';
+import '../ui/royal_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.state});
@@ -57,32 +58,73 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: RoyalPalette.black,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            const SizedBox(height: 56),
-            Container(
-              width: 94,
-              height: 94,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFB85CFF), Color(0xFF5A1A84)],
+            const SizedBox(height: 48),
+            Center(
+              child: Container(
+                width: 104,
+                height: 104,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    colors: [
+                      Color(0xFFFFE99A),
+                      RoyalPalette.gold,
+                      RoyalPalette.deepGold,
+                      Color(0xFF1A1204),
+                    ],
+                  ),
+                  border: Border.all(color: RoyalPalette.gold, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: RoyalPalette.gold.withValues(alpha: 0.28),
+                      blurRadius: 28,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 54,
+                  color: Colors.black,
                 ),
               ),
-              child: const Icon(Icons.graphic_eq_rounded, size: 52),
             ),
             const SizedBox(height: 26),
-            const Text(
-              'Tinni Star',
-              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900),
+            const Center(
+              child: Text(
+                'Tinni Star',
+                style: TextStyle(
+                  color: RoyalPalette.gold,
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+              ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Voice rooms, friends, gifts, KTV, games, CP and family.',
-              style: TextStyle(color: Colors.white70),
+            const Center(
+              child: Text(
+                'ROYAL VOICE COMMUNITY',
+                style: TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 12,
+                  letterSpacing: 2.0,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Center(
+              child: Text(
+                'Voice rooms, friends, gifts, KTV, games, CP and family.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: RoyalPalette.cream),
+              ),
             ),
             const SizedBox(height: 26),
             TextField(
@@ -132,9 +174,28 @@ class _LoginScreenState extends State<LoginScreen> {
               label: const Text('Continue with Facebook'),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Provider buttons currently use the Tinni identity adapter. Production OAuth credentials can plug into the same AuthService contract.',
-              style: TextStyle(fontSize: 12, color: Colors.white54),
+            const RoyalPanel(
+              padding: EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.security_rounded,
+                    color: RoyalPalette.gold,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Secure Tinni identity session. Production OAuth providers can plug into the same account system.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: RoyalPalette.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
