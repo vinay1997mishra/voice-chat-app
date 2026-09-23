@@ -522,7 +522,7 @@ Examples of normal-user self-scoped controls may include:
 - go to seat directly when Free Mic permits
 - leave own seat
 - gift/chat/member/profile interactions
-- personal audio/effect/display preferences shown in the room UI
+- personal audio/effect/display preferences shown in the room UI; effect toggles apply only to that user and never globally to the room
 
 ### Context rule: own room vs someone else's room — LOCKED
 - Inside another user's room: visible personal settings are self-scoped only.
@@ -636,6 +636,39 @@ Effects:
 - room theme.
 
 Effect playback must be separate from financial transaction logic.
+
+## 16A. Personal Effect Settings — LOCKED
+
+Effect visibility/playback preferences are USER-SCOPED, not room-scoped.
+
+Rule:
+- Every user controls effects only for themself.
+- If Room Owner turns an effect off, it is disabled only for the Owner's own view/device/session.
+- Other users in the same room continue to see/play that effect according to their own personal settings.
+- Room Owner cannot globally disable another user's effect playback through this personal Effects setting.
+- Admin also controls effects only for themself.
+- Normal users control effects only for themself.
+
+Examples:
+- User A disables gift effects → User A does not see those selected effects.
+- User B in the same room still sees them if B has them enabled.
+- Owner disables entry effects for self → other users still see entry effects unless they independently disable them.
+
+Effect preferences should be stored per user/profile:
+UserEffectPreferences {
+  userId
+  giftEffectsEnabled
+  entryEffectsEnabled
+  vipEffectsEnabled
+  roomAnimationsEnabled
+  otherEffectCategories...
+}
+
+Effect events are still broadcast/received normally; each client decides locally whether to render them based on that user's own preferences.
+
+Important:
+- Personal effect filtering must not alter gift payment, gift delivery, room state, rank, VIP state, or other users' rendering.
+- This is a presentation preference only.
 
 ## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
 
@@ -901,6 +934,6 @@ Still video-dependent:
 - exact control placement.
 - exact seat-design visuals/assets.
 - exact frame compositing.
-- exact remaining Room Settings option list. Owner/Admin/Normal User permission boundary is now substantially locked; personal Block/Unblock is separated from room Kickout moderation.
+- exact remaining Room Settings option list. Owner/Admin/Normal User permission boundary is now substantially locked; personal Block/Unblock is separated from room Kickout moderation, and Effects settings are confirmed as per-user only.
 - exact dialogs/animations.
 - exact state transitions visible to users.
