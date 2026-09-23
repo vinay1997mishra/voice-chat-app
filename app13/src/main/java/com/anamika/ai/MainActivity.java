@@ -34,6 +34,7 @@ import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
 import com.anamika.ai.developer.CodeIntakeAnalyzer;
+import com.anamika.ai.language.AdaptiveLanguageLearner;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.plugins.PluginManagerActivity;
 import com.anamika.ai.runtime.RuntimeWatchdog;
@@ -97,7 +98,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         root.setGravity(Gravity.CENTER_VERTICAL);
         root.setBackgroundColor(BG);
 
-        TextView title=title("Anamika AI 13");
+        TextView title=title("Anamika");
         root.addView(title);
 
         TextView info=new TextView(this);
@@ -308,6 +309,8 @@ public final class MainActivity extends Activity implements VoiceController.List
         drawerCommand(list,"Rollback Status","rollback status",true);
         drawerCommand(list,"Version Archive Status","version archive status",true);
         drawerCommand(list,"Update Quality Score","update scorecard",true);
+        drawerCommand(list,"Language Learning Status","language learning status",true);
+        drawerCommand(list,"Reset Learned Language","reset language learning",true);
         drawerCommand(list,"Signer Status","signer status",true);
 
         drawerSection(list,"Phone & Apps");
@@ -483,7 +486,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
         startupSetupDialogVisible=true;
         new AlertDialog.Builder(this)
-                .setTitle("Anamika 13 • First Setup")
+                .setTitle("Anamika • First Setup")
                 .setMessage("Full offline coding/self-upgrade ke liye ye setup chahiye:\n\n"+
                         missing+
                         "\nToolchain signed V13 APK me bundled hai. Signer aur Brain/Qwen setup Anamika aapse khud mangegi.")
@@ -563,6 +566,7 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     private void runCommand(String text,String connectorCommandId){
         append("You",text);
+        AdaptiveLanguageLearner.observeOwner(this,text);
         MemoryStore.appendTurn(this,"owner",text);
 
         if(CodeIntakeAnalyzer.looksLikeCode(text)){
