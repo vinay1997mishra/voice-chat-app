@@ -32,7 +32,7 @@ public final class PluginManagerActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(14),dp(14),dp(14),dp(14));
 
-        TextView title=new TextView(this);title.setText("Anamika 13 • Plugin Center");title.setTextSize(22);box.addView(title);
+        TextView title=new TextView(this);title.setText("Anamika • Plugin Center");title.setTextSize(22);box.addView(title);
         TextView note=new TextView(this);note.setText("Only apps you enable here may receive Accessibility automation commands.");box.addView(note);
         Button access=new Button(this);access.setText("Open Accessibility Settings");box.addView(access);
         access.setOnClickListener(v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
