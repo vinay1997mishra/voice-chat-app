@@ -13,6 +13,7 @@ import com.anamika.ai.diagnostics.DiagnosticsController;
 import com.anamika.ai.developer.AutonomyComponents;
 import com.anamika.ai.developer.CodeIntakeAnalyzer;
 import com.anamika.ai.files.LocalVault;
+import com.anamika.ai.language.AdaptiveLanguageLearner;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.messaging.MessageCommandParser;
@@ -93,10 +94,10 @@ public final class CommandRouter {
         if(l.equals("hello")||l.equals("hi")||l.equals("hey")||
                 l.equals("hello anamika")||l.equals("hello mika")||
                 l.equals("namaste")||l.equals("नमस्ते"))
-            return "Ji, boliye. Anamika 13 ready hai.";
+            return "Ji, boliye. Main Anamika hu, ready hu.";
 
         if(l.equals("functions")){
-            return "Main Hindi, Roman Hindi/Hinglish aur English style commands ko canonical V13 commands me samajh sakti hu: owner lock, text/voice reply, wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, diagnostics/self-test, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
+            return "Main Anamika hu. Main Hindi, Roman Hindi/Hinglish aur English style commands samajh sakti hu aur baat karte waqt owner ke recurring language patterns local device par seekhti rehti hu. Core functions: owner lock, text/voice reply, media-friendly wake service, calculator, installed-app launch, web search, settings/dialer, health/crash/watchdog, local memory, private vault, Plugin Center, Accessibility tap/type/back, messaging, Deep Blueprint, research, diagnostics/self-test, self-upgrade workspace, Code Doctor, APK verification aur Android update installer.";
         }
 
         if(l.equals("component packs")||l.equals("component center")){
@@ -105,6 +106,14 @@ public final class CommandRouter {
         }
         if(l.equals("component status"))
             return ComponentPackManager.status(a);
+        if(l.equals("language learning status")||l.equals("adaptive language status"))
+            return AdaptiveLanguageLearner.status(a);
+        if(l.equals("language learning on")||l.equals("adaptive language on"))
+            return AdaptiveLanguageLearner.setEnabled(a,true);
+        if(l.equals("language learning off")||l.equals("adaptive language off"))
+            return AdaptiveLanguageLearner.setEnabled(a,false);
+        if(l.equals("reset language learning")||l.equals("learned language reset"))
+            return AdaptiveLanguageLearner.reset(a);
 
         if(l.equals("autonomy status")||l.equals("self repair status")||l.equals("offline brain status"))
             return AutonomyComponents.status(a);
