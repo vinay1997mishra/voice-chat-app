@@ -10,6 +10,7 @@ class RoomSummary {
     this.partyMode = 'Friends-making Party',
     this.createdAt,
     this.ownerId,
+    this.photoPath,
   });
 
   final String id;
@@ -22,6 +23,7 @@ class RoomSummary {
   final String partyMode;
   final DateTime? createdAt;
   final String? ownerId;
+  final String? photoPath;
 
   bool createdWithin(
     Duration age, {
@@ -44,6 +46,7 @@ class RoomSummary {
     String? partyMode,
     DateTime? createdAt,
     String? ownerId,
+    String? photoPath,
   }) =>
       RoomSummary(
         id: id,
@@ -56,6 +59,7 @@ class RoomSummary {
         partyMode: partyMode ?? this.partyMode,
         createdAt: createdAt ?? this.createdAt,
         ownerId: ownerId ?? this.ownerId,
+        photoPath: photoPath ?? this.photoPath,
       );
 }
 
@@ -121,14 +125,28 @@ class DiscoveryService {
   RoomSummary createRoom({
     required String title,
     required String country,
+    String ownerId = '10000000',
+    String? photoPath,
     bool locked = false,
     int seatCount = 12,
     String partyMode = 'Friends-making Party',
   }) {
     final value = title.trim();
     if (value.isEmpty) throw StateError('Room title is required');
+    final normalizedOwnerId = ownerId.trim();
+    if (normalizedOwnerId.isEmpty) {
+      throw StateError('Owner ID is required');
+    }
+    final existingOwned =
+        rooms.where((room) => room.ownerId == normalizedOwnerId).toList();
+    if (existingOwned.isNotEmpty) {
+      return existingOwned.first;
+    }
+    if (rooms.any((room) => room.id == normalizedOwnerId)) {
+      throw StateError('Room ID is already in use');
+    }
     final room = RoomSummary(
-      id: (_nextRoomId++).toString(),
+      id: normalizedOwnerId,
       title: value,
       country: country,
       online: 1,
@@ -136,7 +154,8 @@ class DiscoveryService {
       seatCount: seatCount,
       partyMode: partyMode,
       createdAt: DateTime.now(),
-      ownerId: '10000000',
+      ownerId: normalizedOwnerId,
+      photoPath: photoPath,
     );
     rooms.insert(0, room);
     return room;
