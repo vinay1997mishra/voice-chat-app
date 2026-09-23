@@ -43,18 +43,24 @@ public final class UnderstandingPackStore {
     }
 
     public static String promptGuide(Context c){
+        String base="";
         File f=new File(root(c),"owner_context_profile.txt");
         if(f.isFile()){
             try{
                 String s=AndroidCompat.readText(f,StandardCharsets.UTF_8).trim();
-                if(!s.isEmpty())return s.length()>MAX_PROFILE_CHARS?s.substring(0,MAX_PROFILE_CHARS):s;
+                if(!s.isEmpty())base=s.length()>MAX_PROFILE_CHARS?s.substring(0,MAX_PROFILE_CHARS):s;
             }catch(Exception ignored){}
         }
-        return OwnerConversationProfile.promptGuide();
+        if(base.isEmpty())base=OwnerConversationProfile.promptGuide();
+        String adaptive=AdaptiveLanguageLearner.promptGuide(c);
+        return adaptive.isEmpty()?base:base+"\n\n"+adaptive;
     }
 
     public static String semanticHint(Context c,String raw){
+        String learned=AdaptiveLanguageLearner.semanticHint(c,raw);
         String dynamic=dynamicHint(c,raw);
+        if(!learned.isEmpty()&&!dynamic.isEmpty())return learned+" "+dynamic;
+        if(!learned.isEmpty())return learned;
         if(!dynamic.isEmpty())return dynamic;
         return OwnerConversationProfile.semanticHint(raw);
     }
@@ -96,8 +102,9 @@ public final class UnderstandingPackStore {
     }
 
     public static String status(Context c){
-        return installed(c)
+        String base=installed(c)
                 ?"Understanding pack: READY ("+version(c)+")"
                 :"Understanding pack: built-in fallback only";
+        return base+"\n"+AdaptiveLanguageLearner.status(c);
     }
 }
