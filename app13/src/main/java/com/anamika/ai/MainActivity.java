@@ -33,6 +33,7 @@ import com.anamika.ai.core.AndroidCompat;
 import com.anamika.ai.core.CrashJournal;
 import com.anamika.ai.core.OwnerStore;
 import com.anamika.ai.diagnostics.DiagnosticsActivity;
+import com.anamika.ai.developer.CodeIntakeAnalyzer;
 import com.anamika.ai.memory.MemoryStore;
 import com.anamika.ai.plugins.PluginManagerActivity;
 import com.anamika.ai.runtime.RuntimeWatchdog;
@@ -306,6 +307,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         drawerCommand(list,"Recovery Checkpoint","recovery checkpoint",true);
         drawerCommand(list,"Rollback Status","rollback status",true);
         drawerCommand(list,"Version Archive Status","version archive status",true);
+        drawerCommand(list,"Update Quality Score","update scorecard",true);
         drawerCommand(list,"Signer Status","signer status",true);
 
         drawerSection(list,"Phone & Apps");
@@ -511,16 +513,22 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     private void maybeHandlePostUpdateStability(){
-        VersionArchiveManager.recordHealthyLaunch(this);
+        String health=VersionArchiveManager.recordHealthyLaunch(this);
         if(!OwnerStore.isTrusted(this))return;
         String reminder=VersionArchiveManager.consumeReminder(this);
-        if(reminder==null||reminder.trim().isEmpty())return;
-        if(messages!=null)append("Anamika",reminder);
-        new AlertDialog.Builder(this)
-                .setTitle("Old Version Reminder")
-                .setMessage(reminder)
-                .setPositiveButton("Keep Old Version",(d,w)->{})
-                .show();
+
+        if(reminder!=null&&!reminder.trim().isEmpty()){
+            if(messages!=null)append("Anamika",reminder);
+            new AlertDialog.Builder(this)
+                    .setTitle("New Update Verified")
+                    .setMessage(reminder)
+                    .setPositiveButton("Keep Old Version",(d,w)->{})
+                    .show();
+            return;
+        }
+
+        if(health!=null&&!health.trim().isEmpty()&&messages!=null)
+            append("Anamika",health);
     }
 
     private void startVoice(){
@@ -556,6 +564,12 @@ public final class MainActivity extends Activity implements VoiceController.List
     private void runCommand(String text,String connectorCommandId){
         append("You",text);
         MemoryStore.appendTurn(this,"owner",text);
+
+        if(CodeIntakeAnalyzer.looksLikeCode(text)){
+            CodeIntakeAnalyzer.Analysis analysis=CodeIntakeAnalyzer.analyze(text);
+            append("Anamika",analysis.ownerReport()+
+                    "\nCode intake accepted. Ab source integration → repair if needed → duplicate check → real build start kar rahi hu.");
+        }
 
         if(CommandRouter.requiresBackgroundFast(text)){
             if(status!=null)status.setText("Working in background…");
