@@ -4,6 +4,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
+import '../moderation/moderation_service.dart';
 import '../room/room_control_service.dart';
 import '../room/room_controller.dart';
 import '../room/room_models.dart';
@@ -42,10 +43,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _openRoom() async => widget.state.roomSession.open(
-        widget.room,
-        userId: widget.state.auth.current?.userId ?? '10000000',
-      );
+  Future<void> _openRoom() async {
+    final ownerId = widget.room.ownerId ?? widget.room.id;
+    widget.state.roomControls.configureForRoom(ownerId);
+    widget.state.roomControls.roomMode =
+        widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
+    await widget.state.roomSession.open(
+      widget.room,
+      userId: widget.state.auth.current?.userId ?? '10000000',
+    );
+  }
+
+  bool get _canManageRoom {
+    final userId = widget.state.auth.current?.userId ?? '10000000';
+    final role = widget.state.roomControls.roles[userId];
+    return role == RoomRole.owner || role == RoomRole.admin;
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -304,21 +317,148 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showRoomTools() {
-    final tools = [
-      ('Sound', Icons.volume_up_rounded),
-      ('Room mode', Icons.meeting_room_rounded),
-      ('Launch event', Icons.celebration_rounded),
-      ('Block effects', Icons.hide_image_rounded),
-      ('Hide notice', Icons.visibility_off_rounded),
-      ('Room theme', Icons.checkroom_rounded),
-      ('Seat', Icons.event_seat_rounded),
-      ('Lucky number', Icons.confirmation_number_rounded),
-      ('Group PK', Icons.sports_mma_rounded),
-      ('Room open', Icons.lock_open_rounded),
-      ('Public Screen', Icons.tv_rounded),
-      ('Setting', Icons.settings_rounded),
-      ('Report', Icons.report_rounded),
+    final controls = widget.state.roomControls;
+    final tools = <(String, IconData, VoidCallback)>[
+      (
+        controls.soundEnabled ? 'Sound On' : 'Sound Off',
+        controls.soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+        () {
+          final enabled = controls.toggleSound();
+          _snack('Room sound ${enabled ? "enabled" : "muted"}.');
+        },
+      ),
+      (
+        controls.roomMode == 'friends' ? 'Friends Mode' : 'Event Mode',
+        Icons.meeting_room_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can change room mode.');
+            return;
+          }
+          final mode = controls.toggleRoomMode();
+          widget.state.discovery.editRoom(
+            widget.room.id,
+            partyMode: mode == 'event' ? 'Event hosting mode' : 'Friends-making Party',
+          );
+          _snack(mode == 'event' ? 'Event hosting mode enabled.' : 'Friends-making Party mode enabled.');
+        },
+      ),
+      (
+        controls.eventActive ? 'Stop Event' : 'Launch Event',
+        Icons.celebration_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can launch events.');
+            return;
+          }
+          final active = controls.toggleEvent();
+          _snack(active ? 'Room event launched.' : 'Room event stopped.');
+        },
+      ),
+      (
+        controls.effectsEnabled ? 'Block Effects' : 'Allow Effects',
+        Icons.hide_image_rounded,
+        () {
+          final enabled = controls.toggleEffects();
+          _snack(enabled ? 'Gift effects enabled.' : 'Gift effects blocked.');
+        },
+      ),
+      (
+        controls.noticesVisible ? 'Hide Notice' : 'Show Notice',
+        Icons.visibility_off_rounded,
+        () {
+          final visible = controls.toggleNotices();
+          _snack(visible ? 'Room notice visible.' : 'Room notice hidden.');
+        },
+      ),
+      (
+        'Room Theme',
+        Icons.checkroom_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can change room theme.');
+            return;
+          }
+          final theme = controls.cycleTheme();
+          _snack('Room theme changed to $theme.');
+        },
+      ),
+      (
+        'Seat Controls',
+        Icons.event_seat_rounded,
+        () {
+          _snack(_canManageRoom ? 'Long-press a seat for manual lock/unlock controls.' : 'Tap a free seat to join or apply for mic.');
+        },
+      ),
+      (
+        controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
+        Icons.confirmation_number_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can set lucky number.');
+            return;
+          }
+          _showLuckyNumberDialog();
+        },
+      ),
+      (
+        controls.groupPkEnabled ? 'Stop Group PK' : 'Group PK',
+        Icons.sports_mma_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can control Group PK.');
+            return;
+          }
+          final enabled = controls.toggleGroupPk();
+          _snack(enabled ? 'Group PK enabled.' : 'Group PK disabled.');
+        },
+      ),
+      (
+        controls.settings.visibility == RoomVisibility.publicRoom ? 'Room Open' : 'Room Private',
+        controls.settings.visibility == RoomVisibility.publicRoom ? Icons.lock_open_rounded : Icons.lock_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can change visibility.');
+            return;
+          }
+          final current = controls.settings;
+          final next = current.visibility == RoomVisibility.publicRoom ? RoomVisibility.privateRoom : RoomVisibility.publicRoom;
+          controls.settings = current.copyWith(visibility: next);
+          _snack(next == RoomVisibility.publicRoom ? 'Room is public.' : 'Room is private.');
+        },
+      ),
+      (
+        controls.publicScreenEnabled ? 'Screen On' : 'Public Screen',
+        Icons.tv_rounded,
+        () {
+          if (!_canManageRoom) {
+            _snack('Only the room owner or room admin can control public screen.');
+            return;
+          }
+          final enabled = controls.togglePublicScreen();
+          _snack(enabled ? 'Public screen enabled.' : 'Public screen disabled.');
+        },
+      ),
+      ('Settings', Icons.settings_rounded, _showRoomSettings),
+      (
+        'Report',
+        Icons.report_rounded,
+        () {
+          final reporter = widget.state.auth.current?.userId ?? '10000000';
+          final target = widget.room.ownerId ?? widget.room.id;
+          widget.state.moderation.report(
+            UserReport(
+              reporterId: reporter,
+              targetId: target,
+              category: ReportCategory.other,
+              details: 'Room report for ${widget.room.id}',
+            ),
+          );
+          _snack('Room report submitted.');
+        },
+      ),
     ];
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -331,15 +471,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             itemCount: tools.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
-              childAspectRatio: 0.9,
+              childAspectRatio: 0.88,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
             ),
             itemBuilder: (_, index) {
               final tool = tools[index];
               return InkWell(
                 onTap: () {
                   Navigator.pop(context);
-                  _snack(tool.$1 + ' selected.');
+                  tool.$3();
+                  if (mounted) setState(() {});
                 },
+                borderRadius: BorderRadius.circular(12),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -348,7 +492,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       child: Icon(tool.$2, color: RoyalPalette.gold),
                     ),
                     const SizedBox(height: 5),
-                    Text(tool.$1, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9)),
+                    Text(
+                      tool.$1,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 9),
+                    ),
                   ],
                 ),
               );
@@ -359,6 +507,118 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _showRoomSettings() {
+    final controls = widget.state.roomControls;
+    if (!_canManageRoom) {
+      _snack('Room settings are available only to the room owner or room admin.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final settings = controls.settings;
+          return SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(12),
+              children: [
+                const ListTile(
+                  title: Text(
+                    'Room Settings',
+                    style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('Public room'),
+                  subtitle: const Text('Turn off to make the room private.'),
+                  value: settings.visibility == RoomVisibility.publicRoom,
+                  onChanged: (value) {
+                    controls.settings = settings.copyWith(
+                      visibility: value ? RoomVisibility.publicRoom : RoomVisibility.privateRoom,
+                    );
+                    setSheetState(() {});
+                    setState(() {});
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Free mic'),
+                  subtitle: const Text('When off, users send a mic request and wait for approval.'),
+                  value: settings.micMode == MicMode.free,
+                  onChanged: (value) {
+                    controls.settings = settings.copyWith(
+                      micMode: value ? MicMode.free : MicMode.apply,
+                    );
+                    setSheetState(() {});
+                    setState(() {});
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Only managers can speak'),
+                  value: settings.onlyManagersCanSpeak,
+                  onChanged: (value) {
+                    controls.settings = settings.copyWith(onlyManagersCanSpeak: value);
+                    setSheetState(() {});
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showLuckyNumberDialog() async {
+    final controls = widget.state.roomControls;
+    final numberController = TextEditingController(
+      text: controls.luckyNumber?.toString() ?? '',
+    );
+    final result = await showDialog<int?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lucky Number'),
+        content: TextField(
+          controller: numberController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
+        ),
+        actions: [
+          if (controls.luckyNumberEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(context, -1),
+              child: const Text('Turn Off'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(numberController.text.trim());
+              if (value == null || value < 0) return;
+              Navigator.pop(context, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null) return;
+    if (result == -1) {
+      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
+      _snack('Lucky number disabled.');
+    } else {
+      controls.setLuckyNumber(result);
+      _snack('Lucky number set to $result.');
+    }
+    if (mounted) setState(() {});
+  }
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
@@ -440,7 +700,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final text = controller.requestOrJoinSeat(index);
           _snack(text);
         },
-        onLongPress: () => _showSeatControls(index),
+        onLongPress: () {
+          if (_canManageRoom) {
+            _showSeatControls(index);
+          } else {
+            _snack('Only the room owner or room admin can lock/unlock seats.');
+          }
+        },
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
