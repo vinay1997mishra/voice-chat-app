@@ -9,6 +9,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 
+import com.anamika.ai.language.AdaptiveLanguageLearner;
 import com.anamika.ai.language.LanguageCommandInterpreter;
 import com.anamika.ai.language.LocalLanguageText;
 import com.anamika.ai.messaging.MessageCommandParser;
@@ -128,6 +129,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         if(!normalized.equals(candidate.trim()))score+=3;
         if(MessageCommandParser.parse(candidate)!=null)score+=5;
         if(LocalLanguageText.likelyHindiOrHinglish(candidate))score+=2;
+        if(!AdaptiveLanguageLearner.semanticHint(activity,candidate).isEmpty())score+=4;
         String l=normalized.toLowerCase(Locale.ROOT);
         String[] known={"open ","search ","dial ","remember ","research ","scan app ","tap ","type ",
                 "calculate ","save file ","settings","functions","wake ","upgrade ","self update",
