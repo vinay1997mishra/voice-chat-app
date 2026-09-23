@@ -4,11 +4,12 @@ import '../core/function_pack.dart';
 import 'room_models.dart';
 
 class RoomController extends ChangeNotifier {
-  RoomController({required this.runtime}) {
+  RoomController({required this.runtime, this.seatCountOverride}) {
     _rebuildSeats();
   }
 
   final FunctionPackRuntime runtime;
+  final int? seatCountOverride;
 
   final List<RoomMessage> messages = [
     const RoomMessage('System', 'Welcome to Tinni Star ✨'),
@@ -40,15 +41,11 @@ class RoomController extends ChangeNotifier {
     if (seat.locked) return 'Seat ' + (index + 1).toString() + ' is locked.';
     if (seat.occupied) return 'Seat ' + (index + 1).toString() + ' is occupied.';
     if (mySeat != null) return 'Leave your current seat first.';
-
     if (config.inviteMode) {
-      messages.add(
-        RoomMessage('System', 'Seat ' + (index + 1).toString() + ' request sent.'),
-      );
+      messages.add(RoomMessage('System', 'Seat ' + (index + 1).toString() + ' request sent.'));
       notifyListeners();
       return 'Request sent to Owner/Admin.';
     }
-
     seats[index] = seat.copyWith(userName: 'You');
     mySeat = index;
     micState = MicState.muted;
@@ -61,9 +58,7 @@ class RoomController extends ChangeNotifier {
     seats[index] = seats[index].copyWith(userName: 'You');
     mySeat = index;
     micState = MicState.muted;
-    messages.add(
-      RoomMessage('System', 'You joined seat ' + (index + 1).toString() + '.'),
-    );
+    messages.add(RoomMessage('System', 'You joined seat ' + (index + 1).toString() + '.'));
     notifyListeners();
   }
 
@@ -99,7 +94,7 @@ class RoomController extends ChangeNotifier {
 
   void _rebuildSeats() {
     seats = List.generate(
-      config.seatCount,
+      seatCountOverride ?? config.seatCount,
       (index) => RoomSeat(index: index),
     );
   }

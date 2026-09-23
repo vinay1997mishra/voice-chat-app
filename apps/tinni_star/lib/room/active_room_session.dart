@@ -42,7 +42,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     room = nextRoom;
-    controller = RoomController(runtime: runtime)..addListener(_onRoomChanged);
+    controller = RoomController(\n      runtime: runtime,\n      seatCountOverride: nextRoom.seatCount,\n    )..addListener(_onRoomChanged);
     minimized = false;
     connecting = true;
     connected = false;

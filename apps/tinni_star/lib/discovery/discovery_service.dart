@@ -6,6 +6,8 @@ class RoomSummary {
     required this.online,
     this.locked = false,
     this.activity = false,
+    this.seatCount = 12,
+    this.partyMode = 'Friends-making Party',
   });
 
   final String id;
@@ -14,6 +16,8 @@ class RoomSummary {
   final int online;
   final bool locked;
   final bool activity;
+  final int seatCount;
+  final String partyMode;
 
   RoomSummary copyWith({
     String? title,
@@ -21,6 +25,8 @@ class RoomSummary {
     int? online,
     bool? locked,
     bool? activity,
+    int? seatCount,
+    String? partyMode,
   }) =>
       RoomSummary(
         id: id,
@@ -29,6 +35,8 @@ class RoomSummary {
         online: online ?? this.online,
         locked: locked ?? this.locked,
         activity: activity ?? this.activity,
+        seatCount: seatCount ?? this.seatCount,
+        partyMode: partyMode ?? this.partyMode,
       );
 }
 
@@ -37,25 +45,11 @@ class DiscoveryService {
       : rooms = List<RoomSummary>.from(
           seed ??
               const [
-                RoomSummary(
-                  id: '1524843',
-                  title: 'India Official Room',
-                  country: 'IN',
-                  online: 128,
-                ),
-                RoomSummary(
-                  id: '10000001',
-                  title: 'Night Party',
-                  country: 'IN',
-                  online: 86,
-                  activity: true,
-                ),
-                RoomSummary(
-                  id: '10000002',
-                  title: 'Music Club',
-                  country: 'US',
-                  online: 54,
-                ),
+                RoomSummary(id: '1524843', title: 'India Official Room', country: 'IN', online: 128, activity: true, seatCount: 12),
+                RoomSummary(id: '10000001', title: 'Golden Hearts Party', country: 'IN', online: 86, activity: true, seatCount: 15),
+                RoomSummary(id: '10000002', title: 'Royal Music Club', country: 'US', online: 54, seatCount: 10),
+                RoomSummary(id: '10000003', title: 'Dil Se Friends', country: 'IN', online: 44, seatCount: 12),
+                RoomSummary(id: '10000004', title: 'Night Kings', country: 'IN', online: 24, seatCount: 8),
               ],
         );
 
@@ -69,6 +63,8 @@ class DiscoveryService {
     required String title,
     required String country,
     bool locked = false,
+    int seatCount = 12,
+    String partyMode = 'Friends-making Party',
   }) {
     final value = title.trim();
     if (value.isEmpty) throw StateError('Room title is required');
@@ -78,6 +74,8 @@ class DiscoveryService {
       country: country,
       online: 1,
       locked: locked,
+      seatCount: seatCount,
+      partyMode: partyMode,
     );
     rooms.insert(0, room);
     return room;
@@ -88,6 +86,8 @@ class DiscoveryService {
     String? title,
     bool? locked,
     bool? activity,
+    int? seatCount,
+    String? partyMode,
   }) {
     final index = rooms.indexWhere((room) => room.id == roomId);
     if (index < 0) return false;
@@ -95,6 +95,8 @@ class DiscoveryService {
       title: title?.trim().isEmpty == true ? null : title,
       locked: locked,
       activity: activity,
+      seatCount: seatCount,
+      partyMode: partyMode,
     );
     return true;
   }
@@ -114,12 +116,7 @@ class DiscoveryService {
     searchHistory.remove(value);
     searchHistory.insert(0, value);
     final lower = value.toLowerCase();
-    return rooms
-        .where(
-          (room) =>
-              room.id == value || room.title.toLowerCase().contains(lower),
-        )
-        .toList();
+    return rooms.where((room) => room.id == value || room.title.toLowerCase().contains(lower)).toList();
   }
 
   void visit(String roomId) {
