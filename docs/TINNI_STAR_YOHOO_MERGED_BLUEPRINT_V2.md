@@ -170,6 +170,8 @@ Room Admin:
 - CANNOT change Room Theme / Background.
 - CANNOT change other room-wide settings.
 - CAN Kick Out a user from the user-specific action menu.
+- CAN invite any room user to an empty seat / mic.
+- CAN accept or reject a user's Apply Mic request.
 - CAN remove a user from a seat / send user down from mic.
 - CAN lock/unlock seats.
 - CAN mute/unmute seats.
@@ -461,6 +463,8 @@ Visibility depends on current role and the target user.
 
 Admin-visible moderation is intentionally limited:
 - Kick Out user.
+- Invite user to seat / mic.
+- Accept or reject Apply Mic requests.
 - Remove user from seat / send user down from mic.
 - Seat lock/unlock.
 - Seat mute/unmute.
@@ -480,6 +484,8 @@ Admin must not receive room-wide Settings controls or Kickout List/Unkick contro
 | View Room Level / Kickout List | YES | NO |
 | Unkick active kickout | YES | NO |
 | Kick Out user | YES | YES |
+| Invite user to seat / mic | YES | YES |
+| Accept/reject Apply Mic request | YES | YES |
 | Remove user from seat | YES | YES |
 | Lock / unlock seat | YES | YES |
 | Mute / unmute seat | YES | YES |
