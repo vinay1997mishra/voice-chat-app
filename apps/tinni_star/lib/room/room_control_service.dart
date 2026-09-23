@@ -78,6 +78,7 @@ class RoomControlService {
   bool luckyNumberEnabled = false;
   int? luckyNumber;
   String themeId = 'royal-dark';
+  String roomMode = 'friends';
 
   void configureForRoom(String ownerUserId) {
     roles.clear();
@@ -195,6 +196,11 @@ class RoomControlService {
     if (value < 0) throw ArgumentError.value(value, 'value');
     luckyNumberEnabled = true;
     luckyNumber = value;
+  }
+
+  String toggleRoomMode() {
+    roomMode = roomMode == 'friends' ? 'event' : 'friends';
+    return roomMode;
   }
 
   String cycleTheme() {
