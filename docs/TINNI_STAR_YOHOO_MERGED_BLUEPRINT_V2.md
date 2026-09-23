@@ -529,6 +529,37 @@ Examples of normal-user self-scoped controls may include:
 - Inside the user's own room: Owner-level Room Settings become available.
 - A user's own Room Settings are not editable remotely from someone else's room.
 
+### Blocklist navigation and UI — LOCKED
+
+Exact navigation:
+Bottom navigation > Mine / Profile
+→ Setting
+→ Blacklist
+
+Mine/Profile screen:
+- Contains a Setting entry.
+- Setting opens the account/user settings screen.
+
+Setting screen includes:
+- Message notification
+- Bind account
+- Language settings
+- About
+- Feedback
+- Blacklist
+- Privacy statement
+- Sign out
+
+Blacklist screen:
+- Shows currently blocked users.
+- Each row shows the blocked user's avatar/DP and display name on the LEFT.
+- Each row shows a RIGHT-SIDE action button labeled "Move out".
+- "Move out" removes that user from the Blacklist and therefore performs Unblock.
+- After successful Move out/Unblock, that user must disappear from the Blacklist.
+- If no blocked users remain, the list shows its empty/completed state.
+
+This Blacklist is the same personal block state used by Block/Unblock on another user's profile/action surface.
+
 ### Personal Block / Unblock — LOCKED
 
 Blocking another user is a personal social/privacy action, not a room-wide moderation action.
@@ -591,7 +622,7 @@ canDirectMessage(a, b):
 
 The same relation must drive:
 1. Block/Unblock on the target user's profile/action sheet.
-2. The user's own Blocklist screen.
+2. The user's own Blocklist screen at Mine/Profile > Setting > Blacklist, where "Move out" performs Unblock.
 3. Blocked-user admission check for the blocker's owned room.
 4. Direct-message eligibility.
 
