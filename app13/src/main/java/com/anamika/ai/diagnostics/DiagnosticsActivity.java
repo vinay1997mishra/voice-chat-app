@@ -26,7 +26,7 @@ public final class DiagnosticsActivity extends Activity {
         box.setPadding(p,p,p,p);
 
         TextView title=new TextView(this);
-        title.setText("Anamika 13 • Diagnostics");
+        title.setText("Anamika • Diagnostics");
         title.setTextSize(23);
         box.addView(title);
 
