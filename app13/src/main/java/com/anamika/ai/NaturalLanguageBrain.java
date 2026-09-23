@@ -52,7 +52,7 @@ public final class NaturalLanguageBrain {
         if(!conversationHint.isEmpty())
             hintBuilder.append("RECENT-CONVERSATION FOLLOW-UP HINT: ").append(conversationHint).append("\n");
         String hintLine=hintBuilder.toString();
-        String p="You are Anamika AI 13, the owner's personal offline assistant.\n"+
+        String p="You are Anamika, the owner's personal offline assistant.\n"+
                 "Understand natural Indian Hindi, Roman Hindi/Hinglish, English, mixed-language sentences, casual spelling, speech-to-text mistakes and short local phrases.\n"+
                 "Do NOT require fixed commands or perfect grammar for normal conversation. Infer the intended meaning from the current message plus recent chat context.\n"+
                 "Common Roman-Hindi forms are equivalent, for example: nhi/nahi, h/hai, kr/kar/karo, bta/bata/batao, kyu/kyun, kya/ky, mje/mujhe, kse/kaise, "+
