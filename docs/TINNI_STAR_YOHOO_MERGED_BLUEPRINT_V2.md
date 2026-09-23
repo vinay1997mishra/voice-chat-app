@@ -290,19 +290,27 @@ Room Settings contains a Room Level / management area that includes Kickout List
 
 Kickout List is a room-level moderation history/audit surface, not the same thing as the user-specific Kick Out action.
 
-Each Kickout record must show:
-- Kicked user's display name.
-- Kicked user's user ID.
-- Kick date.
-- Kick time.
-- Admin/moderator who performed the kick: display name.
-- Admin/moderator who performed the kick: user ID.
-- Kickout status/action label visible against the record.
+Each active Kickout record must show:
+- LEFT SIDE: kicked user's display name.
+- LEFT SIDE: kicked user's user ID.
+- LEFT SIDE: kick date.
+- LEFT SIDE: kick time.
+- LEFT SIDE: admin/moderator who performed the kick: display name.
+- LEFT SIDE: admin/moderator who performed the kick: user ID.
+- RIGHT SIDE: Unkick action.
 
 Interaction split:
 - To kick a user now: Owner/Admin taps that user's ID/avatar/occupied seat/user card, then uses the user-specific action menu.
-- To review past kicks: Owner/Admin opens the 4-box Room Settings panel, then opens Kickout List.
-- Kickout List is therefore historical/audit information, while user-action Kick Out is an immediate moderation command.
+- Kick duration selector appears during Kick Out with exactly these choices:
+  - 2 hours
+  - 12 hours
+  - 48 hours
+  - Permanent
+- To review CURRENT active kickouts: Owner/Admin opens the 4-box Room Settings panel, then opens Kickout List.
+- Kickout List is not an immutable historical audit archive. It represents users who are currently under an active kickout.
+- If an active kickout expires, its record should no longer be shown.
+- If Owner/Admin taps Unkick, that user's entry and all kick-related information for that active restriction disappear from Kickout List.
+- Kickout List itself cannot be manually cleared as a whole.
 
 Data model recommendation:
 RoomKickRecord {
@@ -312,11 +320,12 @@ RoomKickRecord {
   kickedByUserId
   kickedByUserName
   kickedAt
-  reason? 
-  status
+  durationType // 2h | 12h | 48h | permanent
+  expiresAt?  // null for permanent
+  status      // active | expired | revoked
 }
 
-The backend should be authoritative for this audit history so reconnect/reinstall does not erase it.
+The backend should be authoritative for the active kickout state so reconnect/reinstall does not incorrectly restore or lose restrictions.
 
 ## 14. Member/user action sheet — LOCKED AT INTERACTION-ENTRY LEVEL
 
