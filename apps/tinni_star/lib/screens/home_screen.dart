@@ -345,11 +345,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPartyPage() {
-    final rooms = widget.state.discovery.recommend();
     final ordered = popular
-        ? rooms
-        : (List<RoomSummary>.from(rooms)
-          ..sort((a, b) => b.id.compareTo(a.id)));
+        ? widget.state.discovery.recommend()
+        : widget.state.discovery.newRooms();
     final topRooms = ordered.take(3).toList();
     final listRooms = ordered.skip(3).toList();
 
@@ -1068,7 +1066,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final seatOptions = [8, 10, 12, 15, 18, 20];
+    final seatOptions = [8, 10, 12, 15, 18, 20, 30, 40];
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 150),

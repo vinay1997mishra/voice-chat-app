@@ -8,6 +8,7 @@ class RoomSummary {
     this.activity = false,
     this.seatCount = 12,
     this.partyMode = 'Friends-making Party',
+    this.createdAt,
   });
 
   final String id;
@@ -18,6 +19,18 @@ class RoomSummary {
   final bool activity;
   final int seatCount;
   final String partyMode;
+  final DateTime? createdAt;
+
+  bool createdWithin(
+    Duration age, {
+    DateTime? now,
+  }) {
+    final created = createdAt;
+    if (created == null) return false;
+    final reference = now ?? DateTime.now();
+    final cutoff = reference.subtract(age);
+    return !created.isBefore(cutoff) && !created.isAfter(reference);
+  }
 
   RoomSummary copyWith({
     String? title,
@@ -27,6 +40,7 @@ class RoomSummary {
     bool? activity,
     int? seatCount,
     String? partyMode,
+    DateTime? createdAt,
   }) =>
       RoomSummary(
         id: id,
@@ -37,27 +51,67 @@ class RoomSummary {
         activity: activity ?? this.activity,
         seatCount: seatCount ?? this.seatCount,
         partyMode: partyMode ?? this.partyMode,
+        createdAt: createdAt ?? this.createdAt,
       );
 }
 
 class DiscoveryService {
   DiscoveryService({List<RoomSummary>? seed})
-      : rooms = List<RoomSummary>.from(
-          seed ??
-              const [
-                RoomSummary(id: '1524843', title: 'India Official Room', country: 'IN', online: 128, activity: true, seatCount: 12),
-                RoomSummary(id: '10000001', title: 'Golden Hearts Party', country: 'IN', online: 86, activity: true, seatCount: 15),
-                RoomSummary(id: '10000002', title: 'Royal Music Club', country: 'US', online: 54, seatCount: 10),
-                RoomSummary(id: '10000003', title: 'Dil Se Friends', country: 'IN', online: 44, seatCount: 12),
-                RoomSummary(id: '10000004', title: 'Night Kings', country: 'IN', online: 24, seatCount: 8),
-              ],
-        );
+      : rooms = List<RoomSummary>.from(seed ?? _defaultRooms());
 
   final List<RoomSummary> rooms;
   final List<String> searchHistory = <String>[];
   final List<String> recentRoomIds = <String>[];
   final Set<String> favorites = <String>{};
   int _nextRoomId = 20000000;
+
+  static List<RoomSummary> _defaultRooms() {
+    final now = DateTime.now();
+    return [
+      RoomSummary(
+        id: '1524843',
+        title: 'India Official Room',
+        country: 'IN',
+        online: 128,
+        activity: true,
+        seatCount: 12,
+        createdAt: now.subtract(const Duration(days: 60)),
+      ),
+      RoomSummary(
+        id: '10000001',
+        title: 'Golden Hearts Party',
+        country: 'IN',
+        online: 86,
+        activity: true,
+        seatCount: 15,
+        createdAt: now.subtract(const Duration(days: 5)),
+      ),
+      RoomSummary(
+        id: '10000002',
+        title: 'Royal Music Club',
+        country: 'US',
+        online: 54,
+        seatCount: 10,
+        createdAt: now.subtract(const Duration(days: 25)),
+      ),
+      RoomSummary(
+        id: '10000003',
+        title: 'Dil Se Friends',
+        country: 'IN',
+        online: 44,
+        seatCount: 12,
+        createdAt: now.subtract(const Duration(days: 2)),
+      ),
+      RoomSummary(
+        id: '10000004',
+        title: 'Night Kings',
+        country: 'IN',
+        online: 24,
+        seatCount: 8,
+        createdAt: now.subtract(const Duration(days: 10)),
+      ),
+    ];
+  }
 
   RoomSummary createRoom({
     required String title,
@@ -76,6 +130,7 @@ class DiscoveryService {
       locked: locked,
       seatCount: seatCount,
       partyMode: partyMode,
+      createdAt: DateTime.now(),
     );
     rooms.insert(0, room);
     return room;
@@ -110,13 +165,35 @@ class DiscoveryService {
     return sorted;
   }
 
+  List<RoomSummary> newRooms({
+    Duration maxAge = const Duration(days: 15),
+    DateTime? now,
+  }) {
+    final reference = now ?? DateTime.now();
+    final values = rooms
+        .where((room) => room.createdWithin(maxAge, now: reference))
+        .toList()
+      ..sort(
+        (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+            .compareTo(
+          a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+    return values;
+  }
+
   List<RoomSummary> search(String query) {
     final value = query.trim();
     if (value.isEmpty) return const [];
     searchHistory.remove(value);
     searchHistory.insert(0, value);
     final lower = value.toLowerCase();
-    return rooms.where((room) => room.id == value || room.title.toLowerCase().contains(lower)).toList();
+    return rooms
+        .where(
+          (room) =>
+              room.id == value || room.title.toLowerCase().contains(lower),
+        )
+        .toList();
   }
 
   void visit(String roomId) {
