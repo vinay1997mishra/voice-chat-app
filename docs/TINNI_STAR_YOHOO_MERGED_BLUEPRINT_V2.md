@@ -145,7 +145,36 @@ B. User-specific moderation
 - These actions appear only after the Owner/Admin taps a user's ID / avatar / occupied seat / user card and opens that user's action menu.
 - User-specific mic actions also belong to that user context when applicable.
 
-Exact role boundary between Owner and Admin must be server-authoritative.
+### Owner vs Admin permission boundary — LOCKED
+
+Room Owner:
+- Can open and change Room Settings.
+- Can edit Room Information.
+- Can change Mic Mode / seat count.
+- Can choose Seat Design.
+- Can change Room Theme / Background.
+- Can view Room Level / Kickout List.
+- Can Unkick users from Kickout List.
+- Can perform user-specific moderation.
+- Can lock/unlock seats.
+- Can mute/unmute seats.
+- Can remove users from seats.
+
+Room Admin:
+- CANNOT open/view the Kickout List.
+- CANNOT Unkick a user.
+- CANNOT change Room Settings.
+- CANNOT edit Room Information.
+- CANNOT change Mic Mode / seat count.
+- CANNOT change Seat Design.
+- CANNOT change Room Theme / Background.
+- CANNOT change other room-wide settings.
+- CAN Kick Out a user from the user-specific action menu.
+- CAN remove a user from a seat / send user down from mic.
+- CAN lock/unlock seats.
+- CAN mute/unmute seats.
+
+All permission checks must also be enforced server-side; hiding a button in UI is not sufficient.
 
 ## 8. Room lifecycle — MERGED FROM YOHOO
 
@@ -227,14 +256,15 @@ Apply Mic:
 - Owner/Admin accepts or rejects whether that user is allowed onto a seat.
 - Only after approval is the user added to a seat.
 
-Owner/Admin exception:
+Owner/Admin seat-control exception:
 - Free Mic / Apply Mic restriction does not block Owner or Admin from taking an empty seat.
 - When Owner/Admin taps an empty seat, the seat-action menu includes:
-  - Seat Lock
-  - Seat Mute
+  - Seat Lock / Unlock
+  - Seat Mute / Unmute
   - Go to Seat
 - Go to Seat lets Owner/Admin occupy the empty seat directly.
 - Owner/Admin does not need to submit an Apply Mic request for themself.
+- Admin's authority here is limited to seat/mic moderation; it does not grant access to Room Settings.
 
 Normal-user state:
 AUDIENCE
@@ -382,10 +412,13 @@ Interaction split:
   - 12 hours
   - 48 hours
   - Permanent
-- To review CURRENT active kickouts: Owner/Admin opens the 4-box Room Settings panel, then opens Kickout List.
+- To review CURRENT active kickouts: Room Owner opens the 4-box Room Settings panel, then opens Kickout List.
+- Admin cannot view/open Kickout List.
 - Kickout List is not an immutable historical audit archive. It represents users who are currently under an active kickout.
 - If an active kickout expires, its record should no longer be shown.
-- If Owner/Admin taps Unkick, that user's entry and all kick-related information for that active restriction disappear from Kickout List.
+- Only Room Owner can tap Unkick.
+- Admin cannot Unkick.
+- If Room Owner taps Unkick, that user's entry and all kick-related information for that active restriction disappear from Kickout List.
 - Kickout List itself cannot be manually cleared as a whole.
 
 Data model recommendation:
@@ -424,6 +457,33 @@ User action family:
 - report.
 
 Visibility depends on current role and the target user.
+
+Admin-visible moderation is intentionally limited:
+- Kick Out user.
+- Remove user from seat / send user down from mic.
+- Seat lock/unlock.
+- Seat mute/unmute.
+
+Admin must not receive room-wide Settings controls or Kickout List/Unkick controls.
+
+## 14A. Room Owner / Admin permission matrix — LOCKED
+
+| Capability | Owner | Admin |
+|---|---:|---:|
+| Open/change Room Settings | YES | NO |
+| Edit room DP/name/description/member list | YES | NO |
+| Change Mic Mode / seat count | YES | NO |
+| Change Seat Design | YES | NO |
+| Change Room Theme / Background | YES | NO |
+| View Room Level / Kickout List | YES | NO |
+| Unkick active kickout | YES | NO |
+| Kick Out user | YES | YES |
+| Remove user from seat | YES | YES |
+| Lock / unlock seat | YES | YES |
+| Mute / unmute seat | YES | YES |
+| Directly take empty seat | YES | YES |
+
+This matrix is authoritative for Tinni Star unless the owner later changes it.
 
 ## 15. Gifts — MERGED FROM YOHOO
 
@@ -729,6 +789,6 @@ Still video-dependent:
 - exact control placement.
 - exact seat-design visuals/assets.
 - exact frame compositing.
-- exact remaining Room Settings option list and admin permission boundary. 4-box Room Settings entry, user-specific Kick/Block entry, and room-level Kickout List audit fields are now locked.
+- exact remaining Room Settings option list. Owner/Admin permission boundary is now locked: Admin has no Room Settings/Kickout List/Unkick access and only limited seat + kick moderation.
 - exact dialogs/animations.
 - exact state transitions visible to users.
