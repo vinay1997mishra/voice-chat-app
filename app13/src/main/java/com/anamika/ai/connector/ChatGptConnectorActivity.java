@@ -29,7 +29,7 @@ public final class ChatGptConnectorActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(16),dp(16),dp(16),dp(20));
 
-        TextView title=new TextView(this); title.setText("Anamika 13 • ChatGPT Connector"); title.setTextSize(22); box.addView(title);
+        TextView title=new TextView(this); title.setText("Anamika • ChatGPT Connector"); title.setTextSize(22); box.addView(title);
         TextView info=new TextView(this);
         info.setText("ChatGPT ko Anamika se connect karne ke liye remote HTTPS MCP connector URL aur server pairing code chahiye. Pairing token phone ke private storage me protected rahega.");
         box.addView(info);
