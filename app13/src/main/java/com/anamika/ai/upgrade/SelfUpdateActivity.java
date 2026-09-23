@@ -4,8 +4,10 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
@@ -58,7 +60,11 @@ public final class SelfUpdateActivity extends Activity {
         box.addView(title,new LinearLayout.LayoutParams(-1,-2));
 
         status=new TextView(this);
-        status.setText("Select a newer Anamika APK. It will be accepted only if package name and signing certificate match.");
+        long current=currentVersion();
+        status.setText("Current installed version: "+current+
+                "\nNo newer update candidate selected.\n"+
+                "Select an Anamika APK with version > "+current+" or tap Use Latest Local Build.\n"+
+                "After selection: signature/version → bundled source/duplicate check → repair/build only if needed → Install button unlock.");
         status.setTextIsSelectable(true);
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,0,1);
         sp.topMargin=dp(16);
@@ -171,7 +177,9 @@ public final class SelfUpdateActivity extends Activity {
         verified=false;
         installButton().setEnabled(false);
         status.setText(initial.message+
-                "\n\nBundled source code check → auto-repair if needed → fresh signed build chal raha hai…");
+                "\n\nSTEP 1/2 PASS • Package/signature/version verified."+
+                "\nSTEP 2/2 • Bundled source + duplicate/core checks chal rahe hain…"+
+                "\nSource clean hua to install button seedha unlock hoga. Problem mili to repair + fresh signed build chalega.");
         final Context app=getApplicationContext();
         new Thread(()->{
             UpgradeCoordinator.UploadedResult checked=
@@ -195,7 +203,7 @@ public final class SelfUpdateActivity extends Activity {
                 status.setText(checked.message+
                         (replace.isEmpty()?"":"\n"+replace)+
                         "\n\n"+finalCheck.message+
-                        (verified?"\nSTRICT CODE/BUILD CHECK PASS • Ready for owner/Android confirmation."
+                        (verified?"\nREADY • INSTALL VERIFIED UPDATE button ab enabled hai."
                                 :"\nUpdate rejected."));
             });
         },"anamika-uploaded-update-quality-gate").start();
@@ -203,6 +211,10 @@ public final class SelfUpdateActivity extends Activity {
 
     private String replaceStagedWith(File source){
         if(source==null||!source.isFile())return "Rebuilt candidate missing.";
+        try{
+            if(staged.isFile()&&source.getCanonicalFile().equals(staged.getCanonicalFile()))
+                return "";
+        }catch(Exception ignored){}
         File dir=staged.getParentFile();
         File partial=new File(dir,"candidate.rebuilt.partial");
         try(InputStream in=new FileInputStream(source);OutputStream out=new FileOutputStream(partial,false)){
@@ -290,6 +302,13 @@ public final class SelfUpdateActivity extends Activity {
         }catch(Exception e){
             startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));
         }
+    }
+
+    private long currentVersion(){
+        try{
+            PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0);
+            return Build.VERSION.SDK_INT>=28?p.getLongVersionCode():p.versionCode;
+        }catch(Exception e){return -1L;}
     }
 
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
