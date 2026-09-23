@@ -1,0 +1,597 @@
+# Tinni Star × YoHoo Star — Merged Master Blueprint v2
+
+Status: living product blueprint for Tinni Star.
+Source basis:
+1. YoHoo Star 2.03.116 screen/action/state blueprint.
+2. Tinni Star screenshots and user-confirmed behavior.
+3. User-confirmed room/seat/owner rules from reference videos.
+4. Existing Tinni Star implementation direction.
+
+## 1. Product topology
+
+App Startup
+→ Auth / Session
+→ Main Shell
+  → Party
+    → Mine (room-focused)
+    → Party
+    → Events
+    → Country
+  → Discover
+  → Message
+  → Mine (profile-focused)
+
+Voice Room is the central runtime domain and connects:
+Room Session
+→ Seat / Mic
+→ Chat / Members
+→ Gifts / Effects
+→ Owner/Admin controls
+→ KTV / Games
+→ VIP / CP / Family
+→ Moderation / Background / Reconnect
+
+Important distinction:
+- Party > Mine = room-focused.
+- Bottom navigation > Mine = user-profile-focused.
+These must never be treated as the same screen.
+
+## 2. Party > Mine — LOCKED
+
+Structure:
+- My room
+- Recents
+- My followings
+
+Rules:
+- The user who creates a room becomes that room's Owner.
+- My room shows the user's owned room.
+- Recents shows rooms the user recently visited.
+- My followings shows followed rooms.
+- This screen is not the user profile screen.
+
+## 3. Party > Party — LOCKED
+
+Primary structure:
+- Mine / Party / Events / Country top swipe tabs.
+- Weekly CP / ranking banner.
+- Game.
+- CP Ranking.
+- Family.
+- Popular.
+- New.
+- Room cards / room list.
+- Create Room.
+- Search.
+- VIP shortcut.
+
+Navigation:
+- Top tabs are touchable.
+- Top tabs are horizontally swipeable.
+- Visible feature cards must perform a real action, not placeholder-only taps.
+
+New-room rule:
+- New shows only rooms created in the last 15 days.
+- createdAt must be stored for every room.
+- Old rooms do not appear in New.
+
+## 4. Party > Events — CLEAR AT STRUCTURE LEVEL
+
+Expected families:
+- Weekly CP.
+- Game events.
+- Gift festival/activity.
+- VIP activity.
+- Family activity.
+- Birthday/party/activity flows from YoHoo blueprint.
+
+Exact production event cards, timers, reward display and stage layouts still need runtime/video confirmation.
+
+## 5. Party > Country — LOCKED AT CORE LEVEL
+
+- Country selector.
+- Rooms filtered by country.
+- Same room card interaction as Party.
+- Search fallback.
+- Region/server feature gates may later be controlled by backend/remote config.
+
+## 6. Bottom Mine / Profile — LOCKED
+
+Profile-focused screen:
+- Avatar.
+- Nickname.
+- UID.
+- Country.
+- Coins.
+- Diamonds.
+- VIP.
+- Noble.
+- Gift.
+- Game.
+- Family.
+- CP.
+- More.
+- Edit profile.
+- Account binding.
+- Later: birthday, gender, signature, medals, vehicle/headwear, good-number identity, followers/fans, blacklist/report.
+
+## 7. Room ownership — LOCKED
+
+Room creation:
+CREATE_ROOM(userId)
+→ room.ownerId = userId
+→ creator receives Owner role
+→ Owner controls become available for that room only
+
+Owner authority includes the room-management family:
+- Edit room metadata.
+- Change room mode.
+- Change mic mode.
+- Invite/remove mic users.
+- Lock/unlock seats.
+- Manage admins.
+- Kick/blacklist room users.
+- Room theme/settings.
+- Room activity controls.
+
+Exact role boundary between Owner and Admin must be server-authoritative.
+
+## 8. Room lifecycle — MERGED FROM YOHOO
+
+OUTSIDE
+→ PRECHECK
+→ ROOM_METADATA
+→ IM_JOIN
+→ RTC_JOIN
+→ AUDIENCE
+→ optional seat/mic
+→ chat/gift/KTV/game
+→ minimize/background or leave
+
+Reconnect:
+CONNECTED
+→ RECONNECTING
+→ RESYNC_ROOM_SNAPSHOT
+→ CONNECTED
+
+Room UI must not use RTC alone as permanent room-state truth.
+
+## 9. Seat row policy — LOCKED
+
+Selectable seat count:
+8, 9, 10,
+12–18,
+19–28,
+29–35,
+36–42.
+11 is skipped.
+
+Row-count rule:
+- 8–10 seats → 2 rows.
+- 12–18 seats → 3 rows.
+- 19–28 seats → 4 rows.
+- 29–35 seats → 5 rows.
+- 36–42 seats → 6 rows.
+
+Distribution:
+- Seats are balanced across rows.
+- Row-size difference should be at most 1.
+- Examples:
+  - 8 = 4+4
+  - 9 = 5+4
+  - 10 = 5+5
+  - 12 = 4+4+4
+  - 18 = 6+6+6
+  - 19 = 5+5+5+4
+  - 28 = 7+7+7+7
+  - 29 = 6+6+6+6+5
+  - 35 = 7×5
+  - 36 = 6×6
+  - 42 = 7×6
+
+Visual rule:
+- Every row uses the full available width from left edge to right edge.
+- Lower seat counts use larger seat circles/frames.
+- Higher seat counts use smaller seat circles/frames.
+- Chat area must remain usable below seats.
+- Minimum target: about 4 room-message lines visible above the typing/control bar.
+
+## 10. Seat/Mic state — MERGED FROM YOHOO
+
+Audience:
+AUDIENCE
+→ apply/free mic
+→ MIC_REQUESTED or direct seat
+→ ON_MIC
+→ MUTED / UNMUTED
+→ REMOVED / LEAVE
+
+Seat:
+FREE
+→ OCCUPIED
+→ optional LOCKED
+→ release/move
+→ FREE
+
+Confirmed control families:
+- apply mic.
+- cancel request.
+- approve/reject.
+- invite to mic.
+- kick from mic.
+- ban mic.
+- open mic.
+- free-mic / apply-mic mode.
+- lock/unlock.
+- move/assign user.
+
+## 11. Two seat visual families — PARTIALLY CLEAR
+
+Reference videos show two seat presentation families according to the user.
+Blueprint requirement:
+- Seat renderer must support at least two visual/layout modes.
+- Both modes use the same underlying SeatState / MicState.
+- Room mode/layout selection must not fork business logic.
+- Exact visual definition and switching rule are still VIDEO NEEDED.
+
+## 12. User seat identity/frame — PARTIALLY CLEAR
+
+Reference requirement:
+- Occupied seat shows the user's avatar/identity.
+- Different users can have different seat/profile frames.
+- Frame must render independently per user.
+- Frame can coexist with mic state, user name and badges.
+- VIP/Noble/medal/vehicle identity must not overwrite the user's chosen/entitled frame.
+
+Still VIDEO NEEDED:
+- exact frame layers.
+- frame ownership source.
+- VIP vs purchased frame priority.
+- owner/admin special frame behavior.
+- animated vs static frame rules.
+
+## 13. Room screen control map — CLEAR AT FEATURE LEVEL
+
+Core:
+- Room title/info.
+- Owner/admin entry.
+- minimize/back/leave.
+- members.
+- seat/mic.
+- chat.
+- gift.
+- room tools.
+- KTV.
+- game.
+- BGM/music.
+- share.
+- settings.
+- room theme.
+- moderation.
+- activities.
+
+Room chat and seat area must coexist without one covering the other.
+
+## 14. Member/user action sheet — CLEAR AT FEATURE LEVEL
+
+Tap room user/avatar:
+- profile.
+- follow/unfollow.
+- private message.
+- invite to mic.
+- remove from mic.
+- mute/ban mic.
+- kick from room.
+- room blacklist.
+- user blacklist.
+- report.
+
+Visibility depends on role.
+
+## 15. Gifts — MERGED FROM YOHOO
+
+Gift panel:
+catalog
+→ receiver selector
+→ one/multiple receivers
+→ quantity/combo
+→ server validation
+→ wallet transaction
+→ room gift event
+→ effect queue
+
+Must support:
+- categories.
+- multi-recipient selector.
+- horizontal/swipe user recipient row.
+- quantity/combo.
+- backpack/inventory.
+- balance.
+- insufficient-balance flow.
+- full-screen/standard/banner effects.
+- effect queue priorities.
+
+Economy rule:
+Backend is authoritative. Client UI never creates final balance truth.
+
+## 16. Effect/identity layer — CLEAR ARCHITECTURALLY
+
+Effects:
+- SVGA.
+- PAG.
+- MP4.
+- GIF.
+- entry effects.
+- gift effects.
+- banner/rank notices.
+- VIP/Noble identity.
+- user frames.
+- room theme.
+
+Effect playback must be separate from financial transaction logic.
+
+## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
+
+- VIP levels.
+- Noble levels.
+- privileges.
+- entry effects.
+- nameplate.
+- medals.
+- headwear.
+- vehicles.
+- good-number/UID effects.
+- user/seat frames.
+- room halo/wave identity.
+
+Exact entitlement/pricing/priority order still needs confirmation.
+
+## 18. CP — CLEAR AT FEATURE LEVEL
+
+NO_RELATION
+→ COURTING
+→ ACCEPT/REFUSE
+→ CP_ACTIVE
+→ intimacy/levels/rank/memories/ring/anniversary
+→ disconnect flow
+
+Still needs exact UI/runtime videos for:
+- CP home.
+- courting.
+- ring store.
+- heartbeat.
+- disconnect dialogs.
+- ranking cards.
+
+## 19. Family — CLEAR AT FEATURE LEVEL
+
+Family:
+- create/join.
+- Head.
+- Deputy.
+- Assistant.
+- Member.
+- family room.
+- members.
+- roles.
+- tasks.
+- sign-in.
+- rank.
+- lottery.
+- wallet/records.
+- family gifts/experience.
+
+Exact permission matrix and UI still need confirmation.
+
+## 20. KTV — CLEAR AT FEATURE LEVEL
+
+- KTV mode.
+- song search.
+- local songs.
+- queue.
+- lead singer.
+- chorus.
+- cut song.
+- delete song.
+- give up singing.
+- music + voice mix through RTC/media layer.
+
+Exact singing sync, seat dependency and queue-control UI remain VIDEO NEEDED.
+
+## 21. Games — CLEAR AT FRAMEWORK LEVEL
+
+YoHoo-confirmed families:
+- Lucky 777.
+- Blackjack.
+- Gift Draw.
+- Guessing.
+- settlement.
+- rank/reward.
+- Game Noble.
+
+Tinni Star can additionally add Ludo/UNO as separate clean game modules.
+
+Game economy/state must be server-authoritative.
+
+## 22. Wallet / Store / Recharge — CLEAR ARCHITECTURALLY
+
+- coin balance.
+- diamond balance.
+- transaction history.
+- recharge.
+- store.
+- inventory.
+- reward.
+- identity/cosmetic purchases.
+- Google Play Billing adapter for production.
+
+## 23. Social / Message / Dynamic — CLEAR AT FEATURE LEVEL
+
+- direct messages.
+- friends.
+- follow.
+- blacklist.
+- user search.
+- room search.
+- recent rooms.
+- favorites.
+- Dynamic/Moments feed.
+- like/comment/share.
+- publish/review.
+- room indicator in social feed.
+
+## 24. Background room — CLEAR ARCHITECTURALLY
+
+Required:
+- minimize room.
+- continue allowed RTC/media behavior.
+- foreground service where Android requires it.
+- persistent notification as required.
+- audio focus.
+- reconnect.
+- resync room snapshot after network loss.
+
+Android version/device restrictions must be handled honestly.
+
+## 25. Unified RoomEvent model
+
+Event types:
+USER_JOIN
+USER_LEAVE
+SEAT_CHANGED
+MIC_REQUESTED
+MIC_APPROVED
+MIC_REJECTED
+MIC_MUTED
+MIC_UNMUTED
+USER_KICKED
+USER_ROOM_BLACKLISTED
+ROOM_INFO_CHANGED
+CHAT_MESSAGE
+GIFT_SENT
+GIFT_COMBO
+KTV_QUEUE_CHANGED
+SINGING_STARTED
+SINGING_STOPPED
+GAME_STATE_CHANGED
+ADMIN_CHANGED
+FRAME_CHANGED
+VIP_IDENTITY_CHANGED
+
+## 26. Tinni Star service split
+
+AuthService
+DiscoveryService
+RoomSession
+RoomMembership
+SeatManager
+MicManager
+RoomRolePolicy
+RoomModeration
+RoomMemberService
+RTCAdapter
+IMAdapter
+GiftService
+GiftRecipientSelector
+EffectQueue
+WalletService
+RechargeService
+StoreService
+VIPService
+NobleService
+IdentityFrameService
+CPService
+FamilyService
+KTVService
+GameService
+ActivityService
+DynamicFeedService
+BackgroundRoomService
+ReconnectCoordinator
+FeatureFlagService
+AnamikaConnector
+FunctionPackRuntime
+
+## 27. Anamika / Function Pack boundary
+
+Anamika can later:
+- read diagnostics.
+- identify active function pack/version.
+- submit validated compatible pack.
+- trigger rollback after owner approval policy.
+- report health/error state.
+
+Hot-updateable data/config examples:
+- room rules.
+- seat layout rules.
+- gift catalog.
+- feature flags.
+- localization.
+- declarative effects/assets.
+- UI content/rules where schema permits.
+
+APK/native update still required for:
+- compiled Dart/native code.
+- AndroidManifest permissions.
+- RTC/IM native SDK upgrades.
+- signing.
+- foreground-service declarations.
+- native libraries.
+
+## 28. VIDEO NEEDED — exact behavior still not locked
+
+Highest-priority reference gaps:
+1. The two exact seat layout types: visual difference, when each is selected, and whether owner chooses it at room creation or room settings.
+2. Occupied-seat layering: avatar, frame, name, mic state, owner/admin badge, VIP/Noble badge, speaking animation and lock icon order.
+3. Individual user-frame system: where frame comes from, how selected/equipped, static vs animated, VIP/purchased/role priority.
+4. Owner seat behavior: whether Owner has a fixed seat, special frame, crown/badge, auto-seat, and what happens when Owner leaves mic but stays in room.
+5. Admin behavior: how Owner appoints/removes Admin, admin count limit, admin badge/frame, exact controls visible to Admin.
+6. Room member list and member card: exact tabs, online/on-mic sorting, action menu and profile popup.
+7. Room settings / More drawer: exact controls, grouping and every toggle/action.
+8. Free-mic vs apply-mic room UX: request queue, invite popup, approval/rejection, timeout and seat assignment animation.
+9. Seat lock/move UX: long-press/tap behavior, move user between seats, locked-seat appearance, reserved-seat behavior.
+10. Gift panel exact interaction: recipient selection, multi-select, combo window, quantity selector, backpack, gift categories and effect preview.
+11. Room entry/join effects: user entry banner/vehicle/animal/VIP frame sequence and priority when many users enter.
+12. Room chat message types: normal text, system messages, gift messages, join notices, VIP notices, admin notices and clickable user names.
+13. KTV exact UI: song queue, singer seat, chorus, lyrics, scoring, cut song and mic ownership.
+14. Game launch inside room: overlay/full-screen/minigame panel, how room audio continues, settlement/reward UI.
+15. CP screens: courting, CP home, ring, heartbeat, anniversary, disconnect and CP rank.
+16. Family screens: home, member roles, family room, tasks/sign-in, rank, wallet and lottery.
+17. VIP/Noble screens: exact level navigation, privilege detail, purchase/upgrade, equipped identity assets and room effects.
+18. Wallet/recharge/store screens: exact coin product cards, purchase confirmation, inventory/equip flow and history.
+19. Profile/user popup: all badges, frames, follow/friend/chat/report and owned-room/CP/family fields.
+20. Background/minimize behavior: what remains visible/active when app goes background and exact return-to-room UI.
+
+## 29. Confidence
+
+Locked:
+- main navigation split.
+- Party top tabs.
+- Party > Mine structure.
+- creator = room Owner.
+- seat-count row ranges.
+- balanced row distribution.
+- full-width seat rows.
+- New = last 15 days.
+- bottom Mine profile separation.
+- core room/gift/chat/mic/service architecture.
+
+Clear at feature level but not exact UI:
+- moderation.
+- VIP/Noble.
+- CP.
+- Family.
+- KTV.
+- Games.
+- store/recharge.
+- activities/ranks.
+- member cards.
+- effects/identity layers.
+
+Still video-dependent:
+- exact control placement.
+- exact seat visual modes.
+- exact frame compositing.
+- exact owner/admin UX.
+- exact dialogs/animations.
+- exact state transitions visible to users.
