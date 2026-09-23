@@ -74,7 +74,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
               itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 final value = categories[index];
                 return ChoiceChip(

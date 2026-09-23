@@ -40,7 +40,7 @@ class _VipScreenState extends State<VipScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: 12,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 final level = index + 1;
                 return ChoiceChip(

@@ -161,7 +161,7 @@ class GoldSectionTitle extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        if (trailing != null) trailing!,
+        trailing ?? const SizedBox.shrink(),
       ],
     );
   }
