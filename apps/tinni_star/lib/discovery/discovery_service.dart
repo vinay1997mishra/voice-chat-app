@@ -9,6 +9,7 @@ class RoomSummary {
     this.seatCount = 12,
     this.partyMode = 'Friends-making Party',
     this.createdAt,
+    this.ownerId,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class RoomSummary {
   final int seatCount;
   final String partyMode;
   final DateTime? createdAt;
+  final String? ownerId;
 
   bool createdWithin(
     Duration age, {
@@ -41,6 +43,7 @@ class RoomSummary {
     int? seatCount,
     String? partyMode,
     DateTime? createdAt,
+    String? ownerId,
   }) =>
       RoomSummary(
         id: id,
@@ -52,6 +55,7 @@ class RoomSummary {
         seatCount: seatCount ?? this.seatCount,
         partyMode: partyMode ?? this.partyMode,
         createdAt: createdAt ?? this.createdAt,
+        ownerId: ownerId ?? this.ownerId,
       );
 }
 
@@ -63,6 +67,7 @@ class DiscoveryService {
   final List<String> searchHistory = <String>[];
   final List<String> recentRoomIds = <String>[];
   final Set<String> favorites = <String>{};
+  final Set<String> followingRoomIds = <String>{};
   int _nextRoomId = 20000000;
 
   static List<RoomSummary> _defaultRooms() {
@@ -131,6 +136,7 @@ class DiscoveryService {
       seatCount: seatCount,
       partyMode: partyMode,
       createdAt: DateTime.now(),
+      ownerId: '10000000',
     );
     rooms.insert(0, room);
     return room;
@@ -202,7 +208,25 @@ class DiscoveryService {
   }
 
   void toggleFavorite(String roomId) {
-    if (!favorites.add(roomId)) favorites.remove(roomId);
+    if (favorites.add(roomId)) {
+      followingRoomIds.add(roomId);
+    } else {
+      favorites.remove(roomId);
+      followingRoomIds.remove(roomId);
+    }
+  }
+
+  List<RoomSummary> ownedRooms(String ownerId) =>
+      rooms.where((room) => room.ownerId == ownerId).toList();
+
+  List<RoomSummary> followedRooms() {
+    final byId = <String, RoomSummary>{
+      for (final room in rooms) room.id: room,
+    };
+    return followingRoomIds
+        .map((id) => byId[id])
+        .whereType<RoomSummary>()
+        .toList();
   }
 
   void clearHistory() => searchHistory.clear();

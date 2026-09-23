@@ -197,124 +197,94 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMinePage() {
-    final profile = widget.state.profile.profile;
-    final recentIds = widget.state.discovery.recentRoomIds;
-    final byId = {
+    final owned = widget.state.discovery.ownedRooms('10000000');
+    final myRoom = owned.isEmpty ? null : owned.first;
+
+    final byId = <String, RoomSummary>{
       for (final room in widget.state.discovery.rooms) room.id: room,
     };
-    final recent = recentIds
+    final recent = widget.state.discovery.recentRoomIds
         .map((id) => byId[id])
         .whereType<RoomSummary>()
         .take(4)
         .toList();
+    final followings = widget.state.discovery.followedRooms();
 
     return ListView(
       key: const Key('home-mine-page'),
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
-        RoyalPanel(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF302007), Color(0xFF090705)],
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 34,
-                backgroundColor: RoyalPalette.deepGold,
-                child: Text(
-                  profile.nick.characters.first,
-                  style: const TextStyle(
+        const GoldSectionTitle('My room'),
+        const SizedBox(height: 10),
+        if (myRoom == null)
+          RoyalPanel(
+            key: const Key('mine-create-my-room'),
+            onTap: createRoom,
+            child: const Row(
+              children: [
+                CircleAvatar(
+                  radius: 34,
+                  backgroundColor: RoyalPalette.deepGold,
+                  child: Icon(
+                    Icons.add_home_rounded,
                     color: Colors.black,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
+                    size: 30,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'My Royal Space',
-                      style: TextStyle(
-                        color: RoyalPalette.gold,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Create my room',
+                        style: TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                    ),
-                    Text(
-                      profile.nick + ' • ID ' + profile.userId,
-                      style: const TextStyle(color: RoyalPalette.cream),
-                    ),
-                    Text(
-                      'VIP' +
-                          widget.state.identity.vip.level.toString() +
-                          ' • Coins ' +
-                          widget.state.wallet.coins.toString(),
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
+                      Text(
+                        'Your own room will appear here.',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: RoyalPalette.gold,
+                ),
+              ],
+            ),
+          )
+        else
+          _MineRoomCard(
+            key: const Key('mine-my-room-card'),
+            room: myRoom,
+            onTap: () => openRoom(myRoom),
           ),
+        const SizedBox(height: 20),
+        GoldSectionTitle(
+          'Recents',
+          trailing: recent.isNotEmpty
+              ? IconButton(
+                  tooltip: 'Clear recents',
+                  onPressed: () {
+                    widget.state.discovery.clearRecent();
+                    setState(() {});
+                  },
+                  icon: const Icon(
+                    Icons.delete_sweep_rounded,
+                    color: RoyalPalette.gold,
+                  ),
+                )
+              : null,
         ),
-        const SizedBox(height: 14),
-        const GoldSectionTitle('Quick Access'),
         const SizedBox(height: 10),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 3,
-          childAspectRatio: 0.96,
-          mainAxisSpacing: 9,
-          crossAxisSpacing: 9,
-          children: [
-            _ActionTile(
-              key: const Key('mine-vip-tile'),
-              label: 'VIP',
-              icon: Icons.workspace_premium_rounded,
-              onTap: openVip,
-            ),
-            _ActionTile(
-              key: const Key('mine-gift-tile'),
-              label: 'Gift',
-              icon: Icons.card_giftcard_rounded,
-              onTap: openGifts,
-            ),
-            _ActionTile(
-              key: const Key('mine-game-tile'),
-              label: 'Game',
-              icon: Icons.casino_rounded,
-              onTap: openGames,
-            ),
-            _ActionTile(
-              key: const Key('mine-family-tile'),
-              label: 'Family',
-              icon: Icons.groups_rounded,
-              onTap: openFeatureCenter,
-            ),
-            _ActionTile(
-              key: const Key('mine-cp-tile'),
-              label: 'CP',
-              icon: Icons.favorite_rounded,
-              onTap: openFeatureCenter,
-            ),
-            _ActionTile(
-              key: const Key('mine-more-tile'),
-              label: 'More',
-              icon: Icons.grid_view_rounded,
-              onTap: openFeatureCenter,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const GoldSectionTitle('Recent Rooms'),
-        const SizedBox(height: 9),
         if (recent.isEmpty)
           RoyalPanel(
             onTap: () => _goToPage(1),
@@ -324,16 +294,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'No recent room yet. Tap here to open Party.',
+                    'No recent rooms yet. Tap to open Party.',
                     style: TextStyle(color: RoyalPalette.cream),
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: RoyalPalette.gold,
+                ),
               ],
             ),
           )
         else
-          ...recent.map(
+          SizedBox(
+            height: 132,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: recent.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final room = recent[index];
+                return SizedBox(
+                  width: 150,
+                  child: _RecentRoomTile(
+                    room: room,
+                    onTap: () => openRoom(room),
+                  ),
+                );
+              },
+            ),
+          ),
+        const SizedBox(height: 20),
+        const GoldSectionTitle('My followings'),
+        const SizedBox(height: 10),
+        if (followings.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 48),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 62,
+                  color: RoyalPalette.bronze,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'No following rooms yet',
+                  style: TextStyle(
+                    color: RoyalPalette.muted,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...followings.map(
             (room) => _RoomListCard(
               state: widget.state,
               room: room,
@@ -676,6 +693,142 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _MineRoomCard extends StatelessWidget {
+  const _MineRoomCard({
+    super.key,
+    required this.room,
+    required this.onTap,
+  });
+
+  final RoomSummary room;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return RoyalPanel(
+      onTap: onTap,
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF4A3308), Color(0xFF0B0905)],
+              ),
+              border: Border.all(color: RoyalPalette.gold),
+            ),
+            child: Text(
+              room.title.characters.first.toUpperCase(),
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 44,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '👤 Tinni User',
+                  style: TextStyle(
+                    color: RoyalPalette.muted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            children: [
+              Text(
+                '🎙 ' + room.online.toString(),
+                style: const TextStyle(
+                  color: RoyalPalette.gold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: RoyalPalette.gold,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentRoomTile extends StatelessWidget {
+  const _RecentRoomTile({
+    required this.room,
+    required this.onTap,
+  });
+
+  final RoomSummary room;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return RoyalPanel(
+      onTap: onTap,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF382608), Color(0xFF090704)],
+                ),
+              ),
+              child: Icon(
+                Icons.graphic_eq_rounded,
+                color: RoyalPalette.gold,
+                size: 34,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            room.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
