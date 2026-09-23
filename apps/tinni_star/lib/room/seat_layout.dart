@@ -17,15 +17,26 @@ class SeatLayoutSpec {
     );
   }
 
-  int get columns => seatCount ~/ rows;
+  int get columns => (seatCount / rows).ceil();
 
-  List<int> get rowLengths =>
-      List<int>.filled(rows, columns, growable: false);
+  List<int> get rowLengths {
+    final base = seatCount ~/ rows;
+    final extra = seatCount % rows;
+    return List<int>.generate(
+      rows,
+      (row) => base + (row < extra ? 1 : 0),
+      growable: false,
+    );
+  }
 
   (int, int) rangeForRow(int row) {
     if (row < 0 || row >= rows) return (0, 0);
-    final start = row * columns;
-    return (start, start + columns);
+    final lengths = rowLengths;
+    var start = 0;
+    for (var index = 0; index < row; index++) {
+      start += lengths[index];
+    }
+    return (start, start + lengths[row]);
   }
 
   double seatDiameter(double availableWidth) {
