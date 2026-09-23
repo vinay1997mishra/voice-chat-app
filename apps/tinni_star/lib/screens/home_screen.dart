@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
@@ -54,9 +55,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted || result == null) return;
 
+    final ownerId = widget.state.auth.current?.userId ?? '10000000';
     final room = widget.state.discovery.createRoom(
       title: result.title,
       country: result.country,
+      ownerId: ownerId,
+      photoPath: result.photoPath,
       seatCount: result.seatCount,
       partyMode: result.partyMode,
     );
@@ -1135,12 +1139,14 @@ class _CreateRoomResult {
     required this.country,
     required this.seatCount,
     required this.partyMode,
+    this.photoPath,
   });
 
   final String title;
   final String country;
   final int seatCount;
   final String partyMode;
+  final String? photoPath;
 }
 
 class _CreateRoomSheet extends StatefulWidget {
@@ -1152,9 +1158,11 @@ class _CreateRoomSheet extends StatefulWidget {
 
 class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   final TextEditingController titleController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
   String country = 'IN';
   int seatCount = 12;
   String partyMode = 'Friends-making Party';
+  String? photoPath;
 
   @override
   void dispose() {
@@ -1178,8 +1186,43 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
         country: country,
         seatCount: seatCount,
         partyMode: partyMode,
+        photoPath: photoPath,
       ),
     );
+  }
+
+  Future<void> _chooseRoomPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('create-room-photo-gallery'),
+              leading: const Icon(Icons.photo_library_rounded, color: RoyalPalette.gold),
+              title: const Text('Gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            ListTile(
+              key: const Key('create-room-photo-camera'),
+              leading: const Icon(Icons.photo_camera_rounded, color: RoyalPalette.gold),
+              title: const Text('Camera'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final image = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 88,
+      maxWidth: 1600,
+    );
+    if (image == null || !mounted) return;
+    setState(() => photoPath = image.path);
   }
 
   @override
@@ -1204,6 +1247,41 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
               ),
             ),
             const SizedBox(height: 14),
+            Center(
+              child: InkWell(
+                key: const Key('create-room-photo-button'),
+                onTap: _chooseRoomPhoto,
+                borderRadius: BorderRadius.circular(48),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 42,
+                      backgroundColor: RoyalPalette.panel2,
+                      child: Icon(
+                        photoPath == null
+                            ? Icons.add_a_photo_rounded
+                            : Icons.check_circle_rounded,
+                        color: RoyalPalette.gold,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      photoPath == null ? 'Add room photo' : 'Room photo selected',
+                      style: const TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Text(
+                      'Tap to choose Gallery or Camera',
+                      style: TextStyle(color: RoyalPalette.muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Choose party mode',
               style: TextStyle(
