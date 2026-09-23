@@ -52,6 +52,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       widget.room,
       userId: widget.state.auth.current?.userId ?? '10000000',
     );
+    widget.state.roomSession.controller?.setInviteMode(
+      widget.state.roomControls.settings.micMode == MicMode.apply,
+    );
+  }
+
+  Color get _roomBackgroundColor {
+    switch (widget.state.roomControls.themeId) {
+      case 'night-blue':
+        return const Color(0xFF03101B);
+      case 'rose-gold':
+        return const Color(0xFF17090D);
+      default:
+        return const Color(0xFF03070B);
+    }
   }
 
   bool get _canManageRoom {
@@ -554,6 +568,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     controls.settings = settings.copyWith(
                       micMode: value ? MicMode.free : MicMode.apply,
                     );
+                    controller.setInviteMode(!value);
                     setSheetState(() {});
                     setState(() {});
                   },
@@ -813,9 +828,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF03070B),
+        backgroundColor: _roomBackgroundColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF03070B),
+          backgroundColor: _roomBackgroundColor,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -848,33 +863,55 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         body: Column(
           children: [
-            Container(
-              margin: const EdgeInsets.fromLTRB(10, 2, 10, 7),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: const LinearGradient(colors: [Color(0xFF4A2B05), Color(0xFF120C04)]),
-                border: Border.all(color: RoyalPalette.deepGold),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.campaign_rounded, color: RoyalPalette.gold, size: 18),
-                  SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      'Official room • Welcome to Tinni Star Royal Party',
-                      style: TextStyle(color: RoyalPalette.cream, fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
+            if (widget.state.roomControls.noticesVisible)
+              Container(
+                margin: const EdgeInsets.fromLTRB(10, 2, 10, 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4A2B05), Color(0xFF120C04)],
                   ),
-                  Text('×250', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
-                ],
+                  border: Border.all(color: RoyalPalette.deepGold),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.campaign_rounded,
+                      color: RoyalPalette.gold,
+                      size: 18,
+                    ),
+                    SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Official room • Welcome to Tinni Star Royal Party',
+                        style: TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '×250',
+                      style: TextStyle(
+                        color: RoyalPalette.gold,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: [
-                  Chip(label: Text(config.inviteMode ? 'Apply Mic' : 'Free Mic')),
+                  Chip(
+                    label: Text(
+                      controller.inviteMode ? 'Apply Mic' : 'Free Mic',
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Chip(label: Text(controller.seats.length.toString() + ' seats')),
                   const Spacer(),
