@@ -277,15 +277,10 @@ public final class WakeService extends Service implements RecognitionListener {
     }
 
     private boolean hasActivePlayback(List<AudioPlaybackConfiguration> configs){
-        if(configs==null)return false;
-        for(AudioPlaybackConfiguration x:configs){
-            if(x==null)continue;
-            try{
-                if(!x.isActive())continue;
-                return true;
-            }catch(Throwable ignored){}
-        }
-        return false;
+        // AudioManager's playback callback supplies the currently active playback
+        // configurations. Avoid hidden/system-only player-state APIs so this stays
+        // compatible with the public Android SDK used by the local/CI builder.
+        return configs!=null&&!configs.isEmpty();
     }
 
     private boolean hasCompetingRecording(List<AudioRecordingConfiguration> configs){
