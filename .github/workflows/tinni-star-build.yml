@@ -6,6 +6,11 @@ on:
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/tinni_star/**'
+      - '.github/workflows/tinni-star-build.yml'
   workflow_dispatch:
 
 jobs:
