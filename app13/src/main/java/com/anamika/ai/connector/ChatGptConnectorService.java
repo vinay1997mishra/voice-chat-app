@@ -95,7 +95,7 @@ public final class ChatGptConnectorService extends Service {
         Intent open=new Intent(this,ChatGptConnectorActivity.class);
         PendingIntent pi=PendingIntent.getActivity(this,14,open,AndroidCompat.immutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        return b.setContentTitle("Anamika AI 13 • ChatGPT Connector")
+        return b.setContentTitle("Anamika • ChatGPT Connector")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentIntent(pi)
