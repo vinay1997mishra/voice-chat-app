@@ -201,7 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMinePage() {
-    final owned = widget.state.discovery.ownedRooms('10000000');
+    final currentUserId = widget.state.auth.current?.userId ?? '10000000';
+    final owned = widget.state.discovery.ownedRooms(currentUserId);
     final myRoom = owned.isEmpty ? null : owned.first;
 
     final byId = <String, RoomSummary>{
