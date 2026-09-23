@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import 'anamika_connector_screen.dart';
+import 'games_screen.dart';
+import 'gifts_screen.dart';
+import 'vip_screen.dart';
+import '../ui/royal_theme.dart';
 import '../calls/call_service.dart';
 import '../community/family_service.dart';
 import '../economy/economy.dart';
@@ -58,14 +62,9 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         'VIP / Noble',
         Icons.workspace_premium_rounded,
         () {
-          state.identity.gainVipExperience(1200);
-          state.identity.upgradeNoble();
-          state.identity.addMedal('founder');
-          showText(
-            'VIP' +
-                state.identity.vip.level.toString() +
-                ' • Noble ' +
-                state.identity.noble.level.toString(),
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => VipScreen(state: state)),
           );
         },
       ),
@@ -147,15 +146,20 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         'Games',
         Icons.casino_rounded,
         () {
-          if (state.games.active == null) {
-            state.games.start(
-              GameType.blackjack,
-              const ['10000000', '20000000'],
-            );
-          }
-          final result = state.games.finish();
-          state.wallet.creditCoins(result.rewardCoins, 'Game reward');
-          showText('Blackjack reward +' + result.rewardCoins.toString());
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => GamesScreen(state: state)),
+          );
+        },
+      ),
+      _FeatureAction(
+        'Gifts',
+        Icons.card_giftcard_rounded,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => GiftsScreen(state: state)),
+          );
         },
       ),
       _FeatureAction(
@@ -354,7 +358,8 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Feature Center')),
+      backgroundColor: RoyalPalette.black,
+      appBar: AppBar(title: const Text('Feature Center', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900))),
       body: GridView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: modules.length,
