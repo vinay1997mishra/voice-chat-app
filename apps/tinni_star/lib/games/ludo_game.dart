@@ -55,12 +55,13 @@ class LudoGame {
   int roll() {
     if (winner != null) return rolled ?? 1;
     if (rolled != null) return rolled!;
-    rolled = _random.nextInt(6) + 1;
-    status = '${currentPlayer.name.toUpperCase()} rolled $rolled.';
-    if (!movableTokenIndexes().isNotEmpty) {
+    final value = _random.nextInt(6) + 1;
+    rolled = value;
+    status = '${currentPlayer.name.toUpperCase()} rolled $value.';
+    if (movableTokenIndexes().isEmpty) {
       _finishTurn();
     }
-    return rolled ?? 1;
+    return value;
   }
 
   List<int> movableTokenIndexes() {
