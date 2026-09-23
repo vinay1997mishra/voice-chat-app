@@ -47,7 +47,7 @@ public final class SignerProvisionActivity extends Activity {
         box.setPadding(p,p,p,p);
 
         TextView title=new TextView(this);
-        title.setText("Anamika 13 • Signer Setup");
+        title.setText("Anamika • Signer Setup");
         title.setTextSize(23);
         box.addView(title);
 
