@@ -1000,6 +1000,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     IconButton(
+                      key: const Key('room-more-button'),
                       onPressed: _showRoomTools,
                       icon: const Icon(Icons.more_horiz_rounded, color: RoyalPalette.gold),
                     ),
@@ -1014,6 +1015,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     IconButton(
+                      key: const Key('room-mic-button'),
                       onPressed: controller.mySeat == null ? null : _toggleMic,
                       icon: Icon(
                         controller.micState == MicState.live ? Icons.mic_rounded : Icons.mic_off_rounded,
@@ -1021,10 +1023,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     IconButton(
+                      key: const Key('room-gift-button'),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
                       icon: const Icon(Icons.card_giftcard_rounded, color: RoyalPalette.gold),
                     ),
                     IconButton(
+                      key: const Key('room-seat-button'),
                       onPressed: () {
                         if (controller.mySeat == null) {
                           _snack('Tap any mic seat to join.');
