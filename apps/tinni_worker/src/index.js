@@ -633,13 +633,6 @@ export default {
       return json({ ok: true, user: appSession.user });
     }
 
-    if (url.pathname === "/app/users" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const users = await getAppDirectoryStore(env).listUsers();
-      return json({ ok: true, users });
-    }
-
     if (url.pathname === "/rooms" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
