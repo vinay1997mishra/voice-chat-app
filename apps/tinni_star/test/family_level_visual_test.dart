@@ -6,6 +6,8 @@ import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/screens/family_home_screen.dart';
 import 'package:tinni_star/screens/profile_screen.dart';
 
+import 'test_account.dart';
+
 void main() {
   TinniState makeState() {
     final state = TinniState(
@@ -13,13 +15,13 @@ void main() {
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    state.auth.loginDemo();
+    final account = attachTestAccount(state);
     state.family.create(
       familyName: 'Royal Family',
       familyTag: 'RF',
-      head: const FamilyMember(
-        userId: '10000000',
-        name: 'Tinni User',
+      head: FamilyMember(
+        userId: account.userId,
+        name: account.displayName,
         role: FamilyRole.head,
       ),
     );
@@ -31,18 +33,14 @@ void main() {
     final state = makeState();
     state.family.addExperience(50000);
 
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileScreen(state: state)),
-    );
+    await tester.pumpWidget(MaterialApp(home: ProfileScreen(state: state)));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('profile-family-tag')), findsOneWidget);
     expect(find.textContaining('RF'), findsWidgets);
     expect(find.textContaining(state.family.levelLabel), findsWidgets);
 
-    await tester.pumpWidget(
-      MaterialApp(home: FamilyHomeScreen(state: state)),
-    );
+    await tester.pumpWidget(MaterialApp(home: FamilyHomeScreen(state: state)));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('family-level-shell')), findsOneWidget);
