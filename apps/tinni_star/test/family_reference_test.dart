@@ -37,6 +37,8 @@ void main() {
     expect(find.text('Trends'), findsOneWidget);
     expect(find.text('Top members of the family'), findsOneWidget);
     expect(find.text('Member list'), findsOneWidget);
+    await tester.ensureVisible(find.text('Family room'));
+    await tester.pumpAndSettle();
     expect(find.text('Family room'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('family-member-manage-button')));
