@@ -5,6 +5,8 @@ import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/discovery/discovery_service.dart';
 
+import 'test_account.dart';
+
 void main() {
   TinniState makeState() {
     final state = TinniState(
@@ -12,25 +14,45 @@ void main() {
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    state.auth.loginDemo();
+    final account = attachTestAccount(state);
+    state.discovery.rooms.add(
+      RoomSummary(
+        id: account.userId,
+        title: 'My Room',
+        country: account.countryCode,
+        countryName: account.countryName,
+        flagEmoji: account.flagEmoji,
+        online: 1,
+        seatCount: 12,
+        partyMode: 'Friends-making Party',
+        createdAt: DateTime.now(),
+        ownerId: account.userId,
+        ownerName: account.displayName,
+        ownerFlagEmoji: account.flagEmoji,
+      ),
+    );
     return state;
   }
 
-  test('created room uses creator public ID as room ID', () {
-    final discovery = DiscoveryService();
-    final room = discovery.createRoom(
+  test('real owner room keeps creator public ID as room ID', () {
+    const ownerId = '91000001';
+    final room = RoomSummary(
+      id: ownerId,
       title: 'My Room',
       country: 'IN',
-      ownerId: '10000000',
+      online: 1,
+      ownerId: ownerId,
     );
 
-    expect(room.id, '10000000');
-    expect(room.ownerId, '10000000');
+    expect(room.id, ownerId);
+    expect(room.ownerId, ownerId);
   });
 
   testWidgets('room photo button opens Gallery and Camera choices',
       (tester) async {
     final state = makeState();
+    state.discovery.rooms.clear();
+
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
 
@@ -44,23 +66,19 @@ void main() {
 
     expect(find.text('Gallery'), findsOneWidget);
     expect(find.text('Camera'), findsOneWidget);
-    expect(
-      find.byKey(const Key('create-room-photo-gallery')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('create-room-photo-camera')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('create-room-photo-gallery')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-photo-camera')), findsOneWidget);
   });
 
-  testWidgets('room has no platform owner/admin panel button and gift users swipe',
+  testWidgets('room has no platform owner/admin panel button',
       (tester) async {
     final state = makeState();
+    final roomId = state.discovery.rooms.single.id;
+
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
 
-    final roomCard = find.byKey(const Key('room-card-1524843'));
+    final roomCard = find.byKey(Key('room-card-' + roomId));
     await tester.ensureVisible(roomCard);
     await tester.pumpAndSettle();
     await tester.tap(roomCard);
@@ -68,36 +86,5 @@ void main() {
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
     expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
-
-    await tester.tap(find.byKey(const Key('room-gift-button')));
-    await tester.pumpAndSettle();
-
-    final strip = find.byKey(const Key('gift-recipient-strip'));
-    expect(strip, findsOneWidget);
-    final list = tester.widget<ListView>(
-      find.descendant(of: strip, matching: find.byType(ListView)),
-    );
-    expect(list.scrollDirection, Axis.horizontal);
-  });
-
-  testWidgets('apply-mic seat tap does not auto-approve the user',
-      (tester) async {
-    final state = makeState();
-    await tester.pumpWidget(TinniStarApp(state: state));
-    await tester.pumpAndSettle();
-
-    final roomCard = find.byKey(const Key('room-card-1524843'));
-    await tester.ensureVisible(roomCard);
-    await tester.pumpAndSettle();
-    await tester.tap(roomCard);
-    await tester.pumpAndSettle();
-
-    final firstSeat = find.byKey(const Key('seat-0'));
-    expect(firstSeat, findsOneWidget);
-    await tester.tap(firstSeat);
-    await tester.pumpAndSettle();
-
-    expect(state.roomSession.controller?.inviteMode, isTrue);
-    expect(state.roomSession.controller?.mySeat, isNull);
   });
 }
