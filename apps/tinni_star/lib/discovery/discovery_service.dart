@@ -17,6 +17,9 @@ class RoomSummary {
     this.ownerId,
     this.photoPath,
     this.photoDataUrl,
+    this.ownerName,
+    this.ownerAvatarDataUrl,
+    this.ownerFlagEmoji,
   });
 
   final String id;
@@ -33,6 +36,9 @@ class RoomSummary {
   final String? ownerId;
   final String? photoPath;
   final String? photoDataUrl;
+  final String? ownerName;
+  final String? ownerAvatarDataUrl;
+  final String? ownerFlagEmoji;
 
   bool createdWithin(
     Duration age, {
@@ -59,6 +65,9 @@ class RoomSummary {
     String? ownerId,
     String? photoPath,
     String? photoDataUrl,
+    String? ownerName,
+    String? ownerAvatarDataUrl,
+    String? ownerFlagEmoji,
   }) =>
       RoomSummary(
         id: id,
@@ -75,6 +84,10 @@ class RoomSummary {
         ownerId: ownerId ?? this.ownerId,
         photoPath: photoPath ?? this.photoPath,
         photoDataUrl: photoDataUrl ?? this.photoDataUrl,
+        ownerName: ownerName ?? this.ownerName,
+        ownerAvatarDataUrl:
+            ownerAvatarDataUrl ?? this.ownerAvatarDataUrl,
+        ownerFlagEmoji: ownerFlagEmoji ?? this.ownerFlagEmoji,
       );
 }
 
@@ -196,6 +209,9 @@ class DiscoveryService {
           : null,
       ownerId: row['owner_id']?.toString(),
       photoDataUrl: row['photo_data_url']?.toString(),
+      ownerName: row['owner_name']?.toString(),
+      ownerAvatarDataUrl: row['owner_avatar_data_url']?.toString(),
+      ownerFlagEmoji: row['owner_flag_emoji']?.toString(),
     );
   }
 
