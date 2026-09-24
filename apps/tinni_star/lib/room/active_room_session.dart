@@ -162,7 +162,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       final currentRoomId = room?.id;
       final currentUserId = _activeUserId;
       final currentDisplayName = _activeDisplayName;
