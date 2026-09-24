@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const MEMBER_TTL_MS = 12000;
+const MEMBER_TTL_MS = 30000;
 
 export class RoomPresenceStore extends DurableObject {
   constructor(ctx, env) {
