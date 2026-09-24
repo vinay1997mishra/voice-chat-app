@@ -1057,6 +1057,92 @@ Family shortcut:
 - top three room cards are visually emphasized, followed by the normal room list.
 
 
+
+## Family module — LOCKED FROM REFERENCE VIDEO
+
+The supplied Family video confirms the Family shortcut opens a dedicated family ecosystem, not a generic feature hub.
+
+### Family Ranking
+- Title/reference concept: Top Families of the Month.
+- Back navigation.
+- Scope/filter control such as Local/Global.
+- Ranked family rows contain:
+  - numeric rank
+  - family avatar/emblem
+  - family name
+  - country/flag
+  - family tag/badge
+  - family contribution/score
+- Bottom actions when user has not joined a family:
+  - Create
+  - Join
+- Selecting a family opens that family's detail/home page.
+- Create opens a family creation flow.
+- Join opens a family selection/join flow.
+- Exact backend ranking score formula remains server/config driven.
+
+### Family Home
+Top tabs:
+- Home
+- Trends
+
+Home contains:
+- family announcement
+- Top members of the family
+  - Charm Star
+  - Wealth Star
+  - Active Star
+- horizontally browsable Member list
+- Family room card/list
+- Join action when viewing a family the user has not joined
+
+Family announcement:
+- family management can update announcement according to family role policy.
+- announcement is family-wide data, not personal-only state.
+
+### Trends
+- Family activity/history feed.
+- Includes meaningful family events such as creation, joins, role changes, announcement updates, task/reward activity.
+- Backend should provide persistent family event history in production.
+
+### Member Manage
+Top tabs:
+- Member
+- Admin
+
+Member tab row contains:
+- member avatar
+- member name
+- family role/badge
+- contribution/value
+- last-active status such as Today or Logged in N days ago
+
+Admin tab:
+- Family Leader shown prominently.
+- Deputy Family Leader area.
+- Deputy/admin positions are represented as member slots.
+- Empty available slots show Add.
+- Unavailable slots show Locked.
+- Slot availability can depend on family level/policy.
+- Family leader can appoint/remove deputy/admin roles according to server-authoritative role policy.
+
+### Family Room
+- Family home links to a dedicated family voice room.
+- Family room uses the same core Voice Room engine and role/mic/seat system rather than duplicating RTC logic.
+- Family membership/role may add family-specific badges and permissions, but Voice Room state remains shared architecture.
+
+### Family Create / Join
+Create requires at minimum:
+- Family Name
+- Family Tag
+- creator becomes Family Leader
+
+Join:
+- user chooses an available family
+- user joins as Member unless family policy requires approval
+- exact approval/eligibility policy remains backend-configurable until further reference confirms it
+
+
 ---
 
 # PART II — IMPLEMENTATION CONTRACT

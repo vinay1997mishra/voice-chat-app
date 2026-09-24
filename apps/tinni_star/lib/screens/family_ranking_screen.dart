@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import '../community/family_service.dart';
 import '../ui/royal_theme.dart';
+import 'family_home_screen.dart';
 
 class FamilyRankingScreen extends StatefulWidget {
   const FamilyRankingScreen({super.key, required this.state});
@@ -13,263 +15,353 @@ class FamilyRankingScreen extends StatefulWidget {
 }
 
 class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
-  static const _periods = ['Daily', 'Weekly', 'Monthly'];
-  int _period = 1;
+  String _scope = 'Local';
 
-  List<_FamilyRankItem> _items() {
-    final multiplier = _period + 1;
-    final currentFamily = widget.state.family.name ?? 'My Family';
+  static const _families = [
+    _FamilyRankItem('welcome', 'Welcome Uttarakhand', 'UK06', 2590000),
+    _FamilyRankItem('bs', 'BS PATEL FAMILY', 'PATEL 2227', 2430000),
+    _FamilyRankItem('lion', 'LION KING FAMILY', 'LION KING', 1800000),
+    _FamilyRankItem('mumbai', 'Mumbai girl', 'mumbai', 1790000),
+    _FamilyRankItem('jay', 'Jay Shri Shyam', 'Jay Shri S', 1540000),
+    _FamilyRankItem('kuch', 'kuch log achy s', 'AM', 1530000),
+    _FamilyRankItem('sakshi', 'Sakshi world', 'Maruti', 1230000),
+    _FamilyRankItem('aryan', 'Aryan family', 'Mr Aryan 1', 1140000),
+    _FamilyRankItem('warrior', 'Indian warrior', 'Mr Indian', 1130000),
+  ];
 
-    return [
-      _FamilyRankItem(
-        id: 'family-royal',
-        name: 'Royal Family',
-        tag: 'RF',
-        score: 98000 * multiplier,
+  Future<void> _createFamily() async {
+    if (widget.state.family.exists) {
+      _openMyFamily();
+      return;
+    }
+    final nameController = TextEditingController();
+    final tagController = TextEditingController();
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create family'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('create-family-name'),
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Family name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('create-family-tag'),
+              controller: tagController,
+              decoration: const InputDecoration(labelText: 'Family tag'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('create-family-submit'),
+            onPressed: () {
+              if (nameController.text.trim().isEmpty ||
+                  tagController.text.trim().isEmpty) {
+                return;
+              }
+              Navigator.pop(context, true);
+            },
+            child: const Text('Create'),
+          ),
+        ],
       ),
-      _FamilyRankItem(
-        id: 'family-star',
-        name: 'Star Family',
-        tag: 'SF',
-        score: 76000 * multiplier,
+    );
+    if (created != true || !mounted) {
+      nameController.dispose();
+      tagController.dispose();
+      return;
+    }
+
+    final userId = widget.state.auth.current?.userId ?? '10000000';
+    widget.state.family.create(
+      familyName: nameController.text,
+      familyTag: tagController.text,
+      head: FamilyMember(
+        userId: userId,
+        name: 'Tinni User',
+        role: FamilyRole.head,
       ),
-      _FamilyRankItem(
-        id: 'family-heart',
-        name: 'Heart Family',
-        tag: 'HF',
-        score: 63000 * multiplier,
+    );
+    widget.state.family.updateNotice(
+      'welcome ' + nameController.text.trim() + ' members ❤️',
+    );
+    nameController.dispose();
+    tagController.dispose();
+    if (!mounted) return;
+    _openMyFamily();
+  }
+
+  void _openMyFamily() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FamilyHomeScreen(state: widget.state),
       ),
-      _FamilyRankItem(
-        id: 'family-tinni',
-        name: currentFamily,
-        tag: widget.state.family.tag ?? 'TS',
-        score: (widget.state.family.experience + 42000) * multiplier,
-        isMine: true,
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _showJoinList() async {
+    if (widget.state.family.exists) {
+      _openMyFamily();
+      return;
+    }
+    final selected = await showModalBottomSheet<_FamilyRankItem>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+          children: [
+            const GoldSectionTitle('Choose a family'),
+            const SizedBox(height: 8),
+            for (final family in _families.take(6))
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: RoyalPalette.deepGold,
+                  child: Text(
+                    family.name.characters.first.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                title: Text(family.name),
+                subtitle: Text(family.tag),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: RoyalPalette.gold,
+                ),
+                onTap: () => Navigator.pop(context, family),
+              ),
+          ],
+        ),
       ),
-      _FamilyRankItem(
-        id: 'family-friends',
-        name: 'Friends Club',
-        tag: 'FC',
-        score: 36000 * multiplier,
+    );
+    if (!mounted || selected == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FamilyHomeScreen(
+          state: widget.state,
+          previewName: selected.name,
+          previewTag: selected.tag,
+        ),
       ),
-    ]..sort((a, b) => b.score.compareTo(a.score));
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _openFamily(_FamilyRankItem family) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FamilyHomeScreen(
+          state: widget.state,
+          previewName: family.name,
+          previewTag: family.tag,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = _items();
-    final mineIndex = items.indexWhere((item) => item.isMine);
-
     return Scaffold(
       key: const Key('family-ranking-screen'),
       appBar: AppBar(
         title: const Text(
-          'Family Ranking',
+          'Top Families of the Month',
           style: TextStyle(
             color: RoyalPalette.gold,
             fontWeight: FontWeight.w900,
+            fontSize: 18,
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 48,
-            child: ListView.separated(
+        actions: [
+          PopupMenuButton<String>(
+            key: const Key('family-ranking-scope'),
+            initialValue: _scope,
+            onSelected: (value) => setState(() => _scope = value),
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'Local', child: Text('Local')),
+              PopupMenuItem(value: 'Global', child: Text('Global')),
+            ],
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: _periods.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 6),
-              itemBuilder: (context, index) => ChoiceChip(
-                key: Key('family-ranking-period-' + index.toString()),
-                label: Text(_periods[index]),
-                selected: _period == index,
-                onSelected: (_) => setState(() => _period = index),
+              child: Center(
+                child: Text(
+                  _scope,
+                  style: const TextStyle(
+                    color: RoyalPalette.gold,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
           ),
+        ],
+      ),
+      body: Column(
+        children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
-              children: [
-                RoyalPanel(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF3A2600),
-                      Color(0xFF0B0804),
-                      Color(0xFF3A2600),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Top Families',
-                        style: TextStyle(
-                          color: RoyalPalette.gold,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          for (var i = 0; i < items.take(3).length; i++) ...[
-                            Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.only(top: i == 0 ? 0 : 18),
-                                child: Column(
-                                  children: [
-                                    Stack(
-                                      clipBehavior: Clip.none,
-                                      alignment: Alignment.topCenter,
-                                      children: [
-                                        CircleAvatar(
-                                          radius: i == 0 ? 38 : 31,
-                                          backgroundColor: RoyalPalette.gold,
-                                          child: CircleAvatar(
-                                            radius: i == 0 ? 34 : 27,
-                                            backgroundColor: RoyalPalette.panel,
-                                            child: Text(
-                                              items[i].tag,
-                                              style: TextStyle(
-                                                color: RoyalPalette.gold,
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: i == 0 ? 20 : 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: -13,
-                                          child: Icon(
-                                            i == 0
-                                                ? Icons.workspace_premium_rounded
-                                                : Icons.emoji_events_rounded,
-                                            color: RoyalPalette.gold,
-                                            size: i == 0 ? 30 : 23,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      items[i].name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: RoyalPalette.cream,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                    Text(
-                                      items[i].score.toString(),
-                                      style: const TextStyle(
-                                        color: RoyalPalette.gold,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (i < 2) const SizedBox(width: 6),
-                          ],
+            child: ListView.separated(
+              key: const Key('family-ranking-list'),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              itemCount: _families.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 7),
+              itemBuilder: (context, index) {
+                final family = _families[index];
+                final rank = index + 7;
+                return InkWell(
+                  key: Key('family-rank-row-' + index.toString()),
+                  onTap: () => _openFamily(family),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFE783),
+                          Color(0xFFD0A936),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                for (var i = 3; i < items.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: RoyalPanel(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 34,
-                            child: Text(
-                              (i + 1).toString(),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: RoyalPalette.gold,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          CircleAvatar(
-                            radius: 23,
-                            backgroundColor: RoyalPalette.deepGold,
-                            child: Text(
-                              items[i].tag,
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              items[i].name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: RoyalPalette.cream,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            items[i].score.toString(),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF725200),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 31,
+                          child: Text(
+                            rank.toString(),
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
-                              color: RoyalPalette.gold,
+                              color: Colors.black87,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                RoyalPanel(
-                  key: const Key('family-my-ranking'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.groups_rounded,
-                        color: RoyalPalette.gold,
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'My family ranking',
-                          style: TextStyle(
-                            color: RoyalPalette.cream,
-                            fontWeight: FontWeight.w900,
+                        ),
+                        CircleAvatar(
+                          radius: 27,
+                          backgroundColor: const Color(0xFF7A5515),
+                          child: Text(
+                            family.name.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        mineIndex < 0
-                            ? '--'
-                            : '#' + (mineIndex + 1).toString(),
-                        style: const TextStyle(
-                          color: RoyalPalette.gold,
-                          fontWeight: FontWeight.w900,
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                family.name + ' 🇮🇳',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1487A5),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  family.tag,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const Icon(
+                          Icons.local_fire_department_rounded,
+                          color: Colors.deepOrange,
+                          size: 17,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          _compact(family.score),
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (!widget.state.family.exists)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Text(
+                'You have not joined the family yet. Please create or join it first.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          SafeArea(
+            minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('family-create-button'),
+                    onPressed: _createFamily,
+                    child: Text(
+                      widget.state.family.exists ? 'My family' : 'Create',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('family-ranking-join-button'),
+                    onPressed: _showJoinList,
+                    child: Text(
+                      widget.state.family.exists ? 'Open' : 'Join',
+                    ),
                   ),
                 ),
               ],
@@ -279,20 +371,28 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
       ),
     );
   }
+
+  String _compact(int value) {
+    if (value >= 1000000) {
+      return (value / 1000000).toStringAsFixed(2) + 'M';
+    }
+    if (value >= 1000) {
+      return (value / 1000).toStringAsFixed(1) + 'K';
+    }
+    return value.toString();
+  }
 }
 
 class _FamilyRankItem {
-  const _FamilyRankItem({
-    required this.id,
-    required this.name,
-    required this.tag,
-    required this.score,
-    this.isMine = false,
-  });
+  const _FamilyRankItem(
+    this.id,
+    this.name,
+    this.tag,
+    this.score,
+  );
 
   final String id;
   final String name;
   final String tag;
   final int score;
-  final bool isMine;
 }
