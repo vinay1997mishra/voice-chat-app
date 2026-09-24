@@ -325,6 +325,60 @@ export class StaffAuthStore extends DurableObject {
       created_at: Number(row.created_at),
     }));
   }
+
+  async updatePanelAccess(panelIdValue, input) {
+    const panelId = String(panelIdValue || "").trim();
+    if (!panelId) throw new Error("Panel ID is required");
+
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT id, permissions_json, enabled
+         FROM staff_panels
+        WHERE id = ?
+        LIMIT 1`,
+      panelId,
+    ).toArray();
+    const current = rows[0];
+    if (!current) throw new Error("Staff panel not found");
+
+    const permissions = input?.permissions === undefined
+      ? JSON.parse(String(current.permissions_json || "[]"))
+      : normalizePermissions(input.permissions);
+    const enabled = input?.enabled === undefined
+      ? Number(current.enabled) === 1
+      : Boolean(input.enabled);
+
+    if (enabled && permissions.length === 0) {
+      throw new Error("Active staff panel must have at least one permission");
+    }
+
+    this.ctx.storage.sql.exec(
+      `UPDATE staff_panels
+          SET permissions_json = ?, enabled = ?, updated_at = ?
+        WHERE id = ?`,
+      JSON.stringify(permissions),
+      enabled ? 1 : 0,
+      Date.now(),
+      panelId,
+    );
+
+    const updated = this.ctx.storage.sql.exec(
+      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, created_at
+         FROM staff_panels
+        WHERE id = ?
+        LIMIT 1`,
+      panelId,
+    ).toArray()[0];
+
+    return {
+      id: String(updated.id),
+      name: String(updated.name),
+      assigned_user_id: updated.assigned_user_id ? String(updated.assigned_user_id) : "",
+      email: String(updated.email),
+      permissions: JSON.parse(String(updated.permissions_json || "[]")),
+      enabled: Number(updated.enabled) === 1,
+      created_at: Number(updated.created_at),
+    };
+  }
 }
 
 export default {
@@ -336,7 +390,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.3.0",
+        version: "0.4.0",
       });
     }
 
@@ -433,6 +487,21 @@ export default {
       if (!ownerOnly(session)) return json({ ok: false, error: "Owner access required" }, 403);
       const panels = await getStaffStore(env).listPanels();
       return json({ ok: true, panels });
+    }
+
+    const staffPanelMatch = url.pathname.match(/^\/api\/staff\/panels\/([^/]+)$/);
+    if (staffPanelMatch && request.method === "PATCH") {
+      if (!ownerOnly(session)) return json({ ok: false, error: "Owner access required" }, 403);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const panel = await getStaffStore(env).updatePanelAccess(
+          decodeURIComponent(staffPanelMatch[1]),
+          body,
+        );
+        return json({ ok: true, panel });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update staff panel") }, 400);
+      }
     }
 
     if (url.pathname.startsWith("/api/")) {
