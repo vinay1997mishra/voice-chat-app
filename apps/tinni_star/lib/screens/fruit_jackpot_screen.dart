@@ -377,7 +377,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
                 : ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: game.history.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (context, index) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
                       final result = game.history[index];
                       return Container(
