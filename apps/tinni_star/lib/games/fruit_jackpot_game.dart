@@ -24,7 +24,7 @@ enum FruitKind {
 
 class FruitGameConfig {
   const FruitGameConfig({
-    this.roundDuration = const Duration(seconds: 30),
+    this.roundDuration = const Duration(seconds: 20),
     this.betLockBeforeResult = const Duration(seconds: 3),
     this.highVolumePlayerThreshold = 20,
     this.companyMarginPercent = 30,
