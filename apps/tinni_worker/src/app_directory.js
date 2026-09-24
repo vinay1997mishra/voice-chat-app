@@ -2,6 +2,62 @@ import { DurableObject } from "cloudflare:workers";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
 const VALID_GENDERS = new Set(["male", "female"]);
+const encoder = new TextEncoder();
+
+function toBase64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function fromBase64Url(value) {
+  let base64 = String(value || "").replaceAll("-", "+").replaceAll("_", "/");
+  while (base64.length % 4) base64 += "=";
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function safeEqualBytes(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a[index] ^ b[index];
+  }
+  return diff === 0;
+}
+
+async function deriveSecret(secret, saltBytes, iterations) {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(String(secret)),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: saltBytes,
+      iterations,
+    },
+    material,
+    256,
+  );
+  return new Uint8Array(bits);
+}
+
+function randomOtp() {
+  const values = new Uint32Array(1);
+  const limit = Math.floor(0x100000000 / 1000000) * 1000000;
+  do {
+    crypto.getRandomValues(values);
+  } while (values[0] >= limit);
+  return String(values[0] % 1000000).padStart(6, "0");
+}
 
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
@@ -114,6 +170,30 @@ export class AppDirectoryStore extends DurableObject {
         display_name TEXT,
         picture_url TEXT,
         error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS email_otp_requests (
+        request_id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        otp_salt TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        verified INTEGER NOT NULL DEFAULT 0,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_email_otp_email
+        ON email_otp_requests(email);
+
+      CREATE TABLE IF NOT EXISTS email_password_credentials (
+        email TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        password_salt TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        auth_version INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -252,7 +332,7 @@ export class AppDirectoryStore extends DurableObject {
       ? String(input.avatar_data_url)
       : null;
 
-    if (!["google", "facebook"].includes(provider)) {
+    if (!["google", "facebook", "email"].includes(provider)) {
       throw new Error("Unsupported login provider");
     }
     if (!subject) throw new Error("Login account identity is required");
@@ -313,6 +393,219 @@ export class AppDirectoryStore extends DurableObject {
       now,
     );
     return this.getUserById(userId);
+  }
+
+  async startEmailOtp(emailValue) {
+    const email = cleanText(emailValue, 240).toLowerCase();
+    if (!email || !email.includes("@")) {
+      throw new Error("Valid email is required");
+    }
+
+    const now = Date.now();
+    const recent = this.ctx.storage.sql.exec(
+      `SELECT created_at FROM email_otp_requests
+        WHERE email = ?
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      email,
+    ).toArray()[0];
+    if (recent && now - Number(recent.created_at) < 60000) {
+      throw new Error("Please wait before requesting another OTP");
+    }
+
+    const otp = randomOtp();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(otp, salt, 120000);
+    const requestId = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO email_otp_requests
+        (request_id, email, otp_salt, otp_hash, attempts, verified,
+         expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)`,
+      requestId,
+      email,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now + 10 * 60 * 1000,
+      now,
+      now,
+    );
+
+    return {
+      request_id: requestId,
+      email,
+      otp,
+      expires_at: now + 10 * 60 * 1000,
+    };
+  }
+
+  async verifyEmailOtp(requestIdValue, otpValue) {
+    const requestId = String(requestIdValue || "").trim();
+    const otp = String(otpValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM email_otp_requests
+        WHERE request_id = ?
+        LIMIT 1`,
+      requestId,
+    ).toArray()[0];
+
+    if (!row) throw new Error("OTP request not found");
+    if (Number(row.verified) === 1) {
+      return {
+        email: String(row.email),
+        profile_required: !(await this.getUserByEmail(row.email)),
+      };
+    }
+    if (Date.now() > Number(row.expires_at)) throw new Error("OTP has expired");
+    if (Number(row.attempts) >= 5) throw new Error("Too many OTP attempts");
+    if (!/^\d{6}$/.test(otp)) throw new Error("Enter the 6-digit OTP");
+
+    const nextAttempts = Number(row.attempts) + 1;
+    this.ctx.storage.sql.exec(
+      `UPDATE email_otp_requests
+          SET attempts = ?, updated_at = ?
+        WHERE request_id = ?`,
+      nextAttempts,
+      Date.now(),
+      requestId,
+    );
+
+    const actual = await deriveSecret(
+      otp,
+      fromBase64Url(row.otp_salt),
+      120000,
+    );
+    const expected = fromBase64Url(row.otp_hash);
+    if (!safeEqualBytes(actual, expected)) {
+      throw new Error("Incorrect OTP");
+    }
+
+    this.ctx.storage.sql.exec(
+      `UPDATE email_otp_requests
+          SET verified = 1, updated_at = ?
+        WHERE request_id = ?`,
+      Date.now(),
+      requestId,
+    );
+
+    return {
+      email: String(row.email),
+      profile_required: !(await this.getUserByEmail(row.email)),
+    };
+  }
+
+  async completeEmailPassword(requestIdValue, passwordValue, profile) {
+    const requestId = String(requestIdValue || "").trim();
+    const password = String(passwordValue || "");
+    if (password.length < 8 || password.length > 128) {
+      throw new Error("Tinni password must be 8 to 128 characters");
+    }
+
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM email_otp_requests
+        WHERE request_id = ?
+        LIMIT 1`,
+      requestId,
+    ).toArray()[0];
+    if (!row || Number(row.verified) !== 1) {
+      throw new Error("Email OTP verification is required");
+    }
+    if (Date.now() > Number(row.expires_at)) {
+      throw new Error("Email verification has expired");
+    }
+
+    const email = String(row.email).toLowerCase();
+    let user = await this.getUserByEmail(email);
+
+    if (!user) {
+      if (!profile || typeof profile !== "object") {
+        throw new Error("Profile details are required");
+      }
+      user = await this.createUser({
+        auth_provider: "email",
+        auth_subject: email,
+        email,
+        display_name: profile.display_name,
+        age: profile.age,
+        signature: profile.signature,
+        country_code: profile.country_code,
+        country_name: profile.country_name,
+        flag_emoji: profile.flag_emoji,
+        gender: profile.gender,
+        avatar_data_url: profile.avatar_data_url,
+      });
+    } else {
+      await this.linkIdentity(user.user_id, "email", email);
+      user = await this.getUserById(user.user_id);
+    }
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    const existing = this.ctx.storage.sql.exec(
+      `SELECT auth_version FROM email_password_credentials
+        WHERE email = ?
+        LIMIT 1`,
+      email,
+    ).toArray()[0];
+    const authVersion = existing ? Number(existing.auth_version || 1) + 1 : 1;
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO email_password_credentials
+        (email, user_id, password_salt, password_hash, auth_version,
+         created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         user_id = excluded.user_id,
+         password_salt = excluded.password_salt,
+         password_hash = excluded.password_hash,
+         auth_version = excluded.auth_version,
+         updated_at = excluded.updated_at`,
+      email,
+      user.user_id,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      authVersion,
+      now,
+      now,
+    );
+
+    return {
+      user,
+      email,
+      auth_version: authVersion,
+    };
+  }
+
+  async verifyEmailPassword(emailValue, passwordValue) {
+    const email = cleanText(emailValue, 240).toLowerCase();
+    const password = String(passwordValue || "");
+    if (!email || !password) return null;
+
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM email_password_credentials
+        WHERE email = ?
+        LIMIT 1`,
+      email,
+    ).toArray()[0];
+    if (!row) return null;
+
+    const actual = await deriveSecret(
+      password,
+      fromBase64Url(row.password_salt),
+      210000,
+    );
+    const expected = fromBase64Url(row.password_hash);
+    if (!safeEqualBytes(actual, expected)) return null;
+
+    const user = await this.getUserById(row.user_id);
+    if (!user) return null;
+    return {
+      user,
+      email,
+      auth_version: Number(row.auth_version || 1),
+    };
   }
 
   async startFacebookLogin() {
