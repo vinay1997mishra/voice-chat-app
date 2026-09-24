@@ -246,12 +246,16 @@ function applySession(session) {
   if (quickAction) quickAction.hidden = !owner && !allowed.has("users");
 
   if (owner) {
+    document.body.classList.remove("auth-loading");
+    document.body.classList.add("auth-ready");
     loadStaffPanels();
     return;
   }
 
   const firstAllowed = Object.keys(permissionByView).find((view) => allowed.has(permissionByView[view]));
   if (firstAllowed) setView(firstAllowed);
+  document.body.classList.remove("auth-loading");
+  document.body.classList.add("auth-ready");
 }
 
 async function loadSession() {
