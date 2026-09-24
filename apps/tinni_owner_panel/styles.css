@@ -96,3 +96,18 @@ dialog::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
 
 body.auth-loading .app-shell{visibility:hidden}
 body.auth-ready .app-shell{visibility:visible}
+
+
+.staff-panel-card{display:block}
+.staff-panel-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.staff-panel-identity{display:flex;flex-direction:column;gap:4px}
+.staff-master-toggle,.staff-power-toggle{display:flex;flex-direction:row;align-items:center;gap:8px}
+.staff-master-toggle{padding:7px 9px;border:1px solid #4d3d1c;border-radius:999px;background:#15120c;white-space:nowrap}
+.staff-master-toggle input,.staff-power-toggle input{width:17px;height:17px;min-height:0;padding:0;accent-color:var(--gold)}
+.staff-master-toggle span{color:var(--cream);font-size:12px;font-weight:800}
+.staff-power-title{margin-top:14px;color:var(--gold);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+.staff-power-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:8px}
+.staff-power-toggle{padding:8px;border:1px solid #342c1b;border-radius:9px;background:#11100d}
+.staff-power-toggle span{color:var(--cream);font-size:12px}
+@media (max-width:820px){.staff-power-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.staff-panel-head{flex-direction:column}.staff-power-grid{grid-template-columns:1fr 1fr}}

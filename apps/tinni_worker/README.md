@@ -44,3 +44,14 @@ When the owner creates a staff panel, the form collects:
 Staff passwords are never stored as plain text. The Worker stores a random salt and a PBKDF2-SHA256 password hash in the SQLite-backed `StaffAuthStore` Durable Object. Cloudflare provisions the Durable Object namespace from `wrangler.jsonc` during deployment.
 
 Staff sessions are signed with `SESSION_SECRET`, and the UI is filtered to the permissions saved on that staff panel. Owner-only staff management endpoints remain restricted to the owner session.
+
+
+## Staff power management
+
+The Owner Panel shows every permission currently granted to each staff panel. The owner can:
+
+- turn individual powers on or off at any time
+- disable or re-enable the entire staff login
+- see the staff email, linked user ID, active status, and current permissions
+
+Permission and enabled-state changes are persisted in the StaffAuthStore and are re-checked on authenticated requests, so removed access does not rely only on hiding UI controls.
