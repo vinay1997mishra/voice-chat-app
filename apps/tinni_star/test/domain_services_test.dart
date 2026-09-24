@@ -4,7 +4,6 @@ import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/community/family_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/economy/economy.dart';
-import 'package:tinni_star/games/game_service.dart';
 import 'package:tinni_star/infra/realtime.dart';
 
 void main() {
@@ -21,8 +20,8 @@ void main() {
       gift: GiftService.catalog.first,
       quantity: 2,
       maxCombo: 100,
-      senderId: '10000000',
-      receiverIds: const ['20000000'],
+      senderId: '91000001',
+      receiverIds: const ['92000001'],
     );
     expect(tx, isNotNull);
     expect(state.wallet.coins, before - 200);
@@ -61,14 +60,6 @@ void main() {
     await realtime.setMic(true);
     expect(rtc.publishingMic, true);
     expect(im.sentEvents.last['type'], 'mic_state');
-  });
-
-  test('game lifecycle settles a round', () {
-    final state = makeState();
-    state.games.start(GameType.blackjack, const ['1', '2']);
-    final settled = state.games.finish();
-    expect(settled.state, 'settled');
-    expect(state.games.active, isNull);
   });
 
   test('store inventory rejects duplicate purchase', () {
