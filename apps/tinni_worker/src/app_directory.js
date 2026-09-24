@@ -17,6 +17,8 @@ function rowToUser(row) {
   return {
     user_id: String(row.user_id),
     google_sub: String(row.google_sub),
+    auth_provider: String(row.auth_provider || "google"),
+    auth_subject: String(row.auth_subject || row.google_sub),
     email: String(row.email),
     display_name: String(row.display_name),
     age: Number(row.age),
@@ -93,7 +95,40 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_app_rooms_created ON app_rooms(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS facebook_login_requests (
+        request_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        facebook_id TEXT,
+        email TEXT,
+        display_name TEXT,
+        picture_url TEXT,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `);
+
+    for (const migration of [
+      "ALTER TABLE app_users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'google'",
+      "ALTER TABLE app_users ADD COLUMN auth_subject TEXT"
+    ]) {
+      try {
+        this.ctx.storage.sql.exec(migration);
+      } catch (error) {
+        const message = String(error?.message || "").toLowerCase();
+        if (!message.includes("duplicate") && !message.includes("already exists")) {
+          throw error;
+        }
+      }
+    }
+
+    this.ctx.storage.sql.exec(
+      "UPDATE app_users SET auth_subject = google_sub WHERE auth_subject IS NULL OR auth_subject = ''"
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_auth_identity ON app_users(auth_provider, auth_subject)"
+    );
   }
 
   _nextUserId() {
@@ -111,14 +146,30 @@ export class AppDirectoryStore extends DurableObject {
     throw new Error("Unable to allocate user ID");
   }
 
-  async getUserByGoogleSub(googleSubValue) {
-    const googleSub = String(googleSubValue || "").trim();
-    if (!googleSub) return null;
-    const row = this.ctx.storage.sql.exec(
-      `SELECT * FROM app_users WHERE google_sub = ? LIMIT 1`,
-      googleSub,
+  async getUserByProvider(providerValue, subjectValue) {
+    const provider = String(providerValue || "").trim().toLowerCase();
+    const subject = String(subjectValue || "").trim();
+    if (!provider || !subject) return null;
+
+    let row = this.ctx.storage.sql.exec(
+      `SELECT * FROM app_users
+        WHERE auth_provider = ? AND auth_subject = ?
+        LIMIT 1`,
+      provider,
+      subject,
     ).toArray()[0];
+
+    if (!row && provider === "google") {
+      row = this.ctx.storage.sql.exec(
+        `SELECT * FROM app_users WHERE google_sub = ? LIMIT 1`,
+        subject,
+      ).toArray()[0];
+    }
     return rowToUser(row);
+  }
+
+  async getUserByGoogleSub(googleSubValue) {
+    return this.getUserByProvider("google", googleSubValue);
   }
 
   async getUserById(userIdValue) {
@@ -132,7 +183,9 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async createUser(input) {
-    const googleSub = cleanText(input?.google_sub, 160);
+    const provider = cleanText(input?.auth_provider || "google", 24).toLowerCase();
+    const subject = cleanText(input?.auth_subject || input?.google_sub, 160);
+    const googleSub = provider === "google" ? subject : provider + ":" + subject;
     const email = cleanText(input?.email, 240).toLowerCase();
     const displayName = cleanText(input?.display_name, 40);
     const age = Number(input?.age);
@@ -145,8 +198,11 @@ export class AppDirectoryStore extends DurableObject {
       ? String(input.avatar_data_url)
       : null;
 
-    if (!googleSub) throw new Error("Google account identity is required");
-    if (!email || !email.includes("@")) throw new Error("Valid Gmail/email is required");
+    if (!["google", "facebook"].includes(provider)) {
+      throw new Error("Unsupported login provider");
+    }
+    if (!subject) throw new Error("Login account identity is required");
+    if (!email || !email.includes("@")) throw new Error("Valid account email is required");
     if (!displayName) throw new Error("Name is required");
     if (!Number.isInteger(age) || age < 1 || age > 120) throw new Error("Age must be between 1 and 120");
     if (!countryCode || !countryName || !flagEmoji) throw new Error("Country and flag are required");
@@ -159,7 +215,7 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Profile photo format is invalid");
     }
 
-    const existing = await this.getUserByGoogleSub(googleSub);
+    const existing = await this.getUserByProvider(provider, subject);
     if (existing) return existing;
 
     const userId = this._nextUserId();
@@ -167,12 +223,14 @@ export class AppDirectoryStore extends DurableObject {
     try {
       this.ctx.storage.sql.exec(
         `INSERT INTO app_users
-          (user_id, google_sub, email, display_name, age, signature,
-           country_code, country_name, flag_emoji, gender, avatar_data_url,
-           created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (user_id, google_sub, auth_provider, auth_subject, email,
+           display_name, age, signature, country_code, country_name,
+           flag_emoji, gender, avatar_data_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userId,
         googleSub,
+        provider,
+        subject,
         email,
         displayName,
         age,
@@ -187,11 +245,89 @@ export class AppDirectoryStore extends DurableObject {
       );
     } catch (error) {
       if (String(error?.message || "").toLowerCase().includes("unique")) {
-        throw new Error("This Google account/email is already registered");
+        throw new Error("This login account/email is already registered");
       }
       throw error;
     }
     return this.getUserById(userId);
+  }
+
+  async startFacebookLogin() {
+    const now = Date.now();
+    const requestId = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO facebook_login_requests
+        (request_id, status, created_at, updated_at)
+       VALUES (?, 'pending', ?, ?)`,
+      requestId,
+      now,
+      now,
+    );
+    return { request_id: requestId, created_at: now };
+  }
+
+  async getFacebookLogin(requestIdValue) {
+    const requestId = String(requestIdValue || "").trim();
+    if (!requestId) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM facebook_login_requests
+        WHERE request_id = ?
+        LIMIT 1`,
+      requestId,
+    ).toArray()[0];
+    if (!row) return null;
+    if (Date.now() - Number(row.created_at) > 10 * 60 * 1000) {
+      return { request_id: requestId, status: "expired" };
+    }
+    return {
+      request_id: requestId,
+      status: String(row.status),
+      facebook_id: row.facebook_id ? String(row.facebook_id) : null,
+      email: row.email ? String(row.email) : null,
+      display_name: row.display_name ? String(row.display_name) : null,
+      picture_url: row.picture_url ? String(row.picture_url) : null,
+      error: row.error ? String(row.error) : null,
+      created_at: Number(row.created_at),
+      updated_at: Number(row.updated_at),
+    };
+  }
+
+  async completeFacebookLogin(requestIdValue, profile) {
+    const requestId = String(requestIdValue || "").trim();
+    const facebookId = cleanText(profile?.id, 160);
+    if (!requestId || !facebookId) throw new Error("Invalid Facebook login response");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE facebook_login_requests
+          SET status = 'authorized',
+              facebook_id = ?,
+              email = ?,
+              display_name = ?,
+              picture_url = ?,
+              error = NULL,
+              updated_at = ?
+        WHERE request_id = ? AND status = 'pending'`,
+      facebookId,
+      cleanText(profile?.email, 240).toLowerCase() || null,
+      cleanText(profile?.name, 80) || "Facebook User",
+      cleanText(profile?.picture, 2000) || null,
+      now,
+      requestId,
+    );
+    return this.getFacebookLogin(requestId);
+  }
+
+  async failFacebookLogin(requestIdValue, messageValue) {
+    const requestId = String(requestIdValue || "").trim();
+    if (!requestId) return;
+    this.ctx.storage.sql.exec(
+      `UPDATE facebook_login_requests
+          SET status = 'failed', error = ?, updated_at = ?
+        WHERE request_id = ?`,
+      cleanText(messageValue, 500) || "Facebook login failed",
+      Date.now(),
+      requestId,
+    );
   }
 
   async listUsers() {
