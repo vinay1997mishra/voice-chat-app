@@ -67,7 +67,6 @@ class AuthPersistence {
   }
 
   Future<void> clear() async {
-    await _preferences.remove(_userIdKey);
     await _preferences.remove(_nameKey);
     await _preferences.remove(_countryKey);
     await _preferences.remove(_providersKey);
