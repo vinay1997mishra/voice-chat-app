@@ -1,13 +1,25 @@
 import 'dart:convert';
 import 'dart:io';
 
-class GoogleProfileDraft {
-  const GoogleProfileDraft({
+class AppAuthConfig {
+  const AppAuthConfig({
+    required this.googleServerClientId,
+    required this.facebookConfigured,
+  });
+
+  final String? googleServerClientId;
+  final bool facebookConfigured;
+}
+
+class AuthProfileDraft {
+  const AuthProfileDraft({
+    required this.provider,
     required this.email,
     required this.displayName,
     this.photoUrl,
   });
 
+  final String provider;
   final String email;
   final String displayName;
   final String? photoUrl;
@@ -18,13 +30,37 @@ class AppLoginResult {
     this.token,
     this.user,
     this.profileRequired = false,
-    this.googleDraft,
+    this.draft,
   });
 
   final String? token;
   final Map<String, dynamic>? user;
   final bool profileRequired;
-  final GoogleProfileDraft? googleDraft;
+  final AuthProfileDraft? draft;
+}
+
+class FacebookStartResult {
+  const FacebookStartResult({
+    required this.requestId,
+    required this.authUrl,
+  });
+
+  final String requestId;
+  final Uri authUrl;
+}
+
+class FacebookPollResult {
+  const FacebookPollResult({
+    required this.status,
+    this.login,
+    this.requestId,
+  });
+
+  final String status;
+  final AppLoginResult? login;
+  final String? requestId;
+
+  bool get pending => status == 'pending';
 }
 
 class AppAuthApi {
@@ -38,15 +74,28 @@ class AppAuthApi {
   final Uri apiBase;
   final HttpClient _httpClient;
 
-  Future<String?> loadGoogleServerClientId() async {
-    final request = await _httpClient.getUrl(apiBase.replace(path: '/app-config'));
+  Future<AppAuthConfig> loadConfig() async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(path: '/app-config'),
+    );
     final response = await request.close();
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load app config');
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load app config',
+      );
     }
-    final value = data['google_server_client_id']?.toString().trim();
-    return value == null || value.isEmpty ? null : value;
+
+    final google = data['google_server_client_id']?.toString().trim();
+    return AppAuthConfig(
+      googleServerClientId:
+          google == null || google.isEmpty ? null : google,
+      facebookConfigured: data['facebook_configured'] == true,
+    );
+  }
+
+  Future<String?> loadGoogleServerClientId() async {
+    return (await loadConfig()).googleServerClientId;
   }
 
   Future<AppLoginResult> googleLogin({
@@ -70,7 +119,8 @@ class AppAuthApi {
       final google = _asMap(data['google']);
       return AppLoginResult(
         profileRequired: true,
-        googleDraft: GoogleProfileDraft(
+        draft: AuthProfileDraft(
+          provider: 'google',
           email: google['email']?.toString() ?? '',
           displayName: google['display_name']?.toString() ?? '',
           photoUrl: google['photo_url']?.toString(),
@@ -80,6 +130,110 @@ class AppAuthApi {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Google login failed');
+    }
+
+    return AppLoginResult(
+      token: data['token']?.toString(),
+      user: _asMap(data['user']),
+    );
+  }
+
+  Future<FacebookStartResult> startFacebookLogin() async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/facebook/start'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write('{}');
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Facebook login is unavailable',
+      );
+    }
+
+    final requestId = data['request_id']?.toString() ?? '';
+    final authUrl = data['auth_url']?.toString() ?? '';
+    if (requestId.isEmpty || authUrl.isEmpty) {
+      throw StateError('Facebook login response is incomplete');
+    }
+
+    return FacebookStartResult(
+      requestId: requestId,
+      authUrl: Uri.parse(authUrl),
+    );
+  }
+
+  Future<FacebookPollResult> pollFacebookLogin(String requestId) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(
+        path: '/app-auth/facebook/status',
+        queryParameters: <String, String>{'request_id': requestId},
+      ),
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Facebook login failed',
+      );
+    }
+
+    final status = data['status']?.toString() ?? 'pending';
+    if (status == 'complete') {
+      return FacebookPollResult(
+        status: status,
+        login: AppLoginResult(
+          token: data['token']?.toString(),
+          user: _asMap(data['user']),
+        ),
+      );
+    }
+
+    if (status == 'profile_required') {
+      final provider = _asMap(data['provider']);
+      return FacebookPollResult(
+        status: status,
+        requestId: data['request_id']?.toString() ?? requestId,
+        login: AppLoginResult(
+          profileRequired: true,
+          draft: AuthProfileDraft(
+            provider: 'facebook',
+            email: provider['email']?.toString() ?? '',
+            displayName: provider['display_name']?.toString() ?? '',
+            photoUrl: provider['photo_url']?.toString(),
+          ),
+        ),
+      );
+    }
+
+    return FacebookPollResult(status: status);
+  }
+
+  Future<AppLoginResult> completeFacebookLogin({
+    required String requestId,
+    required Map<String, dynamic> profile,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/facebook/complete'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'request_id': requestId,
+        'profile': profile,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Facebook profile creation failed',
+      );
     }
 
     return AppLoginResult(
