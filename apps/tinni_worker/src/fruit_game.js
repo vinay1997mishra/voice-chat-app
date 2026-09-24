@@ -4,7 +4,7 @@ export const ROUND_MS = 20000;
 export const BET_LOCK_MS = 3000;
 export const HIGH_VOLUME_PLAYER_THRESHOLD = 20;
 export const COMPANY_MARGIN_PERCENT = 30;
-export const DEMO_START_BALANCE = 10000000;
+export const START_BALANCE = 10000000;
 
 export const FRUITS = [
   { key: "lemon", emoji: "🍋", label: "Lemon", multiplier: 5 },
@@ -127,7 +127,7 @@ export class FruitGameStore extends DurableObject {
        VALUES (?, ?, 0, ?, ?)
        ON CONFLICT(user_id) DO NOTHING`,
       userId,
-      DEMO_START_BALANCE,
+      START_BALANCE,
       today,
       now,
     );
@@ -379,7 +379,7 @@ export class FruitGameStore extends DurableObject {
     };
   }
 
-  async placeDemoBet(input) {
+  async placeBet(input) {
     const now = Date.now();
     await this._ensureStarted(now);
 
@@ -401,7 +401,7 @@ export class FruitGameStore extends DurableObject {
     this._ensureWallet(userId, now);
     const wallet = this._wallet(userId, now);
     if (wallet.balance < amount) {
-      throw new Error("Not enough server test coins");
+      throw new Error("Not enough coins");
     }
 
     this.ctx.storage.sql.exec(
