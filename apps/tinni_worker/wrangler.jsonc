@@ -24,6 +24,10 @@
       {
         "name": "ROOM_PRESENCE",
         "class_name": "RoomPresenceStore"
+      },
+      {
+        "name": "APP_DIRECTORY",
+        "class_name": "AppDirectoryStore"
       }
     ]
   },
@@ -37,6 +41,10 @@
       "storage": "sqlite"
     },
     "RoomPresenceStore": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "AppDirectoryStore": {
       "type": "durable-object",
       "storage": "sqlite"
     }
