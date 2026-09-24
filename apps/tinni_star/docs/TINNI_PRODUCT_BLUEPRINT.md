@@ -175,6 +175,7 @@ Contains:
 
 Game Center includes:
 
+- **Fruit Jackpot** — continuous timed fruit rounds with 5× / 10× / 20× / 40× multipliers, jackpot display and recent-result history
 - **Ludo** — actual local playable board flow
 - **UNO** — actual local playable card flow
 - Lucky 777
@@ -269,6 +270,7 @@ The following must be backed by real server/provider integrations before product
 - recharge verification
 - Host/Agency/BD settlement
 - multiplayer games
+- Fruit Jackpot round/result authority, aggregate bet exposure and settlement
 - push notifications
 - media/effect asset storage
 - fraud/abuse controls

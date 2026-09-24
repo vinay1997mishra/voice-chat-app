@@ -54,9 +54,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Fruit Jackpot'), findsOneWidget);
     expect(find.text('Ludo'), findsOneWidget);
     expect(find.text('UNO'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Ludo'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ludo'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ludo-roll-dice')), findsOneWidget);
@@ -64,6 +67,8 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('UNO'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('UNO'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('uno-player-hand')), findsOneWidget);

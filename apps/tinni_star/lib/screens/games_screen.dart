@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../games/game_service.dart';
 import '../ui/royal_theme.dart';
+import 'fruit_jackpot_screen.dart';
 import 'ludo_screen.dart';
 import 'uno_screen.dart';
 
@@ -32,6 +33,14 @@ class _GamesScreenState extends State<GamesScreen> {
   @override
   Widget build(BuildContext context) {
     final games = [
+      ('Fruit Jackpot', Icons.local_florist_rounded, () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FruitJackpotScreen(state: widget.state),
+          ),
+        );
+      }),
       ('Ludo', Icons.grid_4x4_rounded, () {
         Navigator.push(
           context,
