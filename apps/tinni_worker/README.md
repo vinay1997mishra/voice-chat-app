@@ -16,3 +16,14 @@ Current endpoints:
 - `GET /`
 
 Protected owner APIs, game authority, wallet settlement, and other production services must remain server-authoritative and authenticated.
+
+
+## Owner Panel login secrets
+
+The Owner Panel is protected by Worker authentication. Configure these as Cloudflare encrypted secrets, not repository variables:
+
+- `OWNER_EMAIL` — the owner login email
+- `OWNER_PASSWORD` — the owner login password
+- `SESSION_SECRET` — a long random value used to sign secure session cookies
+
+The Worker issues an HttpOnly, Secure, SameSite=Strict session cookie after a successful login. Do not commit any of these values to GitHub.
