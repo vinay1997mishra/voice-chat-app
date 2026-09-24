@@ -27,6 +27,23 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
   String get _name => widget.state.family.name ?? widget.previewName ?? 'Family';
   String get _tag => widget.state.family.tag ?? widget.previewTag ?? 'FM';
 
+  List<Color> get _familyLevelColors {
+    switch (widget.state.family.visualTier) {
+      case FamilyVisualTier.emerald:
+        return const [Color(0xFF082F24), Color(0xFF0E8A62)];
+      case FamilyVisualTier.sapphire:
+        return const [Color(0xFF071D38), Color(0xFF155FA8)];
+      case FamilyVisualTier.amethyst:
+        return const [Color(0xFF241036), Color(0xFF833FB0)];
+      case FamilyVisualTier.royalGold:
+        return const [Color(0xFF3C2400), Color(0xFFD49B14)];
+      case FamilyVisualTier.bronze:
+        return const [Color(0xFF2B1A0A), Color(0xFF7A5515)];
+    }
+  }
+
+  Color get _familyTagColor => _familyLevelColors.last;
+
   List<FamilyMember> _members() {
     if (widget.state.family.members.isNotEmpty) {
       return widget.state.family.members;
@@ -162,9 +179,58 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Row(
+      body: Container(
+        key: const Key('family-level-shell'),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              _familyLevelColors.first,
+              RoyalPalette.black,
+              RoyalPalette.black,
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+              child: Row(
+                children: [
+                  Container(
+                    key: const Key('family-level-tag'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _familyTagColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: RoyalPalette.gold),
+                    ),
+                    child: Text(
+                      _tag + ' • ' + widget.state.family.levelLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Family Level ' + widget.state.family.level.toString(),
+                    style: const TextStyle(
+                      color: RoyalPalette.gold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Row(
             children: [
               Expanded(
                 child: _FamilyTab(
@@ -190,6 +256,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                 : _buildTrends(),
           ),
         ],
+      ),
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -556,12 +623,40 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    Text(
-                      _roleLabel(member.role),
-                      style: const TextStyle(
-                        color: RoyalPalette.gold,
-                        fontSize: 10,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          _roleLabel(member.role),
+                          style: const TextStyle(
+                            color: RoyalPalette.gold,
+                            fontSize: 10,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: widget.state.family.visualTier ==
+                                    FamilyVisualTier.royalGold
+                                ? const Color(0xFFD49B14)
+                                : RoyalPalette.deepGold,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            (widget.state.family.tag ?? 'FM') +
+                                ' ' +
+                                widget.state.family.levelLabel,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       '🪙 ' + score.toString(),
