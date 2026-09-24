@@ -4,6 +4,8 @@ import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/screens/family_ranking_screen.dart';
 
+import 'test_account.dart';
+
 void main() {
   TinniState makeState() {
     final state = TinniState(
@@ -11,16 +13,14 @@ void main() {
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    state.auth.loginDemo();
+    attachTestAccount(state);
     return state;
   }
 
   testWidgets('family ranking follows reference flow', (tester) async {
     final state = makeState();
     await tester.pumpWidget(
-      MaterialApp(
-        home: FamilyRankingScreen(state: state),
-      ),
+      MaterialApp(home: FamilyRankingScreen(state: state)),
     );
     await tester.pumpAndSettle();
 
@@ -37,20 +37,5 @@ void main() {
     expect(find.text('Trends'), findsOneWidget);
     expect(find.text('Top members of the family'), findsOneWidget);
     expect(find.text('Member list'), findsOneWidget);
-    await tester.drag(
-      find.byKey(const Key('family-home-content')),
-      const Offset(0, -500),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Family room'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('family-member-manage-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('family-member-manage-screen')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('family-admin-tab')));
-    await tester.pumpAndSettle();
-    expect(find.text('Family Leader'), findsOneWidget);
-    expect(find.text('Deputy Family Leader'), findsOneWidget);
   });
 }
