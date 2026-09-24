@@ -562,6 +562,13 @@ export default {
       });
     }
 
+    if (url.pathname === "/app-config" && request.method === "GET") {
+      return json({
+        ok: true,
+        google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
+      });
+    }
+
     if (url.pathname === "/app-auth/google" && request.method === "POST") {
       if (!env.SESSION_SECRET) {
         return json({ ok: false, error: "App session secret is not configured" }, 503);
