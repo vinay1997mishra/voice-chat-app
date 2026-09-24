@@ -350,7 +350,10 @@ export default {
       const password = String(body.password || "");
 
       const ownerEmail = String(env.OWNER_EMAIL || "").trim().toLowerCase();
-      if (ownerEmail && email === ownerEmail && env.OWNER_PASSWORD && password === env.OWNER_PASSWORD) {
+      if (ownerEmail && email === ownerEmail) {
+        if (!env.OWNER_PASSWORD || password !== env.OWNER_PASSWORD) {
+          return json({ ok: false, error: "Invalid email or password" }, 401);
+        }
         const session = await createSession(
           { role: "owner", email: env.OWNER_EMAIL, permissions: ["*"] },
           env.SESSION_SECRET,
