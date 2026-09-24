@@ -23,6 +23,12 @@ void main() {
     expect(find.text('Login with Email / Gmail'), findsOneWidget);
     expect(find.text('Continue with Phone'), findsNothing);
 
+    await tester.tap(find.byKey(const Key('email-login-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('email-login-password')), findsOneWidget);
+    expect(find.byKey(const Key('reset-password-link')), findsOneWidget);
+    expect(find.text('Reset password'), findsOneWidget);
+
     attachTestAccount(state);
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();

@@ -11,6 +11,7 @@ import '../app/tinni_state.dart';
 import '../auth/app_auth_api.dart';
 import '../auth/auth_service.dart';
 import '../ui/royal_theme.dart';
+import 'reset_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.state});
@@ -350,9 +351,22 @@ class _LoginScreenState extends State<LoginScreen> {
         otp: otp,
       );
       if (!mounted) return;
+
+      if (!verified.profileRequired) {
+        setState(() {
+          emailOtpRequestId = null;
+          emailSetupToken = null;
+          emailProfileRequired = false;
+          emailOtpController.clear();
+          emailController.text = verified.email;
+        });
+        _snack('This email already has a Tinni ID. Use Reset password.');
+        return;
+      }
+
       setState(() {
         emailSetupToken = verified.setupToken;
-        emailProfileRequired = verified.profileRequired;
+        emailProfileRequired = true;
         emailController.text = verified.email;
       });
     } catch (error) {
@@ -605,6 +619,23 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _openResetPassword() async {
+    final result = await Navigator.of(context).push<ResetPasswordResult>(
+      MaterialPageRoute(
+        builder: (_) => ResetPasswordScreen(
+          initialEmail: emailController.text.trim(),
+        ),
+      ),
+    );
+
+    if (!mounted || result == null) return;
+    setState(() {
+      emailController.text = result.email;
+      emailPasswordController.clear();
+    });
+    _snack('Password reset successfully. Login with your new password.');
+  }
+
   Widget _buildEmailPanel() {
     final waitingForOtp =
         emailOtpRequestId != null && emailSetupToken == null;
@@ -657,7 +688,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: const Key('reset-password-link'),
+                onPressed: busy ? null : _openResetPassword,
+                child: const Text(
+                  'Reset password',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+            ),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -668,7 +709,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'New user or forgot password?',
+              'New user?',
               style: TextStyle(
                 color: RoyalPalette.muted,
                 fontSize: 11,
@@ -680,8 +721,8 @@ class _LoginScreenState extends State<LoginScreen> {
               child: OutlinedButton.icon(
                 key: const Key('email-send-otp-button'),
                 onPressed: busy || !emailReady ? null : _sendEmailOtp,
-                icon: const Icon(Icons.mark_email_read_rounded),
-                label: const Text('Send OTP to Email'),
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Create new Email ID'),
               ),
             ),
           ] else if (waitingForOtp) ...[
