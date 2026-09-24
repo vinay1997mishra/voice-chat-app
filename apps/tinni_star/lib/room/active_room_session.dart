@@ -34,7 +34,6 @@ class ActiveRoomSession extends ChangeNotifier {
   String? connectionError;
 
   Timer? _presenceTimer;
-  String? _activeUserId;
   String? _activeAuthToken;
 
   List<RoomPresenceMember> get liveMembers =>
@@ -79,7 +78,6 @@ class ActiveRoomSession extends ChangeNotifier {
 
       await foregroundService.start();
       await realtime.enterRoom(nextRoom.id, userId);
-      _activeUserId = userId;
       _activeAuthToken = authToken;
       await _startPresence();
       connected = true;
@@ -194,7 +192,6 @@ class ActiveRoomSession extends ChangeNotifier {
       }
     }
 
-    _activeUserId = null;
     _activeAuthToken = null;
   }
 
