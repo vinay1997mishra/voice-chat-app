@@ -143,6 +143,126 @@ async function checkHealth() {
   }
 }
 
+const permissionByView = {
+  users: "users",
+  rooms: "rooms",
+  wallets: "wallets",
+  hierarchy: "hierarchy",
+  roles: "roles",
+  vip: "vip",
+  gifts: "gifts",
+  assets: "assets",
+  banners: "banners",
+  games: "games",
+  policies: "policies",
+  audit: "audit",
+};
+
+const permissionByModule = {
+  "Users": "users",
+  "Rooms": "rooms",
+  "Wallets": "wallets",
+  "BD / Agency / Host": "hierarchy",
+  "Tags / Roles / Posts": "roles",
+  "VIP": "vip",
+  "Gifts": "gifts",
+  "Entries / Frames": "assets",
+  "Banners": "banners",
+  "Games": "games",
+  "Policies": "policies",
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function loadStaffPanels() {
+  const root = document.getElementById("customPanels");
+  if (!root) return;
+  try {
+    const data = await api("/api/staff/panels");
+    const panels = Array.isArray(data.panels) ? data.panels : [];
+    if (panels.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No staff panels created yet.";
+      return;
+    }
+    root.className = "staff-panel-list";
+    root.innerHTML = panels.map(panel => `
+      <article class="staff-panel-card">
+        <div>
+          <strong>${escapeHtml(panel.name)}</strong>
+          <small>${escapeHtml(panel.email)}</small>
+          ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
+        </div>
+        <div class="staff-panel-meta">
+          <span class="badge ${panel.enabled ? "gold" : ""}">${panel.enabled ? "Active" : "Disabled"}</span>
+          <small>${(panel.permissions || []).map(pretty).join(", ")}</small>
+        </div>
+      </article>
+    `).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load staff panels.";
+  }
+}
+
+function applySession(session) {
+  const owner = session.role === "owner";
+  const allowed = new Set(session.permissions || []);
+
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    const view = button.dataset.view;
+    if (owner) {
+      button.hidden = false;
+      return;
+    }
+    const permission = permissionByView[view];
+    button.hidden = !permission || !allowed.has(permission);
+  });
+
+  document.querySelectorAll(".module-card").forEach((button) => {
+    if (owner) {
+      button.hidden = false;
+      return;
+    }
+    const permission = permissionByModule[button.dataset.module];
+    button.hidden = !permission || !allowed.has(permission);
+  });
+
+  const ownerChip = document.querySelector(".owner-chip div");
+  if (ownerChip) {
+    ownerChip.innerHTML = owner
+      ? "<strong>Platform Owner</strong><small>Full owner access</small>"
+      : `<strong>${escapeHtml(session.panelName || "Staff")}</strong><small>${escapeHtml(session.email || "")}</small>`;
+  }
+
+  const quickAction = document.getElementById("quickActionBtn");
+  if (quickAction) quickAction.hidden = !owner && !allowed.has("users");
+
+  if (owner) {
+    loadStaffPanels();
+    return;
+  }
+
+  const firstAllowed = Object.keys(permissionByView).find((view) => allowed.has(permissionByView[view]));
+  if (firstAllowed) setView(firstAllowed);
+}
+
+async function loadSession() {
+  try {
+    const session = await api("/auth/session");
+    applySession(session);
+  } catch {
+    window.location.replace("/login");
+  }
+}
+
 function renderFeatures() {
   const root = document.getElementById("featureSwitches");
   root.innerHTML = "";
@@ -207,9 +327,9 @@ function renderTreasury() {
   document.getElementById("statTreasury").textContent = fmt(state.treasury);
 }
 
-function field(name, label, type = "text", placeholder = "") {
+function field(name, label, type = "text", placeholder = "", required = true) {
   if (type === "select") return "";
-  return `<label><span>${label}</span><input name="${name}" type="${type}" placeholder="${placeholder}" required></label>`;
+  return `<label><span>${label}</span><input name="${name}" type="${type}" placeholder="${placeholder}" ${required ? "required" : ""}></label>`;
 }
 
 function selectField(name, label, options) {
@@ -222,7 +342,7 @@ function checkboxField(name, label, checked = false) {
 
 function staffPanelFields() {
   return field("name", "Panel name", "text", "Support Panel") +
-    field("assigned_user_id", "Assign to user ID (optional)", "text", "10000001") +
+    field("assigned_user_id", "Assign to user ID (optional)", "text", "10000001", false) +
     field("staff_email", "Staff login Gmail / Email", "email", "staff@example.com") +
     field("login_password", "Login password", "password", "Minimum 10 characters") +
     field("confirm_password", "Confirm password", "password", "Enter password again") +
@@ -317,6 +437,7 @@ async function handleAction(action, data) {
       body: JSON.stringify(payload),
     });
     toast("Staff panel created with login credentials.");
+    await loadStaffPanels();
     return;
   }
 
@@ -446,3 +567,4 @@ renderVips();
 renderPolicies();
 renderTreasury();
 checkHealth();
+loadSession();
