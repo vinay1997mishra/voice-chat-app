@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090909" />
+  <title>Tinni Star — Owner Login</title>
+  <link rel="stylesheet" href="./login.css" />
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="brand-mark">TS</div>
+      <p class="eyebrow">OWNER ONLY</p>
+      <h1>Tinni Star</h1>
+      <p class="sub">Sign in to the Owner Control Center.</p>
+
+      <form id="loginForm" autocomplete="on">
+        <label>
+          <span>Gmail / Email</span>
+          <input id="email" name="email" type="email" inputmode="email" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <div class="password-row">
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <button type="button" id="togglePassword" aria-label="Show password">Show</button>
+          </div>
+        </label>
+        <button class="login-btn" id="loginButton" type="submit">Login</button>
+        <p class="status" id="status" role="status"></p>
+      </form>
+
+      <p class="security-note">Owner credentials are verified by the Cloudflare Worker. The password is not stored in this page or in GitHub.</p>
+    </section>
+  </main>
+  <script src="./login.js"></script>
+</body>
+</html>
