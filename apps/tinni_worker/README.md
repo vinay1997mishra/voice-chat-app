@@ -83,3 +83,26 @@ In the Meta app's Facebook Login settings, add this exact Valid OAuth Redirect U
 The app reads only a boolean `facebook_configured` flag from `/app-config`; the Facebook App Secret is never sent to the mobile app.
 
 If a Facebook account email already belongs to an existing Google-created Tinni ID, the Facebook identity is linked to that same Tinni ID instead of creating a duplicate account.
+
+
+## Email OTP and Tinni password login
+
+Users can choose **Email / Gmail Login** below Google and Facebook.
+
+Flow:
+
+1. Enter email/Gmail ID.
+2. Send a 6-digit OTP to that inbox.
+3. Verify OTP.
+4. Create a Tinni password (the user's actual Gmail password is never requested).
+5. New users finish DP/name/age/country flag/gender/signature setup.
+6. On later logins, users can enter the same email + Tinni password directly.
+
+Passwords are stored only as salted PBKDF2-SHA256 hashes. OTP values are also stored as salted hashes, expire after 10 minutes, and are limited to 5 verification attempts.
+
+Cloudflare Worker secrets required to send OTP email through Resend:
+
+- `RESEND_API_KEY`
+- `EMAIL_FROM` (a verified sender such as `Tinni Star <login@yourdomain.com>`)
+
+Direct email + Tinni password login still works if the email delivery provider is temporarily unavailable; only sending a new/reset OTP requires the provider.

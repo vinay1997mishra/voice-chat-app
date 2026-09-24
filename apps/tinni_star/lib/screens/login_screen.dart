@@ -29,18 +29,33 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController ageController = TextEditingController();
   final TextEditingController signatureController = TextEditingController();
 
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController emailPasswordController = TextEditingController();
+  final TextEditingController emailOtpController = TextEditingController();
+  final TextEditingController newPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
+
   bool busy = false;
   bool googleReady = false;
   bool facebookReady = false;
+  bool emailReady = false;
   bool waitingFacebook = false;
+  bool emailMode = false;
 
   String? googleSetupError;
   String? facebookSetupError;
+  String? emailSetupError;
 
   String? pendingProvider;
   String? pendingGoogleIdToken;
   String? pendingFacebookRequestId;
   String? pendingAccountLabel;
+
+  String? emailOtpRequestId;
+  String? emailSetupToken;
+  bool emailProfileRequired = false;
+  String? pendingEmailPassword;
 
   int _facebookAttempt = 0;
 
@@ -62,6 +77,11 @@ class _LoginScreenState extends State<LoginScreen> {
     nameController.dispose();
     ageController.dispose();
     signatureController.dispose();
+    emailController.dispose();
+    emailPasswordController.dispose();
+    emailOtpController.dispose();
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -90,12 +110,16 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         googleReady = config.googleServerClientId != null;
         facebookReady = config.facebookConfigured;
+        emailReady = config.emailOtpConfigured;
         googleSetupError = googleReady
             ? null
             : 'Google login setup is not configured yet.';
         facebookSetupError = facebookReady
             ? null
             : 'Facebook login setup is not configured yet.';
+        emailSetupError = emailReady
+            ? null
+            : 'Email OTP service is not configured yet.';
       });
     } catch (error) {
       if (!mounted) return;
@@ -103,8 +127,10 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         googleReady = false;
         facebookReady = false;
+        emailReady = false;
         googleSetupError = message;
         facebookSetupError = message;
+        emailSetupError = message;
       });
     }
   }
@@ -228,6 +254,156 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => waitingFacebook = false);
   }
 
+  void _openEmailMode() {
+    setState(() => emailMode = true);
+  }
+
+  void _closeEmailMode() {
+    setState(() {
+      emailMode = false;
+      emailOtpRequestId = null;
+      emailSetupToken = null;
+      emailProfileRequired = false;
+      pendingEmailPassword = null;
+      emailOtpController.clear();
+      newPasswordController.clear();
+      confirmPasswordController.clear();
+    });
+  }
+
+  Future<void> _emailPasswordLogin() async {
+    if (busy) return;
+    final email = emailController.text.trim();
+    final password = emailPasswordController.text;
+
+    if (!email.contains('@')) {
+      _snack('Enter a valid email / Gmail ID.');
+      return;
+    }
+    if (password.isEmpty) {
+      _snack('Enter your Tinni password.');
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final result = await _api.emailPasswordLogin(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      await _finishLogin(result);
+    } catch (error) {
+      if (!mounted) return;
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _sendEmailOtp() async {
+    if (busy) return;
+    if (!emailReady) {
+      _snack(emailSetupError ?? 'Email OTP service is not configured yet.');
+      return;
+    }
+    final email = emailController.text.trim();
+
+    if (!email.contains('@')) {
+      _snack('Enter a valid email / Gmail ID.');
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final started = await _api.startEmailOtp(email);
+      if (!mounted) return;
+      setState(() {
+        emailOtpRequestId = started.requestId;
+        emailSetupToken = null;
+        emailProfileRequired = false;
+      });
+      _snack('OTP sent to ' + started.email);
+    } catch (error) {
+      if (!mounted) return;
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _verifyEmailOtp() async {
+    if (busy) return;
+    final requestId = emailOtpRequestId;
+    if (requestId == null || requestId.isEmpty) return;
+
+    final otp = emailOtpController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+      _snack('Enter the 6-digit OTP.');
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final verified = await _api.verifyEmailOtp(
+        requestId: requestId,
+        otp: otp,
+      );
+      if (!mounted) return;
+      setState(() {
+        emailSetupToken = verified.setupToken;
+        emailProfileRequired = verified.profileRequired;
+        emailController.text = verified.email;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _saveEmailPassword() async {
+    if (busy) return;
+    final setupToken = emailSetupToken;
+    if (setupToken == null || setupToken.isEmpty) return;
+
+    final password = newPasswordController.text;
+    final confirm = confirmPasswordController.text;
+    if (password.length < 8) {
+      _snack('Tinni password must be at least 8 characters.');
+      return;
+    }
+    if (password != confirm) {
+      _snack('Password and confirm password do not match.');
+      return;
+    }
+
+    if (emailProfileRequired) {
+      setState(() {
+        pendingProvider = 'email';
+        pendingAccountLabel = emailController.text.trim();
+        pendingEmailPassword = password;
+      });
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final result = await _api.completeEmailPassword(
+        setupToken: setupToken,
+        password: password,
+      );
+      if (!mounted) return;
+      await _finishLogin(result);
+    } catch (error) {
+      if (!mounted) return;
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   void _applyDraft(
     AuthProfileDraft? draft, {
     required String fallbackName,
@@ -292,7 +468,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
     setState(() {
-      avatarDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      avatarDataUrl = 'data:image/jpeg;base64,' + base64Encode(bytes);
     });
   }
 
@@ -354,7 +530,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (provider == 'google') {
         final token = pendingGoogleIdToken;
         if (token == null || token.isEmpty) {
-          throw StateError('Google login session expired. Please sign in again.');
+          throw StateError(
+            'Google login session expired. Please sign in again.',
+          );
         }
         result = await _api.googleLogin(
           idToken: token,
@@ -369,6 +547,22 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         result = await _api.completeFacebookLogin(
           requestId: requestId,
+          profile: profile,
+        );
+      } else if (provider == 'email') {
+        final setupToken = emailSetupToken;
+        final password = pendingEmailPassword;
+        if (setupToken == null ||
+            setupToken.isEmpty ||
+            password == null ||
+            password.isEmpty) {
+          throw StateError(
+            'Email verification session expired. Please verify again.',
+          );
+        }
+        result = await _api.completeEmailPassword(
+          setupToken: setupToken,
+          password: password,
           profile: profile,
         );
       } else {
@@ -411,6 +605,289 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildEmailPanel() {
+    final waitingForOtp =
+        emailOtpRequestId != null && emailSetupToken == null;
+    final waitingForPassword = emailSetupToken != null;
+
+    return RoyalPanel(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: busy ? null : _closeEmailMode,
+                icon: const Icon(Icons.arrow_back_rounded),
+                color: RoyalPalette.gold,
+              ),
+              const Expanded(
+                child: Text(
+                  'Email / Gmail Login',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('email-login-address'),
+            controller: emailController,
+            enabled: !busy && !waitingForOtp && !waitingForPassword,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(
+              labelText: 'Email / Gmail ID',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (!waitingForOtp && !waitingForPassword) ...[
+            TextField(
+              key: const Key('email-login-password'),
+              controller: emailPasswordController,
+              enabled: !busy,
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              decoration: const InputDecoration(
+                labelText: 'Tinni Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('email-password-login-button'),
+                onPressed: busy ? null : _emailPasswordLogin,
+                child: const Text('Login with Tinni Password'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'New user or forgot password?',
+              style: TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('email-send-otp-button'),
+                onPressed: busy || !emailReady ? null : _sendEmailOtp,
+                icon: const Icon(Icons.mark_email_read_rounded),
+                label: const Text('Send OTP to Email'),
+              ),
+            ),
+          ] else if (waitingForOtp) ...[
+            TextField(
+              key: const Key('email-otp-field'),
+              controller: emailOtpController,
+              enabled: !busy,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: '6-digit OTP',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('email-verify-otp-button'),
+                onPressed: busy ? null : _verifyEmailOtp,
+                child: const Text('Verify OTP'),
+              ),
+            ),
+          ] else ...[
+            const Text(
+              'OTP verified. Create your Tinni password.',
+              style: TextStyle(
+                color: RoyalPalette.gold,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('email-new-password'),
+              controller: newPasswordController,
+              enabled: !busy,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'New Tinni Password',
+                helperText: 'Minimum 8 characters',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('email-confirm-password'),
+              controller: confirmPasswordController,
+              enabled: !busy,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Confirm Tinni Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('email-save-password-button'),
+                onPressed: busy ? null : _saveEmailPassword,
+                child: const Text('Save Tinni Password'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your Gmail password is never requested or stored.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderPanel() {
+    return RoyalPanel(
+      child: Column(
+        children: [
+          const Icon(
+            Icons.account_circle_rounded,
+            color: RoyalPalette.gold,
+            size: 56,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Sign in with Google, Facebook, or Email / Gmail.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const Key('google-login-button'),
+              onPressed: googleReady && !busy && !waitingFacebook
+                  ? _googleLogin
+                  : null,
+              icon: const Icon(Icons.g_mobiledata_rounded),
+              label: Text(
+                busy ? 'Connecting…' : 'Continue with Google',
+              ),
+            ),
+          ),
+          if (googleSetupError != null) ...[
+            const SizedBox(height: 7),
+            Text(
+              googleSetupError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 10,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'OR',
+            style: TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const Key('facebook-login-button'),
+              onPressed: facebookReady && !busy && !waitingFacebook
+                  ? _facebookLogin
+                  : null,
+              icon: const Icon(Icons.facebook),
+              label: Text(
+                waitingFacebook
+                    ? 'Waiting for Facebook…'
+                    : 'Continue with Facebook',
+              ),
+            ),
+          ),
+          if (waitingFacebook) ...[
+            const SizedBox(height: 7),
+            const Text(
+              'Complete Facebook login in your browser, then return here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: RoyalPalette.cream,
+                fontSize: 10,
+              ),
+            ),
+            TextButton(
+              onPressed: _cancelFacebookWait,
+              child: const Text('Cancel'),
+            ),
+          ] else if (facebookSetupError != null) ...[
+            const SizedBox(height: 7),
+            Text(
+              facebookSetupError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 10,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'OR',
+            style: TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const Key('email-login-button'),
+              onPressed: !busy && !waitingFacebook ? _openEmailMode : null,
+              icon: const Icon(Icons.email_rounded),
+              label: const Text('Login with Email / Gmail'),
+            ),
+          ),
+          if (emailSetupError != null) ...[
+            const SizedBox(height: 7),
+            Text(
+              emailSetupError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileSetup = pendingProvider != null;
@@ -442,107 +919,15 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 24),
             if (!profileSetup) ...[
-              RoyalPanel(
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.account_circle_rounded,
-                      color: RoyalPalette.gold,
-                      size: 56,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Sign in with Google / Gmail or Facebook.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        key: const Key('google-login-button'),
-                        onPressed: googleReady && !busy && !waitingFacebook
-                            ? _googleLogin
-                            : null,
-                        icon: const Icon(Icons.g_mobiledata_rounded),
-                        label: Text(
-                          busy ? 'Connecting…' : 'Continue with Google',
-                        ),
-                      ),
-                    ),
-                    if (googleSetupError != null) ...[
-                      const SizedBox(height: 7),
-                      Text(
-                        googleSetupError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    const Text(
-                      'OR',
-                      style: TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        key: const Key('facebook-login-button'),
-                        onPressed: facebookReady && !busy && !waitingFacebook
-                            ? _facebookLogin
-                            : null,
-                        icon: const Icon(Icons.facebook),
-                        label: Text(
-                          waitingFacebook
-                              ? 'Waiting for Facebook…'
-                              : 'Continue with Facebook',
-                        ),
-                      ),
-                    ),
-                    if (waitingFacebook) ...[
-                      const SizedBox(height: 7),
-                      const Text(
-                        'Complete Facebook login in your browser, then return here.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 10,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _cancelFacebookWait,
-                        child: const Text('Cancel'),
-                      ),
-                    ] else if (facebookSetupError != null) ...[
-                      const SizedBox(height: 7),
-                      Text(
-                        facebookSetupError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+              emailMode ? _buildEmailPanel() : _buildProviderPanel(),
             ] else ...[
               Text(
                 pendingAccountLabel ??
                     (pendingProvider == 'facebook'
                         ? 'Facebook account'
-                        : 'Google account'),
+                        : pendingProvider == 'email'
+                            ? 'Email account'
+                            : 'Google account'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: RoyalPalette.gold,
@@ -613,7 +998,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Text(
                     country == null
                         ? 'Select country'
-                        : '${country.flagEmoji} ${country.name}',
+                        : country.flagEmoji + ' ' + country.name,
                     style: TextStyle(
                       color: country == null
                           ? RoyalPalette.muted
