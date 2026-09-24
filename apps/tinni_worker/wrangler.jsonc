@@ -20,6 +20,10 @@
       {
         "name": "FRUIT_GAME",
         "class_name": "FruitGameStore"
+      },
+      {
+        "name": "ROOM_PRESENCE",
+        "class_name": "RoomPresenceStore"
       }
     ]
   },
@@ -29,6 +33,10 @@
       "storage": "sqlite"
     },
     "FruitGameStore": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "RoomPresenceStore": {
       "type": "durable-object",
       "storage": "sqlite"
     }

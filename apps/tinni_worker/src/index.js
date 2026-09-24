@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { FruitGameStore } from "./fruit_game.js";
-export { FruitGameStore };
+import { RoomPresenceStore } from "./room_presence.js";
+export { FruitGameStore, RoomPresenceStore };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -142,6 +143,11 @@ function getStaffStore(env) {
 function getFruitGameStore(env) {
   const id = env.FRUIT_GAME.idFromName("tinni-fruit-game-global");
   return env.FRUIT_GAME.get(id);
+}
+
+function getRoomPresenceStore(env, roomId) {
+  const id = env.ROOM_PRESENCE.idFromName(String(roomId));
+  return env.ROOM_PRESENCE.get(id);
 }
 
 function isPublicAsset(pathname) {
@@ -463,7 +469,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.7.0",
+        version: "0.8.0",
       });
     }
 
@@ -480,6 +486,31 @@ export default {
         return json(state, 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to place demo bet") }, 400);
+      }
+    }
+
+    if (url.pathname === "/room-presence/state" && request.method === "GET") {
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      return json(await getRoomPresenceStore(env, roomId).state());
+    }
+
+    if (
+      (url.pathname === "/room-presence/join" ||
+       url.pathname === "/room-presence/heartbeat" ||
+       url.pathname === "/room-presence/leave") &&
+      request.method === "POST"
+    ) {
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const store = getRoomPresenceStore(env, roomId);
+      try {
+        if (url.pathname.endsWith("/join")) return json(await store.join(body), 201);
+        if (url.pathname.endsWith("/heartbeat")) return json(await store.heartbeat(body));
+        return json(await store.leave(body));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Room presence failed") }, 400);
       }
     }
 

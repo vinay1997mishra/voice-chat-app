@@ -51,6 +51,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     await widget.state.roomSession.open(
       widget.room,
       userId: widget.state.auth.current?.userId ?? '10000000',
+      displayName: widget.state.auth.current?.displayName ?? 'Tinni User',
     );
     widget.state.roomSession.controller?.setInviteMode(
       widget.state.roomControls.settings.micMode == MicMode.apply,
@@ -1006,6 +1007,87 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
+            SizedBox(
+              key: const Key('room-live-users'),
+              height: 78,
+              child: session.liveMembers.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Waiting for users…',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: session.liveMembers.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 9),
+                      itemBuilder: (_, index) {
+                        final member = session.liveMembers[index];
+                        final isMe = member.userId ==
+                            (widget.state.auth.current?.userId ?? '10000000');
+                        final initial = member.displayName.trim().isEmpty
+                            ? '?'
+                            : member.displayName.trim().characters.first;
+                        return Container(
+                          width: 74,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: RoyalPalette.panel.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isMe
+                                  ? RoyalPalette.gold
+                                  : RoyalPalette.bronze,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 17,
+                                backgroundColor: RoyalPalette.panel2,
+                                child: Text(
+                                  initial.toUpperCase(),
+                                  style: const TextStyle(
+                                    color: RoyalPalette.gold,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                isMe ? 'You' : member.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                'ID ' + member.userId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 7.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 4),
             SizedBox(
               key: const Key('tinni-seat-grid'),
               height: seatAreaHeight,

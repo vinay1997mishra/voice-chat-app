@@ -40,7 +40,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (name.isEmpty || busy) return;
     setState(() => busy = true);
 
+    final userId =
+        await widget.state.authPersistence?.getOrCreateUserId() ?? '10000000';
     final account = widget.state.auth.loginDemo(
+      userId: userId,
       displayName: name,
       countryCode: country,
       provider: provider,
