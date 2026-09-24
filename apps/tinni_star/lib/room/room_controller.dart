@@ -57,12 +57,29 @@ class RoomController extends ChangeNotifier {
   }
 
   void ownerApproveMySeat(int index) {
-    if (index < 0 || index >= seats.length || seats[index].occupied) return;
-    seats[index] = seats[index].copyWith(userName: 'You');
+    managerTakeSeat(index);
+  }
+
+  String managerTakeSeat(int index) {
+    if (index < 0 || index >= seats.length) return 'Invalid seat.';
+    final seat = seats[index];
+    if (seat.occupied) {
+      return 'Seat ' + (index + 1).toString() + ' is occupied.';
+    }
+    if (mySeat != null && mySeat != index) {
+      return 'Leave your current seat first.';
+    }
+    seats[index] = seat.copyWith(userName: 'You');
     mySeat = index;
     micState = MicState.muted;
-    messages.add(RoomMessage('System', 'You joined seat ' + (index + 1).toString() + '.'));
+    messages.add(
+      RoomMessage(
+        'System',
+        'You joined seat ' + (index + 1).toString() + ' directly.',
+      ),
+    );
     notifyListeners();
+    return 'Joined seat ' + (index + 1).toString() + '.';
   }
 
   void leaveSeat() {
@@ -90,6 +107,16 @@ class RoomController extends ChangeNotifier {
     final seat = seats[index];
     if (seat.occupied) return;
     seats[index] = seat.copyWith(locked: !seat.locked);
+    notifyListeners();
+  }
+
+  void toggleSeatRoomMute(int index) {
+    if (index < 0 || index >= seats.length) return;
+    final seat = seats[index];
+    seats[index] = seat.copyWith(roomMuted: !seat.roomMuted);
+    if (mySeat == index && seats[index].roomMuted) {
+      micState = MicState.muted;
+    }
     notifyListeners();
   }
 
