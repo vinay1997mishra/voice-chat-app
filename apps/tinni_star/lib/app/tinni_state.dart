@@ -38,6 +38,7 @@ import '../relationship/cp_service.dart';
 import '../rewards/reward_service.dart';
 import '../room/room_control_service.dart';
 import '../room/active_room_session.dart';
+import '../room/room_presence_service.dart';
 import '../sharing/share_service.dart';
 import '../social/social.dart';
 
@@ -83,7 +84,8 @@ class TinniState {
         realtime = RealtimeCoordinator(
           rtc: LocalRtcAdapter(),
           im: LocalImAdapter(),
-        ) {
+        ),
+        roomPresence = RoomPresenceService() {
     gifts = GiftService(wallet);
     recharge = RechargeService(wallet);
     inventory = InventoryService(wallet);
@@ -96,6 +98,7 @@ class TinniState {
       realtime: realtime,
       foregroundService: roomForegroundService,
       permissions: roomPermissions,
+      presence: roomPresence,
     );
   }
 
@@ -155,4 +158,5 @@ class TinniState {
   final CrashReporter crashReporter;
   final RemoteConfigAdapter remoteConfig;
   final RealtimeCoordinator realtime;
+  final RoomPresenceService roomPresence;
 }
