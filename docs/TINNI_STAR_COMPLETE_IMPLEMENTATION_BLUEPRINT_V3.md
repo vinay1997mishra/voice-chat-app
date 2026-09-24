@@ -1041,6 +1041,15 @@ CP Ranking shortcut:
 Family shortcut:
 - opens the Family feature/ranking surface.
 
+
+### Family ranking shortcut — CORRECTED
+- The Party shortcut labeled Family must open a dedicated Family Ranking screen, not a generic Feature Center.
+- Family Ranking is a distinct ranking destination.
+- Tinni Star must support ranked family entries, Top 1–3 emphasis, lower ranked families, and the current user's/my-family ranking row.
+- Ranking period switching should be data-driven/configurable (for example Daily / Weekly / Monthly) until the exact reference behavior is confirmed.
+- Exact Family Ranking visual layout/tabs were not opened in the supplied reference video, so do not claim pixel parity yet.
+- Once a Family Ranking reference video is supplied, update this section and UI without changing the dedicated navigation contract.
+
 ### Party list below shortcuts
 - Popular / New selector remains below the three ranking shortcuts.
 - Popular shows recommended/high-activity rooms.

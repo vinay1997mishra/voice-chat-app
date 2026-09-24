@@ -108,6 +108,14 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('party-family-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('family-ranking-screen')), findsOneWidget);
+    expect(find.text('Family Ranking'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('home-search-button')));
     await tester.pumpAndSettle();
     expect(find.text('Discover'), findsWidgets);

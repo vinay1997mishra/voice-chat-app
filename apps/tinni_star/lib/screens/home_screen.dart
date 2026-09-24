@@ -10,6 +10,7 @@ import '../ui/royal_theme.dart';
 import 'cp_ranking_screen.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
+import 'family_ranking_screen.dart';
 import 'games_screen.dart';
 import 'gifts_screen.dart';
 import 'ranking_screen.dart';
@@ -158,6 +159,15 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => CpRankingScreen(state: widget.state),
+      ),
+    );
+  }
+
+  void openFamilyRanking() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FamilyRankingScreen(state: widget.state),
       ),
     );
   }
@@ -448,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-family-button'),
                 title: 'Family',
                 icon: Icons.groups_rounded,
-                onTap: openFeatureCenter,
+                onTap: openFamilyRanking,
               ),
             ),
           ],
