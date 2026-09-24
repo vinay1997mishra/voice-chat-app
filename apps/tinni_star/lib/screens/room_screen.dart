@@ -44,14 +44,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openRoom() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
     final ownerId = widget.room.ownerId ?? widget.room.id;
     widget.state.roomControls.configureForRoom(ownerId);
     widget.state.roomControls.roomMode =
         widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
     await widget.state.roomSession.open(
       widget.room,
-      userId: widget.state.auth.current?.userId ?? '10000000',
-      displayName: widget.state.auth.current?.displayName ?? 'Tinni User',
+      userId: account.userId,
+      displayName: account.displayName,
     );
     widget.state.roomSession.controller?.setInviteMode(
       widget.state.roomControls.settings.micMode == MicMode.apply,
@@ -70,7 +72,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   RoomRole? get _currentRoomRole {
-    final userId = widget.state.auth.current?.userId ?? '10000000';
+    final userId = widget.state.auth.current?.userId;
+    if (userId == null) return null;
     return widget.state.roomControls.roles[userId];
   }
 
@@ -115,7 +118,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _showGiftSheet() {
     final ownerId = widget.room.ownerId ?? widget.room.id;
-    final senderId = widget.state.auth.current?.userId ?? '10000000';
+    final senderId = widget.state.auth.current?.userId;
+    if (senderId == null) return;
 
     List<(String, String)> recipients() {
       final values = <(String, String)>[];
@@ -970,7 +974,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     SizedBox(width: 7),
                     Expanded(
                       child: Text(
-                        'Official room • Welcome to Tinni Star Royal Party',
+                        'Welcome to Tinni Star Royal Party',
                         style: TextStyle(
                           color: RoyalPalette.cream,
                           fontSize: 11,
@@ -1027,8 +1031,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       separatorBuilder: (_, _) => const SizedBox(width: 9),
                       itemBuilder: (_, index) {
                         final member = session.liveMembers[index];
-                        final isMe = member.userId ==
-                            (widget.state.auth.current?.userId ?? '10000000');
+                        final isMe =
+                            member.userId == widget.state.auth.current?.userId;
                         final initial = member.displayName.trim().isEmpty
                             ? '?'
                             : member.displayName.trim().characters.first;
