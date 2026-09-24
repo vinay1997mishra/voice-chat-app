@@ -278,7 +278,7 @@ class _RankTabs extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
         itemCount: labels.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           return ChoiceChip(
             key: Key(

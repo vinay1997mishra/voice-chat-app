@@ -256,7 +256,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
         itemCount: labels.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) => ChoiceChip(
           key: Key(prefix + '-' + index.toString()),
           label: Text(labels[index]),
