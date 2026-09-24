@@ -558,7 +558,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.9.0",
+        version: "1.0.0",
       });
     }
 
@@ -675,22 +675,30 @@ export default {
     }
 
     if (url.pathname === "/fruit-game/state" && request.method === "GET") {
-      const userId = url.searchParams.get("user_id") || "";
-      const state = await getFruitGameStore(env).state(userId);
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const state = await getFruitGameStore(env).state(appSession.user.user_id);
       return json(state);
     }
 
-    if ((url.pathname === "/fruit-game/bet" || url.pathname === "/fruit-game/demo-bet") && request.method === "POST") {
+    if (url.pathname === "/fruit-game/bet" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const state = await getFruitGameStore(env).placeDemoBet(body);
+        const state = await getFruitGameStore(env).placeBet({
+          ...body,
+          user_id: appSession.user.user_id,
+        });
         return json(state, 201);
       } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to place demo bet") }, 400);
+        return json({ ok: false, error: String(error?.message || "Unable to place bet") }, 400);
       }
     }
 
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       return json(await getRoomPresenceStore(env, roomId).state());
@@ -702,14 +710,29 @@ export default {
        url.pathname === "/room-presence/leave") &&
       request.method === "POST"
     ) {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       const roomId = String(body.room_id || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       const store = getRoomPresenceStore(env, roomId);
+      const user = appSession.user;
+      const presenceBody = {
+        room_id: roomId,
+        user_id: user.user_id,
+        display_name: user.display_name,
+        avatar_data_url: user.avatar_data_url,
+        flag_emoji: user.flag_emoji,
+        country_code: user.country_code,
+      };
       try {
-        if (url.pathname.endsWith("/join")) return json(await store.join(body), 201);
-        if (url.pathname.endsWith("/heartbeat")) return json(await store.heartbeat(body));
-        return json(await store.leave(body));
+        if (url.pathname.endsWith("/join")) {
+          return json(await store.join(presenceBody), 201);
+        }
+        if (url.pathname.endsWith("/heartbeat")) {
+          return json(await store.heartbeat(presenceBody));
+        }
+        return json(await store.leave(presenceBody));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Room presence failed") }, 400);
       }
