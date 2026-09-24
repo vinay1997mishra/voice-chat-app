@@ -1,7 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../auth/auth_service.dart';
 import '../community/family_service.dart';
 import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
@@ -22,26 +23,58 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
-    final profile = widget.state.profile.profile;
+    final account = widget.state.auth.current;
     final identity = widget.state.identity;
+
+    if (account == null) {
+      return const Scaffold(
+        body: Center(child: Text('Login required')),
+      );
+    }
+
+    ImageProvider? avatar;
+    final dataUrl = account.avatarDataUrl;
+    if (dataUrl != null && dataUrl.startsWith('data:image/')) {
+      try {
+        avatar = MemoryImage(base64Decode(dataUrl.split(',').last));
+      } catch (_) {
+        avatar = null;
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mine', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Mine',
+          style: TextStyle(
+            color: RoyalPalette.gold,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
           RoyalPanel(
-            gradient: const LinearGradient(colors: [Color(0xFF302007), Color(0xFF090705)]),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF302007), Color(0xFF090705)],
+            ),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 38,
                   backgroundColor: RoyalPalette.deepGold,
-                  child: Text(
-                    profile.nick.characters.first,
-                    style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900),
-                  ),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          account.displayName.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -49,13 +82,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        profile.nick,
-                        style: const TextStyle(color: RoyalPalette.cream, fontSize: 22, fontWeight: FontWeight.w900),
+                        account.displayName,
+                        style: const TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       Text(
-                        'ID ' + profile.userId + ' • 🇮🇳',
+                        'ID ' +
+                            account.userId +
+                            ' • ' +
+                            account.flagEmoji +
+                            ' ' +
+                            account.countryName,
                         style: const TextStyle(color: RoyalPalette.muted),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        account.age.toString() +
+                            ' • ' +
+                            (account.gender == 'male' ? 'Male' : 'Female'),
+                        style: const TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      if (account.signature.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          account.signature,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                       if (widget.state.family.exists) ...[
                         const SizedBox(height: 5),
                         _FamilyTagBadge(state: widget.state),
@@ -64,23 +128,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Wrap(
                         spacing: 6,
                         children: [
-                          _GoldBadge('VIP' + identity.vip.level.toString()),
-                          _GoldBadge('Noble ' + identity.noble.level.toString()),
+                          _GoldBadge(
+                            'VIP' + identity.vip.level.toString(),
+                          ),
+                          _GoldBadge(
+                            'Noble ' + identity.noble.level.toString(),
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: RoyalPalette.gold),
               ],
             ),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _StatCard(label: 'Coins', value: widget.state.wallet.coins.toString())),
+              Expanded(
+                child: _StatCard(
+                  label: 'Coins',
+                  value: widget.state.wallet.coins.toString(),
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _StatCard(label: 'Diamonds', value: widget.state.wallet.diamonds.toString())),
+              Expanded(
+                child: _StatCard(
+                  label: 'Diamonds',
+                  value: widget.state.wallet.diamonds.toString(),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -97,17 +174,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.workspace_premium_rounded,
                 label: 'VIP',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VipScreen(state: widget.state))),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VipScreen(state: widget.state),
+                  ),
+                ),
               ),
               _MineTile(
                 icon: Icons.card_giftcard_rounded,
                 label: 'Gift',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GiftsScreen(state: widget.state))),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GiftsScreen(state: widget.state),
+                  ),
+                ),
               ),
               _MineTile(
                 icon: Icons.casino_rounded,
                 label: 'Game',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GamesScreen(state: widget.state))),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GamesScreen(state: widget.state),
+                  ),
+                ),
               ),
               _MineTile(
                 icon: Icons.groups_rounded,
@@ -129,49 +221,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   MaterialPageRoute(
                     builder: (_) => FeatureCenterScreen(state: widget.state),
                   ),
-                ).then((_) => setState(() {})),
+                ),
               ),
               _MineTile(
                 icon: Icons.grid_view_rounded,
                 label: 'More',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => FeatureCenterScreen(state: widget.state)),
-                ).then((_) => setState(() {})),
+                  MaterialPageRoute(
+                    builder: (_) => FeatureCenterScreen(state: widget.state),
+                  ),
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 14),
-          RoyalPanel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.edit_rounded, color: RoyalPalette.gold),
-                  title: const Text('Edit profile'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () {
-                    widget.state.profile.editNick('Tinni Star User');
-                    widget.state.profile.editSignature('Welcome to Tinni Star');
-                    setState(() {});
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.link_rounded, color: RoyalPalette.gold),
-                  title: const Text('Bind Google account'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () async {
-                    widget.state.auth.bind(LoginProvider.google);
-                    final account = widget.state.auth.current;
-                    if (account != null) {
-                      await widget.state.authPersistence?.save(account);
-                    }
-                    if (mounted) setState(() {});
-                  },
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -206,10 +268,7 @@ class _FamilyTagBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            _color.withValues(alpha: 0.68),
-            _color,
-          ],
+          colors: [_color.withValues(alpha: 0.68), _color],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: RoyalPalette.gold),
@@ -241,7 +300,11 @@ class _GoldBadge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w800, fontSize: 10),
+        style: const TextStyle(
+          color: RoyalPalette.gold,
+          fontWeight: FontWeight.w800,
+          fontSize: 10,
+        ),
       ),
     );
   }
@@ -257,8 +320,18 @@ class _StatCard extends StatelessWidget {
     return RoyalPanel(
       child: Column(
         children: [
-          Text(value, style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900, fontSize: 18)),
-          Text(label, style: const TextStyle(color: RoyalPalette.muted)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: RoyalPalette.gold,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(color: RoyalPalette.muted),
+          ),
         ],
       ),
     );
@@ -266,7 +339,12 @@ class _StatCard extends StatelessWidget {
 }
 
 class _MineTile extends StatelessWidget {
-  const _MineTile({required this.icon, required this.label, required this.onTap});
+  const _MineTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -281,7 +359,13 @@ class _MineTile extends StatelessWidget {
         children: [
           Icon(icon, color: RoyalPalette.gold, size: 31),
           const SizedBox(height: 7),
-          Text(label, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w800)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
