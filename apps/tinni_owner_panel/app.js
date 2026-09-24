@@ -216,6 +216,31 @@ function selectField(name, label, options) {
   return `<label><span>${label}</span><select name="${name}">${options.map(o => `<option value="${o[0]}">${o[1]}</option>`).join("")}</select></label>`;
 }
 
+function checkboxField(name, label, checked = false) {
+  return `<label class="checkbox-field"><input name="${name}" type="checkbox" value="true" ${checked ? "checked" : ""}><span>${label}</span></label>`;
+}
+
+function staffPanelFields() {
+  return field("name", "Panel name", "text", "Support Panel") +
+    field("assigned_user_id", "Assign to user ID (optional)", "text", "10000001") +
+    field("staff_email", "Staff login Gmail / Email", "email", "staff@example.com") +
+    field("login_password", "Login password", "password", "Minimum 10 characters") +
+    field("confirm_password", "Confirm password", "password", "Enter password again") +
+    '<div class="dialog-section-title">Panel permissions</div>' +
+    checkboxField("permission_users", "Users", true) +
+    checkboxField("permission_rooms", "Rooms") +
+    checkboxField("permission_wallets", "Wallets") +
+    checkboxField("permission_hierarchy", "BD / Agency / Host") +
+    checkboxField("permission_roles", "Tags / Roles / Posts") +
+    checkboxField("permission_vip", "VIP") +
+    checkboxField("permission_gifts", "Gifts") +
+    checkboxField("permission_assets", "Entries / Frames") +
+    checkboxField("permission_banners", "Banners") +
+    checkboxField("permission_games", "Games") +
+    checkboxField("permission_policies", "Policies") +
+    checkboxField("permission_audit", "Audit Log");
+}
+
 function openAction(action, preset = {}) {
   pendingAction = action;
   dialogFields.innerHTML = "";
@@ -253,7 +278,7 @@ function openAction(action, preset = {}) {
     "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("vip_level","Assign VIP level","number")],
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("vip_level","Assign VIP level","number")],
     "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
-    "panel-new": ["Create Custom Panel", field("name","Panel name") + field("assigned_user_id","Assign to user ID (optional)")],
+    "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
     "role-new": ["Create Tag / Role / Post", field("name","Name") + selectField("type","Type",[["tag","Tag"],["role","Role"],["post","Post"]])],
     "policy-new": ["Create New Setting", field("key","Setting key") + field("value","Value")],
   };
@@ -269,6 +294,32 @@ function openAction(action, preset = {}) {
 }
 
 async function handleAction(action, data) {
+  if (action === "panel-new") {
+    const password = String(data.login_password || "");
+    const confirmPassword = String(data.confirm_password || "");
+    if (password.length < 10) throw new Error("Staff password must be at least 10 characters.");
+    if (password !== confirmPassword) throw new Error("Password and confirm password do not match.");
+
+    const permissions = Object.entries(data)
+      .filter(([key, value]) => key.startsWith("permission_") && value === "true")
+      .map(([key]) => key.replace("permission_", ""));
+
+    const payload = {
+      name: String(data.name || "").trim(),
+      assigned_user_id: String(data.assigned_user_id || "").trim(),
+      staff_email: String(data.staff_email || "").trim().toLowerCase(),
+      password,
+      permissions,
+    };
+
+    await api("/api/staff/panels", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    toast("Staff panel created with login credentials.");
+    return;
+  }
+
   if (action === "treasury-add") {
     const amount = Number(data.amount || 0);
     if (amount <= 0) throw new Error("Enter a valid coin amount");
