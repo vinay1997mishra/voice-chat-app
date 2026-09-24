@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
@@ -16,7 +17,10 @@ void main() {
     await tester.tap(find.text('Continue with Phone'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tinni Star ✨'), findsOneWidget);
-    expect(find.text('Recommended'), findsOneWidget);
+    expect(find.byKey(const Key('home-party-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-ranking-button')), findsOneWidget);
+    expect(find.text('Room'), findsOneWidget);
+    expect(find.text('CP Ranking'), findsOneWidget);
+    expect(find.text('Family'), findsOneWidget);
   });
 }

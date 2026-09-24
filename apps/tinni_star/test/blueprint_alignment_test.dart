@@ -34,7 +34,9 @@ void main() {
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Create room'));
+    await tester.tap(find.byKey(const Key('top-tab-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mine-create-my-room')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('create-room-photo-button')));
