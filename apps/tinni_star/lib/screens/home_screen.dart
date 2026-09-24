@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -36,11 +37,16 @@ class _HomeScreenState extends State<HomeScreen> {
   int _page = 1;
   bool popular = true;
   String countryFilter = '';
+  String countryFilterLabel = '';
 
   @override
   void initState() {
     super.initState();
-    countryFilter = widget.state.auth.current?.countryCode ?? '';
+    final account = widget.state.auth.current;
+    countryFilter = account?.countryCode ?? '';
+    countryFilterLabel = account == null
+        ? 'Select country'
+        : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
     _roomSyncTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -671,14 +677,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _pickCountryRoomFilter() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: true,
+      useSafeArea: true,
+      onSelect: (country) {
+        setState(() {
+          countryFilter = country.countryCode;
+          countryFilterLabel = country.flagEmoji + ' ' + country.name;
+        });
+      },
+    );
+  }
+
   Widget _buildCountryPage() {
-    final countries = const [
-      ('IN', '🇮🇳 India'),
-      ('US', '🇺🇸 United States'),
-      ('VN', '🇻🇳 Vietnam'),
-      ('SG', '🇸🇬 Singapore'),
-    ];
-    final rooms = widget.state.discovery.recommend(country: countryFilter);
+    final rooms = countryFilter.isEmpty
+        ? widget.state.discovery.recommend()
+        : widget.state.discovery.recommend(country: countryFilter);
 
     return ListView(
       key: const Key('home-country-page'),
@@ -686,25 +702,31 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const GoldSectionTitle('Country Rooms'),
         const SizedBox(height: 10),
-        SizedBox(
-          height: 46,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: countries.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final country = countries[index];
-              return ChoiceChip(
-                key: Key('country-' + country.$1),
-                label: Text(country.$2),
-                selected: countryFilter == country.$1,
-                onSelected: (_) {
-                  setState(() => countryFilter = country.$1);
-                },
-              );
-            },
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                key: const Key('all-country-room-filter'),
+                onPressed: _pickCountryRoomFilter,
+                icon: const Icon(Icons.public_rounded),
+                label: Text(countryFilterLabel),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'All countries',
+              onPressed: () {
+                setState(() {
+                  countryFilter = '';
+                  countryFilterLabel = '🌍 All countries';
+                });
+              },
+              icon: const Icon(
+                Icons.language_rounded,
+                color: RoyalPalette.gold,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         if (rooms.isEmpty)
@@ -716,7 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'No rooms for this country yet. Tap to search all rooms.',
+                    'No real rooms for this country yet.',
                   ),
                 ),
               ],
@@ -733,8 +755,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
       ],
     );
-  }
-}
+  }}
 
 class _RoomArtwork extends StatelessWidget {
   const _RoomArtwork({
@@ -844,9 +865,12 @@ class _MineRoomCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  '👤 Tinni User',
-                  style: TextStyle(
+                Text(
+                  '👤 ' +
+                      (room.ownerFlagEmoji ?? '') +
+                      ((room.ownerFlagEmoji ?? '').isEmpty ? '' : ' ') +
+                      (room.ownerName ?? room.ownerId ?? ''),
+                  style: const TextStyle(
                     color: RoyalPalette.muted,
                     fontSize: 12,
                   ),
