@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { FruitGameStore } from "./fruit_game.js";
+export { FruitGameStore };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -137,16 +139,31 @@ function getStaffStore(env) {
   return env.STAFF_AUTH.get(id);
 }
 
+function getFruitGameStore(env) {
+  const id = env.FRUIT_GAME.idFromName("tinni-fruit-game-global");
+  return env.FRUIT_GAME.get(id);
+}
+
 function isPublicAsset(pathname) {
   return pathname === "/login" ||
     pathname === "/login.html" ||
     pathname === "/login.css" ||
-    pathname === "/login.js";
+    pathname === "/login.js" ||
+    pathname === "/fruit-game" ||
+    pathname === "/fruit-live.html" ||
+    pathname === "/fruit-live.css" ||
+    pathname === "/fruit-live.js";
 }
 
 async function serveLogin(request, env) {
   const url = new URL(request.url);
   url.pathname = "/login.html";
+  return env.ASSETS.fetch(new Request(url, request));
+}
+
+async function serveFruitGame(request, env) {
+  const url = new URL(request.url);
+  url.pathname = "/fruit-live.html";
   return env.ASSETS.fetch(new Request(url, request));
 }
 
@@ -446,8 +463,24 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.5.0",
+        version: "0.6.0",
       });
+    }
+
+    if (url.pathname === "/fruit-game/state" && request.method === "GET") {
+      const userId = url.searchParams.get("user_id") || "";
+      const state = await getFruitGameStore(env).state(userId);
+      return json(state);
+    }
+
+    if (url.pathname === "/fruit-game/demo-bet" && request.method === "POST") {
+      const body = await request.json().catch(() => ({}));
+      try {
+        const state = await getFruitGameStore(env).placeDemoBet(body);
+        return json(state, 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to place demo bet") }, 400);
+      }
     }
 
     if (url.pathname === "/auth/login" && request.method === "POST") {
@@ -507,7 +540,9 @@ export default {
     }
 
     if (isPublicAsset(url.pathname)) {
-      return url.pathname === "/login" ? serveLogin(request, env) : env.ASSETS.fetch(request);
+      if (url.pathname === "/login") return serveLogin(request, env);
+      if (url.pathname === "/fruit-game") return serveFruitGame(request, env);
+      return env.ASSETS.fetch(request);
     }
 
     const session = await verifySession(request, env);
