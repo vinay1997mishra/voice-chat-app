@@ -68,11 +68,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  bool get _canManageRoom {
+  RoomRole? get _currentRoomRole {
     final userId = widget.state.auth.current?.userId ?? '10000000';
-    final role = widget.state.roomControls.roles[userId];
-    return role == RoomRole.owner || role == RoomRole.admin;
+    return widget.state.roomControls.roles[userId];
   }
+
+  bool get _isRoomOwner => _currentRoomRole == RoomRole.owner;
+
+  bool get _canModerateSeats =>
+      _currentRoomRole == RoomRole.owner ||
+      _currentRoomRole == RoomRole.admin;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -373,8 +378,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.roomMode == 'friends' ? 'Friends Mode' : 'Event Mode',
         Icons.meeting_room_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can change room mode.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can change room mode.');
             return;
           }
           final mode = controls.toggleRoomMode();
@@ -389,8 +394,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.eventActive ? 'Stop Event' : 'Launch Event',
         Icons.celebration_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can launch events.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can launch events.');
             return;
           }
           final active = controls.toggleEvent();
@@ -417,8 +422,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         'Room Theme',
         Icons.checkroom_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can change room theme.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can change room theme.');
             return;
           }
           final theme = controls.cycleTheme();
@@ -429,15 +434,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         'Seat Controls',
         Icons.event_seat_rounded,
         () {
-          _snack(_canManageRoom ? 'Long-press a seat for manual lock/unlock controls.' : 'Tap a free seat to join or apply for mic.');
+          _snack(_canModerateSeats ? 'Tap an empty seat for seat controls.' : 'Tap a free seat to join or apply for mic.');
         },
       ),
       (
         controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
         Icons.confirmation_number_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can set lucky number.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can set lucky number.');
             return;
           }
           _showLuckyNumberDialog();
@@ -447,8 +452,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.groupPkEnabled ? 'Stop Group PK' : 'Group PK',
         Icons.sports_mma_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can control Group PK.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can control Group PK.');
             return;
           }
           final enabled = controls.toggleGroupPk();
@@ -459,8 +464,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.settings.visibility == RoomVisibility.publicRoom ? 'Room Open' : 'Room Private',
         controls.settings.visibility == RoomVisibility.publicRoom ? Icons.lock_open_rounded : Icons.lock_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can change visibility.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can change visibility.');
             return;
           }
           final current = controls.settings;
@@ -473,8 +478,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.publicScreenEnabled ? 'Screen On' : 'Public Screen',
         Icons.tv_rounded,
         () {
-          if (!_canManageRoom) {
-            _snack('Only the room owner or room admin can control public screen.');
+          if (!_isRoomOwner) {
+            _snack('Only the room owner can control public screen.');
             return;
           }
           final enabled = controls.togglePublicScreen();
@@ -551,8 +556,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _showRoomSettings() {
     final controls = widget.state.roomControls;
-    if (!_canManageRoom) {
-      _snack('Room settings are available only to the room owner or room admin.');
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can change room settings.');
       return;
     }
 
@@ -673,12 +678,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         child: Wrap(
           children: [
             ListTile(
+              key: const Key('seat-control-lock'),
               leading: Icon(
                 seat.locked ? Icons.lock_open_rounded : Icons.lock_rounded,
                 color: RoyalPalette.gold,
               ),
-              title: Text(seat.locked ? 'Unlock seat' : 'Lock seat'),
-              subtitle: const Text('Manual room control only'),
+              title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
               onTap: () {
                 Navigator.pop(context);
                 controller.toggleSeatLock(index);
@@ -689,9 +694,48 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 );
               },
             ),
+            ListTile(
+              key: const Key('seat-control-mute'),
+              leading: Icon(
+                seat.roomMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
+                color: RoyalPalette.gold,
+              ),
+              title: Text(
+                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                controller.toggleSeatRoomMute(index);
+                _snack(
+                  seat.roomMuted
+                      ? 'Seat ${index + 1} unmuted.'
+                      : 'Seat ${index + 1} muted.',
+                );
+              },
+            ),
+            if (!seat.occupied && controller.mySeat == null)
+              ListTile(
+                key: const Key('seat-control-take'),
+                leading: const Icon(
+                  Icons.event_seat_rounded,
+                  color: RoyalPalette.gold,
+                ),
+                title: const Text('Take Seat'),
+                subtitle: const Text(
+                  'Owner/Admin can take the seat without Apply Mic.',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  final text = controller.managerTakeSeat(index);
+                  _snack(text);
+                },
+              ),
             if (controller.mySeat == index)
               ListTile(
-                leading: const Icon(Icons.logout_rounded, color: RoyalPalette.gold),
+                leading: const Icon(
+                  Icons.logout_rounded,
+                  color: RoyalPalette.gold,
+                ),
                 title: const Text('Leave this seat'),
                 onTap: () {
                   Navigator.pop(context);
@@ -740,14 +784,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (_canModerateSeats && !controller.seats[index].occupied) {
+            _showSeatControls(index);
+            return;
+          }
           final text = controller.requestOrJoinSeat(index);
           _snack(text);
         },
         onLongPress: () {
-          if (_canManageRoom) {
+          if (_canModerateSeats) {
             _showSeatControls(index);
           } else {
-            _snack('Only the room owner or room admin can lock/unlock seats.');
+            _snack('Only the room owner or room admin can control seats.');
           }
         },
         child: Column(
@@ -799,7 +847,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             SizedBox(height: compact ? 2 : 4),
             Text(
-              occupied ? seat.userName! : 'Mic ' + (index + 1).toString(),
+              occupied
+                  ? seat.userName!
+                  : seat.roomMuted
+                      ? 'Muted'
+                      : 'Mic ' + (index + 1).toString(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
