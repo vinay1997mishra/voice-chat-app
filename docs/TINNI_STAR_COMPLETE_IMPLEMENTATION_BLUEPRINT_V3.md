@@ -1143,6 +1143,54 @@ Join:
 - exact approval/eligibility policy remains backend-configurable until further reference confirms it
 
 
+
+## Family Tag / Family Level visual system — LOCKED
+
+Family identity is visible on the user profile/ID and inside Family pages.
+
+User profile / ID:
+- If the user belongs to a Family, show the Family Tag near the UID/profile identity area.
+- Family Tag shows the family tag/name identity plus Family Level.
+- Family Tag is separate from VIP/Noble badges.
+- Opening Family from Mine goes to Family Home when the user already belongs to a family; otherwise it goes to Family Ranking/Join.
+
+Family Level:
+- Family has a persistent numeric level.
+- Family experience/contribution increases the level using backend-configured progression.
+- Family level changes the Family's visual identity:
+  - Family page background/theme tier
+  - Family Tag color/style
+  - family badges/ornaments where configured
+- Exact production level thresholds and color table must be data-driven and editable from Owner Panel/backend configuration.
+- Use original/licensed Tinni family visual assets, not copied proprietary artwork.
+
+Family pages:
+- Member list, Family Leader/Deputy management, announcement, top members, Family Room and Trends appear after opening the Family.
+- Member rows can show family tag/level identity together with role.
+
+## Owner/Admin seat-tap behavior — LOCKED FIX
+
+When the room is in Apply Mic mode:
+- Normal user tapping an empty seat submits Apply Mic and does not occupy it until Owner/Admin approval.
+- Room Owner NEVER needs Apply Mic permission for themself.
+- Room Admin NEVER needs Apply Mic permission for themself.
+
+When Owner/Admin taps an empty seat, open the seat control sheet immediately with:
+- Seat Lock / Seat Unlock
+- Seat Mute / Seat Unmute
+- Take Seat
+
+Take Seat:
+- directly occupies the selected empty seat;
+- does not create an Apply Mic request;
+- works even when Mic Mode is Apply Mic.
+
+Permission split:
+- Owner can change room-wide settings.
+- Admin can moderate seat/mic state and use Take Seat.
+- Admin cannot change room-wide settings, open Kickout List, or Unkick.
+
+
 ---
 
 # PART II — IMPLEMENTATION CONTRACT
