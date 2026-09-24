@@ -243,11 +243,7 @@ function isPublicAsset(pathname) {
   return pathname === "/login" ||
     pathname === "/login.html" ||
     pathname === "/login.css" ||
-    pathname === "/login.js" ||
-    pathname === "/fruit-game" ||
-    pathname === "/fruit-live.html" ||
-    pathname === "/fruit-live.css" ||
-    pathname === "/fruit-live.js";
+    pathname === "/login.js";
 }
 
 async function serveLogin(request, env) {
@@ -256,11 +252,6 @@ async function serveLogin(request, env) {
   return env.ASSETS.fetch(new Request(url, request));
 }
 
-async function serveFruitGame(request, env) {
-  const url = new URL(request.url);
-  url.pathname = "/fruit-live.html";
-  return env.ASSETS.fetch(new Request(url, request));
-}
 
 function sessionCookie(value, maxAge = 43200) {
   return "tinni_owner_session=" + value +
@@ -796,7 +787,6 @@ export default {
 
     if (isPublicAsset(url.pathname)) {
       if (url.pathname === "/login") return serveLogin(request, env);
-      if (url.pathname === "/fruit-game") return serveFruitGame(request, env);
       return env.ASSETS.fetch(request);
     }
 
