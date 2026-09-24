@@ -434,7 +434,8 @@ export class StaffAuthStore extends DurableObject {
       auth_version: Number(updated.auth_version || 1),
       created_at: Number(updated.created_at),
     };
-  }}
+  }
+}
 
 export default {
   async fetch(request, env) {
