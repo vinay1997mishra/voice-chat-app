@@ -1,5 +1,7 @@
 enum FamilyRole { head, deputyHead, assistant, member }
 
+enum FamilyVisualTier { bronze, emerald, sapphire, amethyst, royalGold }
+
 class FamilyMember {
   const FamilyMember({
     required this.userId,
@@ -29,6 +31,16 @@ class FamilyService {
   final List<String> records = <String>[];
 
   bool get exists => name != null;
+
+  FamilyVisualTier get visualTier {
+    if (level >= 20) return FamilyVisualTier.royalGold;
+    if (level >= 10) return FamilyVisualTier.amethyst;
+    if (level >= 6) return FamilyVisualTier.sapphire;
+    if (level >= 3) return FamilyVisualTier.emerald;
+    return FamilyVisualTier.bronze;
+  }
+
+  String get levelLabel => 'Lv.' + level.toString();
 
   bool isMember(String userId) =>
       members.any((member) => member.userId == userId);
