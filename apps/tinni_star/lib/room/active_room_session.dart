@@ -44,8 +44,8 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Future<void> open(
     RoomSummary nextRoom, {
-    String userId = '10000000',
-    String displayName = 'Tinni User',
+    required String userId,
+    required String displayName,
   }) async {
     if (room?.id == nextRoom.id && controller != null) {
       minimized = false;
