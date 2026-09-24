@@ -134,27 +134,26 @@ async function verifyAppSession(request, env) {
   );
   if (!payload || payload.role !== "user" || !payload.userId) return null;
 
-  const user = await getAppDirectoryStore(env).getUserById(payload.userId);
+  const store = getAppDirectoryStore(env);
+  const user = await store.getUserById(payload.userId);
   if (!user) return null;
 
   const provider = String(payload.provider || "google");
   const subject = String(payload.subject || payload.googleSub || "");
-  if (
-    String(user.auth_provider || "google") !== provider ||
-    String(user.auth_subject || user.google_sub) !== subject
-  ) {
-    return null;
-  }
+  const identityUser = await store.getUserByProvider(provider, subject);
+  if (!identityUser || identityUser.user_id !== user.user_id) return null;
   return { ...payload, user };
 }
 
-async function createAppUserSession(user, env) {
+async function createAppUserSession(user, env, providerValue, subjectValue) {
+  const provider = String(providerValue || user.auth_provider || "google");
+  const subject = String(subjectValue || user.auth_subject || user.google_sub);
   return createSession(
     {
       role: "user",
       userId: user.user_id,
-      provider: user.auth_provider || "google",
-      subject: user.auth_subject || user.google_sub,
+      provider,
+      subject,
     },
     env.SESSION_SECRET,
     30 * 24 * 60 * 60 * 1000,
@@ -596,6 +595,12 @@ export default {
 
         const store = getAppDirectoryStore(env);
         let user = await store.getUserByGoogleSub(google.sub);
+        if (!user && google.email) {
+          const emailUser = await store.getUserByEmail(google.email);
+          if (emailUser) {
+            user = await store.linkIdentity(emailUser.user_id, "google", google.sub);
+          }
+        }
         const profile = body.profile && typeof body.profile === "object"
           ? body.profile
           : null;
@@ -629,7 +634,7 @@ export default {
           });
         }
 
-        const token = await createAppUserSession(user, env);
+        const token = await createAppUserSession(user, env, "google", google.sub);
 
         return json({
           ok: true,
@@ -767,7 +772,12 @@ export default {
 
       let user = await store.getUserByProvider("facebook", pending.facebook_id);
       if (user) {
-        const token = await createAppUserSession(user, env);
+        const token = await createAppUserSession(
+          user,
+          env,
+          "facebook",
+          pending.facebook_id,
+        );
         return json({ ok: true, status: "complete", token, user });
       }
 
@@ -805,6 +815,16 @@ export default {
 
       try {
         let user = await store.getUserByProvider("facebook", pending.facebook_id);
+        if (!user && pending.email) {
+          const emailUser = await store.getUserByEmail(pending.email);
+          if (emailUser) {
+            user = await store.linkIdentity(
+              emailUser.user_id,
+              "facebook",
+              pending.facebook_id,
+            );
+          }
+        }
         if (!user) {
           const email = pending.email ||
             ("facebook-" + pending.facebook_id + "@tinni.invalid");
@@ -823,7 +843,12 @@ export default {
           });
         }
 
-        const token = await createAppUserSession(user, env);
+        const token = await createAppUserSession(
+          user,
+          env,
+          "facebook",
+          pending.facebook_id,
+        );
         return json({ ok: true, token, user });
       } catch (error) {
         return json({
