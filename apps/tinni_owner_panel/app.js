@@ -172,6 +172,21 @@ const permissionByModule = {
   "Policies": "policies",
 };
 
+const staffPermissionOptions = [
+  ["users", "Users"],
+  ["rooms", "Rooms"],
+  ["wallets", "Wallets"],
+  ["hierarchy", "BD / Agency / Host"],
+  ["roles", "Tags / Roles / Posts"],
+  ["vip", "VIP"],
+  ["gifts", "Gifts"],
+  ["assets", "Entries / Frames"],
+  ["banners", "Banners"],
+  ["games", "Games"],
+  ["policies", "Policies"],
+  ["audit", "Audit Log"],
+];
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -179,6 +194,13 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+async function updateStaffPanelPower(panelId, patch) {
+  return api("/api/staff/panels/" + encodeURIComponent(panelId), {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 async function loadStaffPanels() {
@@ -192,20 +214,48 @@ async function loadStaffPanels() {
       root.textContent = "No staff panels created yet.";
       return;
     }
+
     root.className = "staff-panel-list";
-    root.innerHTML = panels.map(panel => `
-      <article class="staff-panel-card">
-        <div>
-          <strong>${escapeHtml(panel.name)}</strong>
-          <small>${escapeHtml(panel.email)}</small>
-          ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
-        </div>
-        <div class="staff-panel-meta">
-          <span class="badge ${panel.enabled ? "gold" : ""}">${panel.enabled ? "Active" : "Disabled"}</span>
-          <small>${(panel.permissions || []).map(pretty).join(", ")}</small>
-        </div>
-      </article>
-    `).join("");
+    root.innerHTML = panels.map(panel => {
+      const activePermissions = new Set(panel.permissions || []);
+      const panelId = escapeHtml(panel.id);
+      return `
+        <article class="staff-panel-card" data-staff-panel="${panelId}">
+          <div class="staff-panel-head">
+            <div class="staff-panel-identity">
+              <strong>${escapeHtml(panel.name)}</strong>
+              <small>${escapeHtml(panel.email)}</small>
+              ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
+            </div>
+            <label class="staff-master-toggle">
+              <input
+                type="checkbox"
+                data-staff-enabled
+                data-panel-id="${panelId}"
+                ${panel.enabled ? "checked" : ""}
+              >
+              <span>${panel.enabled ? "Login Active" : "Login Disabled"}</span>
+            </label>
+          </div>
+
+          <div class="staff-power-title">Powers / Permissions</div>
+          <div class="staff-power-grid">
+            ${staffPermissionOptions.map(([key, label]) => `
+              <label class="staff-power-toggle">
+                <input
+                  type="checkbox"
+                  data-staff-permission
+                  data-panel-id="${panelId}"
+                  data-permission="${key}"
+                  ${activePermissions.has(key) ? "checked" : ""}
+                >
+                <span>${label}</span>
+              </label>
+            `).join("")}
+          </div>
+        </article>
+      `;
+    }).join("");
   } catch (error) {
     root.className = "empty-state";
     root.textContent = error.message || "Unable to load staff panels.";
@@ -502,6 +552,47 @@ document.body.addEventListener("change", e => {
   if (!input) return;
   state.features[input.dataset.feature] = input.checked;
   toast(`${pretty(input.dataset.feature)} ${input.checked ? "enabled" : "disabled"} in panel preview`);
+});
+
+document.body.addEventListener("change", async (event) => {
+  const enabledInput = event.target.closest("[data-staff-enabled]");
+  if (enabledInput) {
+    enabledInput.disabled = true;
+    try {
+      await updateStaffPanelPower(enabledInput.dataset.panelId, {
+        enabled: enabledInput.checked,
+      });
+      toast(enabledInput.checked ? "Staff login enabled." : "Staff login disabled immediately.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      await loadStaffPanels();
+    }
+    return;
+  }
+
+  const permissionInput = event.target.closest("[data-staff-permission]");
+  if (permissionInput) {
+    const card = permissionInput.closest("[data-staff-panel]");
+    const permissions = [...card.querySelectorAll("[data-staff-permission]:checked")]
+      .map((input) => input.dataset.permission);
+
+    permissionInput.disabled = true;
+    try {
+      await updateStaffPanelPower(permissionInput.dataset.panelId, {
+        permissions,
+      });
+      toast(
+        permissionInput.checked
+          ? pretty(permissionInput.dataset.permission) + " power enabled."
+          : pretty(permissionInput.dataset.permission) + " power disabled."
+      );
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      await loadStaffPanels();
+    }
+  }
 });
 
 document.body.addEventListener("click", e => {
