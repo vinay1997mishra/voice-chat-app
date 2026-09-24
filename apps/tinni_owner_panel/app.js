@@ -227,15 +227,24 @@ async function loadStaffPanels() {
               <small>${escapeHtml(panel.email)}</small>
               ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
             </div>
-            <label class="staff-master-toggle">
-              <input
-                type="checkbox"
-                data-staff-enabled
+            <div class="staff-panel-actions">
+              <label class="staff-master-toggle">
+                <input
+                  type="checkbox"
+                  data-staff-enabled
+                  data-panel-id="${panelId}"
+                  ${panel.enabled ? "checked" : ""}
+                >
+                <span>${panel.enabled ? "Login Active" : "Login Disabled"}</span>
+              </label>
+              <button
+                type="button"
+                class="staff-credentials-btn"
+                data-staff-credentials
                 data-panel-id="${panelId}"
-                ${panel.enabled ? "checked" : ""}
-              >
-              <span>${panel.enabled ? "Login Active" : "Login Disabled"}</span>
-            </label>
+                data-staff-email="${escapeHtml(panel.email)}"
+              >Change Gmail / Password</button>
+            </div>
           </div>
 
           <div class="staff-power-title">Powers / Permissions</div>
@@ -394,6 +403,21 @@ function checkboxField(name, label, checked = false) {
   return `<label class="checkbox-field"><input name="${name}" type="checkbox" value="true" ${checked ? "checked" : ""}><span>${label}</span></label>`;
 }
 
+function openStaffCredentials(panelId, currentEmail) {
+  pendingAction = "staff-credentials";
+  dialogTitle.textContent = "Change Staff Gmail / Password";
+  dialogHelp.textContent = "Change the staff login email, reset the password, or both. Leave the new password blank to keep the current password.";
+  dialogFields.innerHTML =
+    `<input type="hidden" name="panel_id" value="${escapeHtml(panelId)}">` +
+    field("staff_email", "Staff login Gmail / Email", "email", "", true) +
+    field("login_password", "New password (optional)", "password", "Minimum 10 characters", false) +
+    field("confirm_password", "Confirm new password", "password", "Enter new password again", false);
+
+  const emailInput = dialogFields.querySelector('[name="staff_email"]');
+  if (emailInput) emailInput.value = currentEmail || "";
+  dialog.showModal();
+}
+
 function staffPanelFields() {
   return field("name", "Panel name", "text", "Support Panel") +
     field("assigned_user_id", "Assign to user ID (optional)", "text", "10000001", false) +
@@ -468,6 +492,29 @@ function openAction(action, preset = {}) {
 }
 
 async function handleAction(action, data) {
+  if (action === "staff-credentials") {
+    const panelId = String(data.panel_id || "");
+    const staffEmail = String(data.staff_email || "").trim().toLowerCase();
+    const password = String(data.login_password || "");
+    const confirmPassword = String(data.confirm_password || "");
+
+    if (!staffEmail || !staffEmail.includes("@")) {
+      throw new Error("Enter a valid staff Gmail / Email.");
+    }
+    if (password || confirmPassword) {
+      if (password.length < 10) throw new Error("New password must be at least 10 characters.");
+      if (password !== confirmPassword) throw new Error("New password and confirm password do not match.");
+    }
+
+    const patch = { staff_email: staffEmail };
+    if (password) patch.password = password;
+
+    await updateStaffPanelPower(panelId, patch);
+    toast(password ? "Staff Gmail / password updated." : "Staff Gmail updated.");
+    await loadStaffPanels();
+    return;
+  }
+
   if (action === "panel-new") {
     const password = String(data.login_password || "");
     const confirmPassword = String(data.confirm_password || "");
@@ -596,6 +643,14 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", e => {
+  const credentialsButton = e.target.closest("[data-staff-credentials]");
+  if (credentialsButton) {
+    return openStaffCredentials(
+      credentialsButton.dataset.panelId,
+      credentialsButton.dataset.staffEmail
+    );
+  }
+
   const action = e.target.closest("[data-action]")?.dataset.action;
   if (action) return openAction(action);
 
