@@ -24,7 +24,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
   int _selectedBet = 1000;
 
   FruitJackpotRemoteService get game => widget.state.fruitJackpotRemote;
-  String get userId => widget.state.auth.current?.userId ?? '10000000';
+  String get userId => widget.state.auth.current!.userId;
 
   @override
   void initState() {
@@ -120,7 +120,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
                 ),
               const SizedBox(height: 10),
               const Text(
-                'This test build uses the Cloudflare server as the round, result, bet and test-wallet authority so every user stays on the same global round.',
+                'Cloudflare is the round and result authority so every logged-in user stays on the same global round.',
                 style: TextStyle(fontSize: 12, color: RoyalPalette.muted),
               ),
             ],
