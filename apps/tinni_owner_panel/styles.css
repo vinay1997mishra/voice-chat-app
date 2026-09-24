@@ -80,3 +80,16 @@ dialog::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
 @media (max-width:520px){
   .stats-grid{grid-template-columns:1fr 1fr}.stat-card strong{font-size:20px}.module-grid{grid-template-columns:1fr 1fr}.action-list{grid-template-columns:1fr}.rule-grid{grid-template-columns:1fr}.page-title{flex-direction:column}.top-actions .secondary{display:none}
 }
+
+
+.dialog-section-title{margin-top:8px;color:var(--cream);font-weight:900;font-size:13px}
+.checkbox-field{display:flex;flex-direction:row;align-items:center;gap:10px;padding:9px 10px;border:1px solid #40361f;border-radius:10px;background:#0e0d0a}
+.checkbox-field input{width:18px;height:18px;min-height:0;padding:0;accent-color:var(--gold)}
+.checkbox-field span{font-size:13px;color:var(--text)}
+.staff-panel-list{display:grid;gap:10px}
+.staff-panel-card{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:12px;border:1px solid #40361f;border-radius:12px;background:#0e0d0a}
+.staff-panel-card>div{display:flex;flex-direction:column;gap:4px}
+.staff-panel-card strong{color:var(--cream)}
+.staff-panel-card small{color:var(--muted);font-size:11px}
+.staff-panel-meta{align-items:flex-end;text-align:right;max-width:52%}
+[hidden]{display:none!important}
