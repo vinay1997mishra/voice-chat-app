@@ -4,6 +4,7 @@ export const ROUND_MS = 20000;
 export const BET_LOCK_MS = 3000;
 export const HIGH_VOLUME_PLAYER_THRESHOLD = 20;
 export const COMPANY_MARGIN_PERCENT = 30;
+export const DEMO_START_BALANCE = 10000000;
 
 export const FRUITS = [
   { key: "lemon", emoji: "🍋", label: "Lemon", multiplier: 5 },
@@ -40,6 +41,10 @@ function roundEndAt(roundId) {
   return (roundId + 1) * ROUND_MS;
 }
 
+function dayKey(timeMs) {
+  return new Date(timeMs).toISOString().slice(0, 10);
+}
+
 export class FruitGameStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -69,6 +74,14 @@ export class FruitGameStore extends DurableObject {
         active_players INTEGER NOT NULL,
         margin_target_met INTEGER NOT NULL,
         settled_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS fruit_wallets (
+        user_id TEXT PRIMARY KEY,
+        balance INTEGER NOT NULL,
+        today_winnings INTEGER NOT NULL DEFAULT 0,
+        winnings_day TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       );
     `);
   }
@@ -103,6 +116,54 @@ export class FruitGameStore extends DurableObject {
       amount: Number(row.amount),
       created_at: Number(row.created_at),
     }));
+  }
+
+  _ensureWallet(userId, now = Date.now()) {
+    if (!userId) return;
+    const today = dayKey(now);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO fruit_wallets
+        (user_id, balance, today_winnings, winnings_day, updated_at)
+       VALUES (?, ?, 0, ?, ?)
+       ON CONFLICT(user_id) DO NOTHING`,
+      userId,
+      DEMO_START_BALANCE,
+      today,
+      now,
+    );
+
+    const wallet = this.ctx.storage.sql.exec(
+      `SELECT winnings_day FROM fruit_wallets WHERE user_id = ? LIMIT 1`,
+      userId,
+    ).toArray()[0];
+    if (wallet && String(wallet.winnings_day) !== today) {
+      this.ctx.storage.sql.exec(
+        `UPDATE fruit_wallets
+            SET today_winnings = 0, winnings_day = ?, updated_at = ?
+          WHERE user_id = ?`,
+        today,
+        now,
+        userId,
+      );
+    }
+  }
+
+  _wallet(userId, now = Date.now()) {
+    if (!userId) {
+      return { balance: 0, today_winnings: 0 };
+    }
+    this._ensureWallet(userId, now);
+    const row = this.ctx.storage.sql.exec(
+      `SELECT balance, today_winnings
+         FROM fruit_wallets
+        WHERE user_id = ?
+        LIMIT 1`,
+      userId,
+    ).toArray()[0];
+    return {
+      balance: Number(row?.balance || 0),
+      today_winnings: Number(row?.today_winnings || 0),
+    };
   }
 
   async _ensureStarted(now = Date.now()) {
@@ -196,6 +257,32 @@ export class FruitGameStore extends DurableObject {
       winner = candidates[randomIndex(candidates.length)];
     }
 
+    const payoutsByUser = new Map();
+    for (const bet of bets) {
+      if (bet.fruit_key !== winner.key) continue;
+      const payout = bet.amount * winner.multiplier;
+      payoutsByUser.set(
+        bet.user_id,
+        (payoutsByUser.get(bet.user_id) || 0) + payout,
+      );
+    }
+
+    const settledAt = Date.now();
+    for (const [userId, payout] of payoutsByUser) {
+      this._ensureWallet(userId, settledAt);
+      this.ctx.storage.sql.exec(
+        `UPDATE fruit_wallets
+            SET balance = balance + ?,
+                today_winnings = today_winnings + ?,
+                updated_at = ?
+          WHERE user_id = ?`,
+        payout,
+        payout,
+        settledAt,
+        userId,
+      );
+    }
+
     const winnerStake = bets
       .filter((bet) => bet.fruit_key === winner.key)
       .reduce((sum, bet) => sum + bet.amount, 0);
@@ -219,7 +306,7 @@ export class FruitGameStore extends DurableObject {
       retained,
       players.size,
       marginTargetMet ? 1 : 0,
-      Date.now(),
+      settledAt,
     );
   }
 
@@ -263,6 +350,8 @@ export class FruitGameStore extends DurableObject {
       };
     });
 
+    const wallet = this._wallet(userId, now);
+
     return {
       ok: true,
       server_time: now,
@@ -283,6 +372,8 @@ export class FruitGameStore extends DurableObject {
         fruits: FRUITS,
       },
       jackpot: Number(this._meta("jackpot", "85763")),
+      wallet_balance: wallet.balance,
+      today_winnings: wallet.today_winnings,
       my_bets: myBets,
       history,
     };
@@ -305,6 +396,27 @@ export class FruitGameStore extends DurableObject {
     }
     if (remainingMs <= BET_LOCK_MS) {
       throw new Error("Betting is locked for this round");
+    }
+
+    this._ensureWallet(userId, now);
+    const wallet = this._wallet(userId, now);
+    if (wallet.balance < amount) {
+      throw new Error("Not enough server test coins");
+    }
+
+    this.ctx.storage.sql.exec(
+      `UPDATE fruit_wallets
+          SET balance = balance - ?, updated_at = ?
+        WHERE user_id = ? AND balance >= ?`,
+      amount,
+      now,
+      userId,
+      amount,
+    );
+
+    const updatedWallet = this._wallet(userId, now);
+    if (updatedWallet.balance !== wallet.balance - amount) {
+      throw new Error("Unable to reserve bet balance");
     }
 
     this.ctx.storage.sql.exec(
