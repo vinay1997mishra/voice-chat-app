@@ -54,6 +54,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Fruit Jackpot'), findsOneWidget);
     expect(find.text('Ludo'), findsOneWidget);
     expect(find.text('UNO'), findsOneWidget);
 
