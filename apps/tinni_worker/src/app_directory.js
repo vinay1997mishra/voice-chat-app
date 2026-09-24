@@ -43,6 +43,7 @@ function rowToRoom(row) {
     seat_count: Number(row.seat_count),
     party_mode: String(row.party_mode),
     locked: Number(row.locked) === 1,
+    photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
   };
@@ -80,6 +81,7 @@ export class AppDirectoryStore extends DurableObject {
         seat_count INTEGER NOT NULL,
         party_mode TEXT NOT NULL,
         locked INTEGER NOT NULL DEFAULT 0,
+        photo_data_url TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -217,18 +219,27 @@ export class AppDirectoryStore extends DurableObject {
     const seatCount = Number(input?.seat_count || 12);
     const partyMode = cleanText(input?.party_mode, 40) || "Friends-making Party";
     const locked = Boolean(input?.locked);
+    const photoDataUrl = input?.photo_data_url
+      ? String(input.photo_data_url)
+      : null;
 
     if (!title) throw new Error("Room name is required");
     if (!Number.isInteger(seatCount) || seatCount < 1 || seatCount > 30) {
       throw new Error("Invalid seat count");
+    }
+    if (photoDataUrl && photoDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
+      throw new Error("Room photo is too large");
+    }
+    if (photoDataUrl && !photoDataUrl.startsWith("data:image/")) {
+      throw new Error("Room photo format is invalid");
     }
 
     const now = Date.now();
     this.ctx.storage.sql.exec(
       `INSERT INTO app_rooms
         (id, owner_id, title, country_code, country_name, flag_emoji,
-         seat_count, party_mode, locked, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         seat_count, party_mode, locked, photo_data_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ownerId,
       ownerId,
       title,
@@ -238,6 +249,7 @@ export class AppDirectoryStore extends DurableObject {
       seatCount,
       partyMode,
       locked ? 1 : 0,
+      photoDataUrl,
       now,
       now,
     );
