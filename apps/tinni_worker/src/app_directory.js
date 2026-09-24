@@ -28,6 +28,13 @@ function rowToUser(row) {
     avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
+    owner_name: row.owner_name ? String(row.owner_name) : null,
+    owner_avatar_data_url: row.owner_avatar_data_url
+      ? String(row.owner_avatar_data_url)
+      : null,
+    owner_flag_emoji: row.owner_flag_emoji
+      ? String(row.owner_flag_emoji)
+      : null,
   };
 }
 
@@ -200,7 +207,13 @@ export class AppDirectoryStore extends DurableObject {
 
   async listRooms() {
     return this.ctx.storage.sql.exec(
-      `SELECT * FROM app_rooms ORDER BY created_at DESC LIMIT 500`,
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+        ORDER BY r.created_at DESC
+        LIMIT 500`,
     ).toArray().map(rowToRoom);
   }
 
@@ -254,7 +267,13 @@ export class AppDirectoryStore extends DurableObject {
       now,
     );
     return this.ctx.storage.sql.exec(
-      `SELECT * FROM app_rooms WHERE id = ? LIMIT 1`,
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+        WHERE r.id = ?
+        LIMIT 1`,
       ownerId,
     ).toArray().map(rowToRoom)[0];
   }
