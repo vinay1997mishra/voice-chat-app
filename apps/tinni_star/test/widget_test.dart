@@ -19,6 +19,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Continue with Facebook'), findsOneWidget);
+    expect(find.text('Login with Email / Gmail'), findsOneWidget);
     expect(find.text('Continue with Phone'), findsNothing);
 
     attachTestAccount(state);
