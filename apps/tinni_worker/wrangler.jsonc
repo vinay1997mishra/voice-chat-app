@@ -10,5 +10,19 @@
     "directory": "../tinni_owner_panel",
     "binding": "ASSETS",
     "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "STAFF_AUTH",
+        "class_name": "StaffAuthStore"
+      }
+    ]
+  },
+  "exports": {
+    "StaffAuthStore": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
   }
 }
