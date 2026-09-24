@@ -57,12 +57,11 @@ class AppAuthApi {
       apiBase.replace(path: '/app-auth/google'),
     );
     request.headers.contentType = ContentType.json;
-    request.write(
-      jsonEncode(<String, dynamic>{
-        'id_token': idToken,
-        if (profile != null) 'profile': profile,
-      }),
-    );
+    final payload = <String, dynamic>{'id_token': idToken};
+    if (profile != null) {
+      payload['profile'] = profile;
+    }
+    request.write(jsonEncode(payload));
 
     final response = await request.close();
     final data = await _readJson(response);
