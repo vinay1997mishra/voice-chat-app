@@ -578,6 +578,18 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  async getEmailCredentialVersion(emailValue) {
+    const email = cleanText(emailValue, 240).toLowerCase();
+    if (!email) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT auth_version FROM email_password_credentials
+        WHERE email = ?
+        LIMIT 1`,
+      email,
+    ).toArray()[0];
+    return row ? Number(row.auth_version || 1) : null;
+  }
+
   async verifyEmailPassword(emailValue, passwordValue) {
     const email = cleanText(emailValue, 240).toLowerCase();
     const password = String(passwordValue || "");
