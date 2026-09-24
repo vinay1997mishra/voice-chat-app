@@ -89,7 +89,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Rounds run continuously on their own timer. Place a bet before the lock period. The winning fruit pays the shown multiplier.',
+                'Rounds run continuously every 20 seconds on the shared server timer. Place a bet before the lock period. The winning fruit pays the shown multiplier.',
               ),
               const SizedBox(height: 14),
               for (final fruit in FruitKind.values)
