@@ -28,12 +28,13 @@ class AuthService {
   bool get isLoggedIn => _current != null;
 
   TinniAccount loginDemo({
+    String userId = '10000000',
     String displayName = 'Tinni User',
     String countryCode = 'IN',
     LoginProvider provider = LoginProvider.phone,
   }) {
     _current = TinniAccount(
-      userId: '10000000',
+      userId: userId,
       displayName: displayName,
       countryCode: countryCode,
       providers: {provider},
