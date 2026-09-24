@@ -111,7 +111,7 @@ void main() {
     await tester.tap(find.byKey(const Key('party-family-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('family-ranking-screen')), findsOneWidget);
-    expect(find.text('Family Ranking'), findsOneWidget);
+    expect(find.text('Top Families of the Month'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
