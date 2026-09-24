@@ -93,3 +93,6 @@ dialog::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
 .staff-panel-card small{color:var(--muted);font-size:11px}
 .staff-panel-meta{align-items:flex-end;text-align:right;max-width:52%}
 [hidden]{display:none!important}
+
+body.auth-loading .app-shell{visibility:hidden}
+body.auth-ready .app-shell{visibility:visible}
