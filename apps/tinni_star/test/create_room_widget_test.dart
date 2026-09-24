@@ -42,6 +42,20 @@ void main() {
     );
     expect(find.text('My Safe Room'), findsWidgets);
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
+
+    final firstSeat = find.byKey(const Key('seat-0'));
+    await tester.tap(firstSeat);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('seat-control-lock')), findsOneWidget);
+    expect(find.byKey(const Key('seat-control-mute')), findsOneWidget);
+    expect(find.byKey(const Key('seat-control-take')), findsOneWidget);
+    expect(state.roomSession.controller?.mySeat, isNull);
+
+    await tester.tap(find.byKey(const Key('seat-control-take')));
+    await tester.pumpAndSettle();
+    expect(state.roomSession.controller?.mySeat, 0);
+
     expect(tester.takeException(), isNull);
   });
 }
