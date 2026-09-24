@@ -88,7 +88,7 @@ class TinniState {
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
-    fruitJackpot = FruitJackpotGameService(wallet: wallet);
+    fruitJackpot = FruitJackpotGameService(wallet: wallet, autoStart: false);
     roomSession = ActiveRoomSession(
       runtime: runtime,
       realtime: realtime,
