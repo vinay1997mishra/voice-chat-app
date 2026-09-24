@@ -142,10 +142,23 @@ async function verifyAppSession(request, env) {
   const subject = String(payload.subject || payload.googleSub || "");
   const identityUser = await store.getUserByProvider(provider, subject);
   if (!identityUser || identityUser.user_id !== user.user_id) return null;
+
+  if (provider === "email") {
+    const version = await store.getEmailCredentialVersion(subject);
+    if (version === null || Number(payload.authVersion || 0) !== version) {
+      return null;
+    }
+  }
   return { ...payload, user };
 }
 
-async function createAppUserSession(user, env, providerValue, subjectValue) {
+async function createAppUserSession(
+  user,
+  env,
+  providerValue,
+  subjectValue,
+  authVersionValue,
+) {
   const provider = String(providerValue || user.auth_provider || "google");
   const subject = String(subjectValue || user.auth_subject || user.google_sub);
   return createSession(
@@ -154,6 +167,9 @@ async function createAppUserSession(user, env, providerValue, subjectValue) {
       userId: user.user_id,
       provider,
       subject,
+      ...(provider === "email"
+        ? { authVersion: Number(authVersionValue || 1) }
+        : {}),
     },
     env.SESSION_SECRET,
     30 * 24 * 60 * 60 * 1000,
@@ -676,7 +692,7 @@ export default {
         return json({
           ok: true,
           token,
-          user,
+          user: { ...user, auth_provider: "google" },
         });
       } catch (error) {
         return json({
@@ -815,7 +831,12 @@ export default {
           "facebook",
           pending.facebook_id,
         );
-        return json({ ok: true, status: "complete", token, user });
+        return json({
+          ok: true,
+          status: "complete",
+          token,
+          user: { ...user, auth_provider: "facebook" },
+        });
       }
 
       return json({
@@ -886,7 +907,11 @@ export default {
           "facebook",
           pending.facebook_id,
         );
-        return json({ ok: true, token, user });
+        return json({
+          ok: true,
+          token,
+          user: { ...user, auth_provider: "facebook" },
+        });
       } catch (error) {
         return json({
           ok: false,
@@ -992,11 +1017,12 @@ export default {
           env,
           "email",
           completed.email,
+          completed.auth_version,
         );
         return json({
           ok: true,
           token,
-          user: completed.user,
+          user: { ...completed.user, auth_provider: "email" },
         });
       } catch (error) {
         return json({
@@ -1023,11 +1049,12 @@ export default {
         env,
         "email",
         verified.email,
+        verified.auth_version,
       );
       return json({
         ok: true,
         token,
-        user: verified.user,
+        user: { ...verified.user, auth_provider: "email" },
       });
     }
 
