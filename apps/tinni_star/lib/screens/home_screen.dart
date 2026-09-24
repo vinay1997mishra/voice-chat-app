@@ -7,10 +7,12 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
+import 'cp_ranking_screen.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
 import 'games_screen.dart';
 import 'gifts_screen.dart';
+import 'ranking_screen.dart';
 import 'room_screen.dart';
 import 'vip_screen.dart';
 
@@ -137,74 +139,82 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> openRankings({int initialTab = 1}) async {
+    final room = await Navigator.push<RoomSummary>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RankingScreen(
+          state: widget.state,
+          initialTab: initialTab,
+        ),
+      ),
+    );
+    if (!mounted || room == null) return;
+    openRoom(room);
+  }
+
+  void openCpRanking() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CpRankingScreen(state: widget.state),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Tinni Star ✨',
-          style: TextStyle(
-            color: RoyalPalette.gold,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        actions: [
-          IconButton(
-            key: const Key('home-vip-button'),
-            tooltip: 'VIP',
-            onPressed: openVip,
-            icon: const Icon(Icons.workspace_premium_rounded),
-          ),
-          IconButton(
-            key: const Key('home-create-room-button'),
-            tooltip: 'Create room',
-            onPressed: createRoom,
-            icon: const Icon(Icons.add_home_rounded),
-          ),
-          IconButton(
-            key: const Key('home-search-button'),
-            tooltip: 'Search',
-            onPressed: openSearch,
-            icon: const Icon(Icons.search_rounded),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _InteractiveTopTabs(
-            labels: _tabs,
-            selectedIndex: _page,
-            onSelected: _goToPage,
-          ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: PageView(
-              key: const Key('home-top-page-view'),
-              controller: _pageController,
-              onPageChanged: (index) => setState(() => _page = index),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Row(
               children: [
-                _buildMinePage(),
-                _buildPartyPage(),
-                _buildEventsPage(),
-                _buildCountryPage(),
+                Expanded(
+                  child: _InteractiveTopTabs(
+                    labels: _tabs,
+                    selectedIndex: _page,
+                    onSelected: _goToPage,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('home-ranking-button'),
+                  tooltip: 'Rankings',
+                  onPressed: () => openRankings(initialTab: 1),
+                  icon: const Icon(
+                    Icons.leaderboard_rounded,
+                    color: RoyalPalette.gold,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('home-search-button'),
+                  tooltip: 'Search',
+                  onPressed: openSearch,
+                  icon: const Icon(
+                    Icons.search_rounded,
+                    color: RoyalPalette.gold,
+                  ),
+                ),
               ],
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: _page == 1
-          ? FloatingActionButton.extended(
-              key: const Key('home-room-fab'),
-              onPressed: createRoom,
-              backgroundColor: RoyalPalette.gold,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text(
-                'Room',
-                style: TextStyle(fontWeight: FontWeight.w900),
+            const SizedBox(height: 6),
+            Expanded(
+              child: PageView(
+                key: const Key('home-top-page-view'),
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _page = index),
+                children: [
+                  _buildMinePage(),
+                  _buildPartyPage(),
+                  _buildEventsPage(),
+                  _buildCountryPage(),
+                ],
               ),
-            )
-          : null,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -384,58 +394,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView(
       key: const Key('home-party-page'),
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 90),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
-        RoyalPanel(
-          key: const Key('weekly-cp-banner'),
-          radius: 22,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
-          onTap: openFeatureCenter,
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0A0804), Color(0xFF4A2B05), Color(0xFF0A0804)],
-          ),
-          child: const Row(
+        SizedBox(
+          key: const Key('party-promo-carousel'),
+          height: 156,
+          child: PageView(
             children: [
-              Expanded(
-                child: Icon(
-                  Icons.favorite_rounded,
-                  color: RoyalPalette.gold,
-                  size: 54,
-                ),
+              _PartyPromoCard(
+                title: 'WEEKLY STAR',
+                subtitle: 'Weekly rankings and royal rewards',
+                icon: Icons.workspace_premium_rounded,
+                onTap: () => openRankings(initialTab: 1),
               ),
-              Expanded(
-                flex: 3,
-                child: Column(
-                  children: [
-                    Text(
-                      'WEEKLY',
-                      style: TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 26,
-                      ),
-                    ),
-                    Text(
-                      'CP',
-                      style: TextStyle(
-                        color: RoyalPalette.gold,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 43,
-                      ),
-                    ),
-                    Text(
-                      'Royal Couple Ranking',
-                      style: TextStyle(color: RoyalPalette.muted),
-                    ),
-                  ],
-                ),
+              _PartyPromoCard(
+                title: 'LUCKY DRAW',
+                subtitle: 'Games, draws and event rewards',
+                icon: Icons.casino_rounded,
+                onTap: openGames,
               ),
-              Expanded(
-                child: Icon(
-                  Icons.favorite_rounded,
-                  color: RoyalPalette.gold,
-                  size: 54,
-                ),
+              _PartyPromoCard(
+                title: 'THE GREAT NAVIGATOR',
+                subtitle: 'Featured seasonal event',
+                icon: Icons.explore_rounded,
+                onTap: openFeatureCenter,
               ),
             ],
           ),
@@ -445,10 +427,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Expanded(
               child: _FeatureCard(
-                key: const Key('party-game-button'),
-                title: 'Game',
-                icon: Icons.casino_rounded,
-                onTap: openGames,
+                key: const Key('party-room-rank-button'),
+                title: 'Room',
+                icon: Icons.mic_external_on_rounded,
+                onTap: () => openRankings(initialTab: 0),
               ),
             ),
             const SizedBox(width: 8),
@@ -457,7 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-cp-button'),
                 title: 'CP Ranking',
                 icon: Icons.favorite_rounded,
-                onTap: openFeatureCenter,
+                onTap: openCpRanking,
               ),
             ),
             const SizedBox(width: 8),
@@ -471,27 +453,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        GoldSectionTitle(
-          'Recommended',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ChoiceChip(
-                key: const Key('party-popular-chip'),
-                label: const Text('🔥 Popular'),
-                selected: popular,
-                onSelected: (_) => setState(() => popular = true),
-              ),
-              const SizedBox(width: 6),
-              ChoiceChip(
-                key: const Key('party-new-chip'),
-                label: const Text('New'),
-                selected: !popular,
-                onSelected: (_) => setState(() => popular = false),
-              ),
-            ],
-          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            ChoiceChip(
+              key: const Key('party-popular-chip'),
+              label: const Text('🔥 Popular'),
+              selected: popular,
+              onSelected: (_) => setState(() => popular = true),
+            ),
+            const SizedBox(width: 6),
+            ChoiceChip(
+              key: const Key('party-new-chip'),
+              label: const Text('New'),
+              selected: !popular,
+              onSelected: (_) => setState(() => popular = false),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         Row(
@@ -877,6 +855,89 @@ class _RecentRoomTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PartyPromoCard extends StatelessWidget {
+  const _PartyPromoCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: RoyalPanel(
+        onTap: onTap,
+        radius: 22,
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF090603),
+            Color(0xFF6A3900),
+            Color(0xFF120A03),
+          ],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 37,
+              backgroundColor: RoyalPalette.deepGold,
+              child: Icon(
+                icon,
+                color: Colors.black,
+                size: 38,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    style: const TextStyle(
+                      color: RoyalPalette.gold,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 21,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Swipe for more',
+                    style: TextStyle(
+                      color: RoyalPalette.muted,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: RoyalPalette.gold,
+            ),
+          ],
+        ),
       ),
     );
   }

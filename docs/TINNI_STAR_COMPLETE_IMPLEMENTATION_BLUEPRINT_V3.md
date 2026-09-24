@@ -986,6 +986,68 @@ Still video-dependent:
 - exact state transitions visible to users.
 
 
+## Party reference video — LOCKED corrections
+
+The latest Party reference video clarifies the three marked Party-page areas and supersedes the earlier incorrect Tinni Party UI in those positions.
+
+### 1. Top-right Ranking entry
+- Party top navigation remains: Mine / Party / Events / Country.
+- To the right of these tabs is a Ranking/Leaderboard icon.
+- Search remains beside it.
+- The old Tinni-specific VIP/Create-Room app-bar controls must not occupy this reference position.
+- Tapping Ranking opens the Ranking Center.
+
+Ranking Center:
+- top categories: Room / Send gifts / Charm / Game.
+- default/reference view may open on Send gifts.
+- period switcher: Daily / Weekly / Monthly list.
+- visually emphasizes Top 1–3, then lower ranked entries.
+- bottom/current-user row shows the user's own rank/score state.
+- Room ranking entries can navigate to the corresponding room.
+
+### 2. Large promotional/event banner
+- The Party page has a large swipeable promotional banner directly below the top navigation.
+- It is not a permanent static "Weekly CP" panel.
+- Reference examples shown in video include Weekly Star, Lucky Draw, and The Great Navigator.
+- Tinni Star must use original/licensed Tinni artwork and backend-configured promotions, not copied proprietary art.
+- Banner tap opens the matching event/ranking/game destination.
+- Promo content should be server/Owner-Panel configurable in production.
+
+The reference video also shows a Weekly Sign-in flow:
+- seven-day reward ladder.
+- Sign in action.
+- post-sign-in confirmation/reward.
+- exact coin/reward amounts are backend/configuration data and must not be hard-coded from the reference.
+
+### 3. Ranking shortcut row
+Directly under the promo banner are three ranking shortcuts:
+- Room
+- CP Ranking
+- Family
+
+Correction:
+- the first shortcut is Room, not Game.
+- Game remains available through its own game/event surfaces.
+
+Room shortcut:
+- opens Ranking Center on the Room category.
+
+CP Ranking shortcut:
+- opens the dedicated CP Ranking screen.
+- top sections: Ranking List / True Love Challenge / Reward.
+- Ranking List includes CP Ranking / CP Square.
+- shows top couples and the current user's "Not on the list" / Bind with CP state where applicable.
+
+Family shortcut:
+- opens the Family feature/ranking surface.
+
+### Party list below shortcuts
+- Popular / New selector remains below the three ranking shortcuts.
+- Popular shows recommended/high-activity rooms.
+- New follows the locked 15-day room-created rule.
+- top three room cards are visually emphasized, followed by the normal room list.
+
+
 ---
 
 # PART II — IMPLEMENTATION CONTRACT

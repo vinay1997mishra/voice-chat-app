@@ -73,14 +73,37 @@ void main() {
     },
   );
 
-  testWidgets('party buttons open real destinations', (tester) async {
+  testWidgets('party ranking controls open real destinations', (tester) async {
     final state = makeState();
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('party-game-button')));
+    expect(find.byKey(const Key('party-promo-carousel')), findsOneWidget);
+    expect(find.text('Room'), findsOneWidget);
+    expect(find.text('CP Ranking'), findsOneWidget);
+    expect(find.text('Family'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home-ranking-button')));
     await tester.pumpAndSettle();
-    expect(find.text('Game Center'), findsOneWidget);
+    expect(find.byKey(const Key('ranking-screen')), findsOneWidget);
+    expect(find.text('Send gifts'), findsOneWidget);
+    expect(find.text('Charm'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('party-room-rank-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ranking-screen')), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('party-cp-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cp-ranking-screen')), findsOneWidget);
+    expect(find.text('Ranking List'), findsOneWidget);
+    expect(find.text('True Love Challenge'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
