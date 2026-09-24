@@ -1,4 +1,4 @@
-const API_BASE = "https://tinni-star-api.mishrajii7991.workers.dev";
+const API_BASE = window.location.origin;
 
 const state = {
   treasury: 0,
@@ -304,6 +304,11 @@ document.getElementById("menuBtn").addEventListener("click", () => {
 document.getElementById("refreshBtn").addEventListener("click", () => {
   checkHealth();
   toast("Panel refreshed");
+});
+
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  await fetch("/auth/logout", { method: "POST" }).catch(() => null);
+  window.location.replace("/login");
 });
 
 document.getElementById("quickActionBtn").addEventListener("click", () => openAction("user-search"));

@@ -9,9 +9,6 @@
   "assets": {
     "directory": "../tinni_owner_panel",
     "binding": "ASSETS",
-    "run_worker_first": [
-      "/health",
-      "/api/*"
-    ]
+    "run_worker_first": true
   }
 }
