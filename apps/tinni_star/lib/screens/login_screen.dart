@@ -255,10 +255,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openEmailMode() {
-    if (!emailReady) {
-      _snack(emailSetupError ?? 'Email OTP service is not configured yet.');
-      return;
-    }
     setState(() => emailMode = true);
   }
 
@@ -307,6 +303,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _sendEmailOtp() async {
     if (busy) return;
+    if (!emailReady) {
+      _snack(emailSetupError ?? 'Email OTP service is not configured yet.');
+      return;
+    }
     final email = emailController.text.trim();
 
     if (!email.contains('@')) {
@@ -679,7 +679,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 key: const Key('email-send-otp-button'),
-                onPressed: busy ? null : _sendEmailOtp,
+                onPressed: busy || !emailReady ? null : _sendEmailOtp,
                 icon: const Icon(Icons.mark_email_read_rounded),
                 label: const Text('Send OTP to Email'),
               ),
