@@ -118,6 +118,7 @@ async function verifySession(request, env) {
       const store = getStaffStore(env);
       const staff = await store.getStaff(String(payload.email || ""));
       if (!staff || !staff.enabled) return null;
+      if (Number(payload.authVersion || 1) !== Number(staff.auth_version || 1)) return null;
       return {
         ...payload,
         panelId: staff.id,
@@ -203,6 +204,15 @@ export class StaffAuthStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_staff_panels_email ON staff_panels(email);
     `);
+    try {
+      this.ctx.storage.sql.exec(
+        "ALTER TABLE staff_panels ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 1"
+      );
+    } catch (error) {
+      if (!String(error?.message || "").toLowerCase().includes("duplicate")) {
+        throw error;
+      }
+    }
   }
 
   async createPanel(input) {
@@ -262,7 +272,7 @@ export class StaffAuthStore extends DurableObject {
 
     const rows = this.ctx.storage.sql.exec(
       `SELECT id, name, assigned_user_id, email, password_salt, password_hash,
-              permissions_json, enabled, created_at
+              permissions_json, enabled, auth_version, created_at
          FROM staff_panels
         WHERE email = ?
         LIMIT 1`,
@@ -284,6 +294,7 @@ export class StaffAuthStore extends DurableObject {
       email: String(row.email),
       permissions: JSON.parse(String(row.permissions_json || "[]")),
       enabled: true,
+      auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
     };
   }
@@ -291,7 +302,7 @@ export class StaffAuthStore extends DurableObject {
   async getStaff(emailValue) {
     const email = String(emailValue || "").trim().toLowerCase();
     const rows = this.ctx.storage.sql.exec(
-      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, created_at
+      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, auth_version, created_at
          FROM staff_panels
         WHERE email = ?
         LIMIT 1`,
@@ -306,13 +317,14 @@ export class StaffAuthStore extends DurableObject {
       email: String(row.email),
       permissions: JSON.parse(String(row.permissions_json || "[]")),
       enabled: Number(row.enabled) === 1,
+      auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
     };
   }
 
   async listPanels() {
     return this.ctx.storage.sql.exec(
-      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, created_at
+      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, auth_version, created_at
          FROM staff_panels
         ORDER BY created_at DESC`,
     ).toArray().map((row) => ({
@@ -322,6 +334,7 @@ export class StaffAuthStore extends DurableObject {
       email: String(row.email),
       permissions: JSON.parse(String(row.permissions_json || "[]")),
       enabled: Number(row.enabled) === 1,
+      auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
     }));
   }
@@ -331,7 +344,8 @@ export class StaffAuthStore extends DurableObject {
     if (!panelId) throw new Error("Panel ID is required");
 
     const rows = this.ctx.storage.sql.exec(
-      `SELECT id, permissions_json, enabled
+      `SELECT id, email, password_salt, password_hash, permissions_json, enabled,
+              auth_version
          FROM staff_panels
         WHERE id = ?
         LIMIT 1`,
@@ -351,18 +365,59 @@ export class StaffAuthStore extends DurableObject {
       throw new Error("Active staff panel must have at least one permission");
     }
 
-    this.ctx.storage.sql.exec(
-      `UPDATE staff_panels
-          SET permissions_json = ?, enabled = ?, updated_at = ?
-        WHERE id = ?`,
-      JSON.stringify(permissions),
-      enabled ? 1 : 0,
-      Date.now(),
-      panelId,
-    );
+    const nextEmail = input?.staff_email === undefined
+      ? String(current.email)
+      : String(input.staff_email || "").trim().toLowerCase();
+    if (!nextEmail || !nextEmail.includes("@")) {
+      throw new Error("Valid staff email is required");
+    }
+
+    const newPassword = input?.password === undefined ? "" : String(input.password || "");
+    if (newPassword && newPassword.length < 10) {
+      throw new Error("Staff password must be at least 10 characters");
+    }
+
+    let passwordSalt = String(current.password_salt);
+    let passwordHash = String(current.password_hash);
+    let authVersion = Number(current.auth_version || 1);
+
+    const emailChanged = nextEmail !== String(current.email).toLowerCase();
+    if (newPassword) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const hash = await derivePassword(newPassword, salt);
+      passwordSalt = toBase64Url(salt);
+      passwordHash = toBase64Url(hash);
+    }
+
+    if (emailChanged || newPassword) {
+      authVersion += 1;
+    }
+
+    try {
+      this.ctx.storage.sql.exec(
+        `UPDATE staff_panels
+            SET email = ?, password_salt = ?, password_hash = ?,
+                permissions_json = ?, enabled = ?, auth_version = ?, updated_at = ?
+          WHERE id = ?`,
+        nextEmail,
+        passwordSalt,
+        passwordHash,
+        JSON.stringify(permissions),
+        enabled ? 1 : 0,
+        authVersion,
+        Date.now(),
+        panelId,
+      );
+    } catch (error) {
+      if (String(error?.message || "").toLowerCase().includes("unique")) {
+        throw new Error("This staff email is already in use");
+      }
+      throw error;
+    }
 
     const updated = this.ctx.storage.sql.exec(
-      `SELECT id, name, assigned_user_id, email, permissions_json, enabled, created_at
+      `SELECT id, name, assigned_user_id, email, permissions_json, enabled,
+              auth_version, created_at
          FROM staff_panels
         WHERE id = ?
         LIMIT 1`,
@@ -376,6 +431,7 @@ export class StaffAuthStore extends DurableObject {
       email: String(updated.email),
       permissions: JSON.parse(String(updated.permissions_json || "[]")),
       enabled: Number(updated.enabled) === 1,
+      auth_version: Number(updated.auth_version || 1),
       created_at: Number(updated.created_at),
     };
   }
@@ -390,7 +446,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.4.0",
+        version: "0.5.0",
       });
     }
 
@@ -431,6 +487,7 @@ export default {
           panelId: staff.id,
           panelName: staff.name,
           permissions: staff.permissions,
+          authVersion: staff.auth_version || 1,
         },
         env.SESSION_SECRET,
       );

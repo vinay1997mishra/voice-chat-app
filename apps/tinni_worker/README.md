@@ -55,3 +55,13 @@ The Owner Panel shows every permission currently granted to each staff panel. Th
 - see the staff email, linked user ID, active status, and current permissions
 
 Permission and enabled-state changes are persisted in the StaffAuthStore and are re-checked on authenticated requests, so removed access does not rely only on hiding UI controls.
+
+
+## Staff credential changes
+
+The platform owner can change a staff panel's login Gmail/email and reset its password after creation.
+
+- Existing passwords are never displayed.
+- Password resets generate a new random salt and PBKDF2-SHA256 hash.
+- Gmail/email changes enforce uniqueness.
+- Email or password changes increment the staff authentication version so existing staff sessions are invalidated and the staff member must log in again with the new credentials.
