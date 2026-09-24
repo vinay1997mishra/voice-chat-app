@@ -24,7 +24,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
   int _selectedBet = 1000;
 
   FruitJackpotRemoteService get game => widget.state.fruitJackpotRemote;
-  String get userId => widget.state.auth.current!.userId;
+  String get authToken => widget.state.auth.current!.authToken;
 
   @override
   void initState() {
@@ -39,7 +39,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
   }
 
   Future<void> _syncServer() async {
-    await game.sync(userId);
+    await game.sync(authToken);
     if (mounted) setState(() {});
   }
 
@@ -71,7 +71,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
 
   Future<void> _placeBet(FruitKind fruit) async {
     final error = await game.placeBet(
-      userId: userId,
+      authToken: authToken,
       fruit: fruit,
       amount: _selectedBet,
     );
