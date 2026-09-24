@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,12 +32,36 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = ['Mine', 'Party', 'Events', 'Country'];
 
   final PageController _pageController = PageController(initialPage: 1);
+  Timer? _roomSyncTimer;
   int _page = 1;
   bool popular = true;
-  String countryFilter = 'IN';
+  String countryFilter = '';
+
+  @override
+  void initState() {
+    super.initState();
+    countryFilter = widget.state.auth.current?.countryCode ?? '';
+    _syncRooms();
+    _roomSyncTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _syncRooms(),
+    );
+  }
+
+  Future<void> _syncRooms() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Keep the last real server snapshot while reconnecting.
+    }
+  }
 
   @override
   void dispose() {
+    _roomSyncTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -50,8 +76,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> createRoom() async {
-    final ownerId = widget.state.auth.current?.userId ?? '10000000';
-    final existing = widget.state.discovery.ownedRooms(ownerId);
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final existing = widget.state.discovery.ownedRooms(account.userId);
     if (existing.isNotEmpty) {
       openRoom(existing.first);
       return;
@@ -67,26 +95,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted || result == null) return;
 
-    final room = widget.state.discovery.createRoom(
-      title: result.title,
-      country: result.country,
-      ownerId: ownerId,
-      photoPath: result.photoPath,
-      seatCount: result.seatCount,
-      partyMode: result.partyMode,
-    );
-    widget.state.discovery.visit(room.id);
+    try {
+      final room = await widget.state.discovery.createRoomRemote(
+        authToken: account.authToken,
+        title: result.title,
+        seatCount: result.seatCount,
+        partyMode: result.partyMode,
+        photoDataUrl: result.photoDataUrl,
+      );
+      widget.state.discovery.visit(room.id);
 
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
 
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoomScreen(state: widget.state, room: room),
-      ),
-    );
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RoomScreen(state: widget.state, room: room),
+        ),
+      );
 
-    if (mounted) setState(() {});
+      await _syncRooms();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Bad state: ', ''),
+          ),
+        ),
+      );
+    }
   }
 
   void openRoom(RoomSummary room) {
@@ -229,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMinePage() {
-    final currentUserId = widget.state.auth.current?.userId ?? '10000000';
+    final currentUserId = widget.state.auth.current?.userId ?? '';
     final owned = widget.state.discovery.ownedRooms(currentUserId);
     final myRoom = owned.isEmpty ? null : owned.first;
 
@@ -716,6 +754,9 @@ class _RoomArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = room.photoPath;
+    final remotePhoto = room.photoDataUrl;
+    final hasRemotePhoto =
+        remotePhoto != null && remotePhoto.startsWith('data:image/');
     final hasLocalPhoto =
         path != null && path.isNotEmpty && File(path).existsSync();
 
@@ -731,14 +772,21 @@ class _RoomArtwork extends StatelessWidget {
             colors: [Color(0xFF382608), Color(0xFF090704)],
           ),
         ),
-        child: hasLocalPhoto
+        child: hasRemotePhoto
             ? SizedBox.expand(
-                child: Image.file(
-                  File(path),
+                child: Image.memory(
+                  base64Decode(remotePhoto.split(',').last),
                   fit: BoxFit.cover,
                 ),
               )
-            : fallback != null
+            : hasLocalPhoto
+                ? SizedBox.expand(
+                    child: Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : fallback != null
                 ? Text(
                     fallback!,
                     style: const TextStyle(
@@ -1242,17 +1290,15 @@ class _RoomListCard extends StatelessWidget {
 class _CreateRoomResult {
   const _CreateRoomResult({
     required this.title,
-    required this.country,
     required this.seatCount,
     required this.partyMode,
-    this.photoPath,
+    this.photoDataUrl,
   });
 
   final String title;
-  final String country;
   final int seatCount;
   final String partyMode;
-  final String? photoPath;
+  final String? photoDataUrl;
 }
 
 class _CreateRoomSheet extends StatefulWidget {
@@ -1265,10 +1311,9 @@ class _CreateRoomSheet extends StatefulWidget {
 class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   final TextEditingController titleController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
-  String country = 'IN';
   int seatCount = 12;
   String partyMode = 'Friends-making Party';
-  String? photoPath;
+  String? photoDataUrl;
 
   @override
   void dispose() {
@@ -1289,10 +1334,9 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
     Navigator.of(context).pop(
       _CreateRoomResult(
         title: title,
-        country: country,
         seatCount: seatCount,
         partyMode: partyMode,
-        photoPath: photoPath,
+        photoDataUrl: photoDataUrl,
       ),
     );
   }
@@ -1324,11 +1368,22 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
     if (source == null) return;
     final image = await _imagePicker.pickImage(
       source: source,
-      imageQuality: 88,
-      maxWidth: 1600,
+      imageQuality: 65,
+      maxWidth: 512,
+      maxHeight: 512,
     );
     if (image == null || !mounted) return;
-    setState(() => photoPath = image.path);
+    final bytes = await image.readAsBytes();
+    if (bytes.length > 320000) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a smaller room photo.')),
+      );
+      return;
+    }
+    setState(() {
+      photoDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+    });
   }
 
   @override
@@ -1364,7 +1419,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                       radius: 42,
                       backgroundColor: RoyalPalette.panel2,
                       child: Icon(
-                        photoPath == null
+                        photoDataUrl == null
                             ? Icons.add_a_photo_rounded
                             : Icons.check_circle_rounded,
                         color: RoyalPalette.gold,
@@ -1373,7 +1428,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      photoPath == null ? 'Add room photo' : 'Room photo selected',
+                      photoDataUrl == null ? 'Add room photo' : 'Room photo selected',
                       style: const TextStyle(
                         color: RoyalPalette.cream,
                         fontWeight: FontWeight.w800,
@@ -1428,24 +1483,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
               onSubmitted: (_) => submit(),
               decoration: const InputDecoration(labelText: 'Room name'),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('create-room-country'),
-              initialValue: country,
-              decoration: const InputDecoration(labelText: 'Country'),
-              items: const [
-                DropdownMenuItem(value: 'IN', child: Text('🇮🇳 India')),
-                DropdownMenuItem(
-                  value: 'US',
-                  child: Text('🇺🇸 United States'),
-                ),
-                DropdownMenuItem(value: 'VN', child: Text('🇻🇳 Vietnam')),
-                DropdownMenuItem(value: 'SG', child: Text('🇸🇬 Singapore')),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => country = value);
-              },
-            ),
+
             const SizedBox(height: 14),
             const Text(
               'Number of mics',
