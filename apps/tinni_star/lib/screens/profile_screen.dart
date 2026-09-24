@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../auth/auth_service.dart';
+import '../community/family_service.dart';
 import '../ui/royal_theme.dart';
+import 'family_home_screen.dart';
+import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
 import 'gifts_screen.dart';
 import 'games_screen.dart';
@@ -49,7 +52,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         profile.nick,
                         style: const TextStyle(color: RoyalPalette.cream, fontSize: 22, fontWeight: FontWeight.w900),
                       ),
-                      Text('ID ' + profile.userId + ' • 🇮🇳', style: const TextStyle(color: RoyalPalette.muted)),
+                      Text(
+                        'ID ' + profile.userId + ' • 🇮🇳',
+                        style: const TextStyle(color: RoyalPalette.muted),
+                      ),
+                      if (widget.state.family.exists) ...[
+                        const SizedBox(height: 5),
+                        _FamilyTagBadge(state: widget.state),
+                      ],
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
@@ -105,7 +115,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FeatureCenterScreen(state: widget.state),
+                    builder: (_) => widget.state.family.exists
+                        ? FamilyHomeScreen(state: widget.state)
+                        : FamilyRankingScreen(state: widget.state),
                   ),
                 ).then((_) => setState(() {})),
               ),
@@ -162,6 +174,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FamilyTagBadge extends StatelessWidget {
+  const _FamilyTagBadge({required this.state});
+
+  final TinniState state;
+
+  Color get _color {
+    switch (state.family.visualTier) {
+      case FamilyVisualTier.emerald:
+        return const Color(0xFF0E8A62);
+      case FamilyVisualTier.sapphire:
+        return const Color(0xFF155FA8);
+      case FamilyVisualTier.amethyst:
+        return const Color(0xFF833FB0);
+      case FamilyVisualTier.royalGold:
+        return const Color(0xFFD49B14);
+      case FamilyVisualTier.bronze:
+        return const Color(0xFF7A5515);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('profile-family-tag'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _color.withValues(alpha: 0.68),
+            _color,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: RoyalPalette.gold),
+      ),
+      child: Text(
+        (state.family.tag ?? 'Family') + ' • ' + state.family.levelLabel,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+          fontSize: 9,
+        ),
       ),
     );
   }
