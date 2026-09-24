@@ -27,3 +27,20 @@ The Owner Panel is protected by Worker authentication. Configure these as Cloudf
 - `SESSION_SECRET` — a long random value used to sign secure session cookies
 
 The Worker issues an HttpOnly, Secure, SameSite=Strict session cookie after a successful login. Do not commit any of these values to GitHub.
+
+
+## Staff panel accounts
+
+Custom staff panels use the same login page as the owner.
+
+When the owner creates a staff panel, the form collects:
+
+- Panel name
+- Optional linked user ID
+- Staff login Gmail/email
+- Staff login password + confirmation
+- Exact panel permissions
+
+Staff passwords are never stored as plain text. The Worker stores a random salt and a PBKDF2-SHA256 password hash in the SQLite-backed `StaffAuthStore` Durable Object. Cloudflare provisions the Durable Object namespace from `wrangler.jsonc` during deployment.
+
+Staff sessions are signed with `SESSION_SECRET`, and the UI is filtered to the permissions saved on that staff panel. Owner-only staff management endpoints remain restricted to the owner session.

@@ -143,6 +143,130 @@ async function checkHealth() {
   }
 }
 
+const permissionByView = {
+  users: "users",
+  rooms: "rooms",
+  wallets: "wallets",
+  hierarchy: "hierarchy",
+  roles: "roles",
+  vip: "vip",
+  gifts: "gifts",
+  assets: "assets",
+  banners: "banners",
+  games: "games",
+  policies: "policies",
+  audit: "audit",
+};
+
+const permissionByModule = {
+  "Users": "users",
+  "Rooms": "rooms",
+  "Wallets": "wallets",
+  "BD / Agency / Host": "hierarchy",
+  "Tags / Roles / Posts": "roles",
+  "VIP": "vip",
+  "Gifts": "gifts",
+  "Entries / Frames": "assets",
+  "Banners": "banners",
+  "Games": "games",
+  "Policies": "policies",
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function loadStaffPanels() {
+  const root = document.getElementById("customPanels");
+  if (!root) return;
+  try {
+    const data = await api("/api/staff/panels");
+    const panels = Array.isArray(data.panels) ? data.panels : [];
+    if (panels.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No staff panels created yet.";
+      return;
+    }
+    root.className = "staff-panel-list";
+    root.innerHTML = panels.map(panel => `
+      <article class="staff-panel-card">
+        <div>
+          <strong>${escapeHtml(panel.name)}</strong>
+          <small>${escapeHtml(panel.email)}</small>
+          ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
+        </div>
+        <div class="staff-panel-meta">
+          <span class="badge ${panel.enabled ? "gold" : ""}">${panel.enabled ? "Active" : "Disabled"}</span>
+          <small>${(panel.permissions || []).map(pretty).join(", ")}</small>
+        </div>
+      </article>
+    `).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load staff panels.";
+  }
+}
+
+function applySession(session) {
+  const owner = session.role === "owner";
+  const allowed = new Set(session.permissions || []);
+
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    const view = button.dataset.view;
+    if (owner) {
+      button.hidden = false;
+      return;
+    }
+    const permission = permissionByView[view];
+    button.hidden = !permission || !allowed.has(permission);
+  });
+
+  document.querySelectorAll(".module-card").forEach((button) => {
+    if (owner) {
+      button.hidden = false;
+      return;
+    }
+    const permission = permissionByModule[button.dataset.module];
+    button.hidden = !permission || !allowed.has(permission);
+  });
+
+  const ownerChip = document.querySelector(".owner-chip div");
+  if (ownerChip) {
+    ownerChip.innerHTML = owner
+      ? "<strong>Platform Owner</strong><small>Full owner access</small>"
+      : `<strong>${escapeHtml(session.panelName || "Staff")}</strong><small>${escapeHtml(session.email || "")}</small>`;
+  }
+
+  const quickAction = document.getElementById("quickActionBtn");
+  if (quickAction) quickAction.hidden = !owner && !allowed.has("users");
+
+  if (owner) {
+    document.body.classList.remove("auth-loading");
+    document.body.classList.add("auth-ready");
+    loadStaffPanels();
+    return;
+  }
+
+  const firstAllowed = Object.keys(permissionByView).find((view) => allowed.has(permissionByView[view]));
+  if (firstAllowed) setView(firstAllowed);
+  document.body.classList.remove("auth-loading");
+  document.body.classList.add("auth-ready");
+}
+
+async function loadSession() {
+  try {
+    const session = await api("/auth/session");
+    applySession(session);
+  } catch {
+    window.location.replace("/login");
+  }
+}
+
 function renderFeatures() {
   const root = document.getElementById("featureSwitches");
   root.innerHTML = "";
@@ -207,13 +331,38 @@ function renderTreasury() {
   document.getElementById("statTreasury").textContent = fmt(state.treasury);
 }
 
-function field(name, label, type = "text", placeholder = "") {
+function field(name, label, type = "text", placeholder = "", required = true) {
   if (type === "select") return "";
-  return `<label><span>${label}</span><input name="${name}" type="${type}" placeholder="${placeholder}" required></label>`;
+  return `<label><span>${label}</span><input name="${name}" type="${type}" placeholder="${placeholder}" ${required ? "required" : ""}></label>`;
 }
 
 function selectField(name, label, options) {
   return `<label><span>${label}</span><select name="${name}">${options.map(o => `<option value="${o[0]}">${o[1]}</option>`).join("")}</select></label>`;
+}
+
+function checkboxField(name, label, checked = false) {
+  return `<label class="checkbox-field"><input name="${name}" type="checkbox" value="true" ${checked ? "checked" : ""}><span>${label}</span></label>`;
+}
+
+function staffPanelFields() {
+  return field("name", "Panel name", "text", "Support Panel") +
+    field("assigned_user_id", "Assign to user ID (optional)", "text", "10000001", false) +
+    field("staff_email", "Staff login Gmail / Email", "email", "staff@example.com") +
+    field("login_password", "Login password", "password", "Minimum 10 characters") +
+    field("confirm_password", "Confirm password", "password", "Enter password again") +
+    '<div class="dialog-section-title">Panel permissions</div>' +
+    checkboxField("permission_users", "Users", true) +
+    checkboxField("permission_rooms", "Rooms") +
+    checkboxField("permission_wallets", "Wallets") +
+    checkboxField("permission_hierarchy", "BD / Agency / Host") +
+    checkboxField("permission_roles", "Tags / Roles / Posts") +
+    checkboxField("permission_vip", "VIP") +
+    checkboxField("permission_gifts", "Gifts") +
+    checkboxField("permission_assets", "Entries / Frames") +
+    checkboxField("permission_banners", "Banners") +
+    checkboxField("permission_games", "Games") +
+    checkboxField("permission_policies", "Policies") +
+    checkboxField("permission_audit", "Audit Log");
 }
 
 function openAction(action, preset = {}) {
@@ -253,7 +402,7 @@ function openAction(action, preset = {}) {
     "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("vip_level","Assign VIP level","number")],
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("vip_level","Assign VIP level","number")],
     "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
-    "panel-new": ["Create Custom Panel", field("name","Panel name") + field("assigned_user_id","Assign to user ID (optional)")],
+    "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
     "role-new": ["Create Tag / Role / Post", field("name","Name") + selectField("type","Type",[["tag","Tag"],["role","Role"],["post","Post"]])],
     "policy-new": ["Create New Setting", field("key","Setting key") + field("value","Value")],
   };
@@ -269,6 +418,33 @@ function openAction(action, preset = {}) {
 }
 
 async function handleAction(action, data) {
+  if (action === "panel-new") {
+    const password = String(data.login_password || "");
+    const confirmPassword = String(data.confirm_password || "");
+    if (password.length < 10) throw new Error("Staff password must be at least 10 characters.");
+    if (password !== confirmPassword) throw new Error("Password and confirm password do not match.");
+
+    const permissions = Object.entries(data)
+      .filter(([key, value]) => key.startsWith("permission_") && value === "true")
+      .map(([key]) => key.replace("permission_", ""));
+
+    const payload = {
+      name: String(data.name || "").trim(),
+      assigned_user_id: String(data.assigned_user_id || "").trim(),
+      staff_email: String(data.staff_email || "").trim().toLowerCase(),
+      password,
+      permissions,
+    };
+
+    await api("/api/staff/panels", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    toast("Staff panel created with login credentials.");
+    await loadStaffPanels();
+    return;
+  }
+
   if (action === "treasury-add") {
     const amount = Number(data.amount || 0);
     if (amount <= 0) throw new Error("Enter a valid coin amount");
@@ -395,3 +571,4 @@ renderVips();
 renderPolicies();
 renderTreasury();
 checkHealth();
+loadSession();
