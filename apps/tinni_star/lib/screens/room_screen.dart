@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
@@ -53,7 +55,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     await widget.state.roomSession.open(
       widget.room,
       userId: account.userId,
-      displayName: account.displayName,
+      authToken: account.authToken,
     );
     widget.state.roomSession.controller?.setInviteMode(
       widget.state.roomControls.settings.micMode == MicMode.apply,
@@ -1036,6 +1038,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         final initial = member.displayName.trim().isEmpty
                             ? '?'
                             : member.displayName.trim().characters.first;
+                        ImageProvider? avatar;
+                        final avatarData = member.avatarDataUrl;
+                        if (avatarData != null &&
+                            avatarData.startsWith('data:image/')) {
+                          try {
+                            avatar = MemoryImage(
+                              base64Decode(avatarData.split(',').last),
+                            );
+                          } catch (_) {
+                            avatar = null;
+                          }
+                        }
                         return Container(
                           width: 74,
                           padding: const EdgeInsets.symmetric(
@@ -1057,17 +1071,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               CircleAvatar(
                                 radius: 17,
                                 backgroundColor: RoyalPalette.panel2,
-                                child: Text(
-                                  initial.toUpperCase(),
-                                  style: const TextStyle(
-                                    color: RoyalPalette.gold,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
+                                backgroundImage: avatar,
+                                child: avatar == null
+                                    ? Text(
+                                        initial.toUpperCase(),
+                                        style: const TextStyle(
+                                          color: RoyalPalette.gold,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      )
+                                    : null,
                               ),
                               const SizedBox(height: 3),
                               Text(
-                                isMe ? 'You' : member.displayName,
+                                (member.flagEmoji.isEmpty
+                                        ? ''
+                                        : member.flagEmoji + ' ') +
+                                    (isMe ? 'You' : member.displayName),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
