@@ -291,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 8),
             const Center(
               child: Text(
-                'Create your real Tinni ID',
+                'Create your new ID',
                 style: TextStyle(color: RoyalPalette.cream),
               ),
             ),
