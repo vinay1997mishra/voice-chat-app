@@ -9,10 +9,16 @@ class RoomPresenceMember {
     required this.displayName,
     required this.joinedAt,
     required this.lastSeen,
+    this.avatarDataUrl,
+    this.flagEmoji = '',
+    this.countryCode = '',
   });
 
   final String userId;
   final String displayName;
+  final String? avatarDataUrl;
+  final String flagEmoji;
+  final String countryCode;
   final DateTime joinedAt;
   final DateTime lastSeen;
 }
@@ -35,46 +41,22 @@ class RoomPresenceService extends ChangeNotifier {
 
   Future<void> join({
     required String roomId,
-    required String userId,
-    required String displayName,
-  }) async {
-    await _post(
-      '/room-presence/join',
-      <String, Object>{
-        'room_id': roomId,
-        'user_id': userId,
-        'display_name': displayName,
-      },
-    );
-  }
+    required String authToken,
+  }) =>
+      _post('/room-presence/join', roomId, authToken);
 
   Future<void> heartbeat({
     required String roomId,
-    required String userId,
-    required String displayName,
-  }) async {
-    await _post(
-      '/room-presence/heartbeat',
-      <String, Object>{
-        'room_id': roomId,
-        'user_id': userId,
-        'display_name': displayName,
-      },
-    );
-  }
+    required String authToken,
+  }) =>
+      _post('/room-presence/heartbeat', roomId, authToken);
 
   Future<void> leave({
     required String roomId,
-    required String userId,
+    required String authToken,
   }) async {
     try {
-      await _post(
-        '/room-presence/leave',
-        <String, Object>{
-          'room_id': roomId,
-          'user_id': userId,
-        },
-      );
+      await _post('/room-presence/leave', roomId, authToken);
     } finally {
       members.clear();
       connected = false;
@@ -82,7 +64,10 @@ class RoomPresenceService extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh(String roomId) async {
+  Future<void> refresh({
+    required String roomId,
+    required String authToken,
+  }) async {
     try {
       final uri = apiBase.replace(
         path: '/room-presence/state',
@@ -90,6 +75,10 @@ class RoomPresenceService extends ChangeNotifier {
       );
       final request = await _httpClient.getUrl(uri);
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $authToken',
+      );
       final response = await request.close();
       final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -107,11 +96,19 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _post(String path, Map<String, Object> body) async {
+  Future<void> _post(
+    String path,
+    String roomId,
+    String authToken,
+  ) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
       request.headers.contentType = ContentType.json;
-      request.write(jsonEncode(body));
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $authToken',
+      );
+      request.write(jsonEncode(<String, Object>{'room_id': roomId}));
       final response = await request.close();
       final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -143,7 +140,10 @@ class RoomPresenceService extends ChangeNotifier {
             .map(
               (row) => RoomPresenceMember(
                 userId: row['user_id']?.toString() ?? '',
-                displayName: row['display_name']?.toString() ?? 'Tinni User',
+                displayName: row['display_name']?.toString() ?? '',
+                avatarDataUrl: row['avatar_data_url']?.toString(),
+                flagEmoji: row['flag_emoji']?.toString() ?? '',
+                countryCode: row['country_code']?.toString() ?? '',
                 joinedAt: DateTime.fromMillisecondsSinceEpoch(
                   _asInt(row['joined_at']),
                   isUtc: true,
@@ -154,7 +154,10 @@ class RoomPresenceService extends ChangeNotifier {
                 ),
               ),
             )
-            .where((member) => member.userId.isNotEmpty),
+            .where(
+              (member) =>
+                  member.userId.isNotEmpty && member.displayName.isNotEmpty,
+            ),
       );
   }
 
