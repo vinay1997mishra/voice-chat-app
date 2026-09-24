@@ -1,4 +1,4 @@
-const API_BASE = "https://cool-art-1886tinni-star-api.mishrajii7991.workers.dev";
+const API_BASE = "https://tinni-star-api.mishrajii7991.workers.dev";
 
 const state = {
   treasury: 0,
