@@ -65,3 +65,21 @@ The platform owner can change a staff panel's login Gmail/email and reset its pa
 - Password resets generate a new random salt and PBKDF2-SHA256 hash.
 - Gmail/email changes enforce uniqueness.
 - Email or password changes increment the staff authentication version so existing staff sessions are invalidated and the staff member must log in again with the new credentials.
+
+
+## Facebook login
+
+Tinni Star supports Facebook login through a server-side browser OAuth flow. This avoids requiring the native Facebook SDK inside the APK.
+
+Required Cloudflare Worker secrets:
+
+- `FACEBOOK_APP_ID`
+- `FACEBOOK_APP_SECRET`
+
+In the Meta app's Facebook Login settings, add this exact Valid OAuth Redirect URI:
+
+`https://tinni-star-api.mishrajii7991.workers.dev/app-auth/facebook/callback`
+
+The app reads only a boolean `facebook_configured` flag from `/app-config`; the Facebook App Secret is never sent to the mobile app.
+
+If a Facebook account email already belongs to an existing Google-created Tinni ID, the Facebook identity is linked to that same Tinni ID instead of creating a duplicate account.

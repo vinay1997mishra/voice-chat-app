@@ -17,6 +17,7 @@ class AuthPersistence {
   static const _genderKey = 'tinni.auth.gender';
   static const _avatarKey = 'tinni.auth.avatar_data_url';
   static const _tokenKey = 'tinni.auth.token';
+  static const _providerKey = 'tinni.auth.provider';
 
   final SharedPreferencesAsync _preferences;
 
@@ -36,6 +37,12 @@ class AuthPersistence {
       await _preferences.setString(_avatarKey, account.avatarDataUrl!);
     }
     await _preferences.setString(_tokenKey, account.authToken);
+    await _preferences.setString(
+      _providerKey,
+      account.providers.contains(LoginProvider.facebook)
+          ? 'facebook'
+          : 'google',
+    );
   }
 
   Future<bool> restore(AuthService auth) async {
@@ -50,6 +57,7 @@ class AuthPersistence {
     final gender = await _preferences.getString(_genderKey);
     final avatar = await _preferences.getString(_avatarKey);
     final token = await _preferences.getString(_tokenKey);
+    final provider = await _preferences.getString(_providerKey);
 
     if (userId == null ||
         userId.isEmpty ||
@@ -77,7 +85,11 @@ class AuthPersistence {
         flagEmoji: flag,
         gender: gender,
         avatarDataUrl: avatar,
-        providers: const <LoginProvider>{LoginProvider.google},
+        providers: <LoginProvider>{
+          provider == 'facebook'
+              ? LoginProvider.facebook
+              : LoginProvider.google,
+        },
         authToken: token,
       ),
     );
@@ -97,6 +109,7 @@ class AuthPersistence {
       _genderKey,
       _avatarKey,
       _tokenKey,
+      _providerKey,
     ]) {
       await _preferences.remove(key);
     }

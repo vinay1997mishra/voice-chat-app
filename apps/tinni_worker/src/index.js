@@ -134,9 +134,30 @@ async function verifyAppSession(request, env) {
   );
   if (!payload || payload.role !== "user" || !payload.userId) return null;
 
-  const user = await getAppDirectoryStore(env).getUserById(payload.userId);
-  if (!user || user.google_sub !== payload.googleSub) return null;
+  const store = getAppDirectoryStore(env);
+  const user = await store.getUserById(payload.userId);
+  if (!user) return null;
+
+  const provider = String(payload.provider || "google");
+  const subject = String(payload.subject || payload.googleSub || "");
+  const identityUser = await store.getUserByProvider(provider, subject);
+  if (!identityUser || identityUser.user_id !== user.user_id) return null;
   return { ...payload, user };
+}
+
+async function createAppUserSession(user, env, providerValue, subjectValue) {
+  const provider = String(providerValue || user.auth_provider || "google");
+  const subject = String(subjectValue || user.auth_subject || user.google_sub);
+  return createSession(
+    {
+      role: "user",
+      userId: user.user_id,
+      provider,
+      subject,
+    },
+    env.SESSION_SECRET,
+    30 * 24 * 60 * 60 * 1000,
+  );
 }
 
 async function verifyGoogleIdToken(idToken, env) {
@@ -549,7 +570,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.0.0",
+        version: "1.1.0",
       });
     }
 
@@ -557,6 +578,7 @@ export default {
       return json({
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
+        facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
       });
     }
 
@@ -573,6 +595,12 @@ export default {
 
         const store = getAppDirectoryStore(env);
         let user = await store.getUserByGoogleSub(google.sub);
+        if (!user && google.email) {
+          const emailUser = await store.getUserByEmail(google.email);
+          if (emailUser) {
+            user = await store.linkIdentity(emailUser.user_id, "google", google.sub);
+          }
+        }
         const profile = body.profile && typeof body.profile === "object"
           ? body.profile
           : null;
@@ -591,6 +619,8 @@ export default {
 
         if (!user) {
           user = await store.createUser({
+            auth_provider: "google",
+            auth_subject: google.sub,
             google_sub: google.sub,
             email: google.email,
             display_name: profile.display_name,
@@ -604,15 +634,7 @@ export default {
           });
         }
 
-        const token = await createSession(
-          {
-            role: "user",
-            userId: user.user_id,
-            googleSub: user.google_sub,
-          },
-          env.SESSION_SECRET,
-          30 * 24 * 60 * 60 * 1000,
-        );
+        const token = await createAppUserSession(user, env, "google", google.sub);
 
         return json({
           ok: true,
@@ -623,6 +645,215 @@ export default {
         return json({
           ok: false,
           error: String(error?.message || "Google login failed"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/app-auth/facebook/start" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+      if (!env.FACEBOOK_APP_ID || !env.FACEBOOK_APP_SECRET) {
+        return json({ ok: false, error: "Facebook login is not configured yet" }, 503);
+      }
+
+      const store = getAppDirectoryStore(env);
+      const pending = await store.startFacebookLogin();
+      const callbackUrl = new URL("/app-auth/facebook/callback", request.url).toString();
+      const authUrl = new URL("https://www.facebook.com/dialog/oauth");
+      authUrl.searchParams.set("client_id", String(env.FACEBOOK_APP_ID));
+      authUrl.searchParams.set("redirect_uri", callbackUrl);
+      authUrl.searchParams.set("state", pending.request_id);
+      authUrl.searchParams.set("scope", "public_profile,email");
+      authUrl.searchParams.set("response_type", "code");
+
+      return json({
+        ok: true,
+        request_id: pending.request_id,
+        auth_url: authUrl.toString(),
+      }, 201);
+    }
+
+    if (url.pathname === "/app-auth/facebook/callback" && request.method === "GET") {
+      const requestId = String(url.searchParams.get("state") || "").trim();
+      const code = String(url.searchParams.get("code") || "").trim();
+      const oauthError = String(
+        url.searchParams.get("error_description") ||
+        url.searchParams.get("error_message") ||
+        url.searchParams.get("error") ||
+        ""
+      ).trim();
+      const store = getAppDirectoryStore(env);
+      const pending = await store.getFacebookLogin(requestId);
+
+      if (!pending || pending.status !== "pending") {
+        return new Response(
+          "<!doctype html><meta name='viewport' content='width=device-width'><body style='font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px'><h2>Tinni Star</h2><p>This Facebook login request is invalid or expired.</p></body>",
+          { status: 400, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
+
+      if (oauthError || !code) {
+        await store.failFacebookLogin(requestId, oauthError || "Facebook login was cancelled");
+        return new Response(
+          "<!doctype html><meta name='viewport' content='width=device-width'><body style='font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px'><h2>Tinni Star</h2><p>Facebook login was cancelled. You can return to the app.</p></body>",
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
+
+      try {
+        const callbackUrl = new URL("/app-auth/facebook/callback", request.url).toString();
+        const tokenUrl = new URL("https://graph.facebook.com/oauth/access_token");
+        tokenUrl.searchParams.set("client_id", String(env.FACEBOOK_APP_ID));
+        tokenUrl.searchParams.set("client_secret", String(env.FACEBOOK_APP_SECRET));
+        tokenUrl.searchParams.set("redirect_uri", callbackUrl);
+        tokenUrl.searchParams.set("code", code);
+
+        const tokenResponse = await fetch(tokenUrl.toString(), {
+          headers: { "cache-control": "no-store" },
+        });
+        const tokenData = await tokenResponse.json();
+        if (!tokenResponse.ok || !tokenData.access_token) {
+          throw new Error("Facebook token exchange failed");
+        }
+
+        const profileUrl = new URL("https://graph.facebook.com/me");
+        profileUrl.searchParams.set("fields", "id,name,email,picture.type(large)");
+        profileUrl.searchParams.set("access_token", String(tokenData.access_token));
+        const profileResponse = await fetch(profileUrl.toString(), {
+          headers: { "cache-control": "no-store" },
+        });
+        const facebook = await profileResponse.json();
+        if (!profileResponse.ok || !facebook.id) {
+          throw new Error("Facebook profile verification failed");
+        }
+
+        await store.completeFacebookLogin(requestId, {
+          id: facebook.id,
+          email: facebook.email || "",
+          name: facebook.name || "Facebook User",
+          picture: facebook.picture?.data?.url || "",
+        });
+
+        return new Response(
+          "<!doctype html><meta name='viewport' content='width=device-width'><body style='font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px'><h2>Tinni Star</h2><p>Facebook login complete. Return to the Tinni Star app.</p></body>",
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      } catch (error) {
+        await store.failFacebookLogin(
+          requestId,
+          String(error?.message || "Facebook login failed"),
+        );
+        return new Response(
+          "<!doctype html><meta name='viewport' content='width=device-width'><body style='font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px'><h2>Tinni Star</h2><p>Facebook login failed. Return to the app and try again.</p></body>",
+          { status: 400, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
+    }
+
+    if (url.pathname === "/app-auth/facebook/status" && request.method === "GET") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+      const requestId = String(url.searchParams.get("request_id") || "").trim();
+      const store = getAppDirectoryStore(env);
+      const pending = await store.getFacebookLogin(requestId);
+      if (!pending) return json({ ok: false, error: "Facebook login request not found" }, 404);
+      if (pending.status === "failed" || pending.status === "expired") {
+        return json({
+          ok: false,
+          status: pending.status,
+          error: pending.error || "Facebook login expired or failed",
+        }, 400);
+      }
+      if (pending.status !== "authorized") {
+        return json({ ok: true, status: "pending" });
+      }
+
+      let user = await store.getUserByProvider("facebook", pending.facebook_id);
+      if (user) {
+        const token = await createAppUserSession(
+          user,
+          env,
+          "facebook",
+          pending.facebook_id,
+        );
+        return json({ ok: true, status: "complete", token, user });
+      }
+
+      return json({
+        ok: true,
+        status: "profile_required",
+        request_id: pending.request_id,
+        provider: {
+          type: "facebook",
+          email: pending.email || "",
+          display_name: pending.display_name || "",
+          photo_url: pending.picture_url || null,
+        },
+      });
+    }
+
+    if (url.pathname === "/app-auth/facebook/complete" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const requestId = String(body.request_id || "").trim();
+      const profile = body.profile && typeof body.profile === "object"
+        ? body.profile
+        : null;
+      const store = getAppDirectoryStore(env);
+      const pending = await store.getFacebookLogin(requestId);
+
+      if (!pending || pending.status !== "authorized" || !pending.facebook_id) {
+        return json({ ok: false, error: "Facebook login request is not ready" }, 400);
+      }
+      if (!profile) {
+        return json({ ok: false, error: "Profile details are required" }, 400);
+      }
+
+      try {
+        let user = await store.getUserByProvider("facebook", pending.facebook_id);
+        if (!user && pending.email) {
+          const emailUser = await store.getUserByEmail(pending.email);
+          if (emailUser) {
+            user = await store.linkIdentity(
+              emailUser.user_id,
+              "facebook",
+              pending.facebook_id,
+            );
+          }
+        }
+        if (!user) {
+          const email = pending.email ||
+            ("facebook-" + pending.facebook_id + "@tinni.invalid");
+          user = await store.createUser({
+            auth_provider: "facebook",
+            auth_subject: pending.facebook_id,
+            email,
+            display_name: profile.display_name,
+            age: profile.age,
+            signature: profile.signature,
+            country_code: profile.country_code,
+            country_name: profile.country_name,
+            flag_emoji: profile.flag_emoji,
+            gender: profile.gender,
+            avatar_data_url: profile.avatar_data_url,
+          });
+        }
+
+        const token = await createAppUserSession(
+          user,
+          env,
+          "facebook",
+          pending.facebook_id,
+        );
+        return json({ ok: true, token, user });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to create Facebook user"),
         }, 400);
       }
     }
