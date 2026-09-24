@@ -160,6 +160,42 @@ async function createAppUserSession(user, env, providerValue, subjectValue) {
   );
 }
 
+async function sendEmailOtp(email, otp, env) {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    throw new Error("Email OTP service is not configured yet");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + String(env.RESEND_API_KEY),
+    },
+    body: JSON.stringify({
+      from: String(env.EMAIL_FROM),
+      to: [String(email)],
+      subject: "Your Tinni Star OTP",
+      html:
+        "<div style=\"font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px\">" +
+        "<h2>Tinni Star</h2>" +
+        "<p>Your verification code is:</p>" +
+        "<div style=\"font-size:32px;font-weight:800;letter-spacing:8px\">" +
+        String(otp) +
+        "</div>" +
+        "<p>This code expires in 10 minutes. Do not share it with anyone.</p>" +
+        "</div>",
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      "Unable to send OTP email" +
+        (body ? ": " + body.slice(0, 180) : ""),
+    );
+  }
+}
+
 async function verifyGoogleIdToken(idToken, env) {
   if (!env.GOOGLE_SERVER_CLIENT_ID) {
     throw new Error("Google OAuth is not configured on the server");
@@ -570,7 +606,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.1.0",
+        version: "1.2.0",
       });
     }
 
@@ -579,6 +615,7 @@ export default {
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
         facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
+        email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
       });
     }
 
@@ -856,6 +893,142 @@ export default {
           error: String(error?.message || "Unable to create Facebook user"),
         }, 400);
       }
+    }
+
+    if (url.pathname === "/app-auth/email/start" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+      if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+        return json({ ok: false, error: "Email OTP service is not configured yet" }, 503);
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const store = getAppDirectoryStore(env);
+      try {
+        const pending = await store.startEmailOtp(body.email);
+        await sendEmailOtp(pending.email, pending.otp, env);
+        return json({
+          ok: true,
+          request_id: pending.request_id,
+          email: pending.email,
+          expires_at: pending.expires_at,
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send email OTP"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/app-auth/email/verify" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const store = getAppDirectoryStore(env);
+      try {
+        const verified = await store.verifyEmailOtp(body.request_id, body.otp);
+        const setupToken = await createSession(
+          {
+            role: "email_setup",
+            requestId: String(body.request_id || ""),
+            email: verified.email,
+          },
+          env.SESSION_SECRET,
+          10 * 60 * 1000,
+        );
+        return json({
+          ok: true,
+          setup_token: setupToken,
+          email: verified.email,
+          profile_required: verified.profile_required,
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "OTP verification failed"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/app-auth/email/complete" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const setup = await parseSignedSession(
+        String(body.setup_token || ""),
+        env.SESSION_SECRET,
+      );
+      if (
+        !setup ||
+        setup.role !== "email_setup" ||
+        !setup.requestId ||
+        !setup.email
+      ) {
+        return json({ ok: false, error: "Email verification session expired" }, 401);
+      }
+
+      const profile = body.profile && typeof body.profile === "object"
+        ? body.profile
+        : null;
+      const store = getAppDirectoryStore(env);
+      try {
+        const completed = await store.completeEmailPassword(
+          setup.requestId,
+          body.password,
+          profile,
+        );
+        if (String(completed.email) !== String(setup.email).toLowerCase()) {
+          throw new Error("Verified email does not match");
+        }
+
+        const token = await createAppUserSession(
+          completed.user,
+          env,
+          "email",
+          completed.email,
+        );
+        return json({
+          ok: true,
+          token,
+          user: completed.user,
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to save Tinni password"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/app-auth/email/login" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const store = getAppDirectoryStore(env);
+      const verified = await store.verifyEmailPassword(body.email, body.password);
+      if (!verified) {
+        return json({ ok: false, error: "Invalid email or Tinni password" }, 401);
+      }
+
+      const token = await createAppUserSession(
+        verified.user,
+        env,
+        "email",
+        verified.email,
+      );
+      return json({
+        ok: true,
+        token,
+        user: verified.user,
+      });
     }
 
     if (url.pathname === "/app/me" && request.method === "GET") {
