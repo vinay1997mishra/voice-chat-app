@@ -16,11 +16,19 @@
       {
         "name": "STAFF_AUTH",
         "class_name": "StaffAuthStore"
+      },
+      {
+        "name": "FRUIT_GAME",
+        "class_name": "FruitGameStore"
       }
     ]
   },
   "exports": {
     "StaffAuthStore": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "FruitGameStore": {
       "type": "durable-object",
       "storage": "sqlite"
     }
