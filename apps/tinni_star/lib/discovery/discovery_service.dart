@@ -16,6 +16,7 @@ class RoomSummary {
     this.createdAt,
     this.ownerId,
     this.photoPath,
+    this.photoDataUrl,
   });
 
   final String id;
@@ -31,6 +32,7 @@ class RoomSummary {
   final DateTime? createdAt;
   final String? ownerId;
   final String? photoPath;
+  final String? photoDataUrl;
 
   bool createdWithin(
     Duration age, {
@@ -56,6 +58,7 @@ class RoomSummary {
     DateTime? createdAt,
     String? ownerId,
     String? photoPath,
+    String? photoDataUrl,
   }) =>
       RoomSummary(
         id: id,
@@ -71,6 +74,7 @@ class RoomSummary {
         createdAt: createdAt ?? this.createdAt,
         ownerId: ownerId ?? this.ownerId,
         photoPath: photoPath ?? this.photoPath,
+        photoDataUrl: photoDataUrl ?? this.photoDataUrl,
       );
 }
 
@@ -134,6 +138,7 @@ class DiscoveryService {
     required int seatCount,
     required String partyMode,
     bool locked = false,
+    String? photoDataUrl,
   }) async {
     if (authToken.trim().isEmpty) {
       throw StateError('Login session is required');
@@ -151,6 +156,7 @@ class DiscoveryService {
         'seat_count': seatCount,
         'party_mode': partyMode,
         'locked': locked,
+        'photo_data_url': photoDataUrl,
       }),
     );
 
@@ -189,6 +195,7 @@ class DiscoveryService {
           ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
           : null,
       ownerId: row['owner_id']?.toString(),
+      photoDataUrl: row['photo_data_url']?.toString(),
     );
   }
 
