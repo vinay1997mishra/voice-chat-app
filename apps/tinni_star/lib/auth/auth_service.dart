@@ -1,4 +1,4 @@
-enum LoginProvider { google }
+enum LoginProvider { google, facebook }
 
 class TinniAccount {
   const TinniAccount({
@@ -44,7 +44,11 @@ class TinniAccount {
       flagEmoji: user['flag_emoji']?.toString() ?? '',
       gender: user['gender']?.toString() ?? '',
       avatarDataUrl: user['avatar_data_url']?.toString(),
-      providers: const <LoginProvider>{LoginProvider.google},
+      providers: <LoginProvider>{
+        user['auth_provider']?.toString() == 'facebook'
+            ? LoginProvider.facebook
+            : LoginProvider.google,
+      },
       authToken: token,
     );
   }
