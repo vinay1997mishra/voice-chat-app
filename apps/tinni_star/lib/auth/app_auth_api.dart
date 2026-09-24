@@ -5,10 +5,12 @@ class AppAuthConfig {
   const AppAuthConfig({
     required this.googleServerClientId,
     required this.facebookConfigured,
+    required this.emailOtpConfigured,
   });
 
   final String? googleServerClientId;
   final bool facebookConfigured;
+  final bool emailOtpConfigured;
 }
 
 class AuthProfileDraft {
@@ -37,6 +39,28 @@ class AppLoginResult {
   final Map<String, dynamic>? user;
   final bool profileRequired;
   final AuthProfileDraft? draft;
+}
+
+class EmailOtpStartResult {
+  const EmailOtpStartResult({
+    required this.requestId,
+    required this.email,
+  });
+
+  final String requestId;
+  final String email;
+}
+
+class EmailOtpVerifyResult {
+  const EmailOtpVerifyResult({
+    required this.setupToken,
+    required this.email,
+    required this.profileRequired,
+  });
+
+  final String setupToken;
+  final String email;
+  final bool profileRequired;
 }
 
 class FacebookStartResult {
@@ -91,6 +115,7 @@ class AppAuthApi {
       googleServerClientId:
           google == null || google.isEmpty ? null : google,
       facebookConfigured: data['facebook_configured'] == true,
+      emailOtpConfigured: data['email_otp_configured'] == true,
     );
   }
 
@@ -233,6 +258,116 @@ class AppAuthApi {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Facebook profile creation failed',
+      );
+    }
+
+    return AppLoginResult(
+      token: data['token']?.toString(),
+      user: _asMap(data['user']),
+    );
+  }
+
+  Future<EmailOtpStartResult> startEmailOtp(String email) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/email/start'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode(<String, dynamic>{'email': email.trim()}));
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to send email OTP',
+      );
+    }
+
+    return EmailOtpStartResult(
+      requestId: data['request_id']?.toString() ?? '',
+      email: data['email']?.toString() ?? email.trim(),
+    );
+  }
+
+  Future<EmailOtpVerifyResult> verifyEmailOtp({
+    required String requestId,
+    required String otp,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/email/verify'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'request_id': requestId,
+        'otp': otp.trim(),
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'OTP verification failed',
+      );
+    }
+
+    return EmailOtpVerifyResult(
+      setupToken: data['setup_token']?.toString() ?? '',
+      email: data['email']?.toString() ?? '',
+      profileRequired: data['profile_required'] == true,
+    );
+  }
+
+  Future<AppLoginResult> completeEmailPassword({
+    required String setupToken,
+    required String password,
+    Map<String, dynamic>? profile,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/email/complete'),
+    );
+    request.headers.contentType = ContentType.json;
+    final payload = <String, dynamic>{
+      'setup_token': setupToken,
+      'password': password,
+    };
+    if (profile != null) payload['profile'] = profile;
+    request.write(jsonEncode(payload));
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to save Tinni password',
+      );
+    }
+
+    return AppLoginResult(
+      token: data['token']?.toString(),
+      user: _asMap(data['user']),
+    );
+  }
+
+  Future<AppLoginResult> emailPasswordLogin({
+    required String email,
+    required String password,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/app-auth/email/login'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'email': email.trim(),
+        'password': password,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Email login failed',
       );
     }
 
