@@ -93,7 +93,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     if (!bettingOpen) return 'Betting locked for this round.';
 
     try {
-      final uri = apiBase.replace(path: '/fruit-game/demo-bet');
+      final uri = apiBase.replace(path: '/fruit-game/bet');
       final request = await _httpClient.postUrl(uri);
       request.headers.contentType = ContentType.json;
       request.write(
