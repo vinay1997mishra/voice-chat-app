@@ -2,13 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/discovery/discovery_service.dart';
 
 void main() {
-  test('room discovery can create edit favorite and track recent rooms', () {
+  test('room discovery can edit favorite and track real rooms', () {
     final discovery = DiscoveryService();
-    final room = discovery.createRoom(
+    const room = RoomSummary(
+      id: '91000001',
       title: 'My Tinni Room',
       country: 'IN',
+      online: 1,
+      ownerId: '91000001',
     );
-    expect(discovery.rooms.first.id, room.id);
+    discovery.rooms.add(room);
 
     expect(
       discovery.editRoom(

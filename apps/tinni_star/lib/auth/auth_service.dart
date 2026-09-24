@@ -1,24 +1,59 @@
-enum LoginProvider { phone, google, facebook }
+enum LoginProvider { google }
 
 class TinniAccount {
   const TinniAccount({
     required this.userId,
+    required this.email,
     required this.displayName,
+    required this.age,
+    required this.signature,
     required this.countryCode,
+    required this.countryName,
+    required this.flagEmoji,
+    required this.gender,
     required this.providers,
+    required this.authToken,
+    this.avatarDataUrl,
   });
 
   final String userId;
+  final String email;
   final String displayName;
+  final int age;
+  final String signature;
   final String countryCode;
+  final String countryName;
+  final String flagEmoji;
+  final String gender;
+  final String? avatarDataUrl;
   final Set<LoginProvider> providers;
+  final String authToken;
 
-  TinniAccount bind(LoginProvider provider) => TinniAccount(
-        userId: userId,
-        displayName: displayName,
-        countryCode: countryCode,
-        providers: {...providers, provider},
-      );
+  static TinniAccount fromServer(
+    Map<String, dynamic> user, {
+    required String token,
+  }) {
+    return TinniAccount(
+      userId: user['user_id']?.toString() ?? '',
+      email: user['email']?.toString() ?? '',
+      displayName: user['display_name']?.toString() ?? '',
+      age: _asInt(user['age']),
+      signature: user['signature']?.toString() ?? '',
+      countryCode: user['country_code']?.toString() ?? '',
+      countryName: user['country_name']?.toString() ?? '',
+      flagEmoji: user['flag_emoji']?.toString() ?? '',
+      gender: user['gender']?.toString() ?? '',
+      avatarDataUrl: user['avatar_data_url']?.toString(),
+      providers: const <LoginProvider>{LoginProvider.google},
+      authToken: token,
+    );
+  }
+
+  static int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 }
 
 class AuthService {
@@ -27,25 +62,11 @@ class AuthService {
   TinniAccount? get current => _current;
   bool get isLoggedIn => _current != null;
 
-  TinniAccount loginDemo({
-    String userId = '10000000',
-    String displayName = 'Tinni User',
-    String countryCode = 'IN',
-    LoginProvider provider = LoginProvider.phone,
-  }) {
-    _current = TinniAccount(
-      userId: userId,
-      displayName: displayName,
-      countryCode: countryCode,
-      providers: {provider},
-    );
-    return _current!;
-  }
-
-  void bind(LoginProvider provider) {
-    final account = _current;
-    if (account == null) throw StateError('Not logged in');
-    _current = account.bind(provider);
+  void setAuthenticatedAccount(TinniAccount account) {
+    if (account.userId.isEmpty || account.authToken.isEmpty) {
+      throw StateError('Authenticated user ID and token are required');
+    }
+    _current = account;
   }
 
   void forcedLogout() => _current = null;

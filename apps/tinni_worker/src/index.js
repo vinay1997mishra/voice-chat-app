@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { FruitGameStore } from "./fruit_game.js";
 import { RoomPresenceStore } from "./room_presence.js";
-export { FruitGameStore, RoomPresenceStore };
+import { AppDirectoryStore } from "./app_directory.js";
+export { FruitGameStore, RoomPresenceStore, AppDirectoryStore };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -80,14 +81,97 @@ async function hmacBytes(value, secret) {
   return new Uint8Array(signature);
 }
 
-async function createSession(payload, secret) {
+async function createSession(
+  payload,
+  secret,
+  maxAgeMs = 12 * 60 * 60 * 1000,
+) {
   const sessionPayload = JSON.stringify({
     ...payload,
-    exp: Date.now() + 12 * 60 * 60 * 1000,
+    exp: Date.now() + maxAgeMs,
   });
   const encoded = stringToBase64Url(sessionPayload);
   const signature = await hmacBytes(encoded, secret);
   return encoded + "." + toBase64Url(signature);
+}
+
+async function parseSignedSession(token, secret) {
+  if (!token || !secret) return null;
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) return null;
+
+  const encoded = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+  const expected = await hmacBytes(encoded, secret);
+
+  let actual;
+  try {
+    actual = fromBase64Url(signature);
+  } catch {
+    return null;
+  }
+  if (!safeEqualBytes(expected, actual)) return null;
+
+  try {
+    const payload = JSON.parse(decoder.decode(fromBase64Url(encoded)));
+    if (Number(payload.exp) <= Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function bearerToken(request) {
+  const authorization = request.headers.get("authorization") || "";
+  if (!authorization.toLowerCase().startsWith("bearer ")) return null;
+  return authorization.slice(7).trim();
+}
+
+async function verifyAppSession(request, env) {
+  const payload = await parseSignedSession(
+    bearerToken(request),
+    env.SESSION_SECRET,
+  );
+  if (!payload || payload.role !== "user" || !payload.userId) return null;
+
+  const user = await getAppDirectoryStore(env).getUserById(payload.userId);
+  if (!user || user.google_sub !== payload.googleSub) return null;
+  return { ...payload, user };
+}
+
+async function verifyGoogleIdToken(idToken, env) {
+  if (!env.GOOGLE_SERVER_CLIENT_ID) {
+    throw new Error("Google OAuth is not configured on the server");
+  }
+  const token = String(idToken || "").trim();
+  if (!token) throw new Error("Google ID token is required");
+
+  const response = await fetch(
+    "https://oauth2.googleapis.com/tokeninfo?id_token=" +
+      encodeURIComponent(token),
+    { headers: { "cache-control": "no-store" } },
+  );
+  if (!response.ok) throw new Error("Google account verification failed");
+
+  const profile = await response.json();
+  if (String(profile.aud || "") !== String(env.GOOGLE_SERVER_CLIENT_ID)) {
+    throw new Error("Google token audience is invalid");
+  }
+  if (
+    profile.email_verified !== true &&
+    String(profile.email_verified || "").toLowerCase() !== "true"
+  ) {
+    throw new Error("Google email is not verified");
+  }
+  if (Number(profile.exp || 0) * 1000 <= Date.now()) {
+    throw new Error("Google sign-in token has expired");
+  }
+  return {
+    sub: String(profile.sub || ""),
+    email: String(profile.email || "").toLowerCase(),
+    name: String(profile.name || ""),
+    picture: profile.picture ? String(profile.picture) : null,
+  };
 }
 
 async function verifySession(request, env) {
@@ -150,15 +234,16 @@ function getRoomPresenceStore(env, roomId) {
   return env.ROOM_PRESENCE.get(id);
 }
 
+function getAppDirectoryStore(env) {
+  const id = env.APP_DIRECTORY.idFromName("tinni-app-directory");
+  return env.APP_DIRECTORY.get(id);
+}
+
 function isPublicAsset(pathname) {
   return pathname === "/login" ||
     pathname === "/login.html" ||
     pathname === "/login.css" ||
-    pathname === "/login.js" ||
-    pathname === "/fruit-game" ||
-    pathname === "/fruit-live.html" ||
-    pathname === "/fruit-live.css" ||
-    pathname === "/fruit-live.js";
+    pathname === "/login.js";
 }
 
 async function serveLogin(request, env) {
@@ -167,11 +252,6 @@ async function serveLogin(request, env) {
   return env.ASSETS.fetch(new Request(url, request));
 }
 
-async function serveFruitGame(request, env) {
-  const url = new URL(request.url);
-  url.pathname = "/fruit-live.html";
-  return env.ASSETS.fetch(new Request(url, request));
-}
 
 function sessionCookie(value, maxAge = 43200) {
   return "tinni_owner_session=" + value +
@@ -469,27 +549,140 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.8.0",
+        version: "1.0.0",
       });
     }
 
+    if (url.pathname === "/app-config" && request.method === "GET") {
+      return json({
+        ok: true,
+        google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
+      });
+    }
+
+    if (url.pathname === "/app-auth/google" && request.method === "POST") {
+      if (!env.SESSION_SECRET) {
+        return json({ ok: false, error: "App session secret is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const google = await verifyGoogleIdToken(body.id_token, env);
+        if (!google.sub || !google.email) {
+          throw new Error("Google account identity is incomplete");
+        }
+
+        const store = getAppDirectoryStore(env);
+        let user = await store.getUserByGoogleSub(google.sub);
+        const profile = body.profile && typeof body.profile === "object"
+          ? body.profile
+          : null;
+
+        if (!user && !profile) {
+          return json({
+            ok: false,
+            profile_required: true,
+            google: {
+              email: google.email,
+              display_name: google.name,
+              photo_url: google.picture,
+            },
+          }, 428);
+        }
+
+        if (!user) {
+          user = await store.createUser({
+            google_sub: google.sub,
+            email: google.email,
+            display_name: profile.display_name,
+            age: profile.age,
+            signature: profile.signature,
+            country_code: profile.country_code,
+            country_name: profile.country_name,
+            flag_emoji: profile.flag_emoji,
+            gender: profile.gender,
+            avatar_data_url: profile.avatar_data_url,
+          });
+        }
+
+        const token = await createSession(
+          {
+            role: "user",
+            userId: user.user_id,
+            googleSub: user.google_sub,
+          },
+          env.SESSION_SECRET,
+          30 * 24 * 60 * 60 * 1000,
+        );
+
+        return json({
+          ok: true,
+          token,
+          user,
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Google login failed"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/app/me" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, user: appSession.user });
+    }
+
+    if (url.pathname === "/rooms" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      return json({ ok: true, rooms });
+    }
+
+    if (url.pathname === "/rooms" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const room = await getAppDirectoryStore(env).createRoom(
+          appSession.user.user_id,
+          body,
+        );
+        return json({ ok: true, room }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to create room"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/fruit-game/state" && request.method === "GET") {
-      const userId = url.searchParams.get("user_id") || "";
-      const state = await getFruitGameStore(env).state(userId);
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const state = await getFruitGameStore(env).state(appSession.user.user_id);
       return json(state);
     }
 
-    if ((url.pathname === "/fruit-game/bet" || url.pathname === "/fruit-game/demo-bet") && request.method === "POST") {
+    if (url.pathname === "/fruit-game/bet" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const state = await getFruitGameStore(env).placeDemoBet(body);
+        const state = await getFruitGameStore(env).placeBet({
+          ...body,
+          user_id: appSession.user.user_id,
+        });
         return json(state, 201);
       } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to place demo bet") }, 400);
+        return json({ ok: false, error: String(error?.message || "Unable to place bet") }, 400);
       }
     }
 
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       return json(await getRoomPresenceStore(env, roomId).state());
@@ -501,14 +694,29 @@ export default {
        url.pathname === "/room-presence/leave") &&
       request.method === "POST"
     ) {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       const roomId = String(body.room_id || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       const store = getRoomPresenceStore(env, roomId);
+      const user = appSession.user;
+      const presenceBody = {
+        room_id: roomId,
+        user_id: user.user_id,
+        display_name: user.display_name,
+        avatar_data_url: user.avatar_data_url,
+        flag_emoji: user.flag_emoji,
+        country_code: user.country_code,
+      };
       try {
-        if (url.pathname.endsWith("/join")) return json(await store.join(body), 201);
-        if (url.pathname.endsWith("/heartbeat")) return json(await store.heartbeat(body));
-        return json(await store.leave(body));
+        if (url.pathname.endsWith("/join")) {
+          return json(await store.join(presenceBody), 201);
+        }
+        if (url.pathname.endsWith("/heartbeat")) {
+          return json(await store.heartbeat(presenceBody));
+        }
+        return json(await store.leave(presenceBody));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Room presence failed") }, 400);
       }
@@ -572,7 +780,6 @@ export default {
 
     if (isPublicAsset(url.pathname)) {
       if (url.pathname === "/login") return serveLogin(request, env);
-      if (url.pathname === "/fruit-game") return serveFruitGame(request, env);
       return env.ASSETS.fetch(request);
     }
 

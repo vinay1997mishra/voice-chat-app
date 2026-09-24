@@ -34,8 +34,7 @@ class ActiveRoomSession extends ChangeNotifier {
   String? connectionError;
 
   Timer? _presenceTimer;
-  String? _activeUserId;
-  String? _activeDisplayName;
+  String? _activeAuthToken;
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -44,8 +43,8 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Future<void> open(
     RoomSummary nextRoom, {
-    String userId = '10000000',
-    String displayName = 'Tinni User',
+    required String userId,
+    required String authToken,
   }) async {
     if (room?.id == nextRoom.id && controller != null) {
       minimized = false;
@@ -79,8 +78,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
       await foregroundService.start();
       await realtime.enterRoom(nextRoom.id, userId);
-      _activeUserId = userId;
-      _activeDisplayName = displayName;
+      _activeAuthToken = authToken;
       await _startPresence();
       connected = true;
       connecting = false;
@@ -120,7 +118,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Future<void> close() async {
     final oldRoomId = room?.id;
-    final oldUserId = _activeUserId;
+    final oldAuthToken = _activeAuthToken;
     final oldController = controller;
     controller = null;
     room = null;
@@ -133,9 +131,9 @@ class ActiveRoomSession extends ChangeNotifier {
     oldController?.dispose();
 
     await _stopPresence(
-      sendLeave: oldRoomId != null && oldUserId != null,
+      sendLeave: oldRoomId != null && oldAuthToken != null,
       roomId: oldRoomId,
-      userId: oldUserId,
+      authToken: oldAuthToken,
     );
     await realtime.exitRoom();
     await foregroundService.stop();
@@ -144,9 +142,8 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Future<void> _startPresence() async {
     final roomId = room?.id;
-    final userId = _activeUserId;
-    final displayName = _activeDisplayName;
-    if (roomId == null || userId == null || displayName == null) return;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) return;
 
     presence.removeListener(_onPresenceChanged);
     presence.addListener(_onPresenceChanged);
@@ -154,8 +151,7 @@ class ActiveRoomSession extends ChangeNotifier {
     try {
       await presence.join(
         roomId: roomId,
-        userId: userId,
-        displayName: displayName,
+        authToken: authToken,
       );
     } catch (_) {
       // Keep the room open; presence will retry on the next heartbeat.
@@ -164,18 +160,14 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceTimer?.cancel();
     _presenceTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       final currentRoomId = room?.id;
-      final currentUserId = _activeUserId;
-      final currentDisplayName = _activeDisplayName;
-      if (currentRoomId == null ||
-          currentUserId == null ||
-          currentDisplayName == null) {
+      final currentAuthToken = _activeAuthToken;
+      if (currentRoomId == null || currentAuthToken == null) {
         return;
       }
       try {
         await presence.heartbeat(
           roomId: currentRoomId,
-          userId: currentUserId,
-          displayName: currentDisplayName,
+          authToken: currentAuthToken,
         );
       } catch (_) {
         // A later heartbeat/refresh will reconnect automatically.
@@ -186,22 +178,21 @@ class ActiveRoomSession extends ChangeNotifier {
   Future<void> _stopPresence({
     required bool sendLeave,
     String? roomId,
-    String? userId,
+    String? authToken,
   }) async {
     _presenceTimer?.cancel();
     _presenceTimer = null;
     presence.removeListener(_onPresenceChanged);
 
-    if (sendLeave && roomId != null && userId != null) {
+    if (sendLeave && roomId != null && authToken != null) {
       try {
-        await presence.leave(roomId: roomId, userId: userId);
+        await presence.leave(roomId: roomId, authToken: authToken);
       } catch (_) {
         // Server TTL removes stale members if a graceful leave fails.
       }
     }
 
-    _activeUserId = null;
-    _activeDisplayName = null;
+    _activeAuthToken = null;
   }
 
   void _onPresenceChanged() {

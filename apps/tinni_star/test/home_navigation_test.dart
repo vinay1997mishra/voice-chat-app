@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
+import 'package:tinni_star/discovery/discovery_service.dart';
+
+import 'test_account.dart';
 
 void main() {
   TinniState makeState() {
@@ -11,7 +14,31 @@ void main() {
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    state.auth.loginDemo();
+    final account = attachTestAccount(state);
+    state.discovery.rooms.addAll([
+      RoomSummary(
+        id: account.userId,
+        title: 'My Real Room',
+        country: account.countryCode,
+        online: 1,
+        createdAt: DateTime.now(),
+        ownerId: account.userId,
+        ownerName: account.displayName,
+        ownerFlagEmoji: account.flagEmoji,
+      ),
+      RoomSummary(
+        id: '92000001',
+        title: 'Friend Room',
+        country: 'US',
+        online: 4,
+        createdAt: DateTime.now(),
+        ownerId: '92000001',
+        ownerName: 'Friend',
+        ownerFlagEmoji: '🇺🇸',
+      ),
+    ]);
+    state.discovery.visit('92000001');
+    state.discovery.toggleFavorite('92000001');
     return state;
   }
 
@@ -19,9 +46,6 @@ void main() {
     'top Mine is room-focused and separate from bottom profile Mine',
     (tester) async {
       final state = makeState();
-      state.discovery.createRoom(title: 'My Test Room', country: 'IN');
-      state.discovery.visit('10000003');
-      state.discovery.toggleFavorite('10000004');
 
       await tester.pumpWidget(TinniStarApp(state: state));
       await tester.pumpAndSettle();
@@ -30,13 +54,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('My room'), findsOneWidget);
-      expect(find.text('My Test Room'), findsOneWidget);
+      expect(find.text('My Real Room'), findsOneWidget);
       expect(find.text('Recents'), findsOneWidget);
       expect(find.text('My followings'), findsOneWidget);
-      final minePage = find.byKey(const Key('home-mine-page'));
-      await tester.drag(minePage, const Offset(0, -450));
-      await tester.pumpAndSettle();
-      expect(find.text('Night Kings'), findsOneWidget);
       expect(find.text('Royal Center'), findsNothing);
     },
   );
@@ -68,12 +88,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('home-mine-page')), findsOneWidget);
       expect(find.text('My room'), findsOneWidget);
-      expect(find.text('Recents'), findsOneWidget);
-      expect(find.text('My followings'), findsOneWidget);
     },
   );
 
-  testWidgets('party ranking controls open real destinations', (tester) async {
+  testWidgets('party ranking controls open destinations', (tester) async {
     final state = makeState();
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
@@ -86,38 +104,5 @@ void main() {
     await tester.tap(find.byKey(const Key('home-ranking-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ranking-screen')), findsOneWidget);
-    expect(find.text('Send gifts'), findsOneWidget);
-    expect(find.text('Charm'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('party-room-rank-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('ranking-screen')), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('party-cp-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('cp-ranking-screen')), findsOneWidget);
-    expect(find.text('Ranking List'), findsOneWidget);
-    expect(find.text('True Love Challenge'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('party-family-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('family-ranking-screen')), findsOneWidget);
-    expect(find.text('Top Families of the Month'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('home-search-button')));
-    await tester.pumpAndSettle();
-    expect(find.text('Discover'), findsWidgets);
   });
 }

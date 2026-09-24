@@ -21,7 +21,10 @@ Future<void> main() async {
   final state = TinniState(runtime: runtime);
   final authPersistence = AuthPersistence();
   state.attachAuthPersistence(authPersistence);
-  await authPersistence.restore(state.auth);
+  final restored = await authPersistence.restore(state.auth);
+  if (restored && state.auth.current != null) {
+    state.profile.loadFromAccount(state.auth.current!);
+  }
 
   final bridge = AnamikaLinkBridge(
     connector: state.connector,

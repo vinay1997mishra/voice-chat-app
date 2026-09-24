@@ -51,17 +51,18 @@ class FruitJackpotRemoteService extends ChangeNotifier {
   int get userTotalBet =>
       myBets.values.fold<int>(0, (sum, amount) => sum + amount);
 
-  Future<void> sync(String userId) async {
+  Future<void> sync(String authToken) async {
     if (loading) return;
     loading = true;
     try {
       final startedAt = DateTime.now().millisecondsSinceEpoch;
-      final uri = apiBase.replace(
-        path: '/fruit-game/state',
-        queryParameters: <String, String>{'user_id': userId},
-      );
+      final uri = apiBase.replace(path: '/fruit-game/state');
       final request = await _httpClient.getUrl(uri);
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $authToken',
+      );
       final response = await request.close();
       final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -85,7 +86,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
   }
 
   Future<String?> placeBet({
-    required String userId,
+    required String authToken,
     required FruitKind fruit,
     required int amount,
   }) async {
@@ -96,9 +97,12 @@ class FruitJackpotRemoteService extends ChangeNotifier {
       final uri = apiBase.replace(path: '/fruit-game/bet');
       final request = await _httpClient.postUrl(uri);
       request.headers.contentType = ContentType.json;
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $authToken',
+      );
       request.write(
         jsonEncode(<String, Object>{
-          'user_id': userId,
           'fruit_key': fruit.name,
           'amount': amount,
         }),

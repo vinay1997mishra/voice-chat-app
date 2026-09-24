@@ -1,67 +1,70 @@
+import '../auth/auth_service.dart';
+
 class ProfileState {
   const ProfileState({
     required this.userId,
     required this.nick,
     required this.country,
+    required this.countryName,
+    required this.flagEmoji,
+    required this.age,
+    required this.gender,
     this.signature = '',
-    this.birthday,
-    this.avatarPath,
-    this.gender,
+    this.avatarDataUrl,
   });
 
   final String userId;
   final String nick;
   final String country;
+  final String countryName;
+  final String flagEmoji;
+  final int age;
+  final String gender;
   final String signature;
-  final DateTime? birthday;
-  final String? avatarPath;
-  final String? gender;
+  final String? avatarDataUrl;
 
   ProfileState copyWith({
     String? nick,
     String? country,
-    String? signature,
-    DateTime? birthday,
-    String? avatarPath,
+    String? countryName,
+    String? flagEmoji,
+    int? age,
     String? gender,
+    String? signature,
+    String? avatarDataUrl,
   }) {
     return ProfileState(
       userId: userId,
       nick: nick ?? this.nick,
       country: country ?? this.country,
-      signature: signature ?? this.signature,
-      birthday: birthday ?? this.birthday,
-      avatarPath: avatarPath ?? this.avatarPath,
+      countryName: countryName ?? this.countryName,
+      flagEmoji: flagEmoji ?? this.flagEmoji,
+      age: age ?? this.age,
       gender: gender ?? this.gender,
+      signature: signature ?? this.signature,
+      avatarDataUrl: avatarDataUrl ?? this.avatarDataUrl,
     );
   }
 }
 
 class ProfileService {
-  ProfileState profile = const ProfileState(
-    userId: '10000000',
-    nick: 'Tinni User',
-    country: 'IN',
-  );
+  ProfileState? _profile;
 
-  void editNick(String nick) {
-    final value = nick.trim();
-    if (value.isNotEmpty) profile = profile.copyWith(nick: value);
+  ProfileState? get current => _profile;
+
+  void loadFromAccount(TinniAccount account) {
+    _profile = ProfileState(
+      userId: account.userId,
+      nick: account.displayName,
+      country: account.countryCode,
+      countryName: account.countryName,
+      flagEmoji: account.flagEmoji,
+      age: account.age,
+      gender: account.gender,
+      signature: account.signature,
+      avatarDataUrl: account.avatarDataUrl,
+    );
   }
 
-  void editSignature(String signature) {
-    profile = profile.copyWith(signature: signature.trim());
-  }
-
-  void setBirthday(DateTime birthday) {
-    profile = profile.copyWith(birthday: birthday);
-  }
-
-  void setAvatar(String path) {
-    if (path.trim().isNotEmpty) profile = profile.copyWith(avatarPath: path);
-  }
-
-  void setGender(String gender) {
-    profile = profile.copyWith(gender: gender);
-  }
+  void clear() => _profile = null;
 }

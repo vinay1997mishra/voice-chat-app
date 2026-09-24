@@ -4,17 +4,25 @@ import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 
+import 'test_account.dart';
+
 void main() {
-  testWidgets('Tinni Star renders login then home shell', (tester) async {
+  testWidgets('Tinni Star renders Google login then authenticated home shell',
+      (tester) async {
     final state = TinniState(
       runtime: FunctionPackRuntime(
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    await tester.pumpWidget(TinniStarApp(state: state));
 
-    expect(find.text('Continue with Phone'), findsOneWidget);
-    await tester.tap(find.text('Continue with Phone'));
+    await tester.pumpWidget(TinniStarApp(state: state));
+    await tester.pump();
+
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Continue with Phone'), findsNothing);
+
+    attachTestAccount(state);
+    await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('home-party-page')), findsOneWidget);

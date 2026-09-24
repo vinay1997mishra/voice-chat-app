@@ -5,6 +5,8 @@ import 'package:tinni_star/calls/call_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/rewards/reward_service.dart';
 
+import 'test_account.dart';
+
 void main() {
   TinniState makeState() => TinniState(
         runtime: FunctionPackRuntime(
@@ -48,11 +50,11 @@ void main() {
     );
   });
 
-  test('profile can be edited', () {
+  test('profile mirrors the authenticated real account', () {
     final state = makeState();
-    state.profile.editNick('Tinni Queen');
-    state.profile.editSignature('Hello Tinni Star');
-    expect(state.profile.profile.nick, 'Tinni Queen');
-    expect(state.profile.profile.signature, 'Hello Tinni Star');
+    final account = attachTestAccount(state, name: 'Tinni Queen');
+    expect(state.profile.current?.nick, 'Tinni Queen');
+    expect(state.profile.current?.userId, account.userId);
+    expect(state.profile.current?.flagEmoji, account.flagEmoji);
   });
 }

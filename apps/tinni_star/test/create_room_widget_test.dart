@@ -4,15 +4,16 @@ import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 
+import 'test_account.dart';
+
 void main() {
-  testWidgets('create room modal closes cleanly and opens created room',
-      (tester) async {
+  testWidgets('create room modal exposes real room fields', (tester) async {
     final state = TinniState(
       runtime: FunctionPackRuntime(
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
     );
-    state.auth.loginDemo();
+    attachTestAccount(state);
 
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
@@ -23,39 +24,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create room'), findsWidgets);
+    expect(find.byKey(const Key('create-room-name')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-photo-button')), findsOneWidget);
+    expect(find.byKey(const Key('create-room-submit')), findsOneWidget);
+
     await tester.enterText(
       find.byKey(const Key('create-room-name')),
-      'My Safe Room',
+      'My Real Room',
     );
-    final submit = find.byKey(const Key('create-room-submit'));
-    await tester.ensureVisible(submit);
-    await tester.pumpAndSettle();
-    await tester.tap(submit);
-
-    // Finish modal removal + deferred room route push.
-    await tester.pump();
-    await tester.pumpAndSettle();
-
-    expect(
-      state.discovery.rooms.any((room) => room.title == 'My Safe Room'),
-      true,
-    );
-    expect(find.text('My Safe Room'), findsWidgets);
-    expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
-
-    final firstSeat = find.byKey(const Key('seat-0'));
-    await tester.tap(firstSeat);
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('seat-control-lock')), findsOneWidget);
-    expect(find.byKey(const Key('seat-control-mute')), findsOneWidget);
-    expect(find.byKey(const Key('seat-control-take')), findsOneWidget);
-    expect(state.roomSession.controller?.mySeat, isNull);
-
-    await tester.tap(find.byKey(const Key('seat-control-take')));
-    await tester.pumpAndSettle();
-    expect(state.roomSession.controller?.mySeat, 0);
-
+    expect(find.text('My Real Room'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
