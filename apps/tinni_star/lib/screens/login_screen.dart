@@ -4,6 +4,7 @@ import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app/tinni_app.dart';
 import '../app/tinni_state.dart';
@@ -30,9 +31,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool busy = false;
   bool googleReady = false;
+  bool facebookReady = false;
+  bool waitingFacebook = false;
+
   String? googleSetupError;
-  String? googleIdToken;
-  String? googleEmail;
+  String? facebookSetupError;
+
+  String? pendingProvider;
+  String? pendingGoogleIdToken;
+  String? pendingFacebookRequestId;
+  String? pendingAccountLabel;
+
+  int _facebookAttempt = 0;
+
   Country? selectedCountry;
   String? selectedGender;
   String? avatarDataUrl;
@@ -41,11 +52,12 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     signatureController.addListener(_refresh);
-    _prepareGoogle();
+    _prepareAuth();
   }
 
   @override
   void dispose() {
+    _facebookAttempt += 1;
     signatureController.removeListener(_refresh);
     nameController.dispose();
     ageController.dispose();
@@ -64,29 +76,41 @@ class _LoginScreenState extends State<LoginScreen> {
     return value.split(RegExp(r'\s+')).length;
   }
 
-  Future<void> _prepareGoogle() async {
+  Future<void> _prepareAuth() async {
     try {
-      final serverClientId = await _api.loadGoogleServerClientId();
-      if (serverClientId == null) {
-        throw StateError('Google OAuth client ID is not configured yet.');
+      final config = await _api.loadConfig();
+
+      if (config.googleServerClientId != null) {
+        await GoogleSignIn.instance.initialize(
+          serverClientId: config.googleServerClientId,
+        );
       }
-      await GoogleSignIn.instance.initialize(serverClientId: serverClientId);
+
       if (!mounted) return;
       setState(() {
-        googleReady = true;
-        googleSetupError = null;
+        googleReady = config.googleServerClientId != null;
+        facebookReady = config.facebookConfigured;
+        googleSetupError = googleReady
+            ? null
+            : 'Google login setup is not configured yet.';
+        facebookSetupError = facebookReady
+            ? null
+            : 'Facebook login setup is not configured yet.';
       });
     } catch (error) {
       if (!mounted) return;
+      final message = error.toString().replaceFirst('Bad state: ', '');
       setState(() {
         googleReady = false;
-        googleSetupError = error.toString().replaceFirst('Bad state: ', '');
+        facebookReady = false;
+        googleSetupError = message;
+        facebookSetupError = message;
       });
     }
   }
 
   Future<void> _googleLogin() async {
-    if (busy || !googleReady) return;
+    if (busy || waitingFacebook || !googleReady) return;
     setState(() => busy = true);
 
     try {
@@ -108,21 +132,118 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      googleIdToken = token;
-      googleEmail = result.googleDraft?.email ?? googleAccount.email;
-      if (nameController.text.trim().isEmpty) {
-        nameController.text =
-            result.googleDraft?.displayName.isNotEmpty == true
-                ? result.googleDraft!.displayName
-                : (googleAccount.displayName ?? '');
-      }
-      setState(() {});
+      pendingProvider = 'google';
+      pendingGoogleIdToken = token;
+      pendingFacebookRequestId = null;
+      _applyDraft(
+        result.draft,
+        fallbackName: googleAccount.displayName ?? '',
+        fallbackLabel: googleAccount.email,
+      );
     } catch (error) {
       if (!mounted) return;
       _snack(error.toString().replaceFirst('Bad state: ', ''));
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> _facebookLogin() async {
+    if (busy || waitingFacebook || !facebookReady) return;
+
+    setState(() => busy = true);
+    try {
+      final start = await _api.startFacebookLogin();
+      final opened = await launchUrl(
+        start.authUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        throw StateError('Unable to open Facebook login.');
+      }
+
+      if (!mounted) return;
+      final attempt = ++_facebookAttempt;
+      setState(() {
+        busy = false;
+        waitingFacebook = true;
+      });
+      await _pollFacebook(start.requestId, attempt);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        waitingFacebook = false;
+      });
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _pollFacebook(String requestId, int attempt) async {
+    try {
+      for (var index = 0; index < 90; index += 1) {
+        if (!mounted || attempt != _facebookAttempt) return;
+
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted || attempt != _facebookAttempt) return;
+
+        final poll = await _api.pollFacebookLogin(requestId);
+        if (poll.pending) continue;
+
+        final result = poll.login;
+        if (result == null) {
+          throw StateError('Facebook login did not return an account.');
+        }
+
+        if (!result.profileRequired) {
+          setState(() => waitingFacebook = false);
+          await _finishLogin(result);
+          return;
+        }
+
+        pendingProvider = 'facebook';
+        pendingGoogleIdToken = null;
+        pendingFacebookRequestId = poll.requestId ?? requestId;
+        _applyDraft(
+          result.draft,
+          fallbackName: 'Facebook User',
+          fallbackLabel: 'Facebook account',
+        );
+
+        if (!mounted) return;
+        setState(() => waitingFacebook = false);
+        return;
+      }
+
+      throw StateError('Facebook login timed out. Please try again.');
+    } catch (error) {
+      if (!mounted || attempt != _facebookAttempt) return;
+      setState(() => waitingFacebook = false);
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _cancelFacebookWait() {
+    _facebookAttempt += 1;
+    setState(() => waitingFacebook = false);
+  }
+
+  void _applyDraft(
+    AuthProfileDraft? draft, {
+    required String fallbackName,
+    required String fallbackLabel,
+  }) {
+    final name = draft?.displayName.trim();
+    if (nameController.text.trim().isEmpty) {
+      nameController.text =
+          name != null && name.isNotEmpty ? name : fallbackName;
+    }
+
+    final email = draft?.email.trim();
+    pendingAccountLabel =
+        email != null && email.isNotEmpty ? email : fallbackLabel;
+
+    if (mounted) setState(() {});
   }
 
   Future<void> _pickAvatar() async {
@@ -187,8 +308,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _createId() async {
-    final token = googleIdToken;
-    if (busy || token == null) return;
+    final provider = pendingProvider;
+    if (busy || provider == null) return;
 
     final name = nameController.text.trim();
     final age = int.tryParse(ageController.text.trim());
@@ -214,22 +335,46 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final country = selectedCountry!;
+    final profile = <String, dynamic>{
+      'display_name': name,
+      'age': age,
+      'signature': signatureController.text.trim(),
+      'country_code': country.countryCode,
+      'country_name': country.name,
+      'flag_emoji': country.flagEmoji,
+      'gender': selectedGender,
+      'avatar_data_url': avatarDataUrl,
+    };
+
     setState(() => busy = true);
     try {
-      final country = selectedCountry!;
-      final result = await _api.googleLogin(
-        idToken: token,
-        profile: <String, dynamic>{
-          'display_name': name,
-          'age': age,
-          'signature': signatureController.text.trim(),
-          'country_code': country.countryCode,
-          'country_name': country.name,
-          'flag_emoji': country.flagEmoji,
-          'gender': selectedGender,
-          'avatar_data_url': avatarDataUrl,
-        },
-      );
+      late final AppLoginResult result;
+
+      if (provider == 'google') {
+        final token = pendingGoogleIdToken;
+        if (token == null || token.isEmpty) {
+          throw StateError('Google login session expired. Please sign in again.');
+        }
+        result = await _api.googleLogin(
+          idToken: token,
+          profile: profile,
+        );
+      } else if (provider == 'facebook') {
+        final requestId = pendingFacebookRequestId;
+        if (requestId == null || requestId.isEmpty) {
+          throw StateError(
+            'Facebook login session expired. Please sign in again.',
+          );
+        }
+        result = await _api.completeFacebookLogin(
+          requestId: requestId,
+          profile: profile,
+        );
+      } else {
+        throw StateError('Unsupported login provider.');
+      }
+
       if (!mounted) return;
       await _finishLogin(result);
     } catch (error) {
@@ -268,7 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profileSetup = googleIdToken != null;
+    final profileSetup = pendingProvider != null;
     final country = selectedCountry;
 
     return Scaffold(
@@ -307,7 +452,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Sign in with your Google / Gmail account first.',
+                      'Sign in with Google / Gmail or Facebook.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: RoyalPalette.cream,
@@ -319,8 +464,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const Key('google-login-button'),
-                        onPressed:
-                            googleReady && !busy ? _googleLogin : null,
+                        onPressed: googleReady && !busy && !waitingFacebook
+                            ? _googleLogin
+                            : null,
                         icon: const Icon(Icons.g_mobiledata_rounded),
                         label: Text(
                           busy ? 'Connecting…' : 'Continue with Google',
@@ -328,13 +474,63 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     if (googleSetupError != null) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 7),
                       Text(
                         googleSetupError!,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.orangeAccent,
-                          fontSize: 11,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    const Text(
+                      'OR',
+                      style: TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const Key('facebook-login-button'),
+                        onPressed: facebookReady && !busy && !waitingFacebook
+                            ? _facebookLogin
+                            : null,
+                        icon: const Icon(Icons.facebook),
+                        label: Text(
+                          waitingFacebook
+                              ? 'Waiting for Facebook…'
+                              : 'Continue with Facebook',
+                        ),
+                      ),
+                    ),
+                    if (waitingFacebook) ...[
+                      const SizedBox(height: 7),
+                      const Text(
+                        'Complete Facebook login in your browser, then return here.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 10,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _cancelFacebookWait,
+                        child: const Text('Cancel'),
+                      ),
+                    ] else if (facebookSetupError != null) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        facebookSetupError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.orangeAccent,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -343,7 +539,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ] else ...[
               Text(
-                googleEmail ?? '',
+                pendingAccountLabel ??
+                    (pendingProvider == 'facebook'
+                        ? 'Facebook account'
+                        : 'Google account'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: RoyalPalette.gold,
