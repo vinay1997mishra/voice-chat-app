@@ -96,6 +96,16 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_app_rooms_created ON app_rooms(created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS app_user_identities (
+        provider TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(provider, subject)
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_user_identities_user
+        ON app_user_identities(user_id);
+
       CREATE TABLE IF NOT EXISTS facebook_login_requests (
         request_id TEXT PRIMARY KEY,
         status TEXT NOT NULL,
@@ -129,6 +139,13 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_auth_identity ON app_users(auth_provider, auth_subject)"
     );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_user_identities
+        (provider, subject, user_id, created_at)
+       SELECT auth_provider, auth_subject, user_id, created_at
+         FROM app_users
+        WHERE auth_subject IS NOT NULL AND auth_subject != ''`
+    );
   }
 
   _nextUserId() {
@@ -152,8 +169,10 @@ export class AppDirectoryStore extends DurableObject {
     if (!provider || !subject) return null;
 
     let row = this.ctx.storage.sql.exec(
-      `SELECT * FROM app_users
-        WHERE auth_provider = ? AND auth_subject = ?
+      `SELECT u.*
+         FROM app_user_identities i
+         JOIN app_users u ON u.user_id = i.user_id
+        WHERE i.provider = ? AND i.subject = ?
         LIMIT 1`,
       provider,
       subject,
@@ -166,6 +185,41 @@ export class AppDirectoryStore extends DurableObject {
       ).toArray()[0];
     }
     return rowToUser(row);
+  }
+
+  async getUserByEmail(emailValue) {
+    const email = String(emailValue || "").trim().toLowerCase();
+    if (!email) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM app_users WHERE email = ? LIMIT 1`,
+      email,
+    ).toArray()[0];
+    return rowToUser(row);
+  }
+
+  async linkIdentity(userIdValue, providerValue, subjectValue) {
+    const userId = String(userIdValue || "").trim();
+    const provider = String(providerValue || "").trim().toLowerCase();
+    const subject = String(subjectValue || "").trim();
+    if (!userId || !provider || !subject) {
+      throw new Error("Login identity is incomplete");
+    }
+
+    const existing = await this.getUserByProvider(provider, subject);
+    if (existing && existing.user_id !== userId) {
+      throw new Error("This login identity is already linked to another account");
+    }
+
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_user_identities
+        (provider, subject, user_id, created_at)
+       VALUES (?, ?, ?, ?)`,
+      provider,
+      subject,
+      userId,
+      Date.now(),
+    );
+    return this.getUserById(userId);
   }
 
   async getUserByGoogleSub(googleSubValue) {
@@ -249,6 +303,15 @@ export class AppDirectoryStore extends DurableObject {
       }
       throw error;
     }
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_user_identities
+        (provider, subject, user_id, created_at)
+       VALUES (?, ?, ?, ?)`,
+      provider,
+      subject,
+      userId,
+      now,
+    );
     return this.getUserById(userId);
   }
 
