@@ -24,6 +24,7 @@ import '../effects/effect_queue.dart';
 import '../effects/effect_players.dart';
 import '../games/game_service.dart';
 import '../games/fruit_jackpot_game.dart';
+import '../games/fruit_jackpot_remote.dart';
 import '../identity/identity.dart';
 import '../infra/realtime.dart';
 import '../infra/platform_services.dart';
@@ -89,6 +90,7 @@ class TinniState {
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
     fruitJackpot = FruitJackpotGameService(wallet: wallet, autoStart: false);
+    fruitJackpotRemote = FruitJackpotRemoteService();
     roomSession = ActiveRoomSession(
       runtime: runtime,
       realtime: realtime,
@@ -125,6 +127,7 @@ class TinniState {
   late final KtvFeatureService ktvFeatures;
   final GameService games;
   late final FruitJackpotGameService fruitJackpot;
+  late final FruitJackpotRemoteService fruitJackpotRemote;
   final ActivityService activities;
   final RankFeatureService ranks;
   final EffectQueue effects;
