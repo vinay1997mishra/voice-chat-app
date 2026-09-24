@@ -41,7 +41,9 @@ class AuthPersistence {
       _providerKey,
       account.providers.contains(LoginProvider.facebook)
           ? 'facebook'
-          : 'google',
+          : account.providers.contains(LoginProvider.email)
+              ? 'email'
+              : 'google',
     );
   }
 
@@ -88,7 +90,9 @@ class AuthPersistence {
         providers: <LoginProvider>{
           provider == 'facebook'
               ? LoginProvider.facebook
-              : LoginProvider.google,
+              : provider == 'email'
+                  ? LoginProvider.email
+                  : LoginProvider.google,
         },
         authToken: token,
       ),
