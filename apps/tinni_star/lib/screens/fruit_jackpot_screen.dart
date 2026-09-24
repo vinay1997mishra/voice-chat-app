@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../games/fruit_jackpot_game.dart';
+import '../games/fruit_jackpot_remote.dart';
 import '../ui/royal_theme.dart';
 
 class FruitJackpotScreen extends StatefulWidget {
@@ -19,24 +20,33 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
   static const _betAmounts = <int>[500, 1000, 10000, 100000];
 
   Timer? _ticker;
+  Timer? _serverTicker;
   int _selectedBet = 1000;
 
-  FruitJackpotGameService get game => widget.state.fruitJackpot;
+  FruitJackpotRemoteService get game => widget.state.fruitJackpotRemote;
   String get userId => widget.state.auth.current?.userId ?? '10000000';
 
   @override
   void initState() {
     super.initState();
-    game.sync();
-    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      game.sync();
+    _syncServer();
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
       if (mounted) setState(() {});
     });
+    _serverTicker = Timer.periodic(const Duration(seconds: 2), (_) {
+      _syncServer();
+    });
+  }
+
+  Future<void> _syncServer() async {
+    await game.sync(userId);
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _serverTicker?.cancel();
     super.dispose();
   }
 
@@ -59,19 +69,17 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
     return seconds <= 0 ? '0.0' : seconds.toStringAsFixed(1);
   }
 
-  void _placeBet(FruitKind fruit) {
-    final placed = game.placeBet(
+  Future<void> _placeBet(FruitKind fruit) async {
+    final error = await game.placeBet(
       userId: userId,
       fruit: fruit,
       amount: _selectedBet,
     );
 
-    if (!placed) {
-      final message = !game.bettingOpen
-          ? 'Betting locked for this round.'
-          : 'Not enough coins for this bet.';
+    if (!mounted) return;
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(content: Text(error)),
       );
       return;
     }
@@ -112,7 +120,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
                 ),
               const SizedBox(height: 10),
               const Text(
-                'The production version must use the server as the round, result and wallet authority.',
+                'This test build uses the Cloudflare server as the round, result, bet and test-wallet authority so every user stays on the same global round.',
                 style: TextStyle(fontSize: 12, color: RoyalPalette.muted),
               ),
             ],
@@ -198,12 +206,26 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
                     Expanded(
                       child: _RoundStat(
                         label: 'Coins',
-                        value: _compact(widget.state.wallet.coins),
+                        value: game.connected ? _compact(game.walletBalance) : '—',
                       ),
                     ),
                   ],
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              game.connected
+                  ? '● SERVER SYNCED • SAME ROUND FOR ALL USERS'
+                  : '● SERVER RECONNECTING',
+              key: const Key('fruit-jackpot-server-status'),
+              style: TextStyle(
+                color: game.connected ? Colors.greenAccent : RoyalPalette.muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -266,7 +288,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
             ),
             itemBuilder: (context, index) {
               final fruit = FruitKind.values[index];
-              final mine = game.userBetForFruit(userId, fruit);
+              final mine = game.userBetForFruit(fruit);
               final isLastWinner = latest?.fruit == fruit;
               return RoyalPanel(
                 key: Key('fruit-bet-${fruit.name}'),
@@ -321,7 +343,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
           GoldSectionTitle(
             'Bet Amount',
             trailing: Text(
-              'Mine ${_compact(game.userTotalBet(userId))}',
+              'Mine ${_compact(game.userTotalBet)}',
               style: const TextStyle(
                 color: RoyalPalette.muted,
                 fontWeight: FontWeight.w700,
@@ -349,7 +371,7 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
               Expanded(
                 child: _MiniInfo(
                   label: 'Total Bet',
-                  value: _compact(game.totalBetForRound()),
+                  value: _compact(game.totalBet),
                 ),
               ),
               const SizedBox(width: 8),
@@ -424,9 +446,11 @@ class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            bettingOpen
-                ? 'Tap any fruit to place the selected bet. The round continues even if nobody bets.'
-                : 'Result phase — next round starts automatically.',
+            !game.connected
+                ? 'Server reconnecting — betting stays disabled to prevent users from getting different rounds.'
+                : bettingOpen
+                    ? 'SERVER SYNCED • 20s GLOBAL ROUND • Tap a fruit to place the selected server bet.'
+                    : 'SERVER SYNCED • Result phase — next global round starts automatically.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: RoyalPalette.muted,

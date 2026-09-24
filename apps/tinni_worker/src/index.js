@@ -463,7 +463,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "0.6.0",
+        version: "0.7.0",
       });
     }
 
@@ -473,7 +473,7 @@ export default {
       return json(state);
     }
 
-    if (url.pathname === "/fruit-game/demo-bet" && request.method === "POST") {
+    if ((url.pathname === "/fruit-game/bet" || url.pathname === "/fruit-game/demo-bet") && request.method === "POST") {
       const body = await request.json().catch(() => ({}));
       try {
         const state = await getFruitGameStore(env).placeDemoBet(body);
