@@ -99,10 +99,19 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
 
   FruitPartyKind get _movingFruit {
     final roundMs = game.roundDurationMs <= 0 ? 21000 : game.roundDurationMs;
+    if (game.inResultSpin) {
+      return _movingOrder[(_tick ~/ 1) % _movingOrder.length];
+    }
     final remainingMs = game.remaining().inMilliseconds.clamp(0, roundMs);
     final elapsedMs = roundMs - remainingMs;
-    final interval = remainingMs <= 5000 ? 80 : 220;
+    const interval = 260;
     return _movingOrder[(elapsedMs ~/ interval) % _movingOrder.length];
+  }
+
+  int get _resultSecondsLeft {
+    if (!game.inResultSpin) return 0;
+    final ms = game.resultSpinRemaining().inMilliseconds;
+    return ((ms + 999) ~/ 1000).clamp(0, 5).toInt();
   }
 
   FruitPartyRoundResult? get _latest =>
@@ -111,7 +120,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
   bool _fresh(FruitPartyRoundResult? result) {
     if (result == null) return false;
     final age = DateTime.now().difference(result.settledAt.toLocal()).inSeconds;
-    return age >= 0 && age < 21;
+    return age >= 0 && age < 8;
   }
 
   String _compact(int value) {
@@ -169,7 +178,8 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
   Widget build(BuildContext context) {
     final latest = _latest;
     final latestFresh = _fresh(latest);
-    final luckyActive = latestFresh && latest?.isLucky11 == true;
+    final revealResult = latestFresh && !game.inResultSpin;
+    final luckyActive = revealResult && latest?.isLucky11 == true;
     final bonusFruits = luckyActive
         ? latest!.bonusFruits.toSet()
         : const <FruitPartyKind>{};
@@ -177,7 +187,12 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tight = constraints.maxHeight < 480;
+        final tight = constraints.maxHeight < 520;
+        final cellWidth = (constraints.maxWidth - 26) / 3;
+        final boardHeight =
+            (constraints.maxHeight - (tight ? 150 : 190)).clamp(300.0, 610.0);
+        final cellHeight = (boardHeight - 10) / 3;
+        final boardAspect = cellWidth / cellHeight;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           padding: EdgeInsets.fromLTRB(8, tight ? 6 : 8, 8, 7),
@@ -191,7 +206,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                 Color(0xFF25103E),
               ],
             ),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: frameBlink
                   ? const Color(0xFFFFD95B)
@@ -213,10 +228,18 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
             children: [
               _PartyHeader(
                 secondsLeft: _secondsLeft,
+                resultSecondsLeft: _resultSecondsLeft,
+                resultSpinning: game.inResultSpin,
                 compact: tight,
                 onClose: widget.onClose,
               ),
-              SizedBox(height: tight ? 4 : 6),
+              SizedBox(height: tight ? 5 : 8),
+              _PartyStatusBar(
+                resultSpinning: game.inResultSpin,
+                resultSecondsLeft: _resultSecondsLeft,
+                bettingOpen: game.bettingOpen,
+              ),
+              SizedBox(height: tight ? 5 : 8),
               Expanded(
                 child: Stack(
                   children: [
@@ -225,11 +248,11 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _board.length,
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
+                          SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
-                        crossAxisSpacing: 5,
-                        mainAxisSpacing: 5,
-                        childAspectRatio: 1.43,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                        childAspectRatio: boardAspect,
                       ),
                       itemBuilder: (context, index) {
                         final fruit = _board[index];
@@ -241,10 +264,11 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                         }
 
                         final mine = game.userBetForFruit(fruit);
-                        final moving = game.bettingOpen &&
+                        final moving =
+                            (game.bettingOpen || game.inResultSpin) &&
                             fruit == _movingFruit;
                         final bonus = bonusFruits.contains(fruit);
-                        final winner = latestFresh &&
+                        final winner = revealResult &&
                             latest?.isLucky11 != true &&
                             latest?.fruit == fruit;
 
