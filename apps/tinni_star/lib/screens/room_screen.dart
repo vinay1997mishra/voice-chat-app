@@ -629,121 +629,280 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
 
+    final account = widget.state.auth.current;
+    if (account == null) return;
     final controls = widget.state.roomControls;
-    final selected = await Navigator.push<String>(
+    var priceCoins = 10000000;
+    var durationDays = 7;
+    final remoteChoices = <_RoomThemeChoice>[];
+
+    try {
+      final catalog = await widget.state.discovery.fetchRoomThemes(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+      );
+      priceCoins = catalog.userPriceCoins;
+      durationDays = catalog.userDurationDays;
+      for (final theme in catalog.themes) {
+        remoteChoices.add(
+          _RoomThemeChoice(
+            id: theme.id,
+            name: theme.name,
+            asset: theme.asset,
+            expiresAt: theme.expiresAt,
+            panelFree: theme.isPanelTheme,
+          ),
+        );
+      }
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+    if (!mounted) return;
+
+    final builtIns = <_RoomThemeChoice>[
+      const _RoomThemeChoice(
+        id: 'royal-dark',
+        name: 'Royal Dark',
+        color: Color(0xFF03070B),
+      ),
+      const _RoomThemeChoice(
+        id: 'night-blue',
+        name: 'Night Blue',
+        color: Color(0xFF03101B),
+      ),
+      const _RoomThemeChoice(
+        id: 'rose-gold',
+        name: 'Rose Gold',
+        color: Color(0xFF17090D),
+      ),
+    ];
+
+    var pending = builtIns.first;
+    for (final item in <_RoomThemeChoice>[...builtIns, ...remoteChoices]) {
+      if (item.id == controls.themeId) {
+        pending = item;
+        break;
+      }
+    }
+
+    final selected = await Navigator.push<_RoomThemeChoice>(
       context,
       MaterialPageRoute(
-        builder: (pageContext) {
-          var pendingTheme = controls.themeId;
-          return StatefulBuilder(
-            builder: (pageContext, setPageState) {
-              const themes = <(String, String, Color)>[
-                ('royal-dark', 'Royal Dark', Color(0xFF03070B)),
-                ('night-blue', 'Night Blue', Color(0xFF03101B)),
-                ('rose-gold', 'Rose Gold', Color(0xFF17090D)),
-              ];
-              return Scaffold(
-                backgroundColor: RoyalPalette.nearBlack,
-                appBar: AppBar(
-                  title: const Text(
-                    'Room Theme',
-                    style: TextStyle(
-                      color: RoyalPalette.gold,
-                      fontWeight: FontWeight.w900,
-                    ),
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            final themes = <_RoomThemeChoice>[...builtIns, ...remoteChoices];
+            return Scaffold(
+              backgroundColor: RoyalPalette.nearBlack,
+              appBar: AppBar(
+                title: const Text(
+                  'Room Theme',
+                  style: TextStyle(
+                    color: RoyalPalette.gold,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                body: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: themes.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (_, index) {
-                    final theme = themes[index];
-                    final active = pendingTheme == theme.$1;
+              ),
+              body: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: themes.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (_, index) {
+                  if (index == 0) {
                     return InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () {
+                      onTap: () async {
+                        final created = await _createPaidRoomTheme(
+                          priceCoins: priceCoins,
+                          durationDays: durationDays,
+                        );
+                        if (created == null || !pageContext.mounted) return;
+                        final choice = _RoomThemeChoice(
+                          id: created.id,
+                          name: created.name,
+                          asset: created.asset,
+                          expiresAt: created.expiresAt,
+                        );
                         setPageState(() {
-                          pendingTheme = theme.$1;
+                          remoteChoices.insert(0, choice);
+                          pending = choice;
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: active
-                                ? RoyalPalette.gold
-                                : RoyalPalette.bronze,
-                            width: active ? 2 : 1,
-                          ),
+                          border: Border.all(color: RoyalPalette.gold),
                           color: RoyalPalette.panel,
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              width: 58,
-                              height: 58,
-                              decoration: BoxDecoration(
-                                color: theme.$3,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: RoyalPalette.deepGold,
-                                ),
+                            const CircleAvatar(
+                              radius: 29,
+                              backgroundColor: RoyalPalette.panel2,
+                              child: Icon(
+                                Icons.add_rounded,
+                                color: RoyalPalette.gold,
+                                size: 34,
                               ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
-                              child: Text(
-                                theme.$2,
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Add New',
+                                    style: TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    priceCoins.toString() + ' coins • ' + durationDays.toString() + ' days',
+                                    style: const TextStyle(
+                                      color: RoyalPalette.gold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  const Text(
+                                    'No sexual or political content.',
+                                    style: TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            Icon(
-                              active
-                                  ? Icons.check_circle_rounded
-                                  : Icons.circle_outlined,
-                              color: active
-                                  ? RoyalPalette.gold
-                                  : RoyalPalette.muted,
                             ),
                           ],
                         ),
                       ),
                     );
-                  },
-                ),
-                bottomNavigationBar: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        Navigator.pop(pageContext, pendingTheme);
-                      },
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Save Theme'),
+                  }
+
+                  final theme = themes[index - 1];
+                  final active = pending.id == theme.id;
+                  ImageProvider? preview;
+                  if (theme.asset?.startsWith('data:image/') == true) {
+                    try {
+                      preview = MemoryImage(
+                        base64Decode(theme.asset!.split(',').last),
+                      );
+                    } catch (_) {
+                      preview = null;
+                    }
+                  } else if (theme.asset?.startsWith('https://') == true) {
+                    preview = NetworkImage(theme.asset!);
+                  }
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      setPageState(() {
+                        pending = theme;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: active ? RoyalPalette.gold : RoyalPalette.bronze,
+                          width: active ? 2 : 1,
+                        ),
+                        color: RoyalPalette.panel,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              color: theme.color ?? RoyalPalette.panel2,
+                              image: preview == null
+                                  ? null
+                                  : DecorationImage(
+                                      image: preview,
+                                      fit: BoxFit.cover,
+                                    ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: RoyalPalette.deepGold),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  theme.name,
+                                  style: const TextStyle(
+                                    color: RoyalPalette.cream,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (theme.panelFree)
+                                  const Text(
+                                    'Added free from Owner Panel',
+                                    style: TextStyle(
+                                      color: RoyalPalette.gold,
+                                      fontSize: 10,
+                                    ),
+                                  )
+                                else if (theme.expiresAt != null)
+                                  Text(
+                                    'Valid until ' + theme.expiresAt!.day.toString() + '/' + theme.expiresAt!.month.toString() + '/' + theme.expiresAt!.year.toString(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            active
+                                ? Icons.check_circle_rounded
+                                : Icons.circle_outlined,
+                            color: active
+                                ? RoyalPalette.gold
+                                : RoyalPalette.muted,
+                          ),
+                        ],
+                      ),
                     ),
+                  );
+                },
+              ),
+              bottomNavigationBar: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(pageContext, pending),
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('Save Theme'),
                   ),
                 ),
-              );
-            },
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
 
     if (!mounted || selected == null) return;
-    controls.setTheme(selected);
+    if (selected.asset == null) {
+      controls.setTheme(selected.id);
+    } else {
+      controls.setCustomTheme(selected.id, selected.asset!);
+    }
     setState(() {});
     _snack('Room theme saved.');
   }
-
-    Future<void> _showRoomPowerMenu() async {
+  Future<void> _showRoomPowerMenu() async {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -2483,6 +2642,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 }
 
+ class _RoomThemeChoice {
+  const _RoomThemeChoice({
+    required this.id,
+    required this.name,
+    this.color,
+    this.asset,
+    this.expiresAt,
+    this.panelFree = false,
+  });
+
+  final String id;
+  final String name;
+  final Color? color;
+  final String? asset;
+  final DateTime? expiresAt;
+  final bool panelFree;
+}
 class _ProfileAction extends StatelessWidget {
   const _ProfileAction({required this.icon, required this.label, required this.onTap});
 
