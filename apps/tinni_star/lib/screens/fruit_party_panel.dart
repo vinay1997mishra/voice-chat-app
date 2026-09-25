@@ -414,104 +414,192 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
 class _PartyHeader extends StatelessWidget {
   const _PartyHeader({
     required this.secondsLeft,
+    required this.resultSecondsLeft,
+    required this.resultSpinning,
     required this.compact,
     this.onClose,
   });
 
   final int secondsLeft;
+  final int resultSecondsLeft;
+  final bool resultSpinning;
   final bool compact;
   final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(
-          Icons.celebration_rounded,
-          color: Color(0xFFFFD54F),
-          size: 22,
-        ),
-        const SizedBox(width: 5),
-        Expanded(
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: compact ? 5 : 7,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF5514A6),
-                  Color(0xFF1D3FA2),
-                  Color(0xFF8A1A75),
+    return SizedBox(
+      height: compact ? 86 : 104,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            left: 30,
+            right: 30,
+            top: 10,
+            bottom: 2,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF25106F),
+                    Color(0xFF5B20C4),
+                    Color(0xFF8D176F),
+                  ],
+                ),
+                border: Border.all(
+                  color: const Color(0xFFFFD54F),
+                  width: 2.2,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x88FF45D6),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
                 ],
               ),
-              border: Border.all(
-                color: const Color(0xFFFFD54F),
-                width: 1.5,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x66FFD54F),
-                  blurRadius: 10,
-                ),
-              ],
             ),
+          ),
+          Positioned(
+            left: 6,
+            top: 2,
+            child: IconButton(
+              tooltip: 'Back',
+              onPressed: onClose,
+              icon: const Icon(
+                Icons.keyboard_arrow_left_rounded,
+                color: Color(0xFFFFE7A3),
+                size: 34,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 6,
+            top: 8,
+            child: Container(
+              width: 72,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xD9190738),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: resultSpinning
+                      ? const Color(0xFFFFD54F)
+                      : const Color(0xFFFF4FD8),
+                  width: 1.8,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    resultSpinning ? 'RESULT' : 'ROUND',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    resultSpinning ? '0s' : '${secondsLeft}s',
+                    style: const TextStyle(
+                      color: Color(0xFFFFF0B0),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: compact ? 18 : 18,
             child: Text(
-              'FRUIT PARTY',
-              textAlign: TextAlign.center,
+              '🍓  FRUIT PARTY  🍒',
               style: TextStyle(
-                color: const Color(0xFFFFF1A7),
-                fontSize: compact ? 15 : 18,
+                color: const Color(0xFFFFF18A),
+                fontSize: compact ? 21 : 28,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.2,
+                shadows: const [
+                  Shadow(color: Color(0xFFFF2DBB), blurRadius: 10),
+                  Shadow(color: Color(0xFF6B4CFF), blurRadius: 16),
+                ],
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          constraints: const BoxConstraints(minWidth: 58),
-          padding: EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: compact ? 5 : 7,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFF250844),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFF4FD8)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66FF4FD8),
-                blurRadius: 9,
+          Positioned(
+            top: compact ? 50 : 58,
+            child: Text(
+              resultSpinning
+                  ? 'Result in ${resultSecondsLeft}s'
+                  : 'Pick a fruit • win the multiplier',
+              style: const TextStyle(
+                color: Color(0xFFD3C6FF),
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
               ),
-            ],
-          ),
-          child: Text(
-            '${secondsLeft}s',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: const Color(0xFFFFE8FF),
-              fontSize: compact ? 15 : 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        if (onClose != null) ...[
-          const SizedBox(width: 2),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Close game',
-            onPressed: onClose,
-            icon: const Icon(
-              Icons.close_rounded,
-              color: Colors.white70,
-              size: 20,
             ),
           ),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+class _PartyStatusBar extends StatelessWidget {
+  const _PartyStatusBar({
+    required this.resultSpinning,
+    required this.resultSecondsLeft,
+    required this.bettingOpen,
+  });
+
+  final bool resultSpinning;
+  final int resultSecondsLeft;
+  final bool bettingOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = resultSpinning
+        ? 'RESULT SPIN • ${resultSecondsLeft}s'
+        : bettingOpen
+            ? 'BETTING OPEN'
+            : 'WAITING';
+    return Container(
+      height: 25,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(99),
+        gradient: LinearGradient(
+          colors: resultSpinning
+              ? const [
+                  Color(0xFFFF8F00),
+                  Color(0xFFFF2DAF),
+                  Color(0xFF7A28FF),
+                ]
+              : const [
+                  Color(0xFF163A77),
+                  Color(0xFF4A1A8B),
+                  Color(0xFF163A77),
+                ],
+        ),
+        border: Border.all(
+          color: resultSpinning
+              ? const Color(0xFFFFE56A)
+              : const Color(0xFF5AD7FF),
+        ),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.1,
+        ),
+      ),
     );
   }
 }
