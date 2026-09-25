@@ -1120,6 +1120,18 @@ export default {
         return json({ ok: false, error: "Room not found" }, 404);
       }
 
+      const access = getAppDirectoryStore(env).roomAccessState(
+        appSession.user.user_id,
+        roomId,
+      );
+      if (!access.allowed) {
+        return json({
+          ok: false,
+          error: "Room password is required.",
+          room_locked: true,
+        }, 403);
+      }
+
       const kick = getRoomPresenceStore(env, roomId).kickStatus(
         appSession.user.user_id,
       );
@@ -1171,6 +1183,53 @@ export default {
         return json({
           ok: false,
           error: String(error?.message || "Unable to create room"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/rooms/lock" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      try {
+        const result = await getAppDirectoryStore(env).setRoomLock(
+          appSession.user.user_id,
+          roomId,
+          body,
+        );
+        return json(result);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to change room lock"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/rooms/access" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      try {
+        const result = await getAppDirectoryStore(env).verifyRoomPassword(
+          appSession.user.user_id,
+          roomId,
+          body.password,
+        );
+        return json(result, result.allowed ? 200 : 403);
+      } catch (error) {
+        return json({
+          ok: false,
+          allowed: false,
+          error: String(error?.message || "Unable to verify room password"),
         }, 400);
       }
     }
@@ -1336,6 +1395,19 @@ export default {
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       const store = getRoomPresenceStore(env, roomId);
       const user = appSession.user;
+      if (url.pathname.endsWith("/join")) {
+        const access = getAppDirectoryStore(env).roomAccessState(
+          user.user_id,
+          roomId,
+        );
+        if (!access.allowed) {
+          return json({
+            ok: false,
+            error: "Room password is required.",
+            room_locked: true,
+          }, 403);
+        }
+      }
       const presenceBody = {
         room_id: roomId,
         user_id: user.user_id,
