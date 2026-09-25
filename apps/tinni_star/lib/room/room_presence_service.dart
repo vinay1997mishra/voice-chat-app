@@ -449,44 +449,54 @@ class RoomPresenceService extends ChangeNotifier {
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     }
-    selfMicMuted = data['self_mic_muted'] == true;
-    selfSeatForced = data['self_seat_forced'] == true;
-    selfForcedSeatIndex = selfSeatForced
-        ? (data['self_forced_seat_index'] == null
-            ? null
-            : _asInt(data['self_forced_seat_index']))
-        : null;
 
-    final rawInvite = data['pending_seat_invite'];
-    if (rawInvite is Map) {
-      final createdAtMs = _asInt(rawInvite['created_at']);
-      pendingSeatInvite = RoomSeatInvite(
-        seatIndex: _asInt(rawInvite['seat_index']),
-        invitedBy: rawInvite['invited_by']?.toString() ?? '',
-        createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
-      );
-    } else {
-      pendingSeatInvite = null;
+    if (data.containsKey('self_mic_muted')) {
+      selfMicMuted = data['self_mic_muted'] == true;
     }
 
-    final rawRequests = data['seat_requests'];
-    seatRequests
-      ..clear()
-      ..addAll(
-        rawRequests is List
-            ? rawRequests.whereType<Map>().map(
-                  (row) => RoomSeatRequest(
-                    userId: row['user_id']?.toString() ?? '',
-                    seatIndex: _asInt(row['seat_index']),
-                    createdAt: DateTime.fromMillisecondsSinceEpoch(
-                      _asInt(row['created_at']),
-                    ),
-                  ),
-                ).where((item) => item.userId.isNotEmpty)
-            : const <RoomSeatRequest>[],
-      );
+    if (data.containsKey('self_seat_forced')) {
+      selfSeatForced = data['self_seat_forced'] == true;
+      selfForcedSeatIndex = selfSeatForced
+          ? (data['self_forced_seat_index'] == null
+              ? null
+              : _asInt(data['self_forced_seat_index']))
+          : null;
+    }
 
-        final rawMembers = data['members'];
+    if (data.containsKey('pending_seat_invite')) {
+      final rawInvite = data['pending_seat_invite'];
+      if (rawInvite is Map) {
+        final createdAtMs = _asInt(rawInvite['created_at']);
+        pendingSeatInvite = RoomSeatInvite(
+          seatIndex: _asInt(rawInvite['seat_index']),
+          invitedBy: rawInvite['invited_by']?.toString() ?? '',
+          createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
+        );
+      } else {
+        pendingSeatInvite = null;
+      }
+    }
+
+    if (data.containsKey('seat_requests')) {
+      final rawRequests = data['seat_requests'];
+      seatRequests
+        ..clear()
+        ..addAll(
+          rawRequests is List
+              ? rawRequests.whereType<Map>().map(
+                    (row) => RoomSeatRequest(
+                      userId: row['user_id']?.toString() ?? '',
+                      seatIndex: _asInt(row['seat_index']),
+                      createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        _asInt(row['created_at']),
+                      ),
+                    ),
+                  ).where((item) => item.userId.isNotEmpty)
+              : const <RoomSeatRequest>[],
+        );
+    }
+
+    final rawMembers = data['members'];
     if (rawMembers is! List) return;
 
     members
