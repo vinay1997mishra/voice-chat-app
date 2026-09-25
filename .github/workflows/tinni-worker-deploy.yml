@@ -41,7 +41,7 @@ jobs:
       - name: Install Worker dependencies
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Deploy Worker and Owner Panel
         if: steps.creds.outputs.ready == 'true'
