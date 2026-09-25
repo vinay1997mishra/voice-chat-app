@@ -206,7 +206,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
       if (currentRoomId == null || currentAuthToken == null) {
