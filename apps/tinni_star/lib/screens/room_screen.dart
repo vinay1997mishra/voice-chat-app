@@ -10,9 +10,11 @@ import '../moderation/moderation_service.dart';
 import '../room/room_control_service.dart';
 import '../room/room_controller.dart';
 import '../room/room_models.dart';
+import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import 'games_screen.dart';
+import 'messages_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -125,10 +127,261 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  void _showGiftSheet() {
+  String _familyTagFor(String userId) {
+    if (widget.state.family.exists && widget.state.family.isMember(userId)) {
+      return widget.state.family.tag ?? widget.state.family.name ?? 'Family';
+    }
+    return '—';
+  }
+
+  String _hostTagFor(String userId) {
+    final role = widget.state.roomControls.roles[userId];
+    if (role == RoomRole.host) return 'Host';
+    if (role == RoomRole.owner) return 'Owner';
+    if (role == RoomRole.admin) return 'Admin';
+    return '—';
+  }
+
+  String _agencyNameFor(String userId) =>
+      widget.state.roomControls.agencyNameFor(userId) ?? '—';
+
+  Future<void> _openPrivateMessage(RoomPresenceMember member) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MessagesScreen(
+          state: widget.state,
+          targetUserId: member.userId,
+          targetName: member.displayName,
+          targetAvatarDataUrl: member.avatarDataUrl,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSeatInvitePicker(RoomPresenceMember member) async {
+    final available = <int>[
+      for (var index = 0; index < controller.seats.length; index++)
+        if (!controller.seats[index].occupied && !controller.seats[index].locked)
+          index,
+    ];
+    if (available.isEmpty) {
+      _snack('No empty seat is available.');
+      return;
+    }
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Invite ' + member.displayName + ' to seat',
+                style: const TextStyle(
+                  color: RoyalPalette.gold,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final index in available)
+                    ActionChip(
+                      label: Text('Seat ' + (index + 1).toString()),
+                      onPressed: () => Navigator.pop(context, index),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null) return;
+    widget.state.roomControls.applyForMic(member.userId, selected);
+    final roomId = widget.state.roomSession.room?.id;
+    if (roomId != null) {
+      await widget.state.realtime.im.sendRoomEvent(roomId, {
+        'type': 'seat_invite',
+        'userId': member.userId,
+        'seat': selected,
+      });
+    }
+    _snack('Seat ' + (selected + 1).toString() + ' invite sent to ' + member.displayName + '.');
+  }
+
+  Future<void> _moveUserToAudience(RoomPresenceMember member) async {
+    int? seatIndex;
+    for (final entry in widget.state.roomControls.seatUsers.entries) {
+      if (entry.value == member.userId) {
+        seatIndex = entry.key;
+        break;
+      }
+    }
+    seatIndex ??= controller.seats.indexWhere(
+      (seat) => seat.userName == member.displayName,
+    );
+    if (seatIndex == null || seatIndex < 0) {
+      _snack(member.displayName + ' is not on a seat.');
+      return;
+    }
+    controller.managerRemoveUserFromSeat(seatIndex);
+    widget.state.roomControls.kickFromMic(member.userId);
+    final roomId = widget.state.roomSession.room?.id;
+    if (roomId != null) {
+      await widget.state.realtime.im.sendRoomEvent(roomId, {
+        'type': 'seat_remove',
+        'userId': member.userId,
+        'seat': seatIndex,
+      });
+    }
+    _snack(member.displayName + ' moved to audience.');
+  }
+
+  Future<void> _showKickPicker(RoomPresenceMember member) async {
+    final duration = await showModalBottomSheet<Duration?>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            const ListTile(title: Text('Kick duration', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900))),
+            ListTile(title: const Text('2 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 2))),
+            ListTile(title: const Text('6 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 6))),
+            ListTile(title: const Text('24 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 24))),
+            ListTile(title: const Text('Permanent'), onTap: () => Navigator.pop(context, Duration.zero)),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || duration == null) return;
+    final permanent = duration == Duration.zero;
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm kick'),
+        content: Text(
+          permanent
+              ? 'Permanently kick ' + member.displayName + ' from this room?'
+              : 'Kick ' + member.displayName + ' for ' + duration.inHours.toString() + ' hours?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Agree')),
+        ],
+      ),
+    );
+    if (agreed != true) return;
+    final effectiveDuration = permanent ? null : duration;
+    widget.state.roomControls.kickFor(member.userId, effectiveDuration);
+    try {
+      await widget.state.roomSession.kickUser(member.userId, duration: effectiveDuration);
+      _snack(permanent
+          ? member.displayName + ' permanently kicked.'
+          : member.displayName + ' kicked for ' + duration.inHours.toString() + ' hours.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _showUserProfile(RoomPresenceMember member) {
+    if (!_canModerateSeats) return;
+    if (member.userId == widget.state.auth.current?.userId) return;
+    ImageProvider? avatar;
+    final avatarData = member.avatarDataUrl;
+    if (avatarData != null && avatarData.startsWith('data:image/')) {
+      try {
+        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
+      } catch (_) {
+        avatar = null;
+      }
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final followed = widget.state.social.following.contains(member.userId);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: RoyalPalette.panel2,
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(member.displayName.isEmpty ? '?' : member.displayName.characters.first.toUpperCase(),
+                            style: const TextStyle(color: RoyalPalette.gold, fontSize: 28, fontWeight: FontWeight.w900))
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(member.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
+                  Text('ID ' + member.userId, style: const TextStyle(color: RoyalPalette.muted)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: [
+                      Chip(label: Text('Family ' + _familyTagFor(member.userId))),
+                      Chip(label: Text('Host ' + _hostTagFor(member.userId))),
+                      Chip(label: Text('Agency ' + _agencyNameFor(member.userId))),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 82,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _ProfileAction(
+                          icon: followed ? Icons.person_remove_rounded : Icons.person_add_rounded,
+                          label: followed ? 'Unfollow' : 'Follow',
+                          onTap: () {
+                            if (followed) { widget.state.social.unfollow(member.userId); } else { widget.state.social.follow(member.userId); }
+                            setSheetState(() {});
+                          },
+                        ),
+                        _ProfileAction(icon: Icons.mail_rounded, label: 'Message', onTap: () { Navigator.pop(sheetContext); _openPrivateMessage(member); }),
+                        _ProfileAction(icon: Icons.event_seat_rounded, label: 'Seat Invite', onTap: () { Navigator.pop(sheetContext); _showSeatInvitePicker(member); }),
+                        _ProfileAction(icon: Icons.keyboard_arrow_down_rounded, label: 'Down Seat', onTap: () { Navigator.pop(sheetContext); _moveUserToAudience(member); }),
+                        _ProfileAction(icon: Icons.card_giftcard_rounded, label: 'Gift', onTap: () { Navigator.pop(sheetContext); Future<void>.delayed(Duration.zero, () { if (mounted) _showGiftSheet(preselectedUserId: member.userId); }); }),
+                        _ProfileAction(icon: Icons.logout_rounded, label: 'Kick', onTap: () { Navigator.pop(sheetContext); _showKickPicker(member); }),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showGiftSheet({String? preselectedUserId}) {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
     if (senderId == null) return;
+    if (preselectedUserId != null && preselectedUserId != senderId) {
+      _selectedGiftRecipients
+        ..clear()
+        ..add(preselectedUserId);
+    }
 
     final roomGifts = <GiftDefinition>[
       const GiftDefinition(
