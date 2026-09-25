@@ -1239,13 +1239,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 child: Row(
                   children: [
-                    Expanded(
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width * 0.38,
                       child: TextField(
                         controller: chat,
                         decoration: const InputDecoration(
                           hintText: 'Chat',
                           isDense: true,
-                          contentPadding: EdgeInsets.fromLTRB(12, 12, 10, 12),
+                          contentPadding: EdgeInsets.fromLTRB(10, 10, 8, 10),
                         ),
                         onSubmitted: (_) {
                           controller.sendMessage(chat.text);
@@ -1275,17 +1276,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         color: RoyalPalette.gold,
                       ),
                     ),
-                    IconButton(
-                      key: const Key('room-seat-button'),
-                      onPressed: () async {
-                        if (controller.mySeat == null) {
-                          _snack('Tap any mic seat to join.');
-                        } else {
-                          await _leaveSeatAndMute();
-                        }
-                      },
-                      icon: const Icon(Icons.event_seat_rounded, color: RoyalPalette.gold),
-                    ),
+                    if (controller.inviteMode)
+                      IconButton(
+                        key: const Key('room-seat-button'),
+                        tooltip: 'Seat request',
+                        onPressed: () async {
+                          if (controller.mySeat == null) {
+                            _snack('Tap any mic seat to send a seat request.');
+                          } else {
+                            await _leaveSeatAndMute();
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.event_seat_rounded,
+                          color: RoyalPalette.gold,
+                        ),
+                      ),
                   ],
                 ),
               ),
