@@ -271,6 +271,29 @@ async function loadStaffPanels() {
   }
 }
 
+async function loadRoomThemes() {
+  const root = document.getElementById('roomThemeList');
+  if (!root) return;
+  try {
+    const data = await api('/api/room-themes');
+    const themes = Array.isArray(data.themes) ? data.themes : [];
+    if (themes.length === 0) {
+      root.className = 'empty-state';
+      root.textContent = 'No global room themes added from the panel yet.';
+      return;
+    }
+    root.className = 'action-list';
+    root.innerHTML = themes.map(theme => `
+      <button type="button" data-room-theme-remove="${escapeHtml(theme.id)}">
+        <strong>${escapeHtml(theme.name)}</strong>
+        <span>Free global theme • tap to remove</span>
+      </button>
+    `).join('');
+  } catch (error) {
+    root.className = 'empty-state';
+    root.textContent = error.message || 'Unable to load room themes.';
+  }
+}
 function applySession(session) {
   const owner = session.role === "owner";
   const allowed = new Set(session.permissions || []);
@@ -308,6 +331,7 @@ function applySession(session) {
     document.body.classList.remove("auth-loading");
     document.body.classList.add("auth-ready");
     loadStaffPanels();
+    loadRoomThemes();
     return;
   }
 
@@ -462,6 +486,7 @@ function openAction(action, preset = {}) {
     "room-name": ["Change Room Name", field("room_id","Room ID") + field("room_name","New room name")],
     "room-dp": ["Change Room DP", field("room_id","Room ID") + field("asset_url","DP asset URL")],
     "room-bg": ["Room Background", field("room_id","Room ID") + field("asset_url","Background asset URL")],
+    "room-theme-new": ["Add Free Room Theme", field("name","Theme name") + field("asset","Theme image HTTPS URL")],
     "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["credit","Add coins"],["debit","Remove coins"],["ban","Ban wallet"],["unban","Unban wallet"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
@@ -542,6 +567,21 @@ async function handleAction(action, data) {
     return;
   }
 
+  if (action === 'room-theme-new') {
+    const name = String(data.name || '').trim();
+    const asset = String(data.asset || '').trim();
+    if (name.length < 2) throw new Error('Enter a theme name.');
+    if (!asset.startsWith('https://') && !asset.startsWith('data:image/')) {
+      throw new Error('Use an HTTPS image URL or image data URL.');
+    }
+    await api('/api/room-themes', {
+      method: 'POST',
+      body: JSON.stringify({ name, asset }),
+    });
+    toast('Room theme added free from Owner Panel.');
+    await loadRoomThemes();
+    return;
+  }
   if (action === "treasury-add") {
     const amount = Number(data.amount || 0);
     if (amount <= 0) throw new Error("Enter a valid coin amount");
@@ -576,6 +616,7 @@ document.getElementById("menuBtn").addEventListener("click", () => {
 
 document.getElementById("refreshBtn").addEventListener("click", () => {
   checkHealth();
+  loadRoomThemes();
   toast("Panel refreshed");
 });
 
@@ -642,7 +683,19 @@ document.body.addEventListener("change", async (event) => {
   }
 });
 
-document.body.addEventListener("click", e => {
+document.body.addEventListener("click", async e => {
+  const roomThemeRemove = e.target.closest('[data-room-theme-remove]')?.dataset.roomThemeRemove;
+  if (roomThemeRemove) {
+    if (!confirm('Remove this global room theme?')) return;
+    try {
+      await api('/api/room-themes/' + encodeURIComponent(roomThemeRemove), { method: 'DELETE' });
+      toast('Room theme removed.');
+      await loadRoomThemes();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
   const credentialsButton = e.target.closest("[data-staff-credentials]");
   if (credentialsButton) {
     return openStaffCredentials(
