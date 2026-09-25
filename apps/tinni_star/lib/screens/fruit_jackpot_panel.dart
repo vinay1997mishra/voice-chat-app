@@ -455,6 +455,150 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
   }
 }
 
+class _JackpotHistoryRail extends StatelessWidget {
+  const _JackpotHistoryRail({required this.history});
+
+  final List<FruitRoundResult> history;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = history.take(6).toList();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xD90A1230),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF5F66FF)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x665A4DFF), blurRadius: 9),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'LAST',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFFD6D1FF),
+              fontSize: 7,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: recent.isEmpty
+                ? const Center(
+                    child: Icon(
+                      Icons.history_rounded,
+                      color: Colors.white38,
+                      size: 14,
+                    ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      for (final item in recent)
+                        Text(
+                          item.isLucky11 ? '⑪' : item.fruit.emoji,
+                          style: TextStyle(
+                            fontSize: item.isLucky11 ? 15 : 17,
+                            color: item.isLucky11
+                                ? const Color(0xFFFFD54F)
+                                : null,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _JackpotLuckyRail extends StatelessWidget {
+  const _JackpotLuckyRail({
+    required this.active,
+    required this.spinning,
+  });
+
+  final bool active;
+  final bool spinning;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF25145F),
+            Color(0xFF611A86),
+            Color(0xFF171044),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: active
+              ? const Color(0xFFFFD54F)
+              : const Color(0xFF8A4DFF),
+          width: active ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (active
+                    ? const Color(0xFFFFC13A)
+                    : const Color(0xFF9A4DFF))
+                .withValues(alpha: 0.45),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'LUCKY',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 7,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Text(
+            '11',
+            style: TextStyle(
+              color: Color(0xFFFFE36D),
+              fontSize: 24,
+              height: 0.95,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            active
+                ? '3 EXTRA'
+                : spinning
+                    ? 'SPIN'
+                    : '3 EXTRA',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFFE7DFFF),
+              fontSize: 6,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text('🎁', style: TextStyle(fontSize: 16)),
+        ],
+      ),
+    );
+  }
+}
+
 class _JackpotHeader extends StatelessWidget {
   const _JackpotHeader({
     required this.jackpot,
