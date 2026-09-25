@@ -181,10 +181,36 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => busy = true);
     try {
       final start = await _api.startFacebookLogin();
-      final opened = await launchUrl(
-        start.authUrl,
-        mode: LaunchMode.externalApplication,
+
+      // Prefer the installed Facebook app on Android. If Facebook is not
+      // installed or does not accept the native URI, fall back to the normal
+      // HTTPS OAuth page in the user's browser.
+      final facebookAppUri = Uri(
+        scheme: 'fb',
+        host: 'facewebmodal',
+        path: '/f',
+        queryParameters: <String, String>{
+          'href': start.authUrl.toString(),
+        },
       );
+
+      var opened = false;
+      try {
+        opened = await launchUrl(
+          facebookAppUri,
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        opened = false;
+      }
+
+      if (!opened) {
+        opened = await launchUrl(
+          start.authUrl,
+          mode: LaunchMode.externalApplication,
+        );
+      }
+
       if (!opened) {
         throw StateError('Unable to open Facebook login.');
       }
