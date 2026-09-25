@@ -375,22 +375,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  void _insertChatEmoji(String emoji) {
-    final selection = chat.selection;
-    final text = chat.text;
-    final start = selection.isValid ? selection.start : text.length;
-    final end = selection.isValid ? selection.end : text.length;
-    final safeStart = start.clamp(0, text.length);
-    final safeEnd = end.clamp(safeStart, text.length);
-    final next = text.replaceRange(safeStart, safeEnd, emoji);
-    chat.value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(
-        offset: safeStart + emoji.length,
-      ),
-    );
-  }
-
   void _showEmojiPicker() {
     const emojis = <String>[
       '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
@@ -440,7 +424,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     final emoji = emojis[index];
                     return InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: () => _insertChatEmoji(emoji),
+                      onTap: () async {
+                        try {
+                          await widget.state.roomSession.setMySeatEmote(emoji);
+                          if (sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
+                          }
+                        } catch (error) {
+                          _snack(
+                            error.toString().replaceFirst('Bad state: ', ''),
+                          );
+                        }
+                      },
                       child: Center(
                         child: Text(
                           emoji,
@@ -1722,7 +1717,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required double seatDiameter,
   }) {
     final seat = controller.seats[index];
-    final occupied = seat.userName != null;
+    RoomPresenceMember? presenceMember;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == index) {
+        presenceMember = member;
+        break;
+      }
+    }
+    final occupied = seat.userName != null || presenceMember != null;
+    final displayName =
+        presenceMember?.displayName ?? seat.userName ?? 'Mic ${index + 1}';
+    final seatEmote = presenceMember?.seatEmote;
+    ImageProvider? avatar;
+    final avatarData = presenceMember?.avatarDataUrl;
+    if (avatarData != null && avatarData.startsWith('data:image/')) {
+      try {
+        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
+      } catch (_) {
+        avatar = null;
+      }
+    }
     final compact = seatDiameter < 44;
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
         .clamp(38.0, 78.0)
@@ -1734,14 +1748,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () {
           if (_canModerateSeats && occupied) {
-            RoomPresenceMember? member;
-            final mappedUserId = widget.state.roomControls.seatUsers[index];
-            for (final item in widget.state.roomSession.liveMembers) {
-              final idMatch = mappedUserId != null && item.userId == mappedUserId;
-              final nameMatch = item.displayName == seat.userName;
-              if (idMatch || nameMatch) {
-                member = item;
-                break;
+            RoomPresenceMember? member = presenceMember;
+            if (member == null) {
+              final mappedUserId = widget.state.roomControls.seatUsers[index];
+              for (final item in widget.state.roomSession.liveMembers) {
+                final idMatch =
+                    mappedUserId != null && item.userId == mappedUserId;
+                final nameMatch = item.displayName == seat.userName;
+                if (idMatch || nameMatch) {
+                  member = item;
+                  break;
+                }
               }
             }
             if (member != null) {
@@ -1766,54 +1783,82 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            SizedBox(
               width: seatDiameter,
               height: seatDiameter,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF10161C),
-                border: Border.all(
-                  color: occupied
-                      ? RoyalPalette.gold
-                      : RoyalPalette.deepGold,
-                  width: occupied ? 3 : 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: RoyalPalette.gold.withValues(
-                      alpha: occupied ? 0.28 : 0.08,
-                    ),
-                    blurRadius: compact ? 6 : 12,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: seat.locked
-                    ? Icon(
-                        Icons.lock_rounded,
-                        color: RoyalPalette.gold,
-                        size: seatDiameter * 0.42,
-                      )
-                    : occupied
-                        ? Text(
-                            seat.userName!.characters.first,
-                            style: TextStyle(
-                              color: RoyalPalette.gold,
-                              fontWeight: FontWeight.w900,
-                              fontSize: seatDiameter * 0.34,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: seatDiameter,
+                    height: seatDiameter,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF10161C),
+                      image: avatar == null
+                          ? null
+                          : DecorationImage(
+                              image: avatar,
+                              fit: BoxFit.cover,
                             ),
-                          )
-                        : Icon(
-                            Icons.star_rounded,
-                            color: RoyalPalette.deepGold,
-                            size: seatDiameter * 0.42,
+                      border: Border.all(
+                        color: occupied
+                            ? RoyalPalette.gold
+                            : RoyalPalette.deepGold,
+                        width: occupied ? 3 : 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: RoyalPalette.gold.withValues(
+                            alpha: occupied ? 0.28 : 0.08,
                           ),
+                          blurRadius: compact ? 6 : 12,
+                        ),
+                      ],
+                    ),
+                    child: avatar != null
+                        ? null
+                        : Center(
+                            child: seat.locked && !occupied
+                                ? Icon(
+                                    Icons.lock_rounded,
+                                    color: RoyalPalette.gold,
+                                    size: seatDiameter * 0.42,
+                                  )
+                                : occupied
+                                    ? Text(
+                                        displayName.characters.first,
+                                        style: TextStyle(
+                                          color: RoyalPalette.gold,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: seatDiameter * 0.34,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.star_rounded,
+                                        color: RoyalPalette.deepGold,
+                                        size: seatDiameter * 0.42,
+                                      ),
+                          ),
+                  ),
+                  if (seatEmote != null && seatEmote.isNotEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        seatEmote,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: seatDiameter * 0.72,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             SizedBox(height: compact ? 2 : 4),
             Text(
               occupied
-                  ? seat.userName!
+                  ? displayName
                   : seat.roomMuted
                       ? 'Muted'
                       : 'Mic ' + (index + 1).toString(),
@@ -2159,21 +2204,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         },
                       ),
                     ),
-                    IconButton(
-                      key: const Key('room-emoji-button'),
-                      tooltip: 'Emoji & Emotes',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(9),
-                      constraints: const BoxConstraints(
-                        minWidth: 46,
-                        minHeight: 46,
+                    if (controller.mySeat != null)
+                      IconButton(
+                        key: const Key('room-emoji-button'),
+                        tooltip: 'Emoji & Emotes',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: _showEmojiPicker,
+                        icon: const Icon(
+                          Icons.emoji_emotions_rounded,
+                          color: RoyalPalette.gold,
+                        ),
                       ),
-                      onPressed: _showEmojiPicker,
-                      icon: const Icon(
-                        Icons.emoji_emotions_rounded,
-                        color: RoyalPalette.gold,
-                      ),
-                    ),
                     IconButton(
                       key: const Key('room-mic-button'),
                       iconSize: 28,
