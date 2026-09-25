@@ -152,6 +152,32 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_app_rooms_created ON app_rooms(created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS room_locks (
+        room_id TEXT PRIMARY KEY,
+        password_salt TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        generation INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS room_lock_attempts (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS room_access_grants (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id)
+      );
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -721,7 +747,267 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map(rowToRoom);
   }
 
-  async createRoom(ownerIdValue, input) {
+  _roomRow(roomIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return null;
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM app_rooms WHERE id = ? LIMIT 1",
+      roomId,
+    ).toArray()[0] || null;
+  }
+
+  _roomLockRow(roomIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return null;
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM room_locks WHERE room_id = ? LIMIT 1",
+      roomId,
+    ).toArray()[0] || null;
+  }
+
+  roomAccessState(userIdValue, roomIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const room = this._roomRow(roomId);
+    if (!room) {
+      return { ok: false, allowed: false, reason: "room_not_found" };
+    }
+
+    if (String(room.owner_id) === userId) {
+      return { ok: true, allowed: true, owner_bypass: true };
+    }
+    if (Number(room.locked) !== 1) {
+      return { ok: true, allowed: true, locked: false };
+    }
+
+    const lock = this._roomLockRow(roomId);
+    if (!lock) {
+      return { ok: false, allowed: false, reason: "lock_not_configured" };
+    }
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_access_grants WHERE expires_at <= ?",
+      now,
+    );
+    const grant = this.ctx.storage.sql.exec(
+      `SELECT generation, expires_at
+         FROM room_access_grants
+        WHERE room_id = ? AND user_id = ?
+        LIMIT 1`,
+      roomId,
+      userId,
+    ).toArray()[0];
+
+    const allowed = Boolean(
+      grant &&
+      Number(grant.generation) === Number(lock.generation) &&
+      Number(grant.expires_at) > now,
+    );
+    return {
+      ok: true,
+      allowed,
+      locked: true,
+      owner_bypass: false,
+    };
+  }
+
+  async verifyRoomPassword(userIdValue, roomIdValue, passwordValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const password = String(passwordValue || "");
+    const room = this._roomRow(roomId);
+
+    if (!room) throw new Error("Room not found");
+    if (String(room.owner_id) === userId) {
+      return {
+        ok: true,
+        allowed: true,
+        owner_bypass: true,
+        attempts_remaining: 5,
+      };
+    }
+    if (Number(room.locked) !== 1) {
+      return {
+        ok: true,
+        allowed: true,
+        locked: false,
+        attempts_remaining: 5,
+      };
+    }
+
+    const lock = this._roomLockRow(roomId);
+    if (!lock) throw new Error("Room lock is not configured");
+
+    const currentAttempt = this.ctx.storage.sql.exec(
+      `SELECT generation, attempts
+         FROM room_lock_attempts
+        WHERE room_id = ? AND user_id = ?
+        LIMIT 1`,
+      roomId,
+      userId,
+    ).toArray()[0];
+
+    let attempts =
+      currentAttempt &&
+      Number(currentAttempt.generation) === Number(lock.generation)
+        ? Number(currentAttempt.attempts || 0)
+        : 0;
+
+    if (attempts >= 5) {
+      return {
+        ok: false,
+        allowed: false,
+        blocked: true,
+        attempts_remaining: 0,
+        error: "Too many wrong password attempts. Wait until the room is opened.",
+      };
+    }
+
+    const actual = await deriveSecret(
+      password,
+      fromBase64Url(String(lock.password_salt)),
+      120000,
+    );
+    const expected = fromBase64Url(String(lock.password_hash));
+
+    if (!safeEqualBytes(actual, expected)) {
+      attempts += 1;
+      const now = Date.now();
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_lock_attempts
+          (room_id, user_id, generation, attempts, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(room_id, user_id) DO UPDATE SET
+           generation = excluded.generation,
+           attempts = excluded.attempts,
+           updated_at = excluded.updated_at`,
+        roomId,
+        userId,
+        Number(lock.generation),
+        attempts,
+        now,
+      );
+      return {
+        ok: false,
+        allowed: false,
+        blocked: attempts >= 5,
+        attempts_remaining: Math.max(0, 5 - attempts),
+        error:
+          attempts >= 5
+            ? "Too many wrong password attempts. Wait until the room is opened."
+            : "Incorrect room password",
+      };
+    }
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_access_grants
+        (room_id, user_id, generation, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(room_id, user_id) DO UPDATE SET
+         generation = excluded.generation,
+         expires_at = excluded.expires_at,
+         created_at = excluded.created_at`,
+      roomId,
+      userId,
+      Number(lock.generation),
+      now + 2 * 60 * 1000,
+      now,
+    );
+
+    return {
+      ok: true,
+      allowed: true,
+      blocked: false,
+      attempts_remaining: Math.max(0, 5 - attempts),
+    };
+  }
+
+  async setRoomLock(ownerIdValue, roomIdValue, input) {
+    const ownerId = String(ownerIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const locked = Boolean(input?.locked);
+    const password = String(input?.password || "");
+    const room = this._roomRow(roomId);
+
+    if (!room) throw new Error("Room not found");
+    if (String(room.owner_id) !== ownerId) {
+      throw new Error("Only the room owner can change room lock");
+    }
+
+    const now = Date.now();
+    const oldLock = this._roomLockRow(roomId);
+    const nextGeneration = Number(oldLock?.generation || 0) + 1;
+
+    if (locked) {
+      if (password.length < 4 || password.length > 32) {
+        throw new Error("Room password must be 4 to 32 characters");
+      }
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const hash = await deriveSecret(password, salt, 120000);
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_locks
+          (room_id, password_salt, password_hash, generation, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(room_id) DO UPDATE SET
+           password_salt = excluded.password_salt,
+           password_hash = excluded.password_hash,
+           generation = excluded.generation,
+           updated_at = excluded.updated_at`,
+        roomId,
+        toBase64Url(salt),
+        toBase64Url(hash),
+        nextGeneration,
+        now,
+      );
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET locked = 1, updated_at = ? WHERE id = ?",
+        now,
+        roomId,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET locked = 0, updated_at = ? WHERE id = ?",
+        now,
+        roomId,
+      );
+      if (oldLock) {
+        this.ctx.storage.sql.exec(
+          "UPDATE room_locks SET generation = ?, updated_at = ? WHERE room_id = ?",
+          nextGeneration,
+          now,
+          roomId,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_lock_attempts WHERE room_id = ?",
+        roomId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_access_grants WHERE room_id = ?",
+        roomId,
+      );
+    }
+
+    const updated = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+        WHERE r.id = ?
+        LIMIT 1`,
+      roomId,
+    ).toArray()[0];
+
+    return {
+      ok: true,
+      room: rowToRoom(updated),
+    };
+  }
+
+    async createRoom(ownerIdValue, input) {
     const ownerId = String(ownerIdValue || "").trim();
     const owner = await this.getUserById(ownerId);
     if (!owner) throw new Error("Owner user does not exist");
