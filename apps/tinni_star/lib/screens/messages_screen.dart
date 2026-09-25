@@ -25,10 +25,52 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final controller = TextEditingController();
+  bool loading = true;
+  bool sending = false;
+  String? errorText;
 
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
   String get _targetUserId => widget.targetUserId ?? '20000000';
   String get _targetName => widget.targetName ?? 'Aisha';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          errorText = 'Login session is required.';
+        });
+      }
+      return;
+    }
+    try {
+      await widget.state.social.loadConversation(
+        authToken: account.authToken,
+        myUserId: _myUserId,
+        peerUserId: _targetUserId,
+      );
+      if (mounted) {
+        setState(() {
+          loading = false;
+          errorText = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          errorText = error.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -36,14 +78,34 @@ class _MessagesScreenState extends State<MessagesScreen> {
     super.dispose();
   }
 
-  void send() {
-    if (widget.state.social.sendDirectMessage(
-      from: _myUserId,
-      to: _targetUserId,
-      text: controller.text,
-    )) {
+  Future<void> send() async {
+    if (sending) return;
+    final account = widget.state.auth.current;
+    final value = controller.text.trim();
+    if (account == null || value.isEmpty) return;
+
+    setState(() => sending = true);
+    try {
+      await widget.state.social.sendDirectMessageRemote(
+        authToken: account.authToken,
+        from: _myUserId,
+        to: _targetUserId,
+        text: value,
+      );
       controller.clear();
-      setState(() {});
+      if (mounted) {
+        setState(() {
+          errorText = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          errorText = error.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => sending = false);
     }
   }
 
@@ -121,29 +183,44 @@ class _MessagesScreenState extends State<MessagesScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: messages.length,
-              itemBuilder: (_, index) {
-                final message = messages[index];
-                final mine = message.from == _myUserId;
-                return Align(
-                  alignment:
-                      mine ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(11),
-                    decoration: BoxDecoration(
-                      color: RoyalPalette.panel2,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: RoyalPalette.deepGold),
-                    ),
-                    child: Text(message.text),
-                  ),
-                );
-              },
+          if (errorText != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                errorText!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+              ),
             ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: messages.length,
+                      itemBuilder: (_, index) {
+                        final message = messages[index];
+                        final mine = message.from == _myUserId;
+                        return Align(
+                          alignment: mine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: RoyalPalette.panel2,
+                              borderRadius: BorderRadius.circular(16),
+                              border:
+                                  Border.all(color: RoyalPalette.deepGold),
+                            ),
+                            child: Text(message.text),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
           SafeArea(
             top: false,
@@ -158,18 +235,30 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   Expanded(
                     child: TextField(
                       controller: controller,
-                      onSubmitted: (_) => send(),
+                      onSubmitted: (_) {
+                        send();
+                      },
                       decoration: InputDecoration(
                         hintText: 'Message $_targetName…',
                       ),
                     ),
                   ),
                   IconButton(
-                    onPressed: send,
-                    icon: const Icon(
-                      Icons.send_rounded,
-                      color: RoyalPalette.gold,
-                    ),
+                    onPressed: sending
+                        ? null
+                        : () {
+                            send();
+                          },
+                    icon: sending
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: RoyalPalette.gold,
+                          ),
                   ),
                 ],
               ),
