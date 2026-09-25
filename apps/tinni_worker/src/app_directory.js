@@ -958,6 +958,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
     async listRooms() {
+    this._pruneRoomThemes();
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
