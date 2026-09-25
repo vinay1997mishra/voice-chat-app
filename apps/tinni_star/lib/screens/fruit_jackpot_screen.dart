@@ -11,14 +11,11 @@ class FruitJackpotScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF070B1A),
-      appBar: AppBar(
-        title: const Text('Fruit Jackpot'),
-      ),
+      backgroundColor: const Color(0xFF050817),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
-          child: FruitJackpotPanel(state: state),
+        child: FruitJackpotPanel(
+          state: state,
+          onClose: () => Navigator.maybePop(context),
         ),
       ),
     );
