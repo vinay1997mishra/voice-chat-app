@@ -1847,7 +1847,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         seatEmote,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: seatDiameter * 0.72,
+                          fontSize: seatDiameter * 0.82,
                           height: 1,
                         ),
                       ),
