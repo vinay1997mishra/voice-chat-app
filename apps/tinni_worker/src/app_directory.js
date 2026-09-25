@@ -812,7 +812,76 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  async verifyRoomPassword(userIdValue, roomIdValue, passwordValue) {
+  roomPasswordStatus(userIdValue, roomIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const room = this._roomRow(roomId);
+
+    if (!room) {
+      return {
+        ok: false,
+        allowed: false,
+        blocked: false,
+        attempts_remaining: 0,
+        error: "Room not found",
+      };
+    }
+    if (String(room.owner_id) === userId) {
+      return {
+        ok: true,
+        allowed: true,
+        owner_bypass: true,
+        blocked: false,
+        attempts_remaining: 5,
+      };
+    }
+    if (Number(room.locked) !== 1) {
+      return {
+        ok: true,
+        allowed: true,
+        locked: false,
+        blocked: false,
+        attempts_remaining: 5,
+      };
+    }
+
+    const lock = this._roomLockRow(roomId);
+    if (!lock) {
+      return {
+        ok: false,
+        allowed: false,
+        blocked: true,
+        attempts_remaining: 0,
+        error: "Room lock is not configured",
+      };
+    }
+
+    const row = this.ctx.storage.sql.exec(
+      `SELECT generation, attempts
+         FROM room_lock_attempts
+        WHERE room_id = ? AND user_id = ?
+        LIMIT 1`,
+      roomId,
+      userId,
+    ).toArray()[0];
+    const attempts =
+      row && Number(row.generation) === Number(lock.generation)
+        ? Number(row.attempts || 0)
+        : 0;
+    const blocked = attempts >= 5;
+    return {
+      ok: !blocked,
+      allowed: false,
+      locked: true,
+      blocked,
+      attempts_remaining: Math.max(0, 5 - attempts),
+      error: blocked
+        ? "Too many wrong password attempts. Wait until the room is opened."
+        : null,
+    };
+  }
+
+    async verifyRoomPassword(userIdValue, roomIdValue, passwordValue) {
     const userId = String(userIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
     const password = String(passwordValue || "");
