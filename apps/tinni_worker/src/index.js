@@ -1210,6 +1210,20 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/access" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      const result = getAppDirectoryStore(env).roomPasswordStatus(
+        appSession.user.user_id,
+        roomId,
+      );
+      return json(result, result.blocked ? 403 : 200);
+    }
+
     if (url.pathname === "/rooms/access" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
