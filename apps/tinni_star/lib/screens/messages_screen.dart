@@ -1,11 +1,23 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
 
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({super.key, required this.state});
+  const MessagesScreen({
+    super.key,
+    required this.state,
+    this.targetUserId,
+    this.targetName,
+    this.targetAvatarDataUrl,
+  });
+
   final TinniState state;
+  final String? targetUserId;
+  final String? targetName;
+  final String? targetAvatarDataUrl;
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -13,6 +25,10 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final controller = TextEditingController();
+
+  String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
+  String get _targetUserId => widget.targetUserId ?? '20000000';
+  String get _targetName => widget.targetName ?? 'Aisha';
 
   @override
   void dispose() {
@@ -22,8 +38,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   void send() {
     if (widget.state.social.sendDirectMessage(
-      from: '10000000',
-      to: '20000000',
+      from: _myUserId,
+      to: _targetUserId,
       text: controller.text,
     )) {
       controller.clear();
@@ -33,33 +49,73 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = widget.state.social.directMessages;
+    final messages = widget.state.social.directMessages.where((message) {
+      return (message.from == _myUserId && message.to == _targetUserId) ||
+          (message.from == _targetUserId && message.to == _myUserId);
+    }).toList();
+
+    ImageProvider? avatar;
+    final rawAvatar = widget.targetAvatarDataUrl;
+    if (rawAvatar != null && rawAvatar.startsWith('data:image/')) {
+      try {
+        avatar = MemoryImage(base64Decode(rawAvatar.split(',').last));
+      } catch (_) {
+        avatar = null;
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Message', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Message',
+          style: TextStyle(
+            color: RoyalPalette.gold,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: RoyalPanel(
               child: Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: RoyalPalette.deepGold,
-                    child: Text('A', style: TextStyle(color: Colors.black)),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            _targetName.isEmpty
+                                ? '?'
+                                : _targetName.characters.first.toUpperCase(),
+                            style: const TextStyle(color: Colors.black),
+                          )
+                        : null,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Aisha', style: TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
-                        Text('Friend • Online', style: TextStyle(color: RoyalPalette.muted, fontSize: 11)),
+                        Text(
+                          _targetName,
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'ID $_targetUserId',
+                          style: const TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Icon(Icons.circle, color: Colors.green, size: 10),
+                  const Icon(Icons.circle, color: Colors.green, size: 10),
                 ],
               ),
             ),
@@ -71,8 +127,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
               itemCount: messages.length,
               itemBuilder: (_, index) {
                 final message = messages[index];
+                final mine = message.from == _myUserId;
                 return Align(
-                  alignment: Alignment.centerRight,
+                  alignment:
+                      mine ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(11),
@@ -101,12 +159,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     child: TextField(
                       controller: controller,
                       onSubmitted: (_) => send(),
-                      decoration: const InputDecoration(hintText: 'Private message…'),
+                      decoration: InputDecoration(
+                        hintText: 'Message $_targetName…',
+                      ),
                     ),
                   ),
                   IconButton(
                     onPressed: send,
-                    icon: const Icon(Icons.send_rounded, color: RoyalPalette.gold),
+                    icon: const Icon(
+                      Icons.send_rounded,
+                      color: RoyalPalette.gold,
+                    ),
                   ),
                 ],
               ),
