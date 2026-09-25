@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import 'games_screen.dart';
 import 'gifts_screen.dart';
 import 'vip_screen.dart';
 import '../ui/royal_theme.dart';
@@ -138,16 +137,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
             details: 'KTV feedback pipeline ready',
           );
           showText('Now singing: ' + (entry?.song.title ?? 'none'));
-        },
-      ),
-      _FeatureAction(
-        'Games',
-        Icons.casino_rounded,
-        () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => GamesScreen(state: state)),
-          );
         },
       ),
       _FeatureAction(
