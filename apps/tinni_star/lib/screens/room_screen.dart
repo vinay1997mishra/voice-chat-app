@@ -2073,15 +2073,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 SwitchListTile(
                   title: const Text('Free mic'),
-                  subtitle: const Text('When off, users send a mic request and wait for approval.'),
-                  value: settings.micMode == MicMode.free,
-                  onChanged: (value) {
-                    controls.settings = settings.copyWith(
-                      micMode: value ? MicMode.free : MicMode.apply,
-                    );
-                    controller.setInviteMode(!value);
-                    setSheetState(() {});
-                    setState(() {});
+                  subtitle: const Text(
+                    'When off, users send a mic request and wait for approval.',
+                  ),
+                  value: controller.inviteMode == false,
+                  onChanged: (value) async {
+                    try {
+                      await widget.state.roomSession.setRoomMicMode(
+                        value ? 'free' : 'apply',
+                      );
+                      controls.settings = controls.settings.copyWith(
+                        micMode: value ? MicMode.free : MicMode.apply,
+                      );
+                      if (context.mounted) {
+                        setSheetState(() {});
+                      }
+                      if (mounted) setState(() {});
+                    } catch (error) {
+                      _snack(
+                        error.toString().replaceFirst('Bad state: ', ''),
+                      );
+                    }
                   },
                 ),
                 SwitchListTile(
