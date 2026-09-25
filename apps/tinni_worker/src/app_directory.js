@@ -974,6 +974,20 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE room_themes SET enabled = 0 WHERE expires_at IS NOT NULL AND expires_at <= ?",
       now,
     );
+    this.ctx.storage.sql.exec(
+      `UPDATE app_rooms
+          SET theme_id = 'royal-dark',
+              theme_asset = NULL,
+              updated_at = ?
+        WHERE theme_id IN (
+          SELECT id
+            FROM room_themes
+           WHERE enabled = 0
+              OR (expires_at IS NOT NULL AND expires_at <= ?)
+        )`,
+      now,
+      now,
+    );
   }
 
   listRoomThemes(roomIdValue) {
