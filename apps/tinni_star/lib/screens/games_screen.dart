@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
 import 'fruit_jackpot_screen.dart';
+import 'fruit_party_screen.dart';
 import 'ludo_screen.dart';
 import 'uno_screen.dart';
 
@@ -21,6 +22,16 @@ class GamesScreen extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (_) => FruitJackpotScreen(state: state),
+          ),
+        ),
+      ),
+      (
+        'Fruit Party',
+        Icons.celebration_rounded,
+        () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FruitPartyScreen(state: state),
           ),
         ),
       ),
