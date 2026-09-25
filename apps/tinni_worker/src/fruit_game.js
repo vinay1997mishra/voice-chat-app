@@ -5,6 +5,11 @@ export const BET_LOCK_MS = 3000;
 export const HIGH_VOLUME_PLAYER_THRESHOLD = 20;
 export const COMPANY_MARGIN_PERCENT = 30;
 export const START_BALANCE = 10000000;
+export const RESULT_WEIGHTS = Object.freeze({
+  x5: 75,
+  x10_20: 20,
+  x40: 5,
+});
 
 export const FRUITS = [
   { key: "lemon", emoji: "🍋", label: "Lemon", multiplier: 5 },
@@ -18,6 +23,11 @@ export const FRUITS = [
 ];
 
 const FRUIT_BY_KEY = new Map(FRUITS.map((fruit) => [fruit.key, fruit]));
+const X5_FRUITS = FRUITS.filter((fruit) => fruit.multiplier === 5);
+const X10_20_FRUITS = FRUITS.filter(
+  (fruit) => fruit.multiplier === 10 || fruit.multiplier === 20,
+);
+const X40_FRUITS = FRUITS.filter((fruit) => fruit.multiplier === 40);
 
 function randomIndex(length) {
   if (length <= 1) return 0;
@@ -27,6 +37,20 @@ function randomIndex(length) {
     crypto.getRandomValues(values);
   } while (values[0] >= ceiling);
   return values[0] % length;
+}
+
+function weightedRandomFruit() {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  const roll = values[0] % 100;
+
+  if (roll < RESULT_WEIGHTS.x5) {
+    return X5_FRUITS[randomIndex(X5_FRUITS.length)];
+  }
+  if (roll < RESULT_WEIGHTS.x5 + RESULT_WEIGHTS.x10_20) {
+    return X10_20_FRUITS[randomIndex(X10_20_FRUITS.length)];
+  }
+  return X40_FRUITS[randomIndex(X40_FRUITS.length)];
 }
 
 function roundIdAt(timeMs) {
@@ -212,50 +236,8 @@ export class FruitGameStore extends DurableObject {
     const bets = this._bets(roundId);
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
     const players = new Set(bets.map((bet) => bet.user_id));
-    const highVolume = players.size >= HIGH_VOLUME_PLAYER_THRESHOLD && totalBet > 0;
-    const mode = highVolume ? "margin_target_high_volume" : "random_low_volume";
-
-    let winner;
-    if (!highVolume) {
-      winner = FRUITS[randomIndex(FRUITS.length)];
-    } else {
-      const targetPayout = Math.floor(
-        totalBet * (100 - COMPANY_MARGIN_PERCENT) / 100,
-      );
-      const payoutByFruit = new Map(FRUITS.map((fruit) => [fruit.key, 0]));
-
-      for (const bet of bets) {
-        const fruit = FRUIT_BY_KEY.get(bet.fruit_key);
-        if (!fruit) continue;
-        payoutByFruit.set(
-          fruit.key,
-          payoutByFruit.get(fruit.key) + bet.amount * fruit.multiplier,
-        );
-      }
-
-      const eligible = FRUITS.filter(
-        (fruit) => payoutByFruit.get(fruit.key) <= targetPayout,
-      );
-
-      let candidates;
-      if (eligible.length === 0) {
-        const minimum = Math.min(
-          ...FRUITS.map((fruit) => payoutByFruit.get(fruit.key)),
-        );
-        candidates = FRUITS.filter(
-          (fruit) => payoutByFruit.get(fruit.key) === minimum,
-        );
-      } else {
-        const closest = Math.max(
-          ...eligible.map((fruit) => payoutByFruit.get(fruit.key)),
-        );
-        candidates = eligible.filter(
-          (fruit) => payoutByFruit.get(fruit.key) === closest,
-        );
-      }
-
-      winner = candidates[randomIndex(candidates.length)];
-    }
+    const mode = "weighted_random_75_20_5";
+    const winner = weightedRandomFruit();
 
     const payoutsByUser = new Map();
     for (const bet of bets) {
@@ -288,10 +270,7 @@ export class FruitGameStore extends DurableObject {
       .reduce((sum, bet) => sum + bet.amount, 0);
     const totalPayout = winnerStake * winner.multiplier;
     const retained = totalBet - totalPayout;
-    const targetRetained = Math.ceil(
-      totalBet * COMPANY_MARGIN_PERCENT / 100,
-    );
-    const marginTargetMet = !highVolume || retained >= targetRetained;
+    const marginTargetMet = true;
 
     this.ctx.storage.sql.exec(
       `INSERT INTO fruit_results
@@ -369,6 +348,7 @@ export class FruitGameStore extends DurableObject {
       config: {
         high_volume_player_threshold: HIGH_VOLUME_PLAYER_THRESHOLD,
         company_margin_percent: COMPANY_MARGIN_PERCENT,
+        result_weights_percent: RESULT_WEIGHTS,
         fruits: FRUITS,
       },
       jackpot: Number(this._meta("jackpot", "85763")),
