@@ -434,6 +434,8 @@ class _JackpotHeader extends StatelessWidget {
   const _JackpotHeader({
     required this.jackpot,
     required this.secondsLeft,
+    required this.resultSecondsLeft,
+    required this.resultSpinning,
     required this.compact,
     required this.glowColor,
     required this.jackpotWinActive,
@@ -442,126 +444,231 @@ class _JackpotHeader extends StatelessWidget {
 
   final int jackpot;
   final int secondsLeft;
+  final int resultSecondsLeft;
+  final bool resultSpinning;
   final bool compact;
   final Color glowColor;
   final bool jackpotWinActive;
   final VoidCallback? onClose;
 
-  String _compact(int value) {
-    if (value >= 1000000) {
-      final number = value / 1000000;
-      return '${number.toStringAsFixed(number == number.roundToDouble() ? 0 : 2)}M';
+  String _number(int value) {
+    final raw = value.toString();
+    final out = StringBuffer();
+    for (var i = 0; i < raw.length; i++) {
+      if (i > 0 && (raw.length - i) % 3 == 0) out.write(',');
+      out.write(raw[i]);
     }
-    return value.toString();
+    return out.toString();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(
-          Icons.workspace_premium_rounded,
-          color: Color(0xFFFFD54F),
-          size: 22,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: 9,
-              vertical: compact ? 4 : 6,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF731678),
-                  Color(0xFF2B125D),
-                  Color(0xFF7B3810),
+    return SizedBox(
+      height: compact ? 92 : 112,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            left: 28,
+            right: 28,
+            top: 10,
+            bottom: 2,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF4F0A82),
+                    Color(0xFF9B176C),
+                    Color(0xFF5F2509),
+                  ],
+                ),
+                border: Border.all(color: glowColor, width: 2.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: glowColor.withValues(alpha: 0.52),
+                    blurRadius: 22,
+                    spreadRadius: 1.2,
+                  ),
                 ],
               ),
-              border: Border.all(color: glowColor, width: 1.6),
-              boxShadow: [
-                BoxShadow(
-                  color: glowColor.withValues(
-                    alpha: jackpotWinActive ? 0.8 : 0.42,
-                  ),
-                  blurRadius: jackpotWinActive ? 20 : 10,
-                  spreadRadius: jackpotWinActive ? 2 : 0,
-                ),
-              ],
             ),
-            child: Row(
-              children: [
-                Text(
-                  'JACKPOT',
-                  style: TextStyle(
-                    color: glowColor,
-                    fontSize: compact ? 15 : 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                  ),
+          ),
+          Positioned(
+            left: 6,
+            top: 2,
+            child: IconButton(
+              tooltip: 'Back',
+              onPressed: onClose,
+              icon: const Icon(
+                Icons.keyboard_arrow_left_rounded,
+                color: Color(0xFFFFE7A3),
+                size: 34,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 6,
+            top: 8,
+            child: Container(
+              width: 72,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xD9190738),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: resultSpinning
+                      ? const Color(0xFFFFD54F)
+                      : const Color(0xFFFF4FD8),
+                  width: 1.8,
                 ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    '🪙 ${_compact(jackpot)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: compact ? 14 : 17,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    resultSpinning ? 'RESULT' : 'ROUND',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    resultSpinning ? '0s' : '${secondsLeft}s',
+                    style: const TextStyle(
+                      color: Color(0xFFFFF0B0),
+                      fontSize: 19,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          constraints: const BoxConstraints(minWidth: 58),
-          padding: EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: compact ? 5 : 7,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFF250844),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFF4FD8)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66FF4FD8),
-                blurRadius: 9,
+                ],
               ),
-            ],
-          ),
-          child: Text(
-            '${secondsLeft}s',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: const Color(0xFFFFE8FF),
-              fontSize: compact ? 15 : 18,
-              fontWeight: FontWeight.w900,
-              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-        ),
-        if (onClose != null) ...[
-          const SizedBox(width: 2),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Close game',
-            onPressed: onClose,
-            icon: const Icon(
-              Icons.close_rounded,
-              color: Colors.white70,
-              size: 20,
+          Positioned(
+            top: compact ? 13 : 14,
+            child: Text(
+              '👑  JACKPOT  👑',
+              style: TextStyle(
+                color: const Color(0xFFFFD43B),
+                fontSize: compact ? 24 : 30,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.4,
+                shadows: const [
+                  Shadow(color: Color(0xFFFF6B00), blurRadius: 8),
+                  Shadow(color: Color(0xFFFFE991), blurRadius: 16),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: compact ? 47 : 55,
+            child: Container(
+              constraints: BoxConstraints(
+                minWidth: compact ? 190 : 230,
+              ),
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 18 : 24,
+                vertical: compact ? 5 : 7,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xDD3A115D),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: const Color(0xFFFFC83D)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x88FFB300),
+                    blurRadius: 13,
+                  ),
+                ],
+              ),
+              child: Text(
+                '🪙  ${_number(jackpot)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: compact ? 16 : 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            child: Text(
+              jackpotWinActive
+                  ? 'JACKPOT WIN!'
+                  : resultSpinning
+                      ? 'Result in ${resultSecondsLeft}s'
+                      : 'Grows from all bets',
+              style: TextStyle(
+                color: jackpotWinActive
+                    ? const Color(0xFFFFF176)
+                    : const Color(0xFFC8B6FF),
+                fontSize: compact ? 8 : 10,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+class _GameStatusBar extends StatelessWidget {
+  const _GameStatusBar({
+    required this.resultSpinning,
+    required this.resultSecondsLeft,
+    required this.bettingOpen,
+  });
+
+  final bool resultSpinning;
+  final int resultSecondsLeft;
+  final bool bettingOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = resultSpinning
+        ? 'RESULT SPIN • ${resultSecondsLeft}s'
+        : bettingOpen
+            ? 'BETTING OPEN'
+            : 'WAITING';
+    return Container(
+      height: 25,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(99),
+        gradient: LinearGradient(
+          colors: resultSpinning
+              ? const [
+                  Color(0xFFFF8F00),
+                  Color(0xFFFF2DAF),
+                  Color(0xFF7A28FF),
+                ]
+              : const [
+                  Color(0xFF163A77),
+                  Color(0xFF4A1A8B),
+                  Color(0xFF163A77),
+                ],
+        ),
+        border: Border.all(
+          color: resultSpinning
+              ? const Color(0xFFFFE56A)
+              : const Color(0xFF5AD7FF),
+        ),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.1,
+        ),
+      ),
     );
   }
 }
