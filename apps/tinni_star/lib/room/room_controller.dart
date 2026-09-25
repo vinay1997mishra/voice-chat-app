@@ -131,11 +131,22 @@ class RoomController extends ChangeNotifier {
 
   void toggleSeatRoomMute(int index) {
     if (index < 0 || index >= seats.length) return;
+    setSeatRoomMuted(index, !seats[index].roomMuted);
+  }
+
+  void setSeatRoomMuted(int index, bool muted) {
+    if (index < 0 || index >= seats.length) return;
     final seat = seats[index];
-    seats[index] = seat.copyWith(roomMuted: !seat.roomMuted);
-    if (mySeat == index && seats[index].roomMuted) {
+    seats[index] = seat.copyWith(roomMuted: muted);
+    if (mySeat == index && muted) {
       micState = MicState.muted;
     }
+    notifyListeners();
+  }
+
+  void forceMicMuted() {
+    if (mySeat == null || micState == MicState.banned) return;
+    micState = MicState.muted;
     notifyListeners();
   }
 
