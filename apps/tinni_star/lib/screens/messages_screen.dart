@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -135,6 +136,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
+        actions: [
+          UserSafetyMenuButton(
+            state: widget.state,
+            targetUserId: _targetUserId,
+            targetDisplayName: _targetName,
+          ),
+        ],
       ),
       body: Column(
         children: [
