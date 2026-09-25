@@ -1641,7 +1641,7 @@ export default {
       if (!ownerOnly(session)) {
         return json({ ok: false, error: "Owner access required" }, 403);
       }
-      const themes = getAppDirectoryStore(env).listRoomThemes("");
+      const themes = getAppDirectoryStore(env).listPanelRoomThemes();
       return json({ ok: true, themes });
     }
 
