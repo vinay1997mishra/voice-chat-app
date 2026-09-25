@@ -17,6 +17,7 @@ import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import 'games_screen.dart';
 import 'fruit_jackpot_panel.dart';
+import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -35,6 +36,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
   bool _fruitJackpotOpen = false;
+  bool _fruitPartyOpen = false;
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -1856,7 +1858,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         Icons.local_florist_rounded,
         () {
           Navigator.of(context).pop();
-          setState(() => _fruitJackpotOpen = true);
+          setState(() {
+            _fruitPartyOpen = false;
+            _fruitJackpotOpen = true;
+          });
+        },
+      ),
+      (
+        'Fruit Party',
+        Icons.celebration_rounded,
+        () {
+          Navigator.of(context).pop();
+          setState(() {
+            _fruitJackpotOpen = false;
+            _fruitPartyOpen = true;
+          });
         },
       ),
       (
@@ -3086,6 +3102,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   state: widget.state,
                   onClose: () => setState(
                     () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+            if (_fruitPartyOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.50,
+                child: FruitPartyPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitPartyOpen = false,
                   ),
                 ),
               ),
