@@ -552,6 +552,19 @@ async function loadOwnerNotifications() {
             </div>
           </div>
           <p>${escapeHtml(item.message)}</p>
+          ${Array.isArray(item.metadata?.screenshots) && item.metadata.screenshots.length
+            ? `<div style="display:flex;gap:8px;overflow-x:auto;padding-top:8px">
+                ${item.metadata.screenshots.slice(0, 5).map((src, index) => `
+                  <a href="${escapeHtml(src)}" target="_blank" rel="noopener" title="Screenshot ${index + 1}">
+                    <img
+                      src="${escapeHtml(src)}"
+                      alt="Report screenshot ${index + 1}"
+                      style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid #8f681e"
+                    >
+                  </a>
+                `).join("")}
+              </div>`
+            : ""}
         </div>
       `;
     }).join("");
