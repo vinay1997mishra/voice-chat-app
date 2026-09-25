@@ -2016,6 +2016,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 },
               ),
           ],
+          ),
         ),
       ),
     );
@@ -2281,8 +2282,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
-        body: Column(
-          children: [
+        body: Container(
+          decoration: BoxDecoration(
+            color: _roomBackgroundColor,
+            image: _roomThemeImage == null
+                ? null
+                : DecorationImage(
+                    image: _roomThemeImage!,
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: Column(
+            children: [
             if (widget.state.roomControls.noticesVisible)
               Container(
                 margin: const EdgeInsets.fromLTRB(10, 2, 10, 7),
