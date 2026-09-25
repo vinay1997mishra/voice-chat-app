@@ -28,7 +28,7 @@ class RoomPresenceService extends ChangeNotifier {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -62,6 +62,38 @@ class RoomPresenceService extends ChangeNotifier {
       connected = false;
       notifyListeners();
     }
+  }
+
+  Future<void> kick({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    Duration? duration,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-presence/kick'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, Object?>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'duration_ms': duration?.inMilliseconds,
+      }),
+    );
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to kick room user',
+      );
+    }
+    _apply(data);
+    notifyListeners();
   }
 
   Future<void> refresh({
