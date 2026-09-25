@@ -24,6 +24,9 @@ class RoomPresenceMember {
     this.avatarDataUrl,
     this.flagEmoji = '',
     this.countryCode = '',
+    this.familyTag,
+    this.hostTag,
+    this.agencyName,
     this.seatIndex,
     this.micMuted = false,
     this.isAdmin = false,
@@ -36,6 +39,9 @@ class RoomPresenceMember {
   final String? avatarDataUrl;
   final String flagEmoji;
   final String countryCode;
+  final String? familyTag;
+  final String? hostTag;
+  final String? agencyName;
   final int? seatIndex;
   final bool micMuted;
   final bool isAdmin;
@@ -69,24 +75,36 @@ class RoomPresenceService extends ChangeNotifier {
     required String roomId,
     required String authToken,
     int? seatIndex,
+    String? familyTag,
+    String? hostTag,
+    String? agencyName,
   }) =>
       _post(
         '/room-presence/join',
         roomId,
         authToken,
         seatIndex: seatIndex,
+        familyTag: familyTag,
+        hostTag: hostTag,
+        agencyName: agencyName,
       );
 
   Future<void> heartbeat({
     required String roomId,
     required String authToken,
     int? seatIndex,
+    String? familyTag,
+    String? hostTag,
+    String? agencyName,
   }) =>
       _post(
         '/room-presence/heartbeat',
         roomId,
         authToken,
         seatIndex: seatIndex,
+        familyTag: familyTag,
+        hostTag: hostTag,
+        agencyName: agencyName,
       );
 
   Future<void> leave({
@@ -322,6 +340,9 @@ class RoomPresenceService extends ChangeNotifier {
     String roomId,
     String authToken, {
     int? seatIndex,
+    String? familyTag,
+    String? hostTag,
+    String? agencyName,
   }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
@@ -334,6 +355,9 @@ class RoomPresenceService extends ChangeNotifier {
         jsonEncode(<String, Object?>{
           'room_id': roomId,
           'seat_index': seatIndex,
+          'family_tag': familyTag,
+          'host_tag': hostTag,
+          'agency_name': agencyName,
         }),
       );
       final response = await request.close();
@@ -391,6 +415,9 @@ class RoomPresenceService extends ChangeNotifier {
                 avatarDataUrl: row['avatar_data_url']?.toString(),
                 flagEmoji: row['flag_emoji']?.toString() ?? '',
                 countryCode: row['country_code']?.toString() ?? '',
+                familyTag: row['family_tag']?.toString(),
+                hostTag: row['host_tag']?.toString(),
+                agencyName: row['agency_name']?.toString(),
                 seatIndex: row['seat_index'] == null
                     ? null
                     : _asInt(row['seat_index']),
