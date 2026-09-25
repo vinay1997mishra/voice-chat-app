@@ -210,7 +210,127 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _showRoomPowerMenu() async {
+  Future<void> _openRoomThemeSelector() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can change room theme.');
+      return;
+    }
+
+    final controls = widget.state.roomControls;
+    final selected = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (pageContext) {
+          var pendingTheme = controls.themeId;
+          return StatefulBuilder(
+            builder: (pageContext, setPageState) {
+              const themes = <(String, String, Color)>[
+                ('royal-dark', 'Royal Dark', Color(0xFF03070B)),
+                ('night-blue', 'Night Blue', Color(0xFF03101B)),
+                ('rose-gold', 'Rose Gold', Color(0xFF17090D)),
+              ];
+              return Scaffold(
+                backgroundColor: RoyalPalette.nearBlack,
+                appBar: AppBar(
+                  title: const Text(
+                    'Room Theme',
+                    style: TextStyle(
+                      color: RoyalPalette.gold,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                body: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: themes.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (_, index) {
+                    final theme = themes[index];
+                    final active = pendingTheme == theme.$1;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        setPageState(() {
+                          pendingTheme = theme.$1;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: active
+                                ? RoyalPalette.gold
+                                : RoyalPalette.bronze,
+                            width: active ? 2 : 1,
+                          ),
+                          color: RoyalPalette.panel,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: theme.$3,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: RoyalPalette.deepGold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                theme.$2,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              active
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              color: active
+                                  ? RoyalPalette.gold
+                                  : RoyalPalette.muted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                bottomNavigationBar: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(pageContext, pendingTheme);
+                      },
+                      icon: const Icon(Icons.save_rounded),
+                      label: const Text('Save Theme'),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    if (!mounted || selected == null) return;
+    controls.setTheme(selected);
+    setState(() {});
+    _snack('Room theme saved.');
+  }
+
+    Future<void> _showRoomPowerMenu() async {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -992,12 +1112,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         'Room Theme',
         Icons.checkroom_rounded,
         () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can change room theme.');
-            return;
-          }
-          final theme = controls.cycleTheme();
-          _snack('Room theme changed to $theme.');
+          _openRoomThemeSelector();
         },
       ),
       (
