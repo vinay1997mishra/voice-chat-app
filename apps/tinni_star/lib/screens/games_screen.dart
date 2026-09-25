@@ -8,9 +8,16 @@ import 'ludo_screen.dart';
 import 'uno_screen.dart';
 
 class GamesScreen extends StatelessWidget {
-  const GamesScreen({super.key, required this.state});
+  const GamesScreen({
+    super.key,
+    required this.state,
+    this.onFruitJackpot,
+    this.onFruitParty,
+  });
 
   final TinniState state;
+  final VoidCallback? onFruitJackpot;
+  final VoidCallback? onFruitParty;
 
   @override
   Widget build(BuildContext context) {
@@ -18,22 +25,40 @@ class GamesScreen extends StatelessWidget {
       (
         'Fruit Jackpot',
         Icons.local_florist_rounded,
-        () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FruitJackpotScreen(state: state),
-          ),
-        ),
+        () {
+          if (onFruitJackpot != null) {
+            Navigator.pop(context);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              onFruitJackpot!();
+            });
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FruitJackpotScreen(state: state),
+            ),
+          );
+        },
       ),
       (
         'Fruit Party',
         Icons.celebration_rounded,
-        () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FruitPartyScreen(state: state),
-          ),
-        ),
+        () {
+          if (onFruitParty != null) {
+            Navigator.pop(context);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              onFruitParty!();
+            });
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FruitPartyScreen(state: state),
+            ),
+          );
+        },
       ),
       (
         'Ludo',
