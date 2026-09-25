@@ -10,7 +10,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -25,10 +25,13 @@ class FruitPartyRemoteService extends ChangeNotifier {
   int activePlayers = 0;
   int walletBalance = 0;
   int todayWinnings = 0;
-  int betLockMs = 3000;
+  int betLockMs = 0;
   int roundDurationMs = 21000;
+  int resultSpinMs = 5000;
+  String phase = 'betting';
 
   int _roundEndMs = 0;
+  int _cycleEndMs = 0;
   int _serverOffsetMs = 0;
 
   final Map<FruitPartyKind, int> myBets = <FruitPartyKind, int>{
@@ -44,7 +47,22 @@ class FruitPartyRemoteService extends ChangeNotifier {
     return Duration(milliseconds: value <= 0 ? 0 : value);
   }
 
-  bool get bettingOpen => connected && remaining().inMilliseconds > betLockMs;
+  Duration resultSpinRemaining() {
+    if (!connected || _cycleEndMs <= 0 || phase != 'result_spin') {
+      return Duration.zero;
+    }
+    final serverNow = DateTime.now().millisecondsSinceEpoch + _serverOffsetMs;
+    final value = _cycleEndMs - serverNow;
+    return Duration(milliseconds: value <= 0 ? 0 : value);
+  }
+
+  bool get inResultSpin =>
+      connected &&
+      phase == 'result_spin' &&
+      resultSpinRemaining().inMilliseconds > 0;
+
+  bool get bettingOpen =>
+      connected && phase == 'betting' && remaining().inMilliseconds > 0;
 
   int userBetForFruit(FruitPartyKind fruit) => myBets[fruit] ?? 0;
 
@@ -140,11 +158,17 @@ class FruitPartyRemoteService extends ChangeNotifier {
     final round = _asMap(data['round']);
     currentRoundId = _asInt(round['round_id']);
     _roundEndMs = _asInt(round['round_end']);
-    betLockMs = _asInt(round['bet_lock_ms'], fallback: 3000);
+    _cycleEndMs = _asInt(round['cycle_end'], fallback: _roundEndMs);
+    betLockMs = _asInt(round['bet_lock_ms']);
     roundDurationMs = _asInt(
       round['round_duration_ms'],
       fallback: 21000,
     );
+    resultSpinMs = _asInt(
+      round['result_spin_ms'],
+      fallback: 5000,
+    );
+    phase = round['phase']?.toString() ?? 'betting';
     totalBet = _asInt(round['total_bet']);
     activePlayers = _asInt(round['active_players']);
 
