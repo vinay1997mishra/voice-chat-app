@@ -253,13 +253,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     if (action == 'minimize') {
       session.minimize();
-      if (context.mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
       return;
     }
 
     if (action == 'exit') {
       await session.close();
-      if (context.mounted) Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
     }
   }
 
