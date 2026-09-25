@@ -799,6 +799,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   await _leaveSeatAndMute();
                 },
               ),
+            if (controller.mySeat != null && controller.mySeat != index)
+              ListTile(
+                key: const Key('seat-control-leave-current'),
+                leading: const Icon(
+                  Icons.logout_rounded,
+                  color: RoyalPalette.gold,
+                ),
+                title: const Text('Leave current seat'),
+                subtitle: Text(
+                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
           ],
         ),
       ),
@@ -841,7 +857,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
-          if (_canModerateSeats && !controller.seats[index].occupied) {
+          if (_canModerateSeats) {
             _showSeatControls(index);
             return;
           }
@@ -1240,7 +1256,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: MediaQuery.sizeOf(context).width * 0.38,
+                      width: MediaQuery.sizeOf(context).width * 0.32,
                       child: TextField(
                         controller: chat,
                         decoration: const InputDecoration(
