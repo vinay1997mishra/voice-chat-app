@@ -1301,6 +1301,35 @@ export default {
       return json(store.setManager(targetUserId, Boolean(body.enabled)));
     }
 
+    if (url.pathname === "/room-presence/emote" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const emote = String(body.emote || "").trim();
+      const seatIndex = Number(body.seat_index);
+      if (!roomId || !emote || !Number.isInteger(seatIndex) || seatIndex < 0) {
+        return json({
+          ok: false,
+          error: "room_id, emote and seat_index are required",
+        }, 400);
+      }
+
+      try {
+        const result = getRoomPresenceStore(env, roomId).setEmote({
+          user_id: appSession.user.user_id,
+          seat_index: seatIndex,
+          emote,
+        });
+        return json(result);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send room emote"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-presence/mute" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
