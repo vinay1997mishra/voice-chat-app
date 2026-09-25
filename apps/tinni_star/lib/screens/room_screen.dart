@@ -229,7 +229,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     seatIndex ??= controller.seats.indexWhere(
       (seat) => seat.userName == member.displayName,
     );
-    if (seatIndex == null || seatIndex < 0) {
+    if (seatIndex < 0) {
       _snack(member.displayName + ' is not on a seat.');
       return;
     }
@@ -1115,6 +1115,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (_canModerateSeats && occupied) {
+            RoomPresenceMember? member;
+            final mappedUserId = widget.state.roomControls.seatUsers[index];
+            for (final item in widget.state.roomSession.liveMembers) {
+              final idMatch = mappedUserId != null && item.userId == mappedUserId;
+              final nameMatch = item.displayName == seat.userName;
+              if (idMatch || nameMatch) {
+                member = item;
+                break;
+              }
+            }
+            if (member != null) {
+              _showUserProfile(member);
+              return;
+            }
+          }
           if (_canModerateSeats) {
             _showSeatControls(index);
             return;
