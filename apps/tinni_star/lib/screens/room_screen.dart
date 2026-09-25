@@ -527,6 +527,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _snack('Theme image is too large. Choose a smaller image.');
       return null;
     }
+    if (!mounted) return null;
 
     final nameController = TextEditingController();
     var policyConfirmed = false;
@@ -2018,7 +2019,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
           ),
         ),
-      ),
     );
   }
 
@@ -2649,11 +2649,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
+      ),
     );
   }
 }
 
- class _RoomThemeChoice {
+class _RoomThemeChoice {
   const _RoomThemeChoice({
     required this.id,
     required this.name,
