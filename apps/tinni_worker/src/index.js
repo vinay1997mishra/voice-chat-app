@@ -8,18 +8,71 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const STAFF_PERMISSIONS = new Set([
-  "users",
-  "rooms",
-  "wallets",
-  "hierarchy",
-  "roles",
-  "vip",
-  "gifts",
-  "assets",
-  "banners",
-  "games",
-  "policies",
-  "audit"
+  // Legacy whole-module permissions are kept for existing staff panels.
+  "users", "rooms", "wallets", "hierarchy", "roles", "vip",
+  "gifts", "assets", "banners", "games", "policies", "audit",
+
+  "users.search",
+  "users.ban_id",
+  "users.ban_device",
+  "users.invisible",
+  "users.locked_room_bypass",
+  "users.change_id",
+
+  "rooms.search",
+  "rooms.ban",
+  "rooms.rename",
+  "rooms.dp",
+  "rooms.background",
+  "rooms.live_seats",
+  "rooms.theme_view",
+  "rooms.theme_create",
+  "rooms.theme_remove",
+
+  "wallets.normal",
+  "wallets.seller",
+  "wallets.merchant",
+  "wallets.treasury_send",
+
+  "hierarchy.bd_manage",
+  "hierarchy.agency_manage",
+  "hierarchy.agency_bd_link",
+  "hierarchy.host_manage",
+  "hierarchy.targets",
+  "hierarchy.complaints",
+
+  "roles.view",
+  "roles.manage",
+
+  "vip.view",
+  "vip.create",
+  "vip.edit",
+  "vip.toggle",
+  "vip.grant_remove",
+
+  "gifts.view",
+  "gifts.create",
+  "gifts.edit",
+  "gifts.remove",
+
+  "assets.entries",
+  "assets.frames",
+
+  "banners.view",
+  "banners.create",
+  "banners.remove",
+
+  "games.view",
+  "games.toggle",
+  "games.limits",
+  "games.investigate",
+
+  "policies.view",
+  "policies.create",
+  "policies.edit",
+
+  "audit.view",
+  "audit.export",
 ]);
 
 function json(data, status = 200, headers = {}) {
@@ -365,6 +418,14 @@ function sessionCookie(value, maxAge = 43200) {
 
 function ownerOnly(session) {
   return session?.role === "owner";
+}
+
+function sessionHasPermission(session, permission) {
+  if (ownerOnly(session)) return true;
+  if (session?.role !== "staff") return false;
+  const permissions = new Set(Array.isArray(session.permissions) ? session.permissions : []);
+  const group = String(permission || "").split(".")[0];
+  return permissions.has(group) || permissions.has(permission);
 }
 
 function normalizePermissions(value) {
@@ -1947,16 +2008,16 @@ export default {
     }
 
     if (url.pathname === "/api/room-themes" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "rooms.theme_view")) {
+        return json({ ok: false, error: "Room theme view access required" }, 403);
       }
       const themes = getAppDirectoryStore(env).listPanelRoomThemes();
       return json({ ok: true, themes });
     }
 
     if (url.pathname === "/api/room-themes" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "rooms.theme_create")) {
+        return json({ ok: false, error: "Room theme create access required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -1972,8 +2033,8 @@ export default {
 
     const roomThemeMatch = url.pathname.match(/^\/api\/room-themes\/([^/]+)$/);
     if (roomThemeMatch && request.method === "DELETE") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "rooms.theme_remove")) {
+        return json({ ok: false, error: "Room theme remove access required" }, 403);
       }
       try {
         return json(
