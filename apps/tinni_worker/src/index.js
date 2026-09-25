@@ -1248,6 +1248,45 @@ export default {
       }
     }
 
+    if (url.pathname === "/room-themes" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      const themes = getAppDirectoryStore(env).listRoomThemes(roomId);
+      return json({
+        ok: true,
+        user_price_coins: 10000000,
+        user_duration_days: 7,
+        themes,
+      });
+    }
+
+    if (url.pathname === "/room-themes" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      try {
+        const theme = getAppDirectoryStore(env).createUserRoomTheme(
+          appSession.user.user_id,
+          roomId,
+          body,
+        );
+        return json({ ok: true, theme }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to add room theme"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/fruit-game/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1595,6 +1634,49 @@ export default {
         return json({ ok: true, panel });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to update staff panel") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/room-themes" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const themes = getAppDirectoryStore(env).listRoomThemes("");
+      return json({ ok: true, themes });
+    }
+
+    if (url.pathname === "/api/room-themes" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const theme = getAppDirectoryStore(env).createPanelRoomTheme(body);
+        return json({ ok: true, theme }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to add room theme"),
+        }, 400);
+      }
+    }
+
+    const roomThemeMatch = url.pathname.match(/^\/api\/room-themes\/([^/]+)$/);
+    if (roomThemeMatch && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      try {
+        return json(
+          getAppDirectoryStore(env).disableRoomTheme(
+            decodeURIComponent(roomThemeMatch[1]),
+          ),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to remove room theme"),
+        }, 400);
       }
     }
 
