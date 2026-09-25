@@ -16,6 +16,7 @@ import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import 'games_screen.dart';
+import 'fruit_jackpot_panel.dart';
 import 'messages_screen.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
+  bool _fruitJackpotOpen = false;
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -1850,6 +1852,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
       (
+        'Fruit Jackpot',
+        Icons.local_florist_rounded,
+        () {
+          Navigator.of(context).pop();
+          setState(() => _fruitJackpotOpen = true);
+        },
+      ),
+      (
         'Games',
         Icons.casino_rounded,
         () {
@@ -2695,7 +2705,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
-        body: Container(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
           decoration: BoxDecoration(
             color: _roomBackgroundColor,
             image: _roomThemeImage == null
@@ -3062,6 +3075,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
+            ),
+            if (_fruitJackpotOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.50,
+                child: FruitJackpotPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
