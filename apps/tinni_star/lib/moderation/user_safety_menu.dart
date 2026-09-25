@@ -380,7 +380,7 @@ class _ReportUserSheetState extends State<_ReportUserSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           scrollDirection: Axis.horizontal,
                           itemCount: _screenshots.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          separatorBuilder: (context, index) => const SizedBox(width: 8),
                           itemBuilder: (context, index) {
                             final raw = _screenshots[index].split(',').last;
                             return Stack(
