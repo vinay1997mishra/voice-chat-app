@@ -2053,15 +2053,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 SwitchListTile(
-                  title: const Text('Public room'),
-                  subtitle: const Text('Turn off to make the room private.'),
+                  title: Text(
+                    settings.visibility == RoomVisibility.publicRoom
+                        ? 'Room Open'
+                        : 'Room Locked',
+                  ),
+                  subtitle: Text(
+                    settings.visibility == RoomVisibility.publicRoom
+                        ? 'Turn off and set a password to lock the room.'
+                        : 'Turn on to open the room and reset wrong-password attempts.',
+                  ),
                   value: settings.visibility == RoomVisibility.publicRoom,
-                  onChanged: (value) {
-                    controls.settings = settings.copyWith(
-                      visibility: value ? RoomVisibility.publicRoom : RoomVisibility.privateRoom,
-                    );
-                    setSheetState(() {});
-                    setState(() {});
+                  onChanged: (_) async {
+                    await _toggleRoomLock();
+                    if (context.mounted) {
+                      setSheetState(() {});
+                    }
                   },
                 ),
                 SwitchListTile(
