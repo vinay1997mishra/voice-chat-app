@@ -105,6 +105,8 @@ function rowToRoom(row) {
     party_mode: String(row.party_mode),
     locked: Number(row.locked) === 1,
     photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
+    theme_id: row.theme_id ? String(row.theme_id) : "royal-dark",
+    theme_asset: row.theme_asset ? String(row.theme_asset) : null,
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
     owner_name: row.owner_name ? String(row.owner_name) : null,
@@ -214,6 +216,8 @@ export class AppDirectoryStore extends DurableObject {
         party_mode TEXT NOT NULL,
         locked INTEGER NOT NULL DEFAULT 0,
         photo_data_url TEXT,
+        theme_id TEXT NOT NULL DEFAULT 'royal-dark',
+        theme_asset TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -313,6 +317,8 @@ export class AppDirectoryStore extends DurableObject {
     for (const migration of [
       "ALTER TABLE app_users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'google'",
       "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
+      "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
+      "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT"
     ]) {
       try {
@@ -987,6 +993,69 @@ export class AppDirectoryStore extends DurableObject {
       themeId,
     );
     return { ok: true, id: themeId };
+  }
+
+    setRoomTheme(ownerIdValue, roomIdValue, input) {
+    const ownerId = String(ownerIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const themeId = String(input?.theme_id || "").trim();
+    const themeAsset = input?.theme_asset == null
+      ? null
+      : String(input.theme_asset).trim();
+    const room = this._roomRow(roomId);
+
+    if (!room) throw new Error("Room not found");
+    if (String(room.owner_id) !== ownerId) {
+      throw new Error("Only the room owner can change room theme");
+    }
+    if (!themeId) throw new Error("theme_id is required");
+
+    const builtIn = new Set(["royal-dark", "night-blue", "rose-gold"]);
+    if (!builtIn.has(themeId)) {
+      const now = Date.now();
+      const theme = this.ctx.storage.sql.exec(
+        `SELECT *
+           FROM room_themes
+          WHERE id = ?
+            AND enabled = 1
+            AND (room_id IS NULL OR room_id = ?)
+            AND (starts_at IS NULL OR starts_at <= ?)
+            AND (expires_at IS NULL OR expires_at > ?)
+          LIMIT 1`,
+        themeId,
+        roomId,
+        now,
+        now,
+      ).toArray()[0];
+      if (!theme) throw new Error("Room theme is unavailable or expired");
+      if (themeAsset && String(theme.asset) !== themeAsset) {
+        throw new Error("Room theme asset mismatch");
+      }
+    }
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE app_rooms
+          SET theme_id = ?, theme_asset = ?, updated_at = ?
+        WHERE id = ?`,
+      themeId,
+      themeAsset || null,
+      now,
+      roomId,
+    );
+
+    const updated = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+        WHERE r.id = ?
+        LIMIT 1`,
+      roomId,
+    ).toArray()[0];
+
+    return { ok: true, room: rowToRoom(updated) };
   }
 
     _roomRow(roomIdValue) {
