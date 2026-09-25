@@ -42,6 +42,7 @@ const state = {
 
 const viewMeta = {
   dashboard: ["Dashboard", "Live platform overview and owner-only controls."],
+  notifications: ["Notifications", "Owner-only app complaints and platform alerts."],
   users: ["Users", "Search, investigate and override any user account."],
   rooms: ["Rooms", "Manage any room regardless of the user's additional role."],
   wallets: ["Wallets", "Normal, Coin Seller, Merchant and Owner Treasury controls."],
@@ -93,6 +94,7 @@ const dialogHelp = document.getElementById("dialogHelp");
 const dialogFields = document.getElementById("dialogFields");
 const dialogSubmit = document.getElementById("dialogSubmit");
 let pendingAction = null;
+let currentSession = null;
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -489,7 +491,135 @@ async function loadRoomThemes() {
     root.textContent = error.message || 'Unable to load room themes.';
   }
 }
+function formatFullTimestamp(value) {
+  const date = new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function auditDetailsText(details) {
+  if (!details || typeof details !== "object") return "";
+  return Object.entries(details)
+    .map(([key, value]) => {
+      const rendered = typeof value === "object" && value !== null
+        ? JSON.stringify(value)
+        : String(value);
+      return `${pretty(key.replaceAll(".", "_"))}: ${rendered}`;
+    })
+    .join(" • ");
+}
+
+async function loadOwnerNotifications() {
+  const root = document.getElementById("ownerNotifications");
+  if (!root || currentSession?.role !== "owner") return;
+  try {
+    const data = await api("/api/owner/notifications");
+    const items = Array.isArray(data.notifications) ? data.notifications : [];
+    document.getElementById("notificationUnreadCount").textContent = String(data.unread_count || 0);
+    document.getElementById("notificationTotalCount").textContent = String(items.length);
+
+    if (items.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No owner notifications yet.";
+      return;
+    }
+
+    root.className = "action-list";
+    root.innerHTML = items.map((item) => {
+      const source = item.source_user_id
+        ? `${escapeHtml(item.source_display_name || "User")} • ID ${escapeHtml(item.source_user_id)}`
+        : "System";
+      const target = item.target_id
+        ? ` • ${escapeHtml(item.target_type || "target")}: ${escapeHtml(item.target_id)}`
+        : "";
+      return `
+        <div class="panel" style="margin-bottom:12px">
+          <div class="panel-head">
+            <div>
+              <h3>${item.is_read ? "" : "● "}${escapeHtml(item.title)}</h3>
+              <p>${source}${target} • ${escapeHtml(formatFullTimestamp(item.created_at))}</p>
+            </div>
+            <div class="button-row">
+              ${item.is_read ? "" : `<button type="button" class="btn secondary" data-notification-read="${escapeHtml(item.id)}">Mark read</button>`}
+              <button type="button" class="btn secondary" data-notification-delete="${escapeHtml(item.id)}">Delete</button>
+            </div>
+          </div>
+          <p>${escapeHtml(item.message)}</p>
+        </div>
+      `;
+    }).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load notifications.";
+  }
+}
+
+async function loadAuditLog() {
+  const table = document.getElementById("auditTable");
+  const summaryRoot = document.getElementById("auditSummary");
+  if (!table || !summaryRoot || !currentSession) return;
+
+  try {
+    const [recordsData, summaryData] = await Promise.all([
+      api("/api/audit?limit=250"),
+      api("/api/audit/summary"),
+    ]);
+    const records = Array.isArray(recordsData.records) ? recordsData.records : [];
+    const byPanel = Array.isArray(summaryData.summary?.by_panel)
+      ? summaryData.summary.by_panel
+      : [];
+    const byAction = Array.isArray(summaryData.summary?.by_action)
+      ? summaryData.summary.by_action
+      : [];
+
+    summaryRoot.className = "";
+    summaryRoot.innerHTML = byPanel.length === 0
+      ? '<div class="empty-state">No panel activity recorded yet.</div>'
+      : `
+        <div class="chips">
+          ${byPanel.map((item) => `<span class="chip">${escapeHtml(item.panel_name || item.panel_id || "Panel")}: ${Number(item.total_actions || 0)} actions</span>`).join("")}
+        </div>
+        ${byAction.length ? `<p class="muted" style="margin-top:12px">${byAction.slice(0, 12).map((item) => `${escapeHtml(pretty(item.action.replaceAll(".", "_")))}: ${Number(item.count || 0)}`).join(" • ")}</p>` : ""}
+      `;
+
+    const canDelete = recordsData.can_delete === true;
+    const clearButton = document.getElementById("clearAuditBtn");
+    if (clearButton) clearButton.hidden = !canDelete;
+
+    if (records.length === 0) {
+      table.innerHTML = '<tr><td colspan="6" class="muted">No audit records yet.</td></tr>';
+      return;
+    }
+
+    table.innerHTML = records.map((record) => `
+      <tr>
+        <td>${escapeHtml(formatFullTimestamp(record.created_at))}</td>
+        <td>
+          <strong>${escapeHtml(record.panel_name || record.panel_id || "Panel")}</strong>
+          <br><small>${escapeHtml(record.actor_email || "")}</small>
+        </td>
+        <td>${escapeHtml(pretty(String(record.action || "").replaceAll(".", "_")))}</td>
+        <td>${escapeHtml(record.target_type || "—")}${record.target_id ? `<br><small>${escapeHtml(record.target_id)}</small>` : ""}</td>
+        <td>${escapeHtml(auditDetailsText(record.details) || "—")}</td>
+        <td>${canDelete ? `<button type="button" data-audit-delete="${escapeHtml(record.id)}">Delete</button>` : "Owner only"}</td>
+      </tr>
+    `).join("");
+  } catch (error) {
+    table.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(error.message || "Unable to load audit records.")}</td></tr>`;
+    summaryRoot.className = "empty-state";
+    summaryRoot.textContent = error.message || "Unable to load audit summary.";
+  }
+}
+
 function applySession(session) {
+  currentSession = session;
   const owner = session.role === "owner";
   const allowed = new Set(session.permissions || []);
 
@@ -541,15 +671,21 @@ function applySession(session) {
   const quickAction = document.getElementById("quickActionBtn");
   if (quickAction) quickAction.hidden = !owner && !hasPermission(allowed, "users.search");
 
+  const clearAuditButton = document.getElementById("clearAuditBtn");
+  if (clearAuditButton) clearAuditButton.hidden = !owner;
+
   if (owner) {
     document.body.classList.remove("auth-loading");
     document.body.classList.add("auth-ready");
     loadStaffPanels();
     loadRoomThemes();
+    loadOwnerNotifications();
+    loadAuditLog();
     return;
   }
 
   if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
+  if (hasPermission(allowed, "audit.view")) loadAuditLog();
 
   const firstAllowed = Object.keys(permissionByView).find((view) => hasGroupPermission(allowed, permissionByView[view]));
   if (firstAllowed) setView(firstAllowed);
@@ -872,7 +1008,13 @@ document.getElementById("menuBtn").addEventListener("click", () => {
 
 document.getElementById("refreshBtn").addEventListener("click", () => {
   checkHealth();
-  loadRoomThemes();
+  if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "rooms.theme_view")) {
+    loadRoomThemes();
+  }
+  if (currentSession?.role === "owner") loadOwnerNotifications();
+  if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "audit.view")) {
+    loadAuditLog();
+  }
   toast("Panel refreshed");
 });
 
@@ -990,7 +1132,85 @@ document.body.addEventListener("click", async e => {
     );
   }
 
+  const notificationRead = e.target.closest("[data-notification-read]")?.dataset.notificationRead;
+  if (notificationRead) {
+    try {
+      await api("/api/owner/notifications/" + encodeURIComponent(notificationRead), {
+        method: "PATCH",
+        body: JSON.stringify({ is_read: true }),
+      });
+      await loadOwnerNotifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const notificationDelete = e.target.closest("[data-notification-delete]")?.dataset.notificationDelete;
+  if (notificationDelete) {
+    if (!confirm("Delete this notification?")) return;
+    try {
+      await api("/api/owner/notifications/" + encodeURIComponent(notificationDelete), {
+        method: "DELETE",
+      });
+      await loadOwnerNotifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const auditDelete = e.target.closest("[data-audit-delete]")?.dataset.auditDelete;
+  if (auditDelete) {
+    if (!confirm("Delete this audit record? Only the Owner can do this.")) return;
+    try {
+      await api("/api/audit/" + encodeURIComponent(auditDelete), { method: "DELETE" });
+      await loadAuditLog();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const action = e.target.closest("[data-action]")?.dataset.action;
+  if (action === "notifications-refresh") {
+    await loadOwnerNotifications();
+    return;
+  }
+  if (action === "audit-refresh") {
+    await loadAuditLog();
+    return;
+  }
+  if (action === "audit-clear") {
+    if (currentSession?.role !== "owner") {
+      toast("Only the Owner can delete audit records.");
+      return;
+    }
+    if (!confirm("Delete ALL audit records? This cannot be undone.")) return;
+    try {
+      await api("/api/audit", { method: "DELETE" });
+      await loadAuditLog();
+      toast("Audit records deleted.");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+  if (action === "audit-export") {
+    try {
+      const data = await api("/api/audit?limit=500");
+      const blob = new Blob([JSON.stringify(data.records || [], null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tinni-panel-audit-" + new Date().toISOString().slice(0, 10) + ".json";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
   if (action) return openAction(action);
 
   const moduleName = e.target.closest("[data-module]")?.dataset.module;
