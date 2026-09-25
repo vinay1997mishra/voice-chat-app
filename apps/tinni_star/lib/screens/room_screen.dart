@@ -409,6 +409,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
       (
+        'Games',
+        Icons.casino_rounded,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GamesScreen(state: widget.state),
+            ),
+          );
+        },
+      ),
+      (
         controls.soundEnabled ? 'Sound On' : 'Sound Off',
         controls.soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
         () {
@@ -1227,11 +1239,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 child: Row(
                   children: [
-                    IconButton(
-                      key: const Key('room-more-button'),
-                      onPressed: _showRoomTools,
-                      icon: const Icon(Icons.more_horiz_rounded, color: RoyalPalette.gold),
-                    ),
                     Expanded(
                       child: TextField(
                         controller: chat,
@@ -1256,16 +1263,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       icon: const Icon(Icons.card_giftcard_rounded, color: RoyalPalette.gold),
                     ),
                     IconButton(
-                      key: const Key('room-games-grid-button'),
-                      tooltip: 'Games',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => GamesScreen(state: widget.state),
-                          ),
-                        );
-                      },
+                      key: const Key('room-tools-grid-button'),
+                      tooltip: 'More',
+                      onPressed: _showRoomTools,
                       icon: const Icon(
                         Icons.grid_view_rounded,
                         color: RoyalPalette.gold,
