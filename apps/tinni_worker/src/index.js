@@ -1,8 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { FruitGameStore } from "./fruit_game.js";
+import { FruitPartyStore } from "./fruit_party.js";
 import { RoomPresenceStore } from "./room_presence.js";
 import { AppDirectoryStore } from "./app_directory.js";
-export { FruitGameStore, RoomPresenceStore, AppDirectoryStore };
+export { FruitGameStore, FruitPartyStore, RoomPresenceStore, AppDirectoryStore };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -384,6 +385,11 @@ function getStaffStore(env) {
 function getFruitGameStore(env) {
   const id = env.FRUIT_GAME.idFromName("tinni-fruit-game-global");
   return env.FRUIT_GAME.get(id);
+}
+
+function getFruitPartyStore(env) {
+  const id = env.FRUIT_PARTY.idFromName("tinni-fruit-party-global");
+  return env.FRUIT_PARTY.get(id);
 }
 
 function getRoomPresenceStore(env, roomId) {
@@ -1763,6 +1769,31 @@ export default {
         return json(state, 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to place bet") }, 400);
+      }
+    }
+
+    if (url.pathname === "/fruit-party/state" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const state = await getFruitPartyStore(env).state(appSession.user.user_id);
+      return json(state);
+    }
+
+    if (url.pathname === "/fruit-party/bet" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const state = await getFruitPartyStore(env).placeBet({
+          ...body,
+          user_id: appSession.user.user_id,
+        });
+        return json(state, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to place Fruit Party bet"),
+        }, 400);
       }
     }
 
