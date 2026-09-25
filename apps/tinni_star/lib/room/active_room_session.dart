@@ -138,6 +138,21 @@ class ActiveRoomSession extends ChangeNotifier {
     );
   }
 
+  Future<void> setMySeatEmote(String emote) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    final seatIndex = controller?.mySeat;
+    if (roomId == null || authToken == null || seatIndex == null) {
+      throw StateError('You must be on a seat to use emotes.');
+    }
+    await presence.setEmote(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      emote: emote,
+    );
+  }
+
   Future<void> setUserSeatMute(
     String targetUserId, {
     required int seatIndex,
