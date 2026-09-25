@@ -3,6 +3,18 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+class RoomSeatInvite {
+  const RoomSeatInvite({
+    required this.seatIndex,
+    required this.invitedBy,
+    required this.createdAt,
+  });
+
+  final int seatIndex;
+  final String invitedBy;
+  final DateTime createdAt;
+}
+
 class RoomPresenceMember {
   const RoomPresenceMember({
     required this.userId,
@@ -46,6 +58,9 @@ class RoomPresenceService extends ChangeNotifier {
 
   bool connected = false;
   bool selfMicMuted = false;
+  bool selfSeatForced = false;
+  int? selfForcedSeatIndex;
+  RoomSeatInvite? pendingSeatInvite;
   String? lastError;
 
   Future<void> join({
@@ -82,6 +97,9 @@ class RoomPresenceService extends ChangeNotifier {
       members.clear();
       connected = false;
       selfMicMuted = false;
+      selfSeatForced = false;
+      selfForcedSeatIndex = null;
+      pendingSeatInvite = null;
       notifyListeners();
     }
   }
@@ -118,7 +136,61 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setMute({
+  Future<void> inviteToSeat({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    required int seatIndex,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-invite',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'seat_index': seatIndex,
+      },
+    );
+  }
+
+  Future<void> respondSeatInvite({
+    required String roomId,
+    required String authToken,
+    required bool accepted,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/seat-invite/respond',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'accepted': accepted,
+      },
+      applyResponse: false,
+    );
+    pendingSeatInvite = null;
+    if (accepted) {
+      selfSeatForced = true;
+      selfForcedSeatIndex = _asInt(data['seat_index']);
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeFromSeat({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-remove',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+      },
+    );
+  }
+
+    Future<void> setMute({
     required String roomId,
     required String authToken,
     required String targetUserId,
@@ -184,7 +256,34 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
-    Future<void> refresh({
+  Future<Map<String, dynamic>> _commandPost(
+    String path,
+    String authToken,
+    Map<String, Object> payload, {
+    bool applyResponse = true,
+  }) async {
+    final request = await _httpClient.postUrl(apiBase.replace(path: path));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(jsonEncode(payload));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Room action failed',
+      );
+    }
+    if (applyResponse) {
+      _apply(data);
+      notifyListeners();
+    }
+    return data;
+  }
+
+  Future<void> refresh({
     required String roomId,
     required String authToken,
   }) async {
@@ -256,6 +355,25 @@ class RoomPresenceService extends ChangeNotifier {
 
   void _apply(Map<String, dynamic> data) {
     selfMicMuted = data['self_mic_muted'] == true;
+    selfSeatForced = data['self_seat_forced'] == true;
+    selfForcedSeatIndex = selfSeatForced
+        ? (data['self_forced_seat_index'] == null
+            ? null
+            : _asInt(data['self_forced_seat_index']))
+        : null;
+
+    final rawInvite = data['pending_seat_invite'];
+    if (rawInvite is Map) {
+      final createdAtMs = _asInt(rawInvite['created_at']);
+      pendingSeatInvite = RoomSeatInvite(
+        seatIndex: _asInt(rawInvite['seat_index']),
+        invitedBy: rawInvite['invited_by']?.toString() ?? '',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
+      );
+    } else {
+      pendingSeatInvite = null;
+    }
+
     final rawMembers = data['members'];
     if (rawMembers is! List) return;
 
