@@ -276,6 +276,15 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_follows_target
         ON app_follows(target_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS app_blocks (
+        blocker_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(blocker_id, target_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_blocks_target
+        ON app_blocks(target_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS direct_messages (
         id TEXT PRIMARY KEY,
         from_user_id TEXT NOT NULL,
@@ -895,11 +904,86 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  listBlocked(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT target_id
+         FROM app_blocks
+        WHERE blocker_id = ?
+        ORDER BY created_at DESC`,
+      userId,
+    ).toArray().map((row) => String(row.target_id));
+  }
+
+  isBlockedBetween(firstUserIdValue, secondUserIdValue) {
+    const firstUserId = String(firstUserIdValue || "").trim();
+    const secondUserId = String(secondUserIdValue || "").trim();
+    if (!firstUserId || !secondUserId) return false;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT blocker_id
+         FROM app_blocks
+        WHERE (blocker_id = ? AND target_id = ?)
+           OR (blocker_id = ? AND target_id = ?)
+        LIMIT 1`,
+      firstUserId,
+      secondUserId,
+      secondUserId,
+      firstUserId,
+    ).toArray()[0];
+    return Boolean(row);
+  }
+
+  setBlocked(userIdValue, targetIdValue, blockedValue) {
+    const userId = String(userIdValue || "").trim();
+    const targetId = String(targetIdValue || "").trim();
+    if (!userId || !targetId) throw new Error("user IDs are required");
+    if (userId === targetId) throw new Error("You cannot block yourself");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
+      targetId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    if (blockedValue) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO app_blocks (blocker_id, target_id, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(blocker_id, target_id) DO UPDATE SET
+           created_at = excluded.created_at`,
+        userId,
+        targetId,
+        Date.now(),
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM app_follows WHERE follower_id = ? AND target_id = ?",
+        userId,
+        targetId,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM app_blocks WHERE blocker_id = ? AND target_id = ?",
+        userId,
+        targetId,
+      );
+    }
+
+    return {
+      ok: true,
+      target_user_id: targetId,
+      blocked: Boolean(blockedValue),
+    };
+  }
+
   listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {
     const userId = String(userIdValue || "").trim();
     const peerUserId = String(peerUserIdValue || "").trim();
     const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
     if (!userId || !peerUserId) throw new Error("user IDs are required");
+    if (this.isBlockedBetween(userId, peerUserId)) {
+      return [];
+    }
 
     return this.ctx.storage.sql.exec(
       `SELECT id, from_user_id, to_user_id, text, created_at
@@ -928,6 +1012,9 @@ export class AppDirectoryStore extends DurableObject {
     const text = cleanText(textValue, 1000);
     if (!fromUserId || !toUserId) throw new Error("user IDs are required");
     if (!text) throw new Error("Message cannot be empty");
+    if (this.isBlockedBetween(fromUserId, toUserId)) {
+      throw new Error("Messaging is unavailable because one of these users is blocked");
+    }
 
     const target = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
