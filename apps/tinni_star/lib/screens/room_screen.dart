@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
@@ -324,6 +325,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       default:
         return const Color(0xFF03070B);
     }
+  }
+  ImageProvider? get _roomThemeImage {
+    final source = widget.state.roomControls.customThemeAsset;
+    if (source == null || source.isEmpty) return null;
+    if (source.startsWith('data:image/')) {
+      try {
+        return MemoryImage(base64Decode(source.split(',').last));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (source.startsWith('https://')) return NetworkImage(source);
+    return null;
   }
 
   RoomRole? get _currentRoomRole {
