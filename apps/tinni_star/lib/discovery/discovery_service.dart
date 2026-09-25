@@ -249,7 +249,43 @@ class DiscoveryService {
     return room;
   }
 
-  Future<RoomAccessResult> verifyRoomPassword({
+  Future<RoomAccessResult> getRoomAccessStatus({
+    required String authToken,
+    required String roomId,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.getUrl(
+      apiBase.replace(
+        path: '/rooms/access',
+        queryParameters: <String, String>{'room_id': roomId},
+      ),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode >= 500) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to check room access',
+      );
+    }
+
+    return RoomAccessResult(
+      allowed: data['allowed'] == true,
+      blocked: data['blocked'] == true,
+      attemptsRemaining: _asInt(data['attempts_remaining']),
+      error: data['error']?.toString(),
+    );
+  }
+
+    Future<RoomAccessResult> verifyRoomPassword({
     required String authToken,
     required String roomId,
     required String password,
@@ -289,7 +325,7 @@ class DiscoveryService {
     );
   }
 
-    RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
+  RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
     final id = row['id']?.toString() ?? '';
     final title = row['title']?.toString() ?? '';
     if (id.isEmpty || title.isEmpty) return null;
