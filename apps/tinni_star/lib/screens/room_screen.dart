@@ -75,6 +75,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
     widget.state.roomControls.roomMode =
         widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
+    if (widget.room.themeAsset == null || widget.room.themeAsset!.isEmpty) {
+      if (RoomControlService.availableThemes.contains(widget.room.themeId)) {
+        widget.state.roomControls.setTheme(widget.room.themeId);
+      } else {
+        widget.state.roomControls.setTheme('royal-dark');
+      }
+    } else {
+      widget.state.roomControls.setCustomTheme(
+        widget.room.themeId,
+        widget.room.themeAsset!,
+      );
+    }
     await widget.state.roomSession.open(
       widget.room,
       userId: account.userId,
@@ -895,13 +907,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
 
     if (!mounted || selected == null) return;
-    if (selected.asset == null) {
-      controls.setTheme(selected.id);
-    } else {
-      controls.setCustomTheme(selected.id, selected.asset!);
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    try {
+      await widget.state.discovery.setRoomTheme(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        themeId: selected.id,
+        themeAsset: selected.asset,
+      );
+      if (selected.asset == null) {
+        controls.setTheme(selected.id);
+      } else {
+        controls.setCustomTheme(selected.id, selected.asset!);
+      }
+      if (mounted) setState(() {});
+      _snack('Room theme saved.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
-    setState(() {});
-    _snack('Room theme saved.');
   }
   Future<void> _showRoomPowerMenu() async {
     final action = await showModalBottomSheet<String>(
