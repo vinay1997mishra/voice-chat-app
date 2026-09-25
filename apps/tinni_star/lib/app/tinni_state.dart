@@ -100,6 +100,32 @@ class TinniState {
       foregroundService: roomForegroundService,
       permissions: roomPermissions,
       presence: roomPresence,
+      familyTagProvider: () {
+        final userId = auth.current?.userId;
+        if (userId == null || !family.exists || !family.isMember(userId)) {
+          return null;
+        }
+        return family.tag ?? family.name;
+      },
+      hostTagProvider: () {
+        final userId = auth.current?.userId;
+        if (userId == null) return null;
+        switch (roomControls.roles[userId]) {
+          case RoomRole.owner:
+            return 'Owner';
+          case RoomRole.admin:
+            return 'Admin';
+          case RoomRole.host:
+            return 'Host';
+          default:
+            return null;
+        }
+      },
+      agencyNameProvider: () {
+        final userId = auth.current?.userId;
+        if (userId == null) return null;
+        return roomControls.agencyNameFor(userId);
+      },
     );
   }
 
