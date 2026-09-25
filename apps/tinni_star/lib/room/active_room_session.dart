@@ -48,6 +48,8 @@ class ActiveRoomSession extends ChangeNotifier {
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
   RoomSeatInvite? get pendingSeatInvite => presence.pendingSeatInvite;
+  List<RoomSeatRequest> get seatRequests =>
+      List<RoomSeatRequest>.unmodifiable(presence.seatRequests);
 
   String? get _familyTag => familyTagProvider?.call();
   String? get _hostTag => hostTagProvider?.call();
@@ -161,6 +163,36 @@ class ActiveRoomSession extends ChangeNotifier {
       micMode: micMode,
     );
     controller?.setInviteMode(presence.micMode != 'free');
+  }
+
+    Future<void> requestMySeat(int seatIndex) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.requestSeat(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+    );
+  }
+
+  Future<void> resolveSeatRequest(
+    String targetUserId, {
+    required bool approved,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.resolveSeatRequest(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      approved: approved,
+    );
   }
 
     Future<void> inviteUserToSeat(
