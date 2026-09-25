@@ -14,6 +14,7 @@ export class RoomPresenceStore extends DurableObject {
         country_code TEXT NOT NULL DEFAULT '',
         seat_index INTEGER,
         seat_emote TEXT,
+        seat_emote_until INTEGER,
         joined_at INTEGER NOT NULL,
         last_seen INTEGER NOT NULL
       );
@@ -45,6 +46,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN country_code TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
+      "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -145,8 +147,9 @@ export class RoomPresenceStore extends DurableObject {
     }
 
     this.ctx.storage.sql.exec(
-      "UPDATE room_members SET seat_emote = ?, last_seen = ? WHERE user_id = ?",
+      "UPDATE room_members SET seat_emote = ?, seat_emote_until = ?, last_seen = ? WHERE user_id = ?",
       emote,
+      now + 3000,
       now,
       userId,
     );
@@ -272,7 +275,7 @@ export class RoomPresenceStore extends DurableObject {
     this._prune(now);
     return this.ctx.storage.sql.exec(
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
-              country_code, seat_index, seat_emote, joined_at, last_seen
+              country_code, seat_index, seat_emote, seat_emote_until, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -286,7 +289,20 @@ export class RoomPresenceStore extends DurableObject {
           ? null
           : Number(row.seat_index),
       mic_muted: this.muteStatus(row.user_id, row.seat_index),
-      seat_emote: row.seat_emote ? String(row.seat_emote) : null,
+      seat_emote:
+        row.seat_emote &&
+        row.seat_emote_until !== null &&
+        row.seat_emote_until !== undefined &&
+        Number(row.seat_emote_until) > now
+          ? String(row.seat_emote)
+          : null,
+      seat_emote_until:
+        row.seat_emote &&
+        row.seat_emote_until !== null &&
+        row.seat_emote_until !== undefined &&
+        Number(row.seat_emote_until) > now
+          ? Number(row.seat_emote_until)
+          : null,
       joined_at: Number(row.joined_at),
       last_seen: Number(row.last_seen),
     }));
@@ -348,8 +364,8 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
-         seat_index, seat_emote, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
@@ -367,6 +383,7 @@ export class RoomPresenceStore extends DurableObject {
       flagEmoji,
       countryCode,
       seatIndex,
+      null,
       null,
       now,
       now,
