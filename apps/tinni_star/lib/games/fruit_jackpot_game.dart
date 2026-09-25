@@ -24,7 +24,7 @@ enum FruitKind {
 
 class FruitGameConfig {
   const FruitGameConfig({
-    this.roundDuration = const Duration(seconds: 20),
+    this.roundDuration = const Duration(seconds: 21),
     this.betLockBeforeResult = const Duration(seconds: 3),
     this.highVolumePlayerThreshold = 20,
     this.companyMarginPercent = 30,
@@ -73,6 +73,10 @@ class FruitRoundResult {
     required this.activePlayers,
     required this.settledAt,
     required this.marginTargetMet,
+    this.specialKind,
+    this.bonusFruits = const <FruitKind>[],
+    this.jackpotHit = false,
+    this.jackpotPayout = 0,
   });
 
   final int roundId;
@@ -84,6 +88,12 @@ class FruitRoundResult {
   final int activePlayers;
   final DateTime settledAt;
   final bool marginTargetMet;
+  final String? specialKind;
+  final List<FruitKind> bonusFruits;
+  final bool jackpotHit;
+  final int jackpotPayout;
+
+  bool get isLucky11 => specialKind == 'lucky11';
 }
 
 /// Local/demo model for the continuously running Fruit Jackpot game.
