@@ -425,6 +425,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (values.any((item) => item.$1 == id)) continue;
         values.add((id, name));
       }
+      for (final member in widget.state.roomSession.liveMembers) {
+        if (member.userId == senderId) continue;
+        if (values.any((item) => item.$1 == member.userId)) continue;
+        values.add((member.userId, member.displayName));
+      }
       _selectedGiftRecipients.removeWhere(
         (id) => !values.any((item) => item.$1 == id),
       );
@@ -1387,19 +1392,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              CircleAvatar(
-                                radius: 17,
-                                backgroundColor: RoyalPalette.panel2,
-                                backgroundImage: avatar,
-                                child: avatar == null
-                                    ? Text(
-                                        initial.toUpperCase(),
-                                        style: const TextStyle(
-                                          color: RoyalPalette.gold,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      )
+                              GestureDetector(
+                                onTap: _canModerateSeats && !isMe
+                                    ? () => _showUserProfile(member)
                                     : null,
+                                child: CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: RoyalPalette.panel2,
+                                  backgroundImage: avatar,
+                                  child: avatar == null
+                                      ? Text(
+                                          initial.toUpperCase(),
+                                          style: const TextStyle(
+                                            color: RoyalPalette.gold,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        )
+                                      : null,
+                                ),
                               ),
                               const SizedBox(height: 3),
                               Text(
@@ -1566,6 +1576,45 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: RoyalPalette.panel2,
+                child: Icon(icon, color: RoyalPalette.gold, size: 20),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: RoyalPalette.cream, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
         ),
       ),
     );
