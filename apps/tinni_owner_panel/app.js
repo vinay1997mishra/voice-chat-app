@@ -271,6 +271,13 @@ async function loadStaffPanels() {
   }
 }
 
+function formatThemeTime(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const date = new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
 async function loadRoomThemes() {
   const root = document.getElementById('roomThemeList');
   if (!root) return;
@@ -283,12 +290,18 @@ async function loadRoomThemes() {
       return;
     }
     root.className = 'action-list';
-    root.innerHTML = themes.map(theme => `
-      <button type="button" data-room-theme-remove="${escapeHtml(theme.id)}">
-        <strong>${escapeHtml(theme.name)}</strong>
-        <span>Free global theme • tap to remove</span>
-      </button>
-    `).join('');
+    root.innerHTML = themes.map(theme => {
+      const start = theme.starts_at ? formatThemeTime(theme.starts_at) : 'Immediately';
+      const timing = theme.expires_at
+        ? start + ' → ' + formatThemeTime(theme.expires_at)
+        : start + ' → Permanent';
+      return `
+        <button type="button" data-room-theme-remove="${escapeHtml(theme.id)}">
+          <strong>${escapeHtml(theme.name)}</strong>
+          <span>Free global theme • ${escapeHtml(timing)} • tap to remove</span>
+        </button>
+      `;
+    }).join('');
   } catch (error) {
     root.className = 'empty-state';
     root.textContent = error.message || 'Unable to load room themes.';
@@ -486,7 +499,13 @@ function openAction(action, preset = {}) {
     "room-name": ["Change Room Name", field("room_id","Room ID") + field("room_name","New room name")],
     "room-dp": ["Change Room DP", field("room_id","Room ID") + field("asset_url","DP asset URL")],
     "room-bg": ["Room Background", field("room_id","Room ID") + field("asset_url","Background asset URL")],
-    "room-theme-new": ["Add Free Room Theme", field("name","Theme name") + field("asset","Theme image HTTPS URL")],
+    "room-theme-new": ["Add Free Room Theme",
+      field("name","Theme name") +
+      field("asset","Theme image HTTPS URL") +
+      selectField("duration_mode","Duration",[["scheduled","Set Date & Time"],["permanent","Permanent"]]) +
+      field("starts_at","Start date/time (blank = now)","datetime-local") +
+      field("ends_at","End date/time","datetime-local")
+    ],
     "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["credit","Add coins"],["debit","Remove coins"],["ban","Ban wallet"],["unban","Unban wallet"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
@@ -570,15 +589,45 @@ async function handleAction(action, data) {
   if (action === 'room-theme-new') {
     const name = String(data.name || '').trim();
     const asset = String(data.asset || '').trim();
+    const durationMode = String(data.duration_mode || 'scheduled');
+    const permanent = durationMode === 'permanent';
+
     if (name.length < 2) throw new Error('Enter a theme name.');
     if (!asset.startsWith('https://') && !asset.startsWith('data:image/')) {
       throw new Error('Use an HTTPS image URL or image data URL.');
     }
+
+    let startsAt = Date.now();
+    if (data.starts_at) {
+      const startDate = new Date(String(data.starts_at));
+      if (Number.isNaN(startDate.getTime())) throw new Error('Select a valid start date/time.');
+      startsAt = startDate.getTime();
+    }
+
+    let endsAt = null;
+    if (!permanent) {
+      if (!data.ends_at) throw new Error('Select an end date/time or choose Permanent.');
+      const endDate = new Date(String(data.ends_at));
+      if (Number.isNaN(endDate.getTime())) throw new Error('Select a valid end date/time.');
+      endsAt = endDate.getTime();
+      if (endsAt <= startsAt) throw new Error('End date/time must be after start date/time.');
+    }
+
     await api('/api/room-themes', {
       method: 'POST',
-      body: JSON.stringify({ name, asset }),
+      body: JSON.stringify({
+        name,
+        asset,
+        permanent,
+        starts_at: startsAt,
+        ends_at: endsAt,
+      }),
     });
-    toast('Room theme added free from Owner Panel.');
+    toast(
+      permanent
+        ? 'Permanent room theme added from Owner Panel.'
+        : 'Scheduled room theme added from Owner Panel.'
+    );
     await loadRoomThemes();
     return;
   }
