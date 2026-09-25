@@ -12,6 +12,7 @@ export class RoomPresenceStore extends DurableObject {
         avatar_data_url TEXT,
         flag_emoji TEXT NOT NULL DEFAULT '',
         country_code TEXT NOT NULL DEFAULT '',
+        seat_index INTEGER,
         joined_at INTEGER NOT NULL,
         last_seen INTEGER NOT NULL
       );
@@ -28,12 +29,20 @@ export class RoomPresenceStore extends DurableObject {
         role TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS room_mutes (
+        user_id TEXT PRIMARY KEY,
+        seat_index INTEGER NOT NULL,
+        muted_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
     `);
 
     for (const migration of [
       "ALTER TABLE room_members ADD COLUMN avatar_data_url TEXT",
       "ALTER TABLE room_members ADD COLUMN flag_emoji TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE room_members ADD COLUMN country_code TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -108,7 +117,73 @@ export class RoomPresenceStore extends DurableObject {
     return { ok: true, user_id: userId, enabled: Boolean(enabled) };
   }
 
-  kick(input) {
+  muteStatus(userIdValue, seatIndexValue = null) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_mutes WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row) return false;
+    if (seatIndexValue === null || seatIndexValue === undefined) return true;
+    return Number(row.seat_index) === Number(seatIndexValue);
+  }
+
+  setMute(input) {
+    const now = Date.now();
+    const targetUserId = String(input?.target_user_id || "").trim();
+    const mutedBy = String(input?.muted_by || "").trim();
+    const muted = Boolean(input?.muted);
+    const seatIndex = Number(input?.seat_index);
+
+    if (!targetUserId) throw new Error("target_user_id is required");
+    if (!mutedBy) throw new Error("muted_by is required");
+    if (!Number.isInteger(seatIndex) || seatIndex < 0) {
+      throw new Error("seat_index is required");
+    }
+
+    const member = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1",
+      targetUserId,
+    ).toArray()[0];
+    if (!member || member.seat_index === null || member.seat_index === undefined) {
+      throw new Error("User is not on a seat");
+    }
+    if (Number(member.seat_index) !== seatIndex) {
+      throw new Error("User changed seat");
+    }
+
+    if (muted) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_mutes (user_id, seat_index, muted_by, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           seat_index = excluded.seat_index,
+           muted_by = excluded.muted_by,
+           created_at = excluded.created_at`,
+        targetUserId,
+        seatIndex,
+        mutedBy,
+        now,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_mutes WHERE user_id = ?",
+        targetUserId,
+      );
+    }
+
+    return {
+      ok: true,
+      server_time: now,
+      target_user_id: targetUserId,
+      seat_index: seatIndex,
+      muted,
+      members: this._members(now),
+    };
+  }
+
+    kick(input) {
     const now = Date.now();
     const targetUserId = String(input?.target_user_id || "").trim();
     const kickedBy = String(input?.kicked_by || "").trim();
@@ -156,7 +231,7 @@ export class RoomPresenceStore extends DurableObject {
     this._prune(now);
     return this.ctx.storage.sql.exec(
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
-              country_code, joined_at, last_seen
+              country_code, seat_index, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -165,6 +240,11 @@ export class RoomPresenceStore extends DurableObject {
       avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
       flag_emoji: String(row.flag_emoji || ""),
       country_code: String(row.country_code || ""),
+      seat_index:
+        row.seat_index === null || row.seat_index === undefined
+          ? null
+          : Number(row.seat_index),
+      mic_muted: this.muteStatus(row.user_id, row.seat_index),
       joined_at: Number(row.joined_at),
       last_seen: Number(row.last_seen),
     }));
@@ -179,9 +259,17 @@ export class RoomPresenceStore extends DurableObject {
       : null;
     const flagEmoji = String(input?.flag_emoji || "").trim();
     const countryCode = String(input?.country_code || "").trim().toUpperCase();
+    const rawSeatIndex = input?.seat_index;
+    const seatIndex =
+      rawSeatIndex === null || rawSeatIndex === undefined
+        ? null
+        : Number(rawSeatIndex);
 
     if (!userId) throw new Error("user_id is required");
     if (!displayName) throw new Error("display_name is required");
+    if (seatIndex !== null && (!Number.isInteger(seatIndex) || seatIndex < 0)) {
+      throw new Error("seat_index is invalid");
+    }
 
     const kick = this.kickStatus(userId, now);
     if (kick) {
@@ -189,22 +277,38 @@ export class RoomPresenceStore extends DurableObject {
       throw new Error("KICKED_FROM_ROOM:" + suffix);
     }
 
+    const muteRow = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_mutes WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (
+      muteRow &&
+      (seatIndex === null || Number(muteRow.seat_index) !== seatIndex)
+    ) {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_mutes WHERE user_id = ?",
+        userId,
+      );
+    }
+
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
-         joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+         seat_index, joined_at, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
          flag_emoji = excluded.flag_emoji,
          country_code = excluded.country_code,
+         seat_index = excluded.seat_index,
          last_seen = excluded.last_seen`,
       userId,
       displayName,
       avatarDataUrl,
       flagEmoji,
       countryCode,
+      seatIndex,
       now,
       now,
     );
@@ -212,6 +316,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      self_mic_muted: this.muteStatus(userId, seatIndex),
       members: this._members(now),
     };
   }
@@ -230,6 +335,10 @@ export class RoomPresenceStore extends DurableObject {
     if (userId) {
       this.ctx.storage.sql.exec(
         "DELETE FROM room_members WHERE user_id = ?",
+        userId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_mutes WHERE user_id = ?",
         userId,
       );
     }
