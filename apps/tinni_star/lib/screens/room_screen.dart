@@ -3097,7 +3097,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.50,
+                height: MediaQuery.sizeOf(context).height * 0.58,
                 child: FruitJackpotPanel(
                   state: widget.state,
                   onClose: () => setState(
@@ -3110,7 +3110,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.50,
+                height: MediaQuery.sizeOf(context).height * 0.58,
                 child: FruitPartyPanel(
                   state: widget.state,
                   onClose: () => setState(
