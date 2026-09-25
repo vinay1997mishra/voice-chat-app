@@ -1312,6 +1312,17 @@ export class AppDirectoryStore extends DurableObject {
       };
     }
 
+    const access = this.roomAccessState(userId, roomId);
+    if (access.allowed) {
+      return {
+        ok: true,
+        allowed: true,
+        locked: true,
+        blocked: false,
+        attempts_remaining: 5,
+      };
+    }
+
     const row = this.ctx.storage.sql.exec(
       `SELECT generation, attempts
          FROM room_lock_attempts
