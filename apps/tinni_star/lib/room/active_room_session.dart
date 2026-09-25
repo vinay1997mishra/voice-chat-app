@@ -115,6 +115,23 @@ class ActiveRoomSession extends ChangeNotifier {
     await realtime.setMic(roomController.micState == MicState.live);
   }
 
+  Future<void> kickUser(
+    String targetUserId, {
+    Duration? duration,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.kick(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      duration: duration,
+    );
+  }
+
   void refreshFunctionPack() {
     controller?.refreshFunctionPack();
     notifyListeners();
@@ -173,7 +190,12 @@ class ActiveRoomSession extends ChangeNotifier {
           roomId: currentRoomId,
           authToken: currentAuthToken,
         );
-      } catch (_) {
+      } catch (error) {
+        final message = error.toString().toLowerCase();
+        if (message.contains('kicked from this room')) {
+          await close();
+          return;
+        }
         // A later heartbeat/refresh will reconnect automatically.
       }
     });
