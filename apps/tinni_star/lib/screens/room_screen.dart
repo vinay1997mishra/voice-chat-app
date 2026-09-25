@@ -31,6 +31,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final Set<String> _selectedGiftRecipients = <String>{};
   Timer? _emoteExpiryTimer;
+  int? _handledSeatInviteCreatedAtMs;
+  bool _seatInviteDialogOpen = false;
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -392,7 +394,69 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _refresh() {
     if (!mounted) return;
     _scheduleEmoteExpiry();
+    _maybeShowSeatInvite();
     setState(() {});
+  }
+
+  void _maybeShowSeatInvite() {
+    final invite = widget.state.roomSession.pendingSeatInvite;
+    if (invite == null) {
+      _handledSeatInviteCreatedAtMs = null;
+      return;
+    }
+
+    final inviteId = invite.createdAt.millisecondsSinceEpoch;
+    if (_seatInviteDialogOpen ||
+        _handledSeatInviteCreatedAtMs == inviteId) {
+      return;
+    }
+
+    _handledSeatInviteCreatedAtMs = inviteId;
+    _seatInviteDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _seatInviteDialogOpen = false;
+        return;
+      }
+
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Seat Invite'),
+          content: Text(
+            'Owner/Admin invited you to Seat ' +
+                (invite.seatIndex + 1).toString() +
+                '.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Decline'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Accept'),
+            ),
+          ],
+        ),
+      );
+
+      try {
+        await widget.state.roomSession.respondToSeatInvite(
+          accepted == true,
+        );
+        if (accepted == true) {
+          _snack(
+            'Joined Seat ' + (invite.seatIndex + 1).toString() + '.',
+          );
+        }
+      } catch (error) {
+        _snack(error.toString().replaceFirst('Bad state: ', ''));
+      } finally {
+        _seatInviteDialogOpen = false;
+      }
+    });
   }
 
   void _scheduleEmoteExpiry() {
@@ -1067,16 +1131,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     );
     if (selected == null) return;
-    widget.state.roomControls.applyForMic(member.userId, selected);
-    final roomId = widget.state.roomSession.room?.id;
-    if (roomId != null) {
-      await widget.state.realtime.im.sendRoomEvent(roomId, {
-        'type': 'seat_invite',
-        'userId': member.userId,
-        'seat': selected,
-      });
+    try {
+      await widget.state.roomSession.inviteUserToSeat(
+        member.userId,
+        seatIndex: selected,
+      );
+      _snack(
+        'Seat ' +
+            (selected + 1).toString() +
+            ' invite sent to ' +
+            member.displayName +
+            '.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
-    _snack('Seat ' + (selected + 1).toString() + ' invite sent to ' + member.displayName + '.');
   }
 
   int? _seatIndexForMember(
@@ -1135,17 +1204,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _snack(member.displayName + ' is not on a seat.');
       return;
     }
-    controller.managerRemoveUserFromSeat(seatIndex);
-    widget.state.roomControls.kickFromMic(member.userId);
-    final roomId = widget.state.roomSession.room?.id;
-    if (roomId != null) {
-      await widget.state.realtime.im.sendRoomEvent(roomId, {
-        'type': 'seat_remove',
-        'userId': member.userId,
-        'seat': seatIndex,
-      });
+    try {
+      await widget.state.roomSession.moveUserToAudience(member.userId);
+      controller.managerRemoveUserFromSeat(seatIndex);
+      widget.state.roomControls.kickFromMic(member.userId);
+      _snack(member.displayName + ' moved to audience.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
-    _snack(member.displayName + ' moved to audience.');
   }
 
   Future<void> _showKickPicker(RoomPresenceMember member) async {
