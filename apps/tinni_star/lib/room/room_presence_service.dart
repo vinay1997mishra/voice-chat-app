@@ -12,6 +12,8 @@ class RoomPresenceMember {
     this.avatarDataUrl,
     this.flagEmoji = '',
     this.countryCode = '',
+    this.seatIndex,
+    this.micMuted = false,
   });
 
   final String userId;
@@ -19,6 +21,8 @@ class RoomPresenceMember {
   final String? avatarDataUrl;
   final String flagEmoji;
   final String countryCode;
+  final int? seatIndex;
+  final bool micMuted;
   final DateTime joinedAt;
   final DateTime lastSeen;
 }
@@ -37,19 +41,32 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
   bool connected = false;
+  bool selfMicMuted = false;
   String? lastError;
 
   Future<void> join({
     required String roomId,
     required String authToken,
+    int? seatIndex,
   }) =>
-      _post('/room-presence/join', roomId, authToken);
+      _post(
+        '/room-presence/join',
+        roomId,
+        authToken,
+        seatIndex: seatIndex,
+      );
 
   Future<void> heartbeat({
     required String roomId,
     required String authToken,
+    int? seatIndex,
   }) =>
-      _post('/room-presence/heartbeat', roomId, authToken);
+      _post(
+        '/room-presence/heartbeat',
+        roomId,
+        authToken,
+        seatIndex: seatIndex,
+      );
 
   Future<void> leave({
     required String roomId,
@@ -60,6 +77,7 @@ class RoomPresenceService extends ChangeNotifier {
     } finally {
       members.clear();
       connected = false;
+      selfMicMuted = false;
       notifyListeners();
     }
   }
@@ -96,7 +114,41 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refresh({
+  Future<void> setMute({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    required int seatIndex,
+    required bool muted,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-presence/mute'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'seat_index': seatIndex,
+        'muted': muted,
+      }),
+    );
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to update room mute',
+      );
+    }
+    _apply(data);
+    notifyListeners();
+  }
+
+    Future<void> refresh({
     required String roomId,
     required String authToken,
   }) async {
@@ -131,8 +183,9 @@ class RoomPresenceService extends ChangeNotifier {
   Future<void> _post(
     String path,
     String roomId,
-    String authToken,
-  ) async {
+    String authToken, {
+    int? seatIndex,
+  }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
       request.headers.contentType = ContentType.json;
@@ -140,7 +193,12 @@ class RoomPresenceService extends ChangeNotifier {
         HttpHeaders.authorizationHeader,
         'Bearer $authToken',
       );
-      request.write(jsonEncode(<String, Object>{'room_id': roomId}));
+      request.write(
+        jsonEncode(<String, Object?>{
+          'room_id': roomId,
+          'seat_index': seatIndex,
+        }),
+      );
       final response = await request.close();
       final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -161,6 +219,7 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   void _apply(Map<String, dynamic> data) {
+    selfMicMuted = data['self_mic_muted'] == true;
     final rawMembers = data['members'];
     if (rawMembers is! List) return;
 
@@ -176,6 +235,10 @@ class RoomPresenceService extends ChangeNotifier {
                 avatarDataUrl: row['avatar_data_url']?.toString(),
                 flagEmoji: row['flag_emoji']?.toString() ?? '',
                 countryCode: row['country_code']?.toString() ?? '',
+                seatIndex: row['seat_index'] == null
+                    ? null
+                    : _asInt(row['seat_index']),
+                micMuted: row['mic_muted'] == true,
                 joinedAt: DateTime.fromMillisecondsSinceEpoch(
                   _asInt(row['joined_at']),
                   isUtc: true,
