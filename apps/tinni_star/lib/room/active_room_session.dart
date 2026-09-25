@@ -145,6 +145,14 @@ class ActiveRoomSession extends ChangeNotifier {
     if (roomId == null || authToken == null || seatIndex == null) {
       throw StateError('You must be on a seat to use emotes.');
     }
+
+    // Push the current seat first so a just-seated user can use an emote
+    // immediately instead of waiting for the next presence heartbeat.
+    await presence.heartbeat(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+    );
     await presence.setEmote(
       roomId: roomId,
       authToken: authToken,
