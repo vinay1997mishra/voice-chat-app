@@ -45,7 +45,9 @@ void main() {
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Minimize room'));
+    await tester.tap(find.byKey(const Key('room-power-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Minimize'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('mini-room-bar')), findsOneWidget);
 
