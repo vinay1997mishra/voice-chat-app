@@ -471,6 +471,39 @@ export class StaffAuthStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_staff_panels_email ON staff_panels(email);
+
+      CREATE TABLE IF NOT EXISTS panel_audit_log (
+        id TEXT PRIMARY KEY,
+        actor_role TEXT NOT NULL,
+        panel_id TEXT,
+        panel_name TEXT,
+        actor_email TEXT,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        details_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_panel_audit_panel_time
+        ON panel_audit_log(panel_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_panel_audit_time
+        ON panel_audit_log(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS owner_notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        source_user_id TEXT,
+        source_display_name TEXT,
+        target_type TEXT,
+        target_id TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_notifications_time
+        ON owner_notifications(created_at DESC);
     `);
     try {
       this.ctx.storage.sql.exec(
@@ -703,6 +736,238 @@ export class StaffAuthStore extends DurableObject {
       created_at: Number(updated.created_at),
     };
   }
+
+  async recordAudit(input) {
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const actorRole = String(input?.actor_role || "staff");
+    const panelId = input?.panel_id ? String(input.panel_id) : null;
+    const panelName = input?.panel_name ? String(input.panel_name) : null;
+    const actorEmail = input?.actor_email ? String(input.actor_email) : null;
+    const action = String(input?.action || "").trim();
+    const targetType = input?.target_type ? String(input.target_type) : null;
+    const targetId = input?.target_id ? String(input.target_id) : null;
+    if (!action) throw new Error("Audit action is required");
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO panel_audit_log
+        (id, actor_role, panel_id, panel_name, actor_email, action, target_type, target_id, details_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      actorRole,
+      panelId,
+      panelName,
+      actorEmail,
+      action,
+      targetType,
+      targetId,
+      JSON.stringify(input?.details || {}),
+      createdAt,
+    );
+
+    return { id, created_at: createdAt };
+  }
+
+  async listAudit(input = {}) {
+    const panelId = input?.panel_id ? String(input.panel_id) : "";
+    const rawLimit = Number(input?.limit || 250);
+    const limit = Math.min(500, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 250));
+    const rows = panelId
+      ? this.ctx.storage.sql.exec(
+          `SELECT id, actor_role, panel_id, panel_name, actor_email, action,
+                  target_type, target_id, details_json, created_at
+             FROM panel_audit_log
+            WHERE panel_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?`,
+          panelId,
+          limit,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          `SELECT id, actor_role, panel_id, panel_name, actor_email, action,
+                  target_type, target_id, details_json, created_at
+             FROM panel_audit_log
+            ORDER BY created_at DESC
+            LIMIT ?`,
+          limit,
+        ).toArray();
+
+    return rows.map((row) => ({
+      id: String(row.id),
+      actor_role: String(row.actor_role),
+      panel_id: row.panel_id ? String(row.panel_id) : null,
+      panel_name: row.panel_name ? String(row.panel_name) : null,
+      actor_email: row.actor_email ? String(row.actor_email) : null,
+      action: String(row.action),
+      target_type: row.target_type ? String(row.target_type) : null,
+      target_id: row.target_id ? String(row.target_id) : null,
+      details: JSON.parse(String(row.details_json || "{}")),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  async auditSummary(input = {}) {
+    const panelId = input?.panel_id ? String(input.panel_id) : "";
+    const byPanel = panelId
+      ? this.ctx.storage.sql.exec(
+          `SELECT panel_id, panel_name, actor_role, COUNT(*) AS total_actions
+             FROM panel_audit_log
+            WHERE panel_id = ?
+            GROUP BY panel_id, panel_name, actor_role
+            ORDER BY total_actions DESC`,
+          panelId,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          `SELECT panel_id, panel_name, actor_role, COUNT(*) AS total_actions
+             FROM panel_audit_log
+            GROUP BY panel_id, panel_name, actor_role
+            ORDER BY total_actions DESC`,
+        ).toArray();
+
+    const byAction = panelId
+      ? this.ctx.storage.sql.exec(
+          `SELECT action, COUNT(*) AS count
+             FROM panel_audit_log
+            WHERE panel_id = ?
+            GROUP BY action
+            ORDER BY count DESC`,
+          panelId,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          `SELECT action, COUNT(*) AS count
+             FROM panel_audit_log
+            GROUP BY action
+            ORDER BY count DESC`,
+        ).toArray();
+
+    return {
+      by_panel: byPanel.map((row) => ({
+        panel_id: row.panel_id ? String(row.panel_id) : null,
+        panel_name: row.panel_name ? String(row.panel_name) : null,
+        actor_role: String(row.actor_role),
+        total_actions: Number(row.total_actions || 0),
+      })),
+      by_action: byAction.map((row) => ({
+        action: String(row.action),
+        count: Number(row.count || 0),
+      })),
+    };
+  }
+
+  async deleteAudit(idValue) {
+    const id = String(idValue || "").trim();
+    if (!id) throw new Error("Audit record ID is required");
+    this.ctx.storage.sql.exec("DELETE FROM panel_audit_log WHERE id = ?", id);
+    return { ok: true };
+  }
+
+  async clearAudit(panelIdValue = "") {
+    const panelId = String(panelIdValue || "").trim();
+    if (panelId) {
+      this.ctx.storage.sql.exec("DELETE FROM panel_audit_log WHERE panel_id = ?", panelId);
+    } else {
+      this.ctx.storage.sql.exec("DELETE FROM panel_audit_log");
+    }
+    return { ok: true };
+  }
+
+  async createOwnerNotification(input) {
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const type = String(input?.type || "general");
+    const title = String(input?.title || "Notification").trim();
+    const message = String(input?.message || "").trim();
+    if (!message) throw new Error("Notification message is required");
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO owner_notifications
+        (id, type, source_user_id, source_display_name, target_type, target_id,
+         title, message, metadata_json, is_read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      id,
+      type,
+      input?.source_user_id ? String(input.source_user_id) : null,
+      input?.source_display_name ? String(input.source_display_name) : null,
+      input?.target_type ? String(input.target_type) : null,
+      input?.target_id ? String(input.target_id) : null,
+      title,
+      message,
+      JSON.stringify(input?.metadata || {}),
+      createdAt,
+    );
+
+    return { id, created_at: createdAt };
+  }
+
+  async listOwnerNotifications(input = {}) {
+    const rawLimit = Number(input?.limit || 200);
+    const limit = Math.min(500, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 200));
+    return this.ctx.storage.sql.exec(
+      `SELECT id, type, source_user_id, source_display_name, target_type, target_id,
+              title, message, metadata_json, is_read, created_at
+         FROM owner_notifications
+        ORDER BY created_at DESC
+        LIMIT ?`,
+      limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      type: String(row.type),
+      source_user_id: row.source_user_id ? String(row.source_user_id) : null,
+      source_display_name: row.source_display_name ? String(row.source_display_name) : null,
+      target_type: row.target_type ? String(row.target_type) : null,
+      target_id: row.target_id ? String(row.target_id) : null,
+      title: String(row.title),
+      message: String(row.message),
+      metadata: JSON.parse(String(row.metadata_json || "{}")),
+      is_read: Number(row.is_read) === 1,
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  async markOwnerNotificationRead(idValue, isReadValue = true) {
+    const id = String(idValue || "").trim();
+    if (!id) throw new Error("Notification ID is required");
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_notifications SET is_read = ? WHERE id = ?",
+      isReadValue ? 1 : 0,
+      id,
+    );
+    return { ok: true };
+  }
+
+  async deleteOwnerNotification(idValue) {
+    const id = String(idValue || "").trim();
+    if (!id) throw new Error("Notification ID is required");
+    this.ctx.storage.sql.exec("DELETE FROM owner_notifications WHERE id = ?", id);
+    return { ok: true };
+  }
+}
+
+function auditActor(session) {
+  if (ownerOnly(session)) {
+    return {
+      actor_role: "owner",
+      panel_id: "owner-main",
+      panel_name: "Owner Main Panel",
+      actor_email: String(session?.email || ""),
+    };
+  }
+  return {
+    actor_role: "staff",
+    panel_id: String(session?.panelId || ""),
+    panel_name: String(session?.panelName || "Staff Panel"),
+    actor_email: String(session?.email || ""),
+  };
+}
+
+async function writeAudit(env, session, action, targetType = null, targetId = null, details = {}) {
+  return getStaffStore(env).recordAudit({
+    ...auditActor(session),
+    action,
+    target_type: targetType,
+    target_id: targetId,
+    details,
+  });
 }
 
 export default {
@@ -714,7 +979,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.2.0",
+        version: "1.3.0",
       });
     }
 
@@ -1895,6 +2160,36 @@ export default {
       }
     }
 
+    if (url.pathname === "/app/complaints" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const message = String(body.message || body.details || "").trim();
+      const category = String(body.category || body.type || "complaint").trim();
+      const targetType = String(body.target_type || "").trim();
+      const targetId = String(body.target_id || "").trim();
+      if (message.length < 3) {
+        return json({ ok: false, error: "Complaint details are required" }, 400);
+      }
+
+      const notification = await getStaffStore(env).createOwnerNotification({
+        type: "complaint",
+        source_user_id: appSession.user.user_id,
+        source_display_name: appSession.user.display_name,
+        target_type: targetType || null,
+        target_id: targetId || null,
+        title: "New app complaint",
+        message,
+        metadata: { category },
+      });
+
+      return json({
+        ok: true,
+        complaint_id: notification.id,
+        owner_notification_created: true,
+      }, 201);
+    }
+
     if (url.pathname === "/auth/login" && request.method === "POST") {
       if (!env.SESSION_SECRET) {
         return json({ ok: false, error: "Login session secret is not configured yet" }, 503);
@@ -1975,11 +2270,101 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/owner/notifications" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const notifications = await getStaffStore(env).listOwnerNotifications({
+        limit: url.searchParams.get("limit") || 200,
+      });
+      return json({
+        ok: true,
+        notifications,
+        unread_count: notifications.filter((item) => !item.is_read).length,
+      });
+    }
+
+    const ownerNotificationMatch = url.pathname.match(/^\/api\/owner\/notifications\/([^/]+)$/);
+    if (ownerNotificationMatch && request.method === "PATCH") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      return json(await getStaffStore(env).markOwnerNotificationRead(
+        decodeURIComponent(ownerNotificationMatch[1]),
+        body.is_read !== false,
+      ));
+    }
+
+    if (ownerNotificationMatch && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json(await getStaffStore(env).deleteOwnerNotification(
+        decodeURIComponent(ownerNotificationMatch[1]),
+      ));
+    }
+
+    if (url.pathname === "/api/audit/summary" && request.method === "GET") {
+      if (!ownerOnly(session) && !sessionHasPermission(session, "audit.view")) {
+        return json({ ok: false, error: "Audit access required" }, 403);
+      }
+      const panelId = ownerOnly(session)
+        ? String(url.searchParams.get("panel_id") || "")
+        : String(session.panelId || "");
+      const summary = await getStaffStore(env).auditSummary({ panel_id: panelId });
+      return json({ ok: true, summary });
+    }
+
+    if (url.pathname === "/api/audit" && request.method === "GET") {
+      if (!ownerOnly(session) && !sessionHasPermission(session, "audit.view")) {
+        return json({ ok: false, error: "Audit access required" }, 403);
+      }
+      const panelId = ownerOnly(session)
+        ? String(url.searchParams.get("panel_id") || "")
+        : String(session.panelId || "");
+      const records = await getStaffStore(env).listAudit({
+        panel_id: panelId,
+        limit: url.searchParams.get("limit") || 250,
+      });
+      return json({
+        ok: true,
+        records,
+        scope: ownerOnly(session) ? (panelId || "all") : "own-panel",
+        can_delete: ownerOnly(session),
+      });
+    }
+
+    if (url.pathname === "/api/audit" && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json(await getStaffStore(env).clearAudit(
+        String(url.searchParams.get("panel_id") || ""),
+      ));
+    }
+
+    const auditRecordMatch = url.pathname.match(/^\/api\/audit\/([^/]+)$/);
+    if (auditRecordMatch && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json(await getStaffStore(env).deleteAudit(
+        decodeURIComponent(auditRecordMatch[1]),
+      ));
+    }
+
     if (url.pathname === "/api/staff/panels" && request.method === "POST") {
       if (!ownerOnly(session)) return json({ ok: false, error: "Owner access required" }, 403);
       const body = await request.json().catch(() => ({}));
       try {
         const panel = await getStaffStore(env).createPanel(body);
+        await writeAudit(env, session, "staff.panel.create", "panel", panel.id, {
+          panel_name: panel.name,
+          staff_email: panel.email,
+          assigned_user_id: panel.assigned_user_id || null,
+          permissions: panel.permissions,
+        });
         return json({ ok: true, panel }, 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to create staff panel") }, 400);
@@ -2001,6 +2386,17 @@ export default {
           decodeURIComponent(staffPanelMatch[1]),
           body,
         );
+        await writeAudit(env, session, "staff.panel.update", "panel", panel.id, {
+          panel_name: panel.name,
+          changed: {
+            staff_email: body.staff_email !== undefined,
+            password: body.password !== undefined,
+            permissions: body.permissions !== undefined,
+            enabled: body.enabled !== undefined,
+          },
+          enabled: panel.enabled,
+          permissions: panel.permissions,
+        });
         return json({ ok: true, panel });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to update staff panel") }, 400);
@@ -2022,6 +2418,12 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         const theme = getAppDirectoryStore(env).createPanelRoomTheme(body);
+        await writeAudit(env, session, "room.theme.create", "room_theme", theme.id, {
+          name: theme.name,
+          permanent: Boolean(theme.permanent),
+          starts_at: theme.starts_at || null,
+          expires_at: theme.expires_at || null,
+        });
         return json({ ok: true, theme }, 201);
       } catch (error) {
         return json({
@@ -2037,11 +2439,10 @@ export default {
         return json({ ok: false, error: "Room theme remove access required" }, 403);
       }
       try {
-        return json(
-          getAppDirectoryStore(env).disableRoomTheme(
-            decodeURIComponent(roomThemeMatch[1]),
-          ),
-        );
+        const themeId = decodeURIComponent(roomThemeMatch[1]);
+        const result = getAppDirectoryStore(env).disableRoomTheme(themeId);
+        await writeAudit(env, session, "room.theme.remove", "room_theme", themeId, {});
+        return json(result);
       } catch (error) {
         return json({
           ok: false,
