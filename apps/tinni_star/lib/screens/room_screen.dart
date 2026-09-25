@@ -1681,13 +1681,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _snack(visible ? 'Room notice visible.' : 'Room notice hidden.');
         },
       ),
-      (
-        'Room Theme',
-        Icons.checkroom_rounded,
-        () {
-          _openRoomThemeSelector();
-        },
-      ),
+      if (_isRoomOwner)
+        (
+          'Room Theme',
+          Icons.checkroom_rounded,
+          () {
+            _openRoomThemeSelector();
+          },
+        ),
       (
         'Seat Controls',
         Icons.event_seat_rounded,
