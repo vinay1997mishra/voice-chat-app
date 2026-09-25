@@ -20,6 +20,7 @@
 
       <nav class="nav" id="nav">
         <button class="nav-item active" data-view="dashboard"><span>◈</span>Dashboard</button>
+        <button class="nav-item" data-view="notifications"><span>●</span>Notifications</button>
         <button class="nav-item" data-view="users"><span>◎</span>Users</button>
         <button class="nav-item" data-view="rooms"><span>▣</span>Rooms</button>
         <button class="nav-item" data-view="wallets"><span>◫</span>Wallets</button>
@@ -94,6 +95,32 @@
           <article class="panel">
             <div class="panel-head"><div><h2>A-to-Z Owner Controls</h2><p>Every account is a normal user first; posts and tags are additional.</p></div></div>
             <div class="module-grid" id="moduleGrid"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-notifications">
+          <div class="grid two">
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Owner Notifications</h2>
+                  <p>App complaints arrive here for the main Owner Panel only. Custom staff panels do not receive these notifications.</p>
+                </div>
+                <button class="btn secondary" data-action="notifications-refresh">Refresh</button>
+              </div>
+              <div class="stats-grid">
+                <article class="stat-card"><span>Unread</span><strong id="notificationUnreadCount">0</strong><small>Owner-only</small></article>
+                <article class="stat-card"><span>Total loaded</span><strong id="notificationTotalCount">0</strong><small>Latest notifications</small></article>
+              </div>
+            </article>
+            <article class="panel">
+              <h2>Complaint Routing</h2>
+              <p class="muted">Complaints submitted from the app are stored as Owner notifications. They are not pushed to newly created staff panels.</p>
+            </article>
+          </div>
+          <article class="panel">
+            <div class="panel-head"><h2>Notification Inbox</h2><span class="badge gold">Owner only</span></div>
+            <div id="ownerNotifications" class="empty-state">Loading notifications…</div>
           </article>
         </section>
 
@@ -217,7 +244,37 @@
         </section>
 
         <section class="view" id="view-audit">
-          <article class="panel"><div class="panel-head"><div><h2>Owner Audit Log</h2><p>Every sensitive action should include actor, target, before/after values, reason and time.</p></div><button class="btn secondary" data-action="audit-export">Export</button></div><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="auditTable"><tr><td colspan="4" class="muted">Waiting for server audit API.</td></tr></tbody></table></div></article>
+          <div class="grid two">
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Panel Activity Records</h2>
+                  <p>Every server-backed panel action is recorded with panel, target and full date/time/year.</p>
+                </div>
+                <button class="btn secondary" data-action="audit-refresh">Refresh</button>
+              </div>
+              <div id="auditSummary" class="empty-state">Loading panel totals…</div>
+            </article>
+            <article class="panel">
+              <h2>Record Privacy</h2>
+              <p class="muted">The Owner Main Panel can see all records and is the only panel allowed to delete them. A custom panel can see only its own activity if you grant that panel the Audit Log → View permission.</p>
+            </article>
+          </div>
+          <article class="panel">
+            <div class="panel-head">
+              <div><h2>Audit Log</h2><p>Panel, action, target, exact timestamp and details.</p></div>
+              <div class="button-row">
+                <button class="btn secondary" data-action="audit-export">Export</button>
+                <button class="btn secondary" id="clearAuditBtn" data-action="audit-clear">Delete All Records</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Date / Time</th><th>Panel</th><th>Action</th><th>Target</th><th>Details</th><th>Delete</th></tr></thead>
+                <tbody id="auditTable"><tr><td colspan="6" class="muted">Loading audit records…</td></tr></tbody>
+              </table>
+            </div>
+          </article>
         </section>
       </section>
     </main>
