@@ -242,8 +242,9 @@ class _ReportUserSheetState extends State<_ReportUserSheet> {
         roomId: widget.roomId,
       );
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Report submitted to Tinni Star moderation.'),
         ),
