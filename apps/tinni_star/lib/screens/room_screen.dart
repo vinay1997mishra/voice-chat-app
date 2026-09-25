@@ -498,6 +498,131 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<RoomThemeRecord?> _createPaidRoomTheme({
+    required int priceCoins,
+    required int durationDays,
+  }) async {
+    final account = widget.state.auth.current;
+    if (account == null) return null;
+
+    if (widget.state.wallet.coins < priceCoins) {
+      _snack('You need ' + priceCoins.toString() + ' coins to add a custom theme.');
+      return null;
+    }
+
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 72,
+      maxWidth: 1440,
+      maxHeight: 1920,
+    );
+    if (image == null || !mounted) return null;
+
+    final bytes = await image.readAsBytes();
+    final mime = image.mimeType?.startsWith('image/') == true
+        ? image.mimeType!
+        : 'image/jpeg';
+    final asset = 'data:' + mime + ';base64,' + base64Encode(bytes);
+    if (asset.length > 2500000) {
+      _snack('Theme image is too large. Choose a smaller image.');
+      return null;
+    }
+
+    final nameController = TextEditingController();
+    var policyConfirmed = false;
+    final name = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final validName = nameController.text.trim().length >= 2;
+          return AlertDialog(
+            title: const Text('Add New Room Theme'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    priceCoins.toString() + ' coins • ' + durationDays.toString() + ' days',
+                    style: const TextStyle(
+                      color: RoyalPalette.gold,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    maxLength: 60,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: const InputDecoration(labelText: 'Theme name'),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: policyConfirmed,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        policyConfirmed = value == true;
+                      });
+                    },
+                    title: const Text(
+                      'I confirm this theme does not contain sexual or political content.',
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  const Text(
+                    'Themes that break this rule can be removed from the Owner Panel.',
+                    style: TextStyle(color: RoyalPalette.muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: validName && policyConfirmed
+                    ? () => Navigator.pop(dialogContext, nameController.text.trim())
+                    : null,
+                child: const Text('Add for 7 Days'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    nameController.dispose();
+    if (name == null || !mounted) return null;
+
+    final paid = widget.state.wallet.spendCoins(
+      priceCoins,
+      'Custom room theme • ' + durationDays.toString() + ' days',
+    );
+    if (!paid) {
+      _snack('Not enough coins.');
+      return null;
+    }
+
+    try {
+      final theme = await widget.state.discovery.createRoomTheme(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        name: name,
+        asset: asset,
+        policyConfirmed: true,
+      );
+      if (mounted) {
+        _snack('Theme added for ' + durationDays.toString() + ' days.');
+      }
+      return theme;
+    } catch (error) {
+      widget.state.wallet.creditCoins(priceCoins, 'Custom room theme refund');
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      return null;
+    }
+  }
   Future<void> _openRoomThemeSelector() async {
     if (!_isRoomOwner) {
       _snack('Only the room owner can change room theme.');
