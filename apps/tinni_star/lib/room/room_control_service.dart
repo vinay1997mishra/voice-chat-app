@@ -66,6 +66,8 @@ class RoomControlService {
   final Set<int> lockedSeats = <int>{};
   final Map<int, String> seatUsers = <int, String>{};
   final List<MicApplication> micApplications = <MicApplication>[];
+  final Map<String, String> agencyNames = <String, String>{};
+  final Map<String, DateTime?> roomKicks = <String, DateTime?>{};
   int? hostSeat;
   int? bossSeat;
 
@@ -88,6 +90,8 @@ class RoomControlService {
     lockedSeats.clear();
     seatUsers.clear();
     micApplications.clear();
+    agencyNames.clear();
+    roomKicks.clear();
     hostSeat = null;
     bossSeat = null;
     roles[ownerUserId] = RoomRole.owner;
@@ -171,6 +175,41 @@ class RoomControlService {
   }
 
   void unblacklist(String userId) => roomBlacklist.remove(userId);
+
+  void setAgencyName(String userId, String agencyName) {
+    final value = agencyName.trim();
+    if (value.isEmpty) {
+      agencyNames.remove(userId);
+    } else {
+      agencyNames[userId] = value;
+    }
+  }
+
+  String? agencyNameFor(String userId) => agencyNames[userId];
+
+  void kickFor(String userId, Duration? duration) {
+    kickFromRoom(userId);
+    if (duration == null) {
+      roomKicks[userId] = null;
+      roomBlacklist.add(userId);
+      return;
+    }
+    roomKicks[userId] = DateTime.now().add(duration);
+  }
+
+  bool isKicked(String userId) {
+    if (!roomKicks.containsKey(userId)) return false;
+    final until = roomKicks[userId];
+    if (until == null) return true;
+    if (DateTime.now().isBefore(until)) return true;
+    roomKicks.remove(userId);
+    return false;
+  }
+
+  DateTime? kickUntil(String userId) {
+    if (!isKicked(userId)) return null;
+    return roomKicks[userId];
+  }
 
   void toggleSeatLock(int seat) {
     if (!lockedSeats.add(seat)) lockedSeats.remove(seat);
