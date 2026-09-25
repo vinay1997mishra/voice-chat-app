@@ -459,6 +459,7 @@ export class RoomPresenceStore extends DurableObject {
           ? null
           : Number(row.seat_index),
       mic_muted: this.muteStatus(row.user_id, row.seat_index),
+      is_admin: this.isManager(row.user_id),
       seat_emote:
         row.seat_emote &&
         row.seat_emote_until !== null &&
