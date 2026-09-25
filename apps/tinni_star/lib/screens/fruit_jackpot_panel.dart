@@ -204,10 +204,16 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final tight = constraints.maxHeight < 520;
-        final cellWidth = (constraints.maxWidth - 26) / 3;
+        final railWidth = tight ? 36.0 : 44.0;
+        final cellWidth =
+            ((constraints.maxWidth - 34 - (railWidth * 2)) / 3)
+                .clamp(68.0, 180.0)
+                .toDouble();
         final boardHeight =
-            (constraints.maxHeight - (tight ? 150 : 190)).clamp(300.0, 610.0);
-        final cellHeight = (boardHeight - 10) / 3;
+            (constraints.maxHeight - (tight ? 175 : 205))
+                .clamp(210.0, 430.0)
+                .toDouble();
+        final cellHeight = (boardHeight - 12) / 3;
         final boardAspect = cellWidth / cellHeight;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -260,86 +266,105 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
               ),
               SizedBox(height: tight ? 5 : 8),
               Expanded(
-                child: Stack(
+                child: Row(
                   children: [
-                    GridView.builder(
-                      padding: EdgeInsets.zero,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _board.length,
-                      gridDelegate:
-                          SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 6,
-                        mainAxisSpacing: 6,
-                        childAspectRatio: boardAspect,
-                      ),
-                      itemBuilder: (context, index) {
-                        final fruit = _board[index];
-                        if (fruit == null) {
-                          return _Lucky11Tile(
-                            active: luckyActive,
-                            tick: _tick,
-                          );
-                        }
-
-                        final mine = game.userBetForFruit(fruit);
-                        final moving =
-                            (game.bettingOpen || game.inResultSpin) &&
-                            fruit == _movingFruit;
-                        final bonus = bonusFruits.contains(fruit);
-                        final winner = revealResult &&
-                            latest?.isLucky11 != true &&
-                            latest?.fruit == fruit;
-
-                        return _FruitTile(
-                          fruit: fruit,
-                          myBet: mine,
-                          moving: moving,
-                          bonus: bonus,
-                          winner: winner,
-                          compact: tight,
-                          onTap: game.bettingOpen
-                              ? () => _placeBet(fruit)
-                              : null,
-                        );
-                      },
+                    SizedBox(
+                      width: railWidth,
+                      child: _JackpotHistoryRail(history: game.history),
                     ),
-                    if (luckyActive)
-                      Positioned(
-                        left: 4,
-                        right: 4,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          child: Container(
-                            height: 8,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(99),
-                              gradient: LinearGradient(
-                                colors: (_tick ~/ 2).isEven
-                                    ? const [
-                                        Color(0x00FF42D9),
-                                        Color(0xFFFF42D9),
-                                        Color(0xFFFFD84D),
-                                        Color(0x00FF42D9),
-                                      ]
-                                    : const [
-                                        Color(0x00FFD84D),
-                                        Color(0xFF57E7FF),
-                                        Color(0xFFFF42D9),
-                                        Color(0x00FFD84D),
-                                      ],
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0xAAFF42D9),
-                                  blurRadius: 14,
-                                  spreadRadius: 2,
-                                ),
-                              ],
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          GridView.builder(
+                            padding: EdgeInsets.zero,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _board.length,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 6,
+                              childAspectRatio: boardAspect,
                             ),
+                            itemBuilder: (context, index) {
+                              final fruit = _board[index];
+                              if (fruit == null) {
+                                return _Lucky11Tile(
+                                  active: luckyActive,
+                                  tick: _tick,
+                                );
+                              }
+
+                              final mine = game.userBetForFruit(fruit);
+                              final moving =
+                                  (game.bettingOpen || game.inResultSpin) &&
+                                  fruit == _movingFruit;
+                              final bonus = bonusFruits.contains(fruit);
+                              final winner = revealResult &&
+                                  latest?.isLucky11 != true &&
+                                  latest?.fruit == fruit;
+
+                              return _FruitTile(
+                                fruit: fruit,
+                                myBet: mine,
+                                moving: moving,
+                                bonus: bonus,
+                                winner: winner,
+                                compact: tight,
+                                onTap: game.bettingOpen
+                                    ? () => _placeBet(fruit)
+                                    : null,
+                              );
+                            },
                           ),
-                        ),
+                          if (luckyActive)
+                            Positioned(
+                              left: 4,
+                              right: 4,
+                              bottom: 0,
+                              child: IgnorePointer(
+                                child: Container(
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(99),
+                                    gradient: LinearGradient(
+                                      colors: (_tick ~/ 2).isEven
+                                          ? const [
+                                              Color(0x00FF42D9),
+                                              Color(0xFFFF42D9),
+                                              Color(0xFFFFD84D),
+                                              Color(0x00FF42D9),
+                                            ]
+                                          : const [
+                                              Color(0x00FFD84D),
+                                              Color(0xFF57E7FF),
+                                              Color(0xFFFF42D9),
+                                              Color(0x00FFD84D),
+                                            ],
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0xAAFF42D9),
+                                        blurRadius: 14,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: railWidth,
+                      child: _JackpotLuckyRail(
+                        active: luckyActive,
+                        spinning: game.inResultSpin,
+                      ),
+                    ),
                   ],
                 ),
               ),
