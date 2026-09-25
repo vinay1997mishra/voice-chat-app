@@ -10,7 +10,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
+            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -27,6 +27,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
   int walletBalance = 0;
   int todayWinnings = 0;
   int betLockMs = 3000;
+  int roundDurationMs = 21000;
 
   int _roundEndMs = 0;
   int _serverOffsetMs = 0;
@@ -141,6 +142,10 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     currentRoundId = _asInt(round['round_id']);
     _roundEndMs = _asInt(round['round_end']);
     betLockMs = _asInt(round['bet_lock_ms'], fallback: 3000);
+    roundDurationMs = _asInt(
+      round['round_duration_ms'],
+      fallback: 21000,
+    );
     totalBet = _asInt(round['total_bet']);
     activePlayers = _asInt(round['active_players']);
 
@@ -178,6 +183,18 @@ class FruitJackpotRemoteService extends ChangeNotifier {
         ? FruitResultMode.marginTargetHighVolume
         : FruitResultMode.randomLowVolume;
 
+    final bonusFruits = <FruitKind>[];
+    for (final item in _asList(row['bonus_fruits'])) {
+      final bonusMap = _asMap(item);
+      final key = bonusMap['key']?.toString();
+      for (final candidate in FruitKind.values) {
+        if (candidate.name == key) {
+          bonusFruits.add(candidate);
+          break;
+        }
+      }
+    }
+
     return FruitRoundResult(
       roundId: _asInt(row['round_id']),
       fruit: fruit,
@@ -191,6 +208,10 @@ class FruitJackpotRemoteService extends ChangeNotifier {
         isUtc: true,
       ),
       marginTargetMet: row['margin_target_met'] == true,
+      specialKind: row['special_kind']?.toString(),
+      bonusFruits: bonusFruits,
+      jackpotHit: row['jackpot_hit'] == true,
+      jackpotPayout: _asInt(row['jackpot_payout']),
     );
   }
 
