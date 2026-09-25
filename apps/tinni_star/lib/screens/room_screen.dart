@@ -52,7 +52,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final account = widget.state.auth.current;
     if (account == null) return;
     final ownerId = widget.room.ownerId ?? widget.room.id;
+
+    if (widget.room.locked && account.userId != ownerId) {
+      final allowed = await _requestLockedRoomAccess(
+        authToken: account.authToken,
+      );
+      if (!allowed) {
+        if (mounted) Navigator.maybePop(context);
+        return;
+      }
+    }
+
     widget.state.roomControls.configureForRoom(ownerId);
+    widget.state.roomControls.settings =
+        widget.state.roomControls.settings.copyWith(
+      visibility: widget.room.locked
+          ? RoomVisibility.privateRoom
+          : RoomVisibility.publicRoom,
+    );
     widget.state.roomControls.roomMode =
         widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
     await widget.state.roomSession.open(
@@ -65,7 +82,238 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Color get _roomBackgroundColor {
+  Future<bool> _requestLockedRoomAccess({
+    required String authToken,
+  }) async {
+    RoomAccessResult status;
+    try {
+      status = await widget.state.discovery.getRoomAccessStatus(
+        authToken: authToken,
+        roomId: widget.room.id,
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      return false;
+    }
+
+    if (status.allowed) return true;
+    if (status.blocked) {
+      _snack(
+        status.error ??
+            '5 wrong attempts used. Wait until the room is opened.',
+      );
+      return false;
+    }
+
+    var errorText = status.error;
+    var attemptsRemaining = status.attemptsRemaining;
+
+    while (mounted) {
+      final password = await _promptRoomPassword(
+        errorText: errorText,
+        attemptsRemaining: attemptsRemaining,
+      );
+      if (password == null) return false;
+
+      RoomAccessResult result;
+      try {
+        result = await widget.state.discovery.verifyRoomPassword(
+          authToken: authToken,
+          roomId: widget.room.id,
+          password: password,
+        );
+      } catch (error) {
+        _snack(error.toString().replaceFirst('Bad state: ', ''));
+        return false;
+      }
+
+      if (result.allowed) return true;
+      if (result.blocked) {
+        _snack(
+          result.error ??
+              '5 wrong attempts used. Wait until the room is opened.',
+        );
+        return false;
+      }
+
+      errorText = result.error ?? 'Incorrect room password';
+      attemptsRemaining = result.attemptsRemaining;
+    }
+
+    return false;
+  }
+
+  Future<String?> _promptRoomPassword({
+    String? errorText,
+    int? attemptsRemaining,
+  }) async {
+    final passwordController = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Room Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter the password to join this locked room.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                autofocus: true,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (value) {
+                  if (value.isNotEmpty) {
+                    Navigator.pop(dialogContext, value);
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  errorText: errorText,
+                ),
+              ),
+              if (attemptsRemaining != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Attempts remaining: $attemptsRemaining',
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = passwordController.text;
+                if (value.isNotEmpty) {
+                  Navigator.pop(dialogContext, value);
+                }
+              },
+              child: const Text('Enter'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      passwordController.dispose();
+    }
+  }
+
+  Future<String?> _promptNewRoomPassword() async {
+    final passwordController = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Lock Room'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Set a password. Users will need it to enter this room.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                autofocus: true,
+                obscureText: true,
+                maxLength: 32,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Room password',
+                  helperText: '4–32 characters',
+                ),
+                onSubmitted: (value) {
+                  if (value.length >= 4 && value.length <= 32) {
+                    Navigator.pop(dialogContext, value);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = passwordController.text;
+                if (value.length < 4 || value.length > 32) return;
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Lock'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      passwordController.dispose();
+    }
+  }
+
+  Future<void> _toggleRoomLock() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can change room lock.');
+      return;
+    }
+
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final controls = widget.state.roomControls;
+    final currentlyLocked =
+        controls.settings.visibility == RoomVisibility.privateRoom;
+
+    if (currentlyLocked) {
+      try {
+        await widget.state.discovery.setRoomLock(
+          authToken: account.authToken,
+          roomId: widget.room.id,
+          locked: false,
+        );
+        controls.settings = controls.settings.copyWith(
+          visibility: RoomVisibility.publicRoom,
+        );
+        if (mounted) setState(() {});
+        _snack('Room opened. Password attempts have been reset.');
+      } catch (error) {
+        _snack(error.toString().replaceFirst('Bad state: ', ''));
+      }
+      return;
+    }
+
+    final password = await _promptNewRoomPassword();
+    if (password == null) return;
+
+    try {
+      await widget.state.discovery.setRoomLock(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        locked: true,
+        password: password,
+      );
+      controls.settings = controls.settings.copyWith(
+        visibility: RoomVisibility.privateRoom,
+      );
+      if (mounted) setState(() {});
+      _snack('Room locked with password.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+    Color get _roomBackgroundColor {
     switch (widget.state.roomControls.themeId) {
       case 'night-blue':
         return const Color(0xFF03101B);
@@ -1146,17 +1394,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        controls.settings.visibility == RoomVisibility.publicRoom ? 'Room Open' : 'Room Private',
-        controls.settings.visibility == RoomVisibility.publicRoom ? Icons.lock_open_rounded : Icons.lock_rounded,
+        controls.settings.visibility == RoomVisibility.publicRoom
+            ? 'Room Open'
+            : 'Room Locked',
+        controls.settings.visibility == RoomVisibility.publicRoom
+            ? Icons.lock_open_rounded
+            : Icons.lock_rounded,
         () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can change visibility.');
-            return;
-          }
-          final current = controls.settings;
-          final next = current.visibility == RoomVisibility.publicRoom ? RoomVisibility.privateRoom : RoomVisibility.publicRoom;
-          controls.settings = current.copyWith(visibility: next);
-          _snack(next == RoomVisibility.publicRoom ? 'Room is public.' : 'Room is private.');
+          _toggleRoomLock();
         },
       ),
       (
