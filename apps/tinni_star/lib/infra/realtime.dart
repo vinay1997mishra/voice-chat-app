@@ -3,7 +3,11 @@ enum RtcConnectionState { idle, joining, joined, reconnecting, failed }
 abstract interface class RtcAdapter {
   RtcConnectionState get state;
   bool get publishingMic;
-  Future<void> join(String roomId, String userId);
+  Future<void> join(
+    String roomId,
+    String userId, {
+    String? authToken,
+  });
   Future<void> leave();
   Future<void> setMicPublished(bool enabled);
 }
@@ -27,7 +31,11 @@ class LocalRtcAdapter implements RtcAdapter {
   bool get publishingMic => _publishing;
 
   @override
-  Future<void> join(String roomId, String userId) async {
+  Future<void> join(
+    String roomId,
+    String userId, {
+    String? authToken,
+  }) async {
     if (roomId.isEmpty || userId.isEmpty) {
       _state = RtcConnectionState.failed;
       throw StateError('roomId and userId are required');
@@ -96,12 +104,20 @@ class RealtimeCoordinator {
   String? activeRoomId;
   String? userId;
 
-  Future<void> enterRoom(String roomId, String userId) async {
+  Future<void> enterRoom(
+    String roomId,
+    String userId, {
+    String? authToken,
+  }) async {
     this.userId = userId;
     await im.connect(userId);
     await im.joinRoom(roomId);
     try {
-      await rtc.join(roomId, userId);
+      await rtc.join(
+        roomId,
+        userId,
+        authToken: authToken,
+      );
       activeRoomId = roomId;
     } catch (_) {
       await im.leaveRoom(roomId);
