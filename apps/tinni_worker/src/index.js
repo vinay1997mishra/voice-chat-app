@@ -743,7 +743,7 @@ export default {
 
       const store = getAppDirectoryStore(env);
       const pending = await store.startFacebookLogin();
-      const callbackUrl = new URL("/app-auth/facebook/callback", request.url).toString();
+      const callbackUrl = new URL("/app-auth/facebook/callback", env.PUBLIC_API_ORIGIN || request.url).toString();
       const authUrl = new URL("https://www.facebook.com/dialog/oauth");
       authUrl.searchParams.set("client_id", String(env.FACEBOOK_APP_ID));
       authUrl.searchParams.set("redirect_uri", callbackUrl);
@@ -786,7 +786,7 @@ export default {
       }
 
       try {
-        const callbackUrl = new URL("/app-auth/facebook/callback", request.url).toString();
+        const callbackUrl = new URL("/app-auth/facebook/callback", env.PUBLIC_API_ORIGIN || request.url).toString();
         const tokenUrl = new URL("https://graph.facebook.com/oauth/access_token");
         tokenUrl.searchParams.set("client_id", String(env.FACEBOOK_APP_ID));
         tokenUrl.searchParams.set("client_secret", String(env.FACEBOOK_APP_SECRET));
@@ -1291,7 +1291,7 @@ export default {
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) {
         return json({ ok: false, error: "Unauthorized" }, 401);
       }
-      return Response.redirect(new URL("/login", request.url), 302);
+      return Response.redirect(new URL("/login", env.PUBLIC_API_ORIGIN || request.url), 302);
     }
 
     if (url.pathname === "/auth/session" && request.method === "GET") {
