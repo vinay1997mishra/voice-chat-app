@@ -18,6 +18,9 @@ class ActiveRoomSession extends ChangeNotifier {
     required this.foregroundService,
     required this.permissions,
     required this.presence,
+    this.familyTagProvider,
+    this.hostTagProvider,
+    this.agencyNameProvider,
   });
 
   final FunctionPackRuntime runtime;
@@ -25,6 +28,9 @@ class ActiveRoomSession extends ChangeNotifier {
   final RoomForegroundServiceBridge foregroundService;
   final RoomPermissionBridge permissions;
   final RoomPresenceService presence;
+  final String? Function()? familyTagProvider;
+  final String? Function()? hostTagProvider;
+  final String? Function()? agencyNameProvider;
 
   RoomSummary? room;
   RoomController? controller;
@@ -42,6 +48,10 @@ class ActiveRoomSession extends ChangeNotifier {
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
   RoomSeatInvite? get pendingSeatInvite => presence.pendingSeatInvite;
+
+  String? get _familyTag => familyTagProvider?.call();
+  String? get _hostTag => hostTagProvider?.call();
+  String? get _agencyName => agencyNameProvider?.call();
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -197,6 +207,9 @@ class ActiveRoomSession extends ChangeNotifier {
       roomId: roomId,
       authToken: authToken,
       seatIndex: seatIndex,
+      familyTag: _familyTag,
+      hostTag: _hostTag,
+      agencyName: _agencyName,
     );
     await presence.setEmote(
       roomId: roomId,
@@ -267,6 +280,9 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
         seatIndex: controller?.mySeat,
+        familyTag: _familyTag,
+        hostTag: _hostTag,
+        agencyName: _agencyName,
       );
       await _applyForcedSeatChange();
       await _enforceModerationMute();
@@ -286,6 +302,9 @@ class ActiveRoomSession extends ChangeNotifier {
           roomId: currentRoomId,
           authToken: currentAuthToken,
           seatIndex: controller?.mySeat,
+          familyTag: _familyTag,
+          hostTag: _hostTag,
+          agencyName: _agencyName,
         );
         await _applyForcedSeatChange();
         await _enforceModerationMute();
