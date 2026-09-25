@@ -3,6 +3,18 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+class RoomSeatRequest {
+  const RoomSeatRequest({
+    required this.userId,
+    required this.seatIndex,
+    required this.createdAt,
+  });
+
+  final String userId;
+  final int seatIndex;
+  final DateTime createdAt;
+}
+
 class RoomSeatInvite {
   const RoomSeatInvite({
     required this.seatIndex,
@@ -70,6 +82,7 @@ class RoomPresenceService extends ChangeNotifier {
   bool selfSeatForced = false;
   int? selfForcedSeatIndex;
   RoomSeatInvite? pendingSeatInvite;
+  final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
   String? lastError;
 
   Future<void> join({
@@ -122,6 +135,7 @@ class RoomPresenceService extends ChangeNotifier {
       selfSeatForced = false;
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
+      seatRequests.clear();
       notifyListeners();
     }
   }
@@ -174,6 +188,38 @@ class RoomPresenceService extends ChangeNotifier {
     );
     this.micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     notifyListeners();
+  }
+
+    Future<void> requestSeat({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-request',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'seat_index': seatIndex,
+      },
+    );
+  }
+
+  Future<void> resolveSeatRequest({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    required bool approved,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-request/resolve',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'approved': approved,
+      },
+    );
   }
 
     Future<void> inviteToSeat({
@@ -423,7 +469,24 @@ class RoomPresenceService extends ChangeNotifier {
       pendingSeatInvite = null;
     }
 
-    final rawMembers = data['members'];
+    final rawRequests = data['seat_requests'];
+    seatRequests
+      ..clear()
+      ..addAll(
+        rawRequests is List
+            ? rawRequests.whereType<Map>().map(
+                  (row) => RoomSeatRequest(
+                    userId: row['user_id']?.toString() ?? '',
+                    seatIndex: _asInt(row['seat_index']),
+                    createdAt: DateTime.fromMillisecondsSinceEpoch(
+                      _asInt(row['created_at']),
+                    ),
+                  ),
+                ).where((item) => item.userId.isNotEmpty)
+            : const <RoomSeatRequest>[],
+      );
+
+        final rawMembers = data['members'];
     if (rawMembers is! List) return;
 
     members
