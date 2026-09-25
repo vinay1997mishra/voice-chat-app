@@ -6,6 +6,9 @@
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "PUBLIC_API_ORIGIN": "https://tinnistar-api.tinnistarchat.workers.dev"
+  },
   "assets": {
     "directory": "../tinni_owner_panel",
     "binding": "ASSETS",
