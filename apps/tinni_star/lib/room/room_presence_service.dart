@@ -26,6 +26,7 @@ class RoomPresenceMember {
     this.countryCode = '',
     this.seatIndex,
     this.micMuted = false,
+    this.isAdmin = false,
     this.seatEmote,
     this.seatEmoteUntil,
   });
@@ -37,6 +38,7 @@ class RoomPresenceMember {
   final String countryCode;
   final int? seatIndex;
   final bool micMuted;
+  final bool isAdmin;
   final String? seatEmote;
   final DateTime? seatEmoteUntil;
   final DateTime joinedAt;
@@ -393,6 +395,7 @@ class RoomPresenceService extends ChangeNotifier {
                     ? null
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
+                isAdmin: row['is_admin'] == true,
                 seatEmote: row['seat_emote']?.toString(),
                 seatEmoteUntil: row['seat_emote_until'] == null
                     ? null
