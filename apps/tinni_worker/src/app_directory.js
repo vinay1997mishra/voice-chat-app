@@ -267,6 +267,25 @@ export class AppDirectoryStore extends DurableObject {
         PRIMARY KEY(room_id, user_id)
       );
 
+      CREATE TABLE IF NOT EXISTS app_follows (
+        follower_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(follower_id, target_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_follows_target
+        ON app_follows(target_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS direct_messages (
+        id TEXT PRIMARY KEY,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
+        ON direct_messages(from_user_id, to_user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -827,7 +846,118 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map(rowToUser);
   }
 
-  async listRooms() {
+  listFollowing(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT target_id
+         FROM app_follows
+        WHERE follower_id = ?
+        ORDER BY created_at DESC`,
+      userId,
+    ).toArray().map((row) => String(row.target_id));
+  }
+
+  setFollowing(userIdValue, targetIdValue, followingValue) {
+    const userId = String(userIdValue || "").trim();
+    const targetId = String(targetIdValue || "").trim();
+    if (!userId || !targetId) throw new Error("user IDs are required");
+    if (userId === targetId) throw new Error("You cannot follow yourself");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
+      targetId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    if (followingValue) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO app_follows (follower_id, target_id, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(follower_id, target_id) DO UPDATE SET
+           created_at = excluded.created_at`,
+        userId,
+        targetId,
+        Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM app_follows WHERE follower_id = ? AND target_id = ?",
+        userId,
+        targetId,
+      );
+    }
+
+    return {
+      ok: true,
+      target_user_id: targetId,
+      following: Boolean(followingValue),
+    };
+  }
+
+  listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {
+    const userId = String(userIdValue || "").trim();
+    const peerUserId = String(peerUserIdValue || "").trim();
+    const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
+    if (!userId || !peerUserId) throw new Error("user IDs are required");
+
+    return this.ctx.storage.sql.exec(
+      `SELECT id, from_user_id, to_user_id, text, created_at
+         FROM direct_messages
+        WHERE (from_user_id = ? AND to_user_id = ?)
+           OR (from_user_id = ? AND to_user_id = ?)
+        ORDER BY created_at ASC
+        LIMIT ?`,
+      userId,
+      peerUserId,
+      peerUserId,
+      userId,
+      limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from: String(row.from_user_id),
+      to: String(row.to_user_id),
+      text: String(row.text),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
+    const fromUserId = String(fromUserIdValue || "").trim();
+    const toUserId = String(toUserIdValue || "").trim();
+    const text = cleanText(textValue, 1000);
+    if (!fromUserId || !toUserId) throw new Error("user IDs are required");
+    if (!text) throw new Error("Message cannot be empty");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
+      toUserId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    const now = Date.now();
+    const id =
+      "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO direct_messages
+        (id, from_user_id, to_user_id, text, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      id,
+      fromUserId,
+      toUserId,
+      text,
+      now,
+    );
+    return {
+      id,
+      from: fromUserId,
+      to: toUserId,
+      text,
+      created_at: now,
+    };
+  }
+
+    async listRooms() {
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
