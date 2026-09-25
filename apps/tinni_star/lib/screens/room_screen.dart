@@ -127,6 +127,89 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  void _insertChatEmoji(String emoji) {
+    final selection = chat.selection;
+    final text = chat.text;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final safeStart = start.clamp(0, text.length);
+    final safeEnd = end.clamp(safeStart, text.length);
+    final next = text.replaceRange(safeStart, safeEnd, emoji);
+    chat.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(
+        offset: safeStart + emoji.length,
+      ),
+    );
+  }
+
+  void _showEmojiPicker() {
+    const emojis = <String>[
+      '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
+      '😎', '🤩', '🥳', '😇', '🙂', '🙃', '😉', '😋',
+      '😜', '🤪', '🤗', '🤭', '🫣', '🤔', '🫡', '😴',
+      '😭', '🥺', '😢', '😡', '🤬', '😱', '😳', '🫠',
+      '❤️', '🩷', '💖', '💕', '💞', '💔', '🔥', '✨',
+      '🎉', '🎊', '🎁', '👑', '🌹', '🌟', '💯', '⚡',
+      '👍', '👎', '👏', '🙌', '🙏', '🤝', '💪', '✌️',
+      '👌', '🤟', '🤘', '👋', '💋', '🫶', '💃', '🕺',
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: 300,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Emoji & Emotes',
+                    style: TextStyle(
+                      color: RoyalPalette.gold,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+                  itemCount: emojis.length,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 8,
+                    mainAxisSpacing: 6,
+                    crossAxisSpacing: 6,
+                  ),
+                  itemBuilder: (_, index) {
+                    final emoji = emojis[index];
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _insertChatEmoji(emoji),
+                      child: Center(
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 27),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showRoomPowerMenu() async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -1701,7 +1784,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: MediaQuery.sizeOf(context).width * 0.32,
+                      width: MediaQuery.sizeOf(context).width * 0.28,
                       child: TextField(
                         controller: chat,
                         decoration: const InputDecoration(
@@ -1716,7 +1799,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     IconButton(
+                      key: const Key('room-emoji-button'),
+                      tooltip: 'Emoji & Emotes',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _showEmojiPicker,
+                      icon: const Icon(
+                        Icons.emoji_emotions_rounded,
+                        color: RoyalPalette.gold,
+                      ),
+                    ),
+                    IconButton(
                       key: const Key('room-mic-button'),
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
                           : 'Microphone',
@@ -1736,12 +1840,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                     IconButton(
                       key: const Key('room-gift-button'),
+                      tooltip: 'Gifts',
+                      iconSize: 31,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
-                      icon: const Icon(Icons.card_giftcard_rounded, color: RoyalPalette.gold),
+                      icon: const Icon(
+                        Icons.card_giftcard_rounded,
+                        color: RoyalPalette.gold,
+                      ),
                     ),
                     IconButton(
                       key: const Key('room-tools-grid-button'),
                       tooltip: 'More',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
                       onPressed: _showRoomTools,
                       icon: const Icon(
                         Icons.grid_view_rounded,
@@ -1752,6 +1872,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       IconButton(
                         key: const Key('room-seat-button'),
                         tooltip: 'Seat request',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
                         onPressed: () async {
                           if (controller.mySeat == null) {
                             _snack('Tap any mic seat to send a seat request.');
