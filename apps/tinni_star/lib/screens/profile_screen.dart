@@ -9,7 +9,6 @@ import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
 import 'gifts_screen.dart';
-import 'games_screen.dart';
 import 'vip_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -188,16 +187,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => GiftsScreen(state: widget.state),
-                  ),
-                ),
-              ),
-              _MineTile(
-                icon: Icons.casino_rounded,
-                label: 'Game',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GamesScreen(state: widget.state),
                   ),
                 ),
               ),
