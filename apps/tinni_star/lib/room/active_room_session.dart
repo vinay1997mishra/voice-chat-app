@@ -149,7 +149,21 @@ class ActiveRoomSession extends ChangeNotifier {
     );
   }
 
-  Future<void> inviteUserToSeat(
+  Future<void> setRoomMicMode(String micMode) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setMicMode(
+      roomId: roomId,
+      authToken: authToken,
+      micMode: micMode,
+    );
+    controller?.setInviteMode(presence.micMode != 'free');
+  }
+
+    Future<void> inviteUserToSeat(
     String targetUserId, {
     required int seatIndex,
   }) async {
@@ -365,6 +379,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _onPresenceChanged() {
+    controller?.setInviteMode(presence.micMode != 'free');
     notifyListeners();
   }
 
