@@ -40,6 +40,7 @@ class ActiveRoomSession extends ChangeNotifier {
       List<RoomPresenceMember>.unmodifiable(presence.members);
 
   bool get hasRoom => room != null && controller != null;
+  bool get moderationMicMuted => presence.selfMicMuted;
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -112,7 +113,12 @@ class ActiveRoomSession extends ChangeNotifier {
   Future<void> setMicFromController() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
-    await realtime.setMic(roomController.micState == MicState.live);
+    if (presence.selfMicMuted && roomController.micState == MicState.live) {
+      roomController.forceMicMuted();
+    }
+    await realtime.setMic(
+      !presence.selfMicMuted && roomController.micState == MicState.live,
+    );
   }
 
   Future<void> kickUser(
@@ -129,6 +135,25 @@ class ActiveRoomSession extends ChangeNotifier {
       authToken: authToken,
       targetUserId: targetUserId,
       duration: duration,
+    );
+  }
+
+  Future<void> setUserSeatMute(
+    String targetUserId, {
+    required int seatIndex,
+    required bool muted,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setMute(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      seatIndex: seatIndex,
+      muted: muted,
     );
   }
 
@@ -173,7 +198,9 @@ class ActiveRoomSession extends ChangeNotifier {
       await presence.join(
         roomId: roomId,
         authToken: authToken,
+        seatIndex: controller?.mySeat,
       );
+      await _enforceModerationMute();
     } catch (_) {
       // Keep the room open; presence will retry on the next heartbeat.
     }
@@ -189,7 +216,9 @@ class ActiveRoomSession extends ChangeNotifier {
         await presence.heartbeat(
           roomId: currentRoomId,
           authToken: currentAuthToken,
+          seatIndex: controller?.mySeat,
         );
+        await _enforceModerationMute();
       } catch (error) {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
@@ -201,7 +230,18 @@ class ActiveRoomSession extends ChangeNotifier {
     });
   }
 
-  Future<void> _stopPresence({
+  Future<void> _enforceModerationMute() async {
+    final roomController = controller;
+    if (roomController == null || !connected) return;
+    if (!presence.selfMicMuted) return;
+
+    roomController.forceMicMuted();
+    if (realtime.rtc.publishingMic) {
+      await realtime.setMic(false);
+    }
+  }
+
+    Future<void> _stopPresence({
     required bool sendLeave,
     String? roomId,
     String? authToken,
