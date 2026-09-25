@@ -1695,6 +1695,9 @@ export default {
         avatar_data_url: user.avatar_data_url,
         flag_emoji: user.flag_emoji,
         country_code: user.country_code,
+        family_tag: body.family_tag,
+        host_tag: body.host_tag,
+        agency_name: body.agency_name,
         seat_index:
           body.seat_index === null || body.seat_index === undefined
             ? null
