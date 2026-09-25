@@ -91,7 +91,27 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool managerRemoveUserFromSeat(int index) {
+  void forceMySeat(int? index) {
+    final oldSeat = mySeat;
+    if (oldSeat != null && oldSeat >= 0 && oldSeat < seats.length) {
+      seats[oldSeat] = seats[oldSeat].copyWith(clearUser: true);
+    }
+
+    if (index == null) {
+      mySeat = null;
+      micState = MicState.offSeat;
+      notifyListeners();
+      return;
+    }
+
+    if (index < 0 || index >= seats.length) return;
+    seats[index] = seats[index].copyWith(userName: 'You');
+    mySeat = index;
+    micState = MicState.muted;
+    notifyListeners();
+  }
+
+    bool managerRemoveUserFromSeat(int index) {
     if (index < 0 || index >= seats.length) return false;
     final seat = seats[index];
     if (!seat.occupied) return false;
