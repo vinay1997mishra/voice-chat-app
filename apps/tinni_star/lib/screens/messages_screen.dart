@@ -52,6 +52,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return;
     }
     try {
+      await widget.state.social.syncBlocked(account.authToken);
       await widget.state.social.loadConversation(
         authToken: account.authToken,
         myUserId: _myUserId,
