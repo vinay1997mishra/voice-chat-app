@@ -77,7 +77,11 @@ class ActiveRoomSession extends ChangeNotifier {
       }
 
       await foregroundService.start();
-      await realtime.enterRoom(nextRoom.id, userId);
+      await realtime.enterRoom(
+        nextRoom.id,
+        userId,
+        authToken: authToken,
+      );
       _activeAuthToken = authToken;
       await _startPresence();
       connected = true;
