@@ -91,6 +91,25 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool managerRemoveUserFromSeat(int index) {
+    if (index < 0 || index >= seats.length) return false;
+    final seat = seats[index];
+    if (!seat.occupied) return false;
+    seats[index] = seat.copyWith(clearUser: true);
+    if (mySeat == index) {
+      mySeat = null;
+      micState = MicState.offSeat;
+    }
+    messages.add(
+      RoomMessage(
+        'System',
+        'Seat ' + (index + 1).toString() + ' user moved to audience.',
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
   void setInviteMode(bool enabled) {
     inviteModeOverride = enabled;
     notifyListeners();
