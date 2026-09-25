@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final Set<String> _selectedGiftRecipients = <String>{};
+  Timer? _emoteExpiryTimer;
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -350,12 +352,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
+    _emoteExpiryTimer?.cancel();
     chat.dispose();
     super.dispose();
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _scheduleEmoteExpiry();
+    setState(() {});
+  }
+
+  void _scheduleEmoteExpiry() {
+    _emoteExpiryTimer?.cancel();
+    DateTime? nextExpiry;
+    final now = DateTime.now();
+
+    for (final member in widget.state.roomSession.liveMembers) {
+      final expiry = member.seatEmoteUntil;
+      if (member.seatEmote == null ||
+          expiry == null ||
+          !expiry.isAfter(now)) {
+        continue;
+      }
+      if (nextExpiry == null || expiry.isBefore(nextExpiry)) {
+        nextExpiry = expiry;
+      }
+    }
+
+    if (nextExpiry == null) return;
+    final delay = nextExpiry.difference(now);
+    _emoteExpiryTimer = Timer(delay, () {
+      if (!mounted) return;
+      _scheduleEmoteExpiry();
+      setState(() {});
+    });
   }
 
   void _snack(String text) {
@@ -1727,7 +1758,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final occupied = seat.userName != null || presenceMember != null;
     final displayName =
         presenceMember?.displayName ?? seat.userName ?? 'Mic ${index + 1}';
-    final seatEmote = presenceMember?.seatEmote;
+    final emoteUntil = presenceMember?.seatEmoteUntil;
+    final seatEmote = presenceMember?.seatEmote != null &&
+            emoteUntil != null &&
+            emoteUntil.isAfter(DateTime.now())
+        ? presenceMember!.seatEmote
+        : null;
     ImageProvider? avatar;
     final avatarData = presenceMember?.avatarDataUrl;
     if (avatarData != null && avatarData.startsWith('data:image/')) {
