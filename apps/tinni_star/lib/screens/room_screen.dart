@@ -1232,7 +1232,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             SafeArea(
               top: false,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                padding: const EdgeInsets.fromLTRB(0, 6, 6, 8),
                 decoration: const BoxDecoration(
                   color: Color(0xFF05080B),
                   border: Border(top: BorderSide(color: RoyalPalette.bronze)),
@@ -1242,7 +1242,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     Expanded(
                       child: TextField(
                         controller: chat,
-                        decoration: const InputDecoration(hintText: 'Chat', isDense: true),
+                        decoration: const InputDecoration(
+                          hintText: 'Chat',
+                          isDense: true,
+                          contentPadding: EdgeInsets.fromLTRB(12, 12, 10, 12),
+                        ),
                         onSubmitted: (_) {
                           controller.sendMessage(chat.text);
                           chat.clear();
