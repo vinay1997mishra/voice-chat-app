@@ -31,8 +31,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
   String? errorText;
 
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
-  String get _targetUserId => widget.targetUserId ?? '20000000';
-  String get _targetName => widget.targetName ?? 'Aisha';
+  String get _targetUserId => widget.targetUserId ?? 'tinni-official';
+  String get _targetName => widget.targetName ?? 'Tinni Official';
+  bool get _isOfficial => _targetUserId == 'tinni-official';
 
   @override
   void initState() {
@@ -138,11 +139,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
           ),
         ),
         actions: [
-          UserSafetyMenuButton(
-            state: widget.state,
-            targetUserId: _targetUserId,
-            targetDisplayName: _targetName,
-          ),
+          if (!_isOfficial)
+            UserSafetyMenuButton(
+              state: widget.state,
+              targetUserId: _targetUserId,
+              targetDisplayName: _targetName,
+            ),
         ],
       ),
       body: Column(
@@ -156,12 +158,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     backgroundColor: RoyalPalette.deepGold,
                     backgroundImage: avatar,
                     child: avatar == null
-                        ? Text(
-                            _targetName.isEmpty
-                                ? '?'
-                                : _targetName.characters.first.toUpperCase(),
-                            style: const TextStyle(color: Colors.black),
-                          )
+                        ? (_isOfficial
+                            ? const Icon(
+                                Icons.verified_rounded,
+                                color: Colors.black,
+                              )
+                            : Text(
+                                _targetName.isEmpty
+                                    ? '?'
+                                    : _targetName.characters.first.toUpperCase(),
+                                style: const TextStyle(color: Colors.black),
+                              ))
                         : null,
                   ),
                   const SizedBox(width: 10),
@@ -177,7 +184,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                           ),
                         ),
                         Text(
-                          'ID $_targetUserId',
+                          _isOfficial
+                              ? 'Verified official account'
+                              : 'ID $_targetUserId',
                           style: const TextStyle(
                             color: RoyalPalette.muted,
                             fontSize: 11,
@@ -239,38 +248,59 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 color: RoyalPalette.nearBlack,
                 border: Border(top: BorderSide(color: RoyalPalette.deepGold)),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      onSubmitted: (_) {
-                        send();
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Message $_targetName…',
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: sending
-                        ? null
-                        : () {
-                            send();
-                          },
-                    icon: sending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(
-                            Icons.send_rounded,
-                            color: RoyalPalette.gold,
+              child: _isOfficial
+                  ? const Row(
+                      children: [
+                        Icon(
+                          Icons.verified_rounded,
+                          color: RoyalPalette.gold,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Messages from Tinni Official are official platform notices.',
+                            style: TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 12,
+                            ),
                           ),
-                  ),
-                ],
-              ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            onSubmitted: (_) {
+                              send();
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Message $_targetName…',
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: sending
+                              ? null
+                              : () {
+                                  send();
+                                },
+                          icon: sending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.send_rounded,
+                                  color: RoyalPalette.gold,
+                                ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
