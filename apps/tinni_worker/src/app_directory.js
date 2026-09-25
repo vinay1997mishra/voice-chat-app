@@ -1,6 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
+const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
+const ROOM_THEME_USER_PRICE_COINS = 10000000;
+const ROOM_THEME_USER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
 
@@ -114,6 +117,66 @@ function rowToRoom(row) {
   };
 }
 
+function rowToRoomTheme(row) {
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    asset: String(row.asset),
+    source: String(row.source),
+    room_id: row.room_id ? String(row.room_id) : null,
+    creator_user_id: row.creator_user_id ? String(row.creator_user_id) : null,
+    price_coins: Number(row.price_coins || 0),
+    created_at: Number(row.created_at),
+    expires_at:
+      row.expires_at === null || row.expires_at === undefined
+        ? null
+        : Number(row.expires_at),
+    enabled: Number(row.enabled) === 1,
+  };
+}
+
+function validateRoomThemePolicy(nameValue, assetValue) {
+  const name = cleanText(nameValue, 60);
+  const asset = String(assetValue || "").trim();
+  const combined = (name + " " + asset).toLowerCase();
+
+  const blocked = [
+    "porn",
+    "porno",
+    "nude",
+    "nudity",
+    "nsfw",
+    "xxx",
+    "erotic",
+    "sexual",
+    "sex ",
+    " sex",
+    "politic",
+    "election",
+    "campaign",
+    "candidate",
+    "ballot",
+    "vote ",
+    " voting",
+  ];
+  if (blocked.some((term) => combined.includes(term))) {
+    throw new Error("Sexual or political room themes are not allowed");
+  }
+  if (!name) throw new Error("Theme name is required");
+  if (!asset) throw new Error("Theme image is required");
+  if (asset.length > MAX_ROOM_THEME_ASSET_LENGTH) {
+    throw new Error("Theme image is too large");
+  }
+  if (
+    !asset.startsWith("data:image/") &&
+    !asset.startsWith("https://")
+  ) {
+    throw new Error("Theme image must be an image upload or HTTPS URL");
+  }
+  return { name, asset };
+}
+
 export class AppDirectoryStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -151,6 +214,23 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_app_rooms_created ON app_rooms(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS room_themes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        asset TEXT NOT NULL,
+        source TEXT NOT NULL,
+        room_id TEXT,
+        creator_user_id TEXT,
+        price_coins INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        enabled INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_themes_room
+        ON room_themes(room_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_room_themes_expiry
+        ON room_themes(expires_at);
 
       CREATE TABLE IF NOT EXISTS room_locks (
         room_id TEXT PRIMARY KEY,
@@ -747,7 +827,115 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map(rowToRoom);
   }
 
-  _roomRow(roomIdValue) {
+  _pruneRoomThemes(now = Date.now()) {
+    this.ctx.storage.sql.exec(
+      "UPDATE room_themes SET enabled = 0 WHERE expires_at IS NOT NULL AND expires_at <= ?",
+      now,
+    );
+  }
+
+  listRoomThemes(roomIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    const now = Date.now();
+    this._pruneRoomThemes(now);
+    return this.ctx.storage.sql.exec(
+      `SELECT *
+         FROM room_themes
+        WHERE enabled = 1
+          AND (room_id IS NULL OR room_id = ?)
+          AND (expires_at IS NULL OR expires_at > ?)
+        ORDER BY CASE WHEN source = 'panel' THEN 0 ELSE 1 END,
+                 created_at DESC`,
+      roomId,
+      now,
+    ).toArray().map(rowToRoomTheme);
+  }
+
+  createUserRoomTheme(userIdValue, roomIdValue, input) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const room = this._roomRow(roomId);
+    if (!room) throw new Error("Room not found");
+    if (String(room.owner_id) !== userId) {
+      throw new Error("Only the room owner can add a custom room theme");
+    }
+    if (input?.policy_confirmed !== true) {
+      throw new Error("Confirm the no-sexual/no-political theme policy");
+    }
+
+    const { name, asset } = validateRoomThemePolicy(
+      input?.name,
+      input?.asset,
+    );
+    const now = Date.now();
+    const id =
+      "theme-user-" + roomId + "-" + now.toString(36) + "-" +
+      crypto.randomUUID().slice(0, 8);
+    const expiresAt = now + ROOM_THEME_USER_DURATION_MS;
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_themes
+        (id, name, asset, source, room_id, creator_user_id, price_coins,
+         created_at, expires_at, enabled)
+       VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, 1)`,
+      id,
+      name,
+      asset,
+      roomId,
+      userId,
+      ROOM_THEME_USER_PRICE_COINS,
+      now,
+      expiresAt,
+    );
+
+    return rowToRoomTheme(
+      this.ctx.storage.sql.exec(
+        "SELECT * FROM room_themes WHERE id = ? LIMIT 1",
+        id,
+      ).toArray()[0],
+    );
+  }
+
+  createPanelRoomTheme(input) {
+    const { name, asset } = validateRoomThemePolicy(
+      input?.name,
+      input?.asset,
+    );
+    const now = Date.now();
+    const id =
+      "theme-panel-" + now.toString(36) + "-" +
+      crypto.randomUUID().slice(0, 8);
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_themes
+        (id, name, asset, source, room_id, creator_user_id, price_coins,
+         created_at, expires_at, enabled)
+       VALUES (?, ?, ?, 'panel', NULL, NULL, 0, ?, NULL, 1)`,
+      id,
+      name,
+      asset,
+      now,
+    );
+
+    return rowToRoomTheme(
+      this.ctx.storage.sql.exec(
+        "SELECT * FROM room_themes WHERE id = ? LIMIT 1",
+        id,
+      ).toArray()[0],
+    );
+  }
+
+  disableRoomTheme(themeIdValue) {
+    const themeId = String(themeIdValue || "").trim();
+    if (!themeId) throw new Error("Theme ID is required");
+    this.ctx.storage.sql.exec(
+      "UPDATE room_themes SET enabled = 0 WHERE id = ?",
+      themeId,
+    );
+    return { ok: true, id: themeId };
+  }
+
+    _roomRow(roomIdValue) {
     const roomId = String(roomIdValue || "").trim();
     if (!roomId) return null;
     return this.ctx.storage.sql.exec(
