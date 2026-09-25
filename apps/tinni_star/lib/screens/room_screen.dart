@@ -1262,11 +1262,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       scrollDirection: Axis.horizontal,
                       children: [
                         _ProfileAction(
-                          icon: followed ? Icons.person_remove_rounded : Icons.person_add_rounded,
+                          icon: followed
+                              ? Icons.person_remove_rounded
+                              : Icons.person_add_rounded,
                           label: followed ? 'Unfollow' : 'Follow',
-                          onTap: () {
-                            if (followed) { widget.state.social.unfollow(currentMember.userId); } else { widget.state.social.follow(currentMember.userId); }
-                            setSheetState(() {});
+                          onTap: () async {
+                            final account = widget.state.auth.current;
+                            if (account == null) return;
+                            try {
+                              await widget.state.social.setFollowingRemote(
+                                authToken: account.authToken,
+                                targetUserId: currentMember.userId,
+                                value: !followed,
+                              );
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            } catch (error) {
+                              _snack(
+                                error
+                                    .toString()
+                                    .replaceFirst('Bad state: ', ''),
+                              );
+                            }
                           },
                         ),
                         _ProfileAction(
