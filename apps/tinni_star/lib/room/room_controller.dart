@@ -145,7 +145,11 @@ class RoomController extends ChangeNotifier {
   }
 
   void forceMicMuted() {
-    if (mySeat == null || micState == MicState.banned) return;
+    if (mySeat == null ||
+        micState == MicState.banned ||
+        micState == MicState.muted) {
+      return;
+    }
     micState = MicState.muted;
     notifyListeners();
   }
