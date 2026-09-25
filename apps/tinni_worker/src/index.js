@@ -1248,6 +1248,30 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/theme" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      try {
+        return json(
+          getAppDirectoryStore(env).setRoomTheme(
+            appSession.user.user_id,
+            roomId,
+            body,
+          ),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to change room theme"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-themes" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
