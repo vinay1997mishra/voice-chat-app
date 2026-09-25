@@ -7,7 +7,7 @@
     "enabled": true
   },
   "vars": {
-    "PUBLIC_API_ORIGIN": "https://tinnistar-api.tinnistarchat.workers.dev"
+    "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev"
   },
   "assets": {
     "directory": "../tinni_owner_panel",
