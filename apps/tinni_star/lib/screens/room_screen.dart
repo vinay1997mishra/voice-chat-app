@@ -394,8 +394,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _refresh() {
     if (!mounted) return;
     _scheduleEmoteExpiry();
+    _syncMyAdminRole();
     _maybeShowSeatInvite();
     setState(() {});
+  }
+
+  void _syncMyAdminRole() {
+    final account = widget.state.auth.current;
+    if (account == null || account.userId == (widget.room.ownerId ?? widget.room.id)) {
+      return;
+    }
+
+    RoomPresenceMember? me;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.userId == account.userId) {
+        me = member;
+        break;
+      }
+    }
+    if (me == null) return;
+
+    final current = widget.state.roomControls.roles[account.userId];
+    if (me.isAdmin && current != RoomRole.admin) {
+      widget.state.roomControls.setAdmin(account.userId, true);
+    } else if (!me.isAdmin && current == RoomRole.admin) {
+      widget.state.roomControls.setAdmin(account.userId, false);
+    }
   }
 
   void _maybeShowSeatInvite() {
