@@ -10,6 +10,7 @@ Cloudflare Workers Builds settings:
 - Build command: leave empty
 - Deploy command: `npx wrangler deploy`
 - Preview command: `npx wrangler preview`
+- Public API origin: `https://tinnistar-api.tinnistarchat.workers.dev` (the app-facing proxy URL)
 
 Current endpoints:
 - `GET /health`
@@ -78,7 +79,7 @@ Required Cloudflare Worker secrets:
 
 In the Meta app's Facebook Login settings, add this exact Valid OAuth Redirect URI:
 
-`https://tinni-star-api.mishrajii7991.workers.dev/app-auth/facebook/callback`
+`https://tinnistar-api.tinnistarchat.workers.dev/app-auth/facebook/callback`
 
 The app reads only a boolean `facebook_configured` flag from `/app-config`; the Facebook App Secret is never sent to the mobile app.
 
