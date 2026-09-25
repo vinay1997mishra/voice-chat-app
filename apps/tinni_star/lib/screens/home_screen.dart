@@ -14,7 +14,6 @@ import 'cp_ranking_screen.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
 import 'family_ranking_screen.dart';
-import 'games_screen.dart';
 import 'gifts_screen.dart';
 import 'ranking_screen.dart';
 import 'room_screen.dart';
@@ -147,13 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => VipScreen(state: widget.state)),
-    );
-  }
-
-  void openGames() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => GamesScreen(state: widget.state)),
     );
   }
 
@@ -462,10 +454,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => openRankings(initialTab: 1),
               ),
               _PartyPromoCard(
-                title: 'LUCKY DRAW',
-                subtitle: 'Games, draws and event rewards',
-                icon: Icons.casino_rounded,
-                onTap: openGames,
+                title: 'ROYAL PARTY',
+                subtitle: 'Live rooms, rankings and party events',
+                icon: Icons.mic_external_on_rounded,
+                onTap: () => openRankings(initialTab: 0),
               ),
               _PartyPromoCard(
                 title: 'THE GREAT NAVIGATOR',
@@ -560,12 +552,6 @@ class _HomeScreenState extends State<HomeScreen> {
         'Couple ranking, intimacy and heartbeat activities',
         Icons.favorite_rounded,
         openFeatureCenter,
-      ),
-      (
-        'Royal Game Night',
-        'Lucky 777, Blackjack, Gift Draw and Guessing',
-        Icons.casino_rounded,
-        openGames,
       ),
       (
         'Gift Festival',
