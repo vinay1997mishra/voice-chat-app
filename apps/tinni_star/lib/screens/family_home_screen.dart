@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../community/family_service.dart';
+import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'room_screen.dart';
 
@@ -623,6 +624,13 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
+                    Text(
+                      'ID ' + member.userId,
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 9,
+                      ),
+                    ),
                     Row(
                       children: [
                         Text(
@@ -668,12 +676,25 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                   ],
                 ),
               ),
-              Text(
-                index < 5 ? 'Today' : 'Logged in 1 days ago',
-                style: const TextStyle(
-                  color: RoyalPalette.muted,
-                  fontSize: 9,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  UserSafetyMenuButton(
+                    state: widget.state,
+                    targetUserId: member.userId,
+                    targetDisplayName: member.name,
+                    onBlockChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  Text(
+                    index < 5 ? 'Today' : 'Logged in 1 days ago',
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
