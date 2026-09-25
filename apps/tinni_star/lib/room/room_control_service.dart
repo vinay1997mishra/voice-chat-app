@@ -80,6 +80,7 @@ class RoomControlService {
   bool luckyNumberEnabled = false;
   int? luckyNumber;
   String themeId = 'royal-dark';
+  String? customThemeAsset;
   String roomMode = 'friends';
 
   void configureForRoom(String ownerUserId) {
@@ -253,6 +254,18 @@ class RoomControlService {
       throw ArgumentError.value(value, 'value', 'Unknown room theme');
     }
     themeId = value;
+    customThemeAsset = null;
+    return themeId;
+  }
+
+  String setCustomTheme(String value, String asset) {
+    final id = value.trim();
+    final source = asset.trim();
+    if (id.isEmpty || source.isEmpty) {
+      throw ArgumentError('Custom room theme requires an ID and asset');
+    }
+    themeId = id;
+    customThemeAsset = source;
     return themeId;
   }
 
