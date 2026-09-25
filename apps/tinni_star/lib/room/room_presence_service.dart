@@ -14,6 +14,7 @@ class RoomPresenceMember {
     this.countryCode = '',
     this.seatIndex,
     this.micMuted = false,
+    this.seatEmote,
   });
 
   final String userId;
@@ -23,6 +24,7 @@ class RoomPresenceMember {
   final String countryCode;
   final int? seatIndex;
   final bool micMuted;
+  final String? seatEmote;
   final DateTime joinedAt;
   final DateTime lastSeen;
 }
@@ -148,6 +150,38 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
+    Future<void> setEmote({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+    required String emote,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-presence/emote'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, Object>{
+        'room_id': roomId,
+        'seat_index': seatIndex,
+        'emote': emote,
+      }),
+    );
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to send room emote',
+      );
+    }
+    _apply(data);
+    notifyListeners();
+  }
+
     Future<void> refresh({
     required String roomId,
     required String authToken,
@@ -239,6 +273,7 @@ class RoomPresenceService extends ChangeNotifier {
                     ? null
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
+                seatEmote: row['seat_emote']?.toString(),
                 joinedAt: DateTime.fromMillisecondsSinceEpoch(
                   _asInt(row['joined_at']),
                   isUtc: true,
