@@ -172,20 +172,179 @@ const permissionByModule = {
   "Policies": "policies",
 };
 
-const staffPermissionOptions = [
-  ["users", "Users"],
-  ["rooms", "Rooms"],
-  ["wallets", "Wallets"],
-  ["hierarchy", "BD / Agency / Host"],
-  ["roles", "Tags / Roles / Posts"],
-  ["vip", "VIP"],
-  ["gifts", "Gifts"],
-  ["assets", "Entries / Frames"],
-  ["banners", "Banners"],
-  ["games", "Games"],
-  ["policies", "Policies"],
-  ["audit", "Audit Log"],
+const staffPermissionGroups = [
+  {
+    key: "users",
+    label: "Users",
+    items: [
+      ["users.search", "Search / view user details"],
+      ["users.ban_id", "ID ban / unban"],
+      ["users.ban_device", "Device ban / unban"],
+      ["users.invisible", "Invisible ID"],
+      ["users.locked_room_bypass", "Locked-room bypass"],
+      ["users.change_id", "Change public ID"],
+    ],
+  },
+  {
+    key: "rooms",
+    label: "Rooms",
+    items: [
+      ["rooms.search", "Search / view room details"],
+      ["rooms.ban", "Room ban / unban"],
+      ["rooms.rename", "Change room name"],
+      ["rooms.dp", "Change room DP"],
+      ["rooms.background", "Add / remove room background"],
+      ["rooms.live_seats", "View live users / seats"],
+      ["rooms.theme_view", "View room themes"],
+      ["rooms.theme_create", "Add / schedule room themes"],
+      ["rooms.theme_remove", "Remove room themes"],
+    ],
+  },
+  {
+    key: "wallets",
+    label: "Wallets",
+    items: [
+      ["wallets.normal", "Manage normal user wallet"],
+      ["wallets.seller", "Manage Coin Seller wallet"],
+      ["wallets.merchant", "Manage Merchant wallet"],
+      ["wallets.treasury_send", "Send Owner Treasury coins"],
+    ],
+  },
+  {
+    key: "hierarchy",
+    label: "BD / Agency / Host",
+    items: [
+      ["hierarchy.bd_manage", "Activate / remove BD"],
+      ["hierarchy.agency_manage", "Activate / remove Agency"],
+      ["hierarchy.agency_bd_link", "Add / remove Agency under BD"],
+      ["hierarchy.host_manage", "Add / remove Host"],
+      ["hierarchy.targets", "Targets / commission controls"],
+      ["hierarchy.complaints", "Exit requests / complaints"],
+    ],
+  },
+  {
+    key: "roles",
+    label: "Tags / Roles / Posts",
+    items: [
+      ["roles.view", "View tags / roles / posts"],
+      ["roles.manage", "Create / edit / remove tags, roles and posts"],
+    ],
+  },
+  {
+    key: "vip",
+    label: "VIP",
+    items: [
+      ["vip.view", "View VIP settings"],
+      ["vip.create", "Create VIP level"],
+      ["vip.edit", "Edit VIP functions / properties"],
+      ["vip.toggle", "Enable / disable VIP"],
+      ["vip.grant_remove", "Grant / remove VIP from user"],
+    ],
+  },
+  {
+    key: "gifts",
+    label: "Gifts",
+    items: [
+      ["gifts.view", "View gift catalog"],
+      ["gifts.create", "Add gifts"],
+      ["gifts.edit", "Edit gifts / prices / assets"],
+      ["gifts.remove", "Remove / disable gifts"],
+    ],
+  },
+  {
+    key: "assets",
+    label: "Entries / Frames",
+    items: [
+      ["assets.entries", "Manage vehicle / animal / 3D entries"],
+      ["assets.frames", "Manage profile / seat / VIP frames"],
+    ],
+  },
+  {
+    key: "banners",
+    label: "Banners",
+    items: [
+      ["banners.view", "View banners"],
+      ["banners.create", "Create / schedule banners"],
+      ["banners.remove", "Remove banners"],
+    ],
+  },
+  {
+    key: "games",
+    label: "Games",
+    items: [
+      ["games.view", "View game status / stats"],
+      ["games.toggle", "Enable / disable games"],
+      ["games.limits", "Change bet limits"],
+      ["games.investigate", "User betting investigation"],
+    ],
+  },
+  {
+    key: "policies",
+    label: "Policies",
+    items: [
+      ["policies.view", "View policies / economy"],
+      ["policies.create", "Create settings"],
+      ["policies.edit", "Edit targets / commissions / rules"],
+    ],
+  },
+  {
+    key: "audit",
+    label: "Audit Log",
+    items: [
+      ["audit.view", "View audit log"],
+      ["audit.export", "Export audit log"],
+    ],
+  },
 ];
+
+const actionPermission = {
+  "user-search": "users.search",
+  "user-ban": "users.ban_id",
+  "device-ban": "users.ban_device",
+  "user-invisible": "users.invisible",
+  "locked-bypass": "users.locked_room_bypass",
+  "id-change": "users.change_id",
+  "room-ban": "rooms.ban",
+  "room-name": "rooms.rename",
+  "room-dp": "rooms.dp",
+  "room-bg": "rooms.background",
+  "room-live": "rooms.live_seats",
+  "room-theme-new": "rooms.theme_create",
+  "wallet-normal": "wallets.normal",
+  "wallet-seller": "wallets.seller",
+  "wallet-merchant": "wallets.merchant",
+  "treasury-send": "wallets.treasury_send",
+  "bd-activate": "hierarchy.bd_manage",
+  "agency-activate": "hierarchy.agency_manage",
+  "agency-to-bd": "hierarchy.agency_bd_link",
+  "agency-from-bd": "hierarchy.agency_bd_link",
+  "host-add": "hierarchy.host_manage",
+  "host-remove": "hierarchy.host_manage",
+  "bd-target": "hierarchy.targets",
+  "complaints": "hierarchy.complaints",
+  "role-new": "roles.manage",
+  "vip-new": "vip.create",
+  "vip-grant": "vip.grant_remove",
+  "gift-new": "gifts.create",
+  "entry-new": "assets.entries",
+  "frame-new": "assets.frames",
+  "banner-new": "banners.create",
+  "game-switch": "games.toggle",
+  "game-limits": "games.limits",
+  "game-stats": "games.investigate",
+  "policy-new": "policies.create",
+  "audit-export": "audit.export",
+};
+
+function hasPermission(allowed, permission) {
+  if (!permission) return false;
+  const group = permission.split(".")[0];
+  return allowed.has(group) || allowed.has(permission);
+}
+
+function hasGroupPermission(allowed, group) {
+  return allowed.has(group) || [...allowed].some((permission) => permission.startsWith(group + "."));
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -248,19 +407,42 @@ async function loadStaffPanels() {
           </div>
 
           <div class="staff-power-title">Powers / Permissions</div>
-          <div class="staff-power-grid">
-            ${staffPermissionOptions.map(([key, label]) => `
-              <label class="staff-power-toggle">
-                <input
-                  type="checkbox"
-                  data-staff-permission
-                  data-panel-id="${panelId}"
-                  data-permission="${key}"
-                  ${activePermissions.has(key) ? "checked" : ""}
-                >
-                <span>${label}</span>
-              </label>
-            `).join("")}
+          <div class="staff-permission-groups">
+            ${staffPermissionGroups.map(group => {
+              const inherited = activePermissions.has(group.key);
+              const allChildren = group.items.every(([key]) => inherited || activePermissions.has(key));
+              return `
+                <details class="staff-permission-group" open>
+                  <summary>
+                    <strong>${group.label}</strong>
+                    <label class="staff-group-toggle" onclick="event.stopPropagation()">
+                      <input
+                        type="checkbox"
+                        data-staff-group
+                        data-panel-id="${panelId}"
+                        data-group="${group.key}"
+                        ${allChildren ? "checked" : ""}
+                      >
+                      <span>All</span>
+                    </label>
+                  </summary>
+                  <div class="staff-power-grid">
+                    ${group.items.map(([key, label]) => `
+                      <label class="staff-power-toggle">
+                        <input
+                          type="checkbox"
+                          data-staff-permission
+                          data-panel-id="${panelId}"
+                          data-permission="${key}"
+                          ${inherited || activePermissions.has(key) ? "checked" : ""}
+                        >
+                        <span>${label}</span>
+                      </label>
+                    `).join("")}
+                  </div>
+                </details>
+              `;
+            }).join("")}
           </div>
         </article>
       `;
@@ -318,7 +500,7 @@ function applySession(session) {
       return;
     }
     const permission = permissionByView[view];
-    button.hidden = !permission || !allowed.has(permission);
+    button.hidden = !permission || !hasGroupPermission(allowed, permission);
   });
 
   document.querySelectorAll(".module-card").forEach((button) => {
@@ -327,7 +509,26 @@ function applySession(session) {
       return;
     }
     const permission = permissionByModule[button.dataset.module];
-    button.hidden = !permission || !allowed.has(permission);
+    button.hidden = !permission || !hasGroupPermission(allowed, permission);
+  });
+
+  document.querySelectorAll("[data-action]").forEach((button) => {
+    if (owner) {
+      button.hidden = false;
+      return;
+    }
+    const required = actionPermission[button.dataset.action];
+    if (required) button.hidden = !hasPermission(allowed, required);
+  });
+
+  document.querySelectorAll("[data-vip-edit]").forEach((button) => {
+    if (!owner) button.hidden = !hasPermission(allowed, "vip.edit");
+  });
+  document.querySelectorAll("[data-vip-toggle]").forEach((button) => {
+    if (!owner) button.hidden = !hasPermission(allowed, "vip.toggle");
+  });
+  document.querySelectorAll("[data-policy-edit]").forEach((button) => {
+    if (!owner) button.hidden = !hasPermission(allowed, "policies.edit");
   });
 
   const ownerChip = document.querySelector(".owner-chip div");
@@ -338,7 +539,7 @@ function applySession(session) {
   }
 
   const quickAction = document.getElementById("quickActionBtn");
-  if (quickAction) quickAction.hidden = !owner && !allowed.has("users");
+  if (quickAction) quickAction.hidden = !owner && !hasPermission(allowed, "users.search");
 
   if (owner) {
     document.body.classList.remove("auth-loading");
@@ -348,7 +549,9 @@ function applySession(session) {
     return;
   }
 
-  const firstAllowed = Object.keys(permissionByView).find((view) => allowed.has(permissionByView[view]));
+  if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
+
+  const firstAllowed = Object.keys(permissionByView).find((view) => hasGroupPermission(allowed, permissionByView[view]));
   if (firstAllowed) setView(firstAllowed);
   document.body.classList.remove("auth-loading");
   document.body.classList.add("auth-ready");
@@ -461,19 +664,23 @@ function staffPanelFields() {
     field("staff_email", "Staff login Gmail / Email", "email", "staff@example.com") +
     field("login_password", "Login password", "password", "Minimum 10 characters") +
     field("confirm_password", "Confirm password", "password", "Enter password again") +
-    '<div class="dialog-section-title">Panel permissions</div>' +
-    checkboxField("permission_users", "Users", true) +
-    checkboxField("permission_rooms", "Rooms") +
-    checkboxField("permission_wallets", "Wallets") +
-    checkboxField("permission_hierarchy", "BD / Agency / Host") +
-    checkboxField("permission_roles", "Tags / Roles / Posts") +
-    checkboxField("permission_vip", "VIP") +
-    checkboxField("permission_gifts", "Gifts") +
-    checkboxField("permission_assets", "Entries / Frames") +
-    checkboxField("permission_banners", "Banners") +
-    checkboxField("permission_games", "Games") +
-    checkboxField("permission_policies", "Policies") +
-    checkboxField("permission_audit", "Audit Log");
+    '<div class="dialog-section-title">Panel permissions — choose exact functions</div>' +
+    staffPermissionGroups.map(group => `
+      <details class="dialog-permission-group" open>
+        <summary>
+          <strong>${group.label}</strong>
+          <label class="dialog-group-toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" data-dialog-permission-group data-group="${group.key}">
+            <span>Select all</span>
+          </label>
+        </summary>
+        <div class="dialog-permission-items">
+          ${group.items.map(([key, label]) =>
+            checkboxField("permission_" + key, label, false)
+          ).join("")}
+        </div>
+      </details>
+    `).join("");
 }
 
 function openAction(action, preset = {}) {
@@ -684,6 +891,15 @@ document.getElementById("globalSearch").addEventListener("keydown", e => {
   }
 });
 
+document.body.addEventListener("change", (event) => {
+  const groupInput = event.target.closest("[data-dialog-permission-group]");
+  if (!groupInput) return;
+  const group = groupInput.dataset.group;
+  const container = groupInput.closest(".dialog-permission-group");
+  container?.querySelectorAll(`input[name^="permission_${group}."]`)
+    .forEach((input) => { input.checked = groupInput.checked; });
+});
+
 document.body.addEventListener("change", e => {
   const input = e.target.closest("[data-feature]");
   if (!input) return;
@@ -708,6 +924,27 @@ document.body.addEventListener("change", async (event) => {
     return;
   }
 
+  const groupInput = event.target.closest("[data-staff-group]");
+  if (groupInput) {
+    const card = groupInput.closest("[data-staff-panel]");
+    const group = groupInput.dataset.group;
+    card.querySelectorAll(`[data-staff-permission][data-permission^="${group}."]`)
+      .forEach((input) => { input.checked = groupInput.checked; });
+    const permissions = [...card.querySelectorAll("[data-staff-permission]:checked")]
+      .map((input) => input.dataset.permission);
+
+    groupInput.disabled = true;
+    try {
+      await updateStaffPanelPower(groupInput.dataset.panelId, { permissions });
+      toast(groupInput.checked ? pretty(group) + " — all functions enabled." : pretty(group) + " — all functions disabled.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      await loadStaffPanels();
+    }
+    return;
+  }
+
   const permissionInput = event.target.closest("[data-staff-permission]");
   if (permissionInput) {
     const card = permissionInput.closest("[data-staff-panel]");
@@ -721,8 +958,8 @@ document.body.addEventListener("change", async (event) => {
       });
       toast(
         permissionInput.checked
-          ? pretty(permissionInput.dataset.permission) + " power enabled."
-          : pretty(permissionInput.dataset.permission) + " power disabled."
+          ? pretty(permissionInput.dataset.permission) + " enabled."
+          : pretty(permissionInput.dataset.permission) + " disabled."
       );
     } catch (error) {
       toast(error.message);
