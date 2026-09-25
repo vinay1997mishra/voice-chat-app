@@ -859,7 +859,26 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map(rowToRoomTheme);
   }
 
-  createUserRoomTheme(userIdValue, roomIdValue, input) {
+  listPanelRoomThemes() {
+    const now = Date.now();
+    this._pruneRoomThemes(now);
+    return this.ctx.storage.sql.exec(
+      `SELECT *
+         FROM room_themes
+        WHERE source = 'panel'
+          AND enabled = 1
+        ORDER BY
+          CASE
+            WHEN starts_at IS NULL OR starts_at <= ? THEN 0
+            ELSE 1
+          END,
+          COALESCE(starts_at, created_at) ASC,
+          created_at DESC`,
+      now,
+    ).toArray().map(rowToRoomTheme);
+  }
+
+    createUserRoomTheme(userIdValue, roomIdValue, input) {
     const userId = String(userIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
     const room = this._roomRow(roomId);
