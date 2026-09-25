@@ -66,6 +66,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
     }
 
+    try {
+      await widget.state.social.syncFollowing(account.authToken);
+    } catch (_) {
+      // Room entry should still work if social sync is temporarily unavailable.
+    }
+
     widget.state.roomControls.configureForRoom(ownerId);
     widget.state.roomControls.settings =
         widget.state.roomControls.settings.copyWith(
