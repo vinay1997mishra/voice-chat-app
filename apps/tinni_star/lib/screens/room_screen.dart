@@ -466,7 +466,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             onTap: () async {
                               await _setUserSeatMute(
                                 currentMember,
-                                seatIndex,
+                                seatIndex!,
                                 !micMuted,
                               );
                               if (sheetContext.mounted) {
