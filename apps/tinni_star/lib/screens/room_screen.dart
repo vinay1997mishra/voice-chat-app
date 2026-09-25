@@ -12,6 +12,7 @@ import '../room/room_controller.dart';
 import '../room/room_models.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
+import 'games_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -128,6 +129,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
     if (senderId == null) return;
+
+    final roomGifts = <GiftDefinition>[
+      const GiftDefinition(
+        id: 'gold-dragon',
+        name: 'Golden Dragon',
+        price: 5000,
+        effectKind: 'mp4',
+      ),
+      const GiftDefinition(
+        id: 'royal-crown',
+        name: 'Royal Crown',
+        price: 2500,
+        effectKind: 'pag',
+      ),
+      const GiftDefinition(
+        id: 'star-castle',
+        name: 'Star Castle',
+        price: 12000,
+        effectKind: 'mp4',
+      ),
+      const GiftDefinition(
+        id: 'heart-ring',
+        name: 'Heart Ring',
+        price: 1800,
+        effectKind: 'svga',
+      ),
+      ...GiftService.catalog,
+    ];
 
     List<(String, String)> recipients() {
       final values = <(String, String)>[];
@@ -286,7 +315,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
-                      itemCount: GiftService.catalog.length,
+                      itemCount: roomGifts.length,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
@@ -295,7 +324,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         crossAxisSpacing: 10,
                       ),
                       itemBuilder: (_, index) {
-                        final gift = GiftService.catalog[index];
+                        final gift = roomGifts[index];
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
                           onTap: () {
@@ -1225,6 +1254,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       key: const Key('room-gift-button'),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
                       icon: const Icon(Icons.card_giftcard_rounded, color: RoyalPalette.gold),
+                    ),
+                    IconButton(
+                      key: const Key('room-games-grid-button'),
+                      tooltip: 'Games',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GamesScreen(state: widget.state),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.grid_view_rounded,
+                        color: RoyalPalette.gold,
+                      ),
                     ),
                     IconButton(
                       key: const Key('room-seat-button'),
