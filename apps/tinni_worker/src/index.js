@@ -1228,6 +1228,53 @@ export default {
       return json(store.setManager(targetUserId, Boolean(body.enabled)));
     }
 
+    if (url.pathname === "/room-presence/mute" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      const seatIndex = Number(body.seat_index);
+      const muted = Boolean(body.muted);
+      if (!roomId || !targetUserId || !Number.isInteger(seatIndex) || seatIndex < 0) {
+        return json({
+          ok: false,
+          error: "room_id, target_user_id and seat_index are required",
+        }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const canModerate =
+        String(room.owner_id) === actorId || store.isManager(actorId);
+      if (!canModerate) {
+        return json({ ok: false, error: "Only room owner/admin can mute users" }, 403);
+      }
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner cannot be muted" }, 400);
+      }
+
+      try {
+        return json(store.setMute({
+          target_user_id: targetUserId,
+          seat_index: seatIndex,
+          muted_by: actorId,
+          muted,
+        }));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update room mute"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-presence/kick" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1296,6 +1343,10 @@ export default {
         avatar_data_url: user.avatar_data_url,
         flag_emoji: user.flag_emoji,
         country_code: user.country_code,
+        seat_index:
+          body.seat_index === null || body.seat_index === undefined
+            ? null
+            : Number(body.seat_index),
       };
       try {
         if (url.pathname.endsWith("/join")) {
