@@ -979,7 +979,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.4.0",
+        version: "1.5.0",
       });
     }
 
@@ -2373,6 +2373,63 @@ export default {
         panelName: session.panelName || null,
         permissions: session.permissions || [],
       });
+    }
+
+    if (url.pathname === "/api/owner/official-message" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      const targetUserId = String(body.target_user_id || "").trim();
+      const message = String(body.message || "").trim();
+      const reportId = String(body.report_id || "").trim();
+      const recipientKind = String(body.recipient_kind || "").trim();
+
+      if (!targetUserId) {
+        return json({ ok: false, error: "target_user_id is required" }, 400);
+      }
+      if (!message) {
+        return json({ ok: false, error: "Message cannot be empty" }, 400);
+      }
+      if (message.length > 2000) {
+        return json({ ok: false, error: "Message is too long" }, 400);
+      }
+
+      try {
+        const officialMessage = getAppDirectoryStore(env).sendOfficialMessage(
+          targetUserId,
+          message,
+          {
+            report_id: reportId || null,
+            recipient_kind: recipientKind || null,
+          },
+        );
+
+        await writeAudit(
+          env,
+          session,
+          "official.message.send",
+          "user",
+          targetUserId,
+          {
+            sender_name: "Tinni Official",
+            report_id: reportId || null,
+            recipient_kind: recipientKind || null,
+            message_id: officialMessage.id,
+          },
+        );
+
+        return json({
+          ok: true,
+          message: officialMessage,
+          sender_name: "Tinni Official",
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send official message"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/api/owner/notifications" && request.method === "GET") {
