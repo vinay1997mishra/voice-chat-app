@@ -1,0 +1,47 @@
+name: Tinni Worker Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/tinni_worker/**'
+      - 'apps/tinni_owner_panel/**'
+      - '.github/workflows/tinni-worker-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/tinni_worker/**'
+      - 'apps/tinni_owner_panel/**'
+      - '.github/workflows/tinni-worker-check.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/tinni_worker/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: apps/tinni_worker
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check apps/tinni_worker/src/index.js
+          node --check apps/tinni_worker/src/app_directory.js
+          node --check apps/tinni_worker/src/room_presence.js
+          node --check apps/tinni_worker/src/fruit_game.js
+          node --check apps/tinni_owner_panel/app.js
+
+      - name: Bundle Worker
+        working-directory: apps/tinni_worker
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
