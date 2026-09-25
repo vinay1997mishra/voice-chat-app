@@ -1346,9 +1346,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     spacing: 7,
                     runSpacing: 7,
                     children: [
-                      Chip(label: Text('Family ' + _familyTagFor(currentMember.userId))),
-                      Chip(label: Text('Host ' + _hostTagFor(currentMember.userId))),
-                      Chip(label: Text('Agency ' + _agencyNameFor(currentMember.userId))),
+                      Chip(label: Text('Family ' + (currentMember.familyTag ?? _familyTagFor(currentMember.userId)))),
+                      Chip(label: Text('Host ' + (currentMember.hostTag ?? _hostTagFor(currentMember.userId)))),
+                      Chip(label: Text('Agency ' + (currentMember.agencyName ?? _agencyNameFor(currentMember.userId)))),
                     ],
                   ),
                   const SizedBox(height: 14),
