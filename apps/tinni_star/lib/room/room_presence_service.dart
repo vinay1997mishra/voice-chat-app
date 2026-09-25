@@ -15,6 +15,7 @@ class RoomPresenceMember {
     this.seatIndex,
     this.micMuted = false,
     this.seatEmote,
+    this.seatEmoteUntil,
   });
 
   final String userId;
@@ -25,6 +26,7 @@ class RoomPresenceMember {
   final int? seatIndex;
   final bool micMuted;
   final String? seatEmote;
+  final DateTime? seatEmoteUntil;
   final DateTime joinedAt;
   final DateTime lastSeen;
 }
@@ -274,6 +276,11 @@ class RoomPresenceService extends ChangeNotifier {
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
                 seatEmote: row['seat_emote']?.toString(),
+                seatEmoteUntil: row['seat_emote_until'] == null
+                    ? null
+                    : DateTime.fromMillisecondsSinceEpoch(
+                        _asInt(row['seat_emote_until']),
+                      ),
                 joinedAt: DateTime.fromMillisecondsSinceEpoch(
                   _asInt(row['joined_at']),
                   isUtc: true,
