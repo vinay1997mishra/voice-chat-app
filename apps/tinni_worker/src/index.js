@@ -81,6 +81,37 @@ async function hmacBytes(value, secret) {
   return new Uint8Array(signature);
 }
 
+async function createLiveKitAccessToken({
+  apiKey,
+  apiSecret,
+  roomId,
+  userId,
+  displayName,
+}) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = stringToBase64Url(JSON.stringify({
+    alg: "HS256",
+    typ: "JWT",
+  }));
+  const payload = stringToBase64Url(JSON.stringify({
+    iss: String(apiKey),
+    sub: String(userId),
+    name: String(displayName || userId),
+    nbf: now - 5,
+    exp: now + 60 * 60,
+    video: {
+      roomJoin: true,
+      room: String(roomId),
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    },
+  }));
+  const signingInput = header + "." + payload;
+  const signature = await hmacBytes(signingInput, String(apiSecret));
+  return signingInput + "." + toBase64Url(signature);
+}
+
 async function createSession(
   payload,
   secret,
@@ -1062,6 +1093,47 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({ ok: true, user: appSession.user });
+    }
+
+    if (url.pathname === "/livekit/token" && request.method === "POST") {
+      if (!env.LIVEKIT_URL || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+        return json({
+          ok: false,
+          error: "LiveKit is not configured on the server",
+        }, 503);
+      }
+
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const roomExists = rooms.some((room) => String(room.room_id) === roomId);
+      if (!roomExists) {
+        return json({ ok: false, error: "Room not found" }, 404);
+      }
+
+      const token = await createLiveKitAccessToken({
+        apiKey: env.LIVEKIT_API_KEY,
+        apiSecret: env.LIVEKIT_API_SECRET,
+        roomId,
+        userId: appSession.user.user_id,
+        displayName: appSession.user.display_name,
+      });
+
+      return json({
+        ok: true,
+        server_url: String(env.LIVEKIT_URL),
+        token,
+        room_id: roomId,
+        user_id: appSession.user.user_id,
+        expires_in: 3600,
+      });
     }
 
     if (url.pathname === "/rooms" && request.method === "GET") {
