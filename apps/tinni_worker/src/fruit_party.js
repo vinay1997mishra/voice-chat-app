@@ -1,7 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 
 export const PARTY_ROUND_MS = 21000;
-export const PARTY_BET_LOCK_MS = 3000;
+export const PARTY_RESULT_SPIN_MS = 5000;
+export const PARTY_ROUND_CYCLE_MS =
+  PARTY_ROUND_MS + PARTY_RESULT_SPIN_MS;
+export const PARTY_BET_LOCK_MS = 0;
 export const PARTY_START_BALANCE = 10000000;
 export const PARTY_LUCKY_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const PARTY_BET_AMOUNTS = Object.freeze([
@@ -64,15 +67,19 @@ function randomDistinctFruits(count) {
 }
 
 function roundIdAt(ms) {
-  return Math.floor(ms / PARTY_ROUND_MS);
+  return Math.floor(ms / PARTY_ROUND_CYCLE_MS);
 }
 
 function roundStartAt(roundId) {
-  return roundId * PARTY_ROUND_MS;
+  return roundId * PARTY_ROUND_CYCLE_MS;
+}
+
+function bettingEndAt(roundId) {
+  return roundStartAt(roundId) + PARTY_ROUND_MS;
 }
 
 function roundEndAt(roundId) {
-  return (roundId + 1) * PARTY_ROUND_MS;
+  return roundStartAt(roundId) + PARTY_ROUND_CYCLE_MS;
 }
 
 function dayKey(ms) {
@@ -214,8 +221,8 @@ export class FruitPartyStore extends DurableObject {
         !Array.isArray(rounds)) {
       const windowStart = windowId * PARTY_LUCKY_WINDOW_MS;
       const windowEnd = windowStart + PARTY_LUCKY_WINDOW_MS;
-      const firstRound = Math.ceil(windowStart / PARTY_ROUND_MS);
-      const lastRound = Math.floor((windowEnd - 1) / PARTY_ROUND_MS);
+      const firstRound = Math.ceil(windowStart / PARTY_ROUND_CYCLE_MS);
+      const lastRound = Math.floor((windowEnd - 1) / PARTY_ROUND_CYCLE_MS);
       const totalRounds = Math.max(1, lastRound - firstRound + 1);
       const count = 3 + randomIndex(2);
       const selected = new Set();
@@ -244,14 +251,26 @@ export class FruitPartyStore extends DurableObject {
     let next = lastRaw === null ? startedRound : Number(lastRaw) + 1;
 
     let processed = 0;
-    while (next < currentRound && processed < 100) {
+    while (
+      (
+        next < currentRound ||
+        (
+          next === currentRound &&
+          now >= bettingEndAt(currentRound)
+        )
+      ) &&
+      processed < 100
+    ) {
       await this._settle(next);
       this._setMeta("last_settled_round", next);
       next += 1;
       processed += 1;
     }
 
-    const nextAlarm = roundEndAt(currentRound);
+    const nextAlarm =
+      now < bettingEndAt(currentRound)
+        ? bettingEndAt(currentRound)
+        : roundEndAt(currentRound);
     const currentAlarm = await this.ctx.storage.getAlarm();
     if (currentAlarm === null || Math.abs(currentAlarm - nextAlarm) > 500) {
       await this.ctx.storage.setAlarm(nextAlarm);
@@ -330,8 +349,13 @@ export class FruitPartyStore extends DurableObject {
     await this._ensureStarted(now);
 
     const roundId = roundIdAt(now);
-    const endAt = roundEndAt(roundId);
-    const remainingMs = Math.max(0, endAt - now);
+    const bettingEnd = bettingEndAt(roundId);
+    const cycleEnd = roundEndAt(roundId);
+    const inResultSpin = now >= bettingEnd;
+    const remainingMs = Math.max(0, bettingEnd - now);
+    const resultSpinRemainingMs = inResultSpin
+      ? Math.max(0, cycleEnd - now)
+      : 0;
     const bets = this._bets(roundId);
     const userId = String(userIdValue || "").trim();
     const myBets = Object.fromEntries(
@@ -383,10 +407,15 @@ export class FruitPartyStore extends DurableObject {
       round: {
         round_id: roundId,
         round_start: roundStartAt(roundId),
-        round_end: endAt,
+        round_end: bettingEnd,
+        cycle_end: cycleEnd,
         remaining_ms: remainingMs,
+        result_spin_remaining_ms: resultSpinRemainingMs,
+        result_spin_ms: PARTY_RESULT_SPIN_MS,
+        phase: inResultSpin ? "result_spin" : "betting",
         round_duration_ms: PARTY_ROUND_MS,
-        betting_open: remainingMs > PARTY_BET_LOCK_MS,
+        round_cycle_ms: PARTY_ROUND_CYCLE_MS,
+        betting_open: !inResultSpin && remainingMs > 0,
         bet_lock_ms: PARTY_BET_LOCK_MS,
         total_bet: bets.reduce((sum, bet) => sum + bet.amount, 0),
         active_players: new Set(bets.map((bet) => bet.user_id)).size,
@@ -416,15 +445,15 @@ export class FruitPartyStore extends DurableObject {
     const fruitKey = String(input?.fruit_key || "").trim();
     const amount = Number(input?.amount || 0);
     const roundId = roundIdAt(now);
-    const remainingMs = roundEndAt(roundId) - now;
+    const remainingMs = bettingEndAt(roundId) - now;
 
     if (!userId) throw new Error("user_id is required");
     if (!FRUIT_BY_KEY.has(fruitKey)) throw new Error("Invalid fruit");
     if (!Number.isInteger(amount) || !ALLOWED_BETS.has(amount)) {
       throw new Error("Invalid bet amount");
     }
-    if (remainingMs <= PARTY_BET_LOCK_MS) {
-      throw new Error("Betting is locked for this round");
+    if (remainingMs <= 0) {
+      throw new Error("Betting is locked while the result is spinning");
     }
 
     this._ensureWallet(userId, now);
