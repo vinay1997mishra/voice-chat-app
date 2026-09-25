@@ -12,6 +12,9 @@ export class RoomPresenceStore extends DurableObject {
         avatar_data_url TEXT,
         flag_emoji TEXT NOT NULL DEFAULT '',
         country_code TEXT NOT NULL DEFAULT '',
+        family_tag TEXT,
+        host_tag TEXT,
+        agency_name TEXT,
         seat_index INTEGER,
         seat_emote TEXT,
         seat_emote_until INTEGER,
@@ -57,6 +60,9 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN avatar_data_url TEXT",
       "ALTER TABLE room_members ADD COLUMN flag_emoji TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE room_members ADD COLUMN country_code TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE room_members ADD COLUMN family_tag TEXT",
+      "ALTER TABLE room_members ADD COLUMN host_tag TEXT",
+      "ALTER TABLE room_members ADD COLUMN agency_name TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
@@ -445,7 +451,8 @@ export class RoomPresenceStore extends DurableObject {
     this._prune(now);
     return this.ctx.storage.sql.exec(
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
-              country_code, seat_index, seat_emote, seat_emote_until, joined_at, last_seen
+              country_code, family_tag, host_tag, agency_name,
+              seat_index, seat_emote, seat_emote_until, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -454,6 +461,9 @@ export class RoomPresenceStore extends DurableObject {
       avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
       flag_emoji: String(row.flag_emoji || ""),
       country_code: String(row.country_code || ""),
+      family_tag: row.family_tag ? String(row.family_tag) : null,
+      host_tag: row.host_tag ? String(row.host_tag) : null,
+      agency_name: row.agency_name ? String(row.agency_name) : null,
       seat_index:
         row.seat_index === null || row.seat_index === undefined
           ? null
@@ -488,6 +498,9 @@ export class RoomPresenceStore extends DurableObject {
       : null;
     const flagEmoji = String(input?.flag_emoji || "").trim();
     const countryCode = String(input?.country_code || "").trim().toUpperCase();
+    const familyTag = String(input?.family_tag || "").trim() || null;
+    const hostTag = String(input?.host_tag || "").trim() || null;
+    const agencyName = String(input?.agency_name || "").trim() || null;
     const rawSeatIndex = input?.seat_index;
     let seatIndex =
       rawSeatIndex === null || rawSeatIndex === undefined
@@ -546,13 +559,17 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
+         family_tag, host_tag, agency_name,
          seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
          flag_emoji = excluded.flag_emoji,
          country_code = excluded.country_code,
+         family_tag = excluded.family_tag,
+         host_tag = excluded.host_tag,
+         agency_name = excluded.agency_name,
          seat_index = excluded.seat_index,
          seat_emote = CASE
            WHEN room_members.seat_index IS excluded.seat_index THEN room_members.seat_emote
@@ -564,6 +581,9 @@ export class RoomPresenceStore extends DurableObject {
       avatarDataUrl,
       flagEmoji,
       countryCode,
+      familyTag,
+      hostTag,
+      agencyName,
       seatIndex,
       null,
       null,
