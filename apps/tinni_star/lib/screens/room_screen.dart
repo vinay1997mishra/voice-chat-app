@@ -1001,8 +1001,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
 
     if (!mounted || selected == null) return;
-    final account = widget.state.auth.current;
-    if (account == null) return;
 
     try {
       await widget.state.discovery.setRoomTheme(
