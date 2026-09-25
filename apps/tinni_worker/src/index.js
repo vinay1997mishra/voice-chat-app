@@ -979,7 +979,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.3.0",
+        version: "1.4.0",
       });
     }
 
@@ -1605,6 +1605,37 @@ export default {
       }
     }
 
+    if (url.pathname === "/social/blocked" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        blocked: getAppDirectoryStore(env).listBlocked(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
+    if (url.pathname === "/social/block" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(
+          getAppDirectoryStore(env).setBlocked(
+            appSession.user.user_id,
+            body.target_user_id,
+            body.blocked === true,
+          ),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update block"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/messages" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2164,29 +2195,103 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      const message = String(body.message || body.details || "").trim();
-      const category = String(body.category || body.type || "complaint").trim();
-      const targetType = String(body.target_type || "").trim();
-      const targetId = String(body.target_id || "").trim();
-      if (message.length < 3) {
-        return json({ ok: false, error: "Complaint details are required" }, 400);
+
+      const allowedCategories = new Set([
+        "sexual_nude_exploitation",
+        "child_safety_minor_exploitation",
+        "harassment_bullying_hate",
+        "threats_violence_weapons",
+        "terrorism_extremism_drugs",
+        "self_harm_suicide",
+        "fraud_scam_payment_abuse",
+        "account_theft_phishing_impersonation",
+        "privacy_doxxing",
+        "illegal_gambling_betting",
+        "spam_advertising",
+        "copyright_stolen_content",
+        "room_abuse",
+        "other",
+      ]);
+
+      const targetUserId = String(body.target_user_id || "").trim();
+      const targetDisplayName = String(body.target_display_name || "").trim();
+      const roomId = String(body.room_id || "").trim();
+      const rawCategories = Array.isArray(body.categories) ? body.categories : [];
+      const categories = [...new Set(
+        rawCategories
+          .map((value) => String(value || "").trim())
+          .filter((value) => allowedCategories.has(value)),
+      )];
+      const otherDetails = String(body.other_details || "").trim();
+      const screenshots = Array.isArray(body.screenshots)
+        ? body.screenshots
+            .map((value) => String(value || "").trim())
+            .filter((value) => value.startsWith("data:image/"))
+            .slice(0, 5)
+        : [];
+
+      if (!targetUserId) {
+        return json({ ok: false, error: "target_user_id is required" }, 400);
+      }
+      if (targetUserId === String(appSession.user.user_id)) {
+        return json({ ok: false, error: "You cannot report your own ID" }, 400);
+      }
+      if (categories.length === 0) {
+        return json({ ok: false, error: "Select at least one report reason" }, 400);
+      }
+      if (categories.includes("other") && otherDetails.length < 3) {
+        return json({ ok: false, error: "Write details for Other" }, 400);
+      }
+      if (screenshots.some((value) => value.length > 950000)) {
+        return json({ ok: false, error: "One or more screenshots are too large" }, 413);
       }
 
+      const categoryLabels = {
+        sexual_nude_exploitation: "Sexual / Nude Content & Sexual Exploitation",
+        child_safety_minor_exploitation: "Child Safety / Minor Exploitation",
+        harassment_bullying_hate: "Harassment / Bullying / Hate Speech",
+        threats_violence_weapons: "Threats / Violence / Weapons",
+        terrorism_extremism_drugs: "Terrorism / Extremism / Drugs / Illegal Substances",
+        self_harm_suicide: "Self-harm / Suicide Encouragement",
+        fraud_scam_payment_abuse: "Fraud / Scam / Fake Coins / Payment Abuse",
+        account_theft_phishing_impersonation: "Account Theft / Phishing / Impersonation",
+        privacy_doxxing: "Privacy / Personal Information / Doxxing",
+        illegal_gambling_betting: "Illegal Gambling / Betting",
+        spam_advertising: "Spam / Advertising",
+        copyright_stolen_content: "Copyright / Stolen Content",
+        room_abuse: "Room Abuse / Prohibited Room Activity",
+        other: "Other",
+      };
+      const labels = categories.map((key) => categoryLabels[key] || key);
+      const message = labels.join(", ") +
+        (otherDetails ? " — " + otherDetails : "");
+
       const notification = await getStaffStore(env).createOwnerNotification({
-        type: "complaint",
+        type: "user_report",
         source_user_id: appSession.user.user_id,
         source_display_name: appSession.user.display_name,
-        target_type: targetType || null,
-        target_id: targetId || null,
-        title: "New app complaint",
+        target_type: "user",
+        target_id: targetUserId,
+        title: "User report" + (targetDisplayName ? ": " + targetDisplayName : ""),
         message,
-        metadata: { category },
+        metadata: {
+          categories,
+          category_labels: labels,
+          other_details: otherDetails || null,
+          screenshots,
+          screenshot_count: screenshots.length,
+          room_id: roomId || null,
+          target_display_name: targetDisplayName || null,
+          reporter_user_id: appSession.user.user_id,
+          reporter_display_name: appSession.user.display_name,
+        },
       });
 
       return json({
         ok: true,
-        complaint_id: notification.id,
+        report_id: notification.id,
         owner_notification_created: true,
+        screenshot_count: screenshots.length,
       }, 201);
     }
 
