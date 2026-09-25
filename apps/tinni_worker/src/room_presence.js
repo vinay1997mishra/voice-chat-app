@@ -108,7 +108,18 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  isManager(userIdValue) {
+  isMember(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    this._prune();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return Boolean(row);
+  }
+
+    isManager(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return false;
     const row = this.ctx.storage.sql.exec(
