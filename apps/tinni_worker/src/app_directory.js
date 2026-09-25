@@ -128,6 +128,10 @@ function rowToRoomTheme(row) {
     creator_user_id: row.creator_user_id ? String(row.creator_user_id) : null,
     price_coins: Number(row.price_coins || 0),
     created_at: Number(row.created_at),
+    starts_at:
+      row.starts_at === null || row.starts_at === undefined
+        ? null
+        : Number(row.starts_at),
     expires_at:
       row.expires_at === null || row.expires_at === undefined
         ? null
@@ -224,6 +228,7 @@ export class AppDirectoryStore extends DurableObject {
         creator_user_id TEXT,
         price_coins INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
+        starts_at INTEGER,
         expires_at INTEGER,
         enabled INTEGER NOT NULL DEFAULT 1
       );
@@ -307,6 +312,7 @@ export class AppDirectoryStore extends DurableObject {
 
     for (const migration of [
       "ALTER TABLE app_users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'google'",
+      "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT"
     ]) {
       try {
@@ -843,10 +849,12 @@ export class AppDirectoryStore extends DurableObject {
          FROM room_themes
         WHERE enabled = 1
           AND (room_id IS NULL OR room_id = ?)
+          AND (starts_at IS NULL OR starts_at <= ?)
           AND (expires_at IS NULL OR expires_at > ?)
         ORDER BY CASE WHEN source = 'panel' THEN 0 ELSE 1 END,
                  created_at DESC`,
       roomId,
+      now,
       now,
     ).toArray().map(rowToRoomTheme);
   }
@@ -876,14 +884,15 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_themes
         (id, name, asset, source, room_id, creator_user_id, price_coins,
-         created_at, expires_at, enabled)
-       VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, 1)`,
+         created_at, starts_at, expires_at, enabled)
+       VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, 1)`,
       id,
       name,
       asset,
       roomId,
       userId,
       ROOM_THEME_USER_PRICE_COINS,
+      now,
       now,
       expiresAt,
     );
@@ -902,6 +911,30 @@ export class AppDirectoryStore extends DurableObject {
       input?.asset,
     );
     const now = Date.now();
+    const permanent = input?.permanent === true;
+    const rawStartsAt = input?.starts_at;
+    const rawEndsAt = input?.ends_at;
+    const startsAt =
+      rawStartsAt === null || rawStartsAt === undefined || rawStartsAt === ""
+        ? now
+        : Number(rawStartsAt);
+    const expiresAt =
+      permanent
+        ? null
+        : Number(rawEndsAt);
+
+    if (!Number.isFinite(startsAt)) {
+      throw new Error("Valid start date/time is required");
+    }
+    if (!permanent) {
+      if (!Number.isFinite(expiresAt)) {
+        throw new Error("Valid end date/time is required");
+      }
+      if (expiresAt <= startsAt) {
+        throw new Error("End date/time must be after start date/time");
+      }
+    }
+
     const id =
       "theme-panel-" + now.toString(36) + "-" +
       crypto.randomUUID().slice(0, 8);
@@ -909,12 +942,14 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_themes
         (id, name, asset, source, room_id, creator_user_id, price_coins,
-         created_at, expires_at, enabled)
-       VALUES (?, ?, ?, 'panel', NULL, NULL, 0, ?, NULL, 1)`,
+         created_at, starts_at, expires_at, enabled)
+       VALUES (?, ?, ?, 'panel', NULL, NULL, 0, ?, ?, ?, 1)`,
       id,
       name,
       asset,
       now,
+      startsAt,
+      expiresAt,
     );
 
     return rowToRoomTheme(
