@@ -127,6 +127,59 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  Future<void> _showRoomPowerMenu() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: RoyalPalette.gold,
+                  ),
+                  title: const Text('Minimize'),
+                  subtitle: const Text('Stay in the room and return to the app.'),
+                  onTap: () => Navigator.pop(sheetContext, 'minimize'),
+                ),
+              ),
+              Expanded(
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.exit_to_app_rounded,
+                    color: RoyalPalette.gold,
+                  ),
+                  title: const Text('Exit'),
+                  subtitle: const Text('Leave the room immediately.'),
+                  onTap: () => Navigator.pop(sheetContext, 'exit'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    final session = widget.state.roomSession;
+
+    if (action == 'minimize') {
+      session.minimize();
+      if (context.mounted) Navigator.pop(context);
+      return;
+    }
+
+    if (action == 'exit') {
+      await session.close();
+      if (context.mounted) Navigator.pop(context);
+    }
+  }
+
   String _familyTagFor(String userId) {
     if (widget.state.family.exists && widget.state.family.isMember(userId)) {
       return widget.state.family.tag ?? widget.state.family.name ?? 'Family';
@@ -1395,21 +1448,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ),
           actions: [
             IconButton(
-              tooltip: 'Minimize room',
-              onPressed: () {
-                session.minimize();
-                Navigator.pop(context);
-              },
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: RoyalPalette.gold),
-            ),
-            IconButton(
-              tooltip: 'Close room',
-              onPressed: () async {
-                await session.close();
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              },
-              icon: const Icon(Icons.close_rounded, color: RoyalPalette.gold),
+              key: const Key('room-power-button'),
+              tooltip: 'Room options',
+              onPressed: _showRoomPowerMenu,
+              icon: const Icon(
+                Icons.power_settings_new_rounded,
+                color: RoyalPalette.gold,
+              ),
             ),
           ],
         ),
