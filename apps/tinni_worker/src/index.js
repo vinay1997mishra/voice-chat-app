@@ -1248,6 +1248,82 @@ export default {
       }
     }
 
+    if (url.pathname === "/social/following" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        following: getAppDirectoryStore(env).listFollowing(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
+    if (url.pathname === "/social/follow" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(
+          getAppDirectoryStore(env).setFollowing(
+            appSession.user.user_id,
+            body.target_user_id,
+            body.following === true,
+          ),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update follow"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/messages" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const peerUserId = String(
+        url.searchParams.get("peer_user_id") || "",
+      ).trim();
+      if (!peerUserId) {
+        return json({ ok: false, error: "peer_user_id is required" }, 400);
+      }
+      try {
+        return json({
+          ok: true,
+          messages: getAppDirectoryStore(env).listDirectMessages(
+            appSession.user.user_id,
+            peerUserId,
+            url.searchParams.get("limit"),
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load messages"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/messages" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const message = getAppDirectoryStore(env).sendDirectMessage(
+          appSession.user.user_id,
+          body.to_user_id,
+          body.text,
+        );
+        return json({ ok: true, message }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send message"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/rooms/theme" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
