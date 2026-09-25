@@ -1,10 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
 
-export const ROUND_MS = 20000;
+export const ROUND_MS = 21000;
 export const BET_LOCK_MS = 3000;
 export const HIGH_VOLUME_PLAYER_THRESHOLD = 20;
 export const COMPANY_MARGIN_PERCENT = 30;
 export const START_BALANCE = 10000000;
+export const LUCKY_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const ALLOWED_BET_AMOUNTS = Object.freeze([
+  5000,
+  25000,
+  100000,
+  500000,
+  2000000,
+  10000000,
+]);
 export const RESULT_WEIGHTS = Object.freeze({
   x5: 75,
   x10_20: 20,
@@ -28,6 +37,7 @@ const X10_20_FRUITS = FRUITS.filter(
   (fruit) => fruit.multiplier === 10 || fruit.multiplier === 20,
 );
 const X40_FRUITS = FRUITS.filter((fruit) => fruit.multiplier === 40);
+const ALLOWED_BET_SET = new Set(ALLOWED_BET_AMOUNTS);
 
 function randomIndex(length) {
   if (length <= 1) return 0;
@@ -51,6 +61,15 @@ function weightedRandomFruit() {
     return X10_20_FRUITS[randomIndex(X10_20_FRUITS.length)];
   }
   return X40_FRUITS[randomIndex(X40_FRUITS.length)];
+}
+
+function randomDistinctFruits(count) {
+  const pool = [...FRUITS];
+  const picked = [];
+  while (pool.length > 0 && picked.length < count) {
+    picked.push(pool.splice(randomIndex(pool.length), 1)[0]);
+  }
+  return picked;
 }
 
 function roundIdAt(timeMs) {
@@ -108,6 +127,33 @@ export class FruitGameStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
     `);
+
+    this._ensureResultColumn("special_kind", "TEXT");
+    this._ensureResultColumn(
+      "bonus_fruits_json",
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
+    this._ensureResultColumn(
+      "jackpot_hit",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    this._ensureResultColumn(
+      "jackpot_payout",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+
+  _ensureResultColumn(name, definition) {
+    try {
+      this.ctx.storage.sql.exec(
+        "ALTER TABLE fruit_results ADD COLUMN " + name + " " + definition,
+      );
+    } catch (error) {
+      const message = String(error?.message || "").toLowerCase();
+      if (!message.includes("duplicate") && !message.includes("already exists")) {
+        throw error;
+      }
+    }
   }
 
   _meta(key, fallback = null) {
@@ -190,6 +236,44 @@ export class FruitGameStore extends DurableObject {
     };
   }
 
+  _luckySchedule(roundId) {
+    const windowId = Math.floor(roundStartAt(roundId) / LUCKY_WINDOW_MS);
+    const storedWindowId = this._meta("lucky_window_id");
+    let rounds = [];
+
+    if (storedWindowId === String(windowId)) {
+      try {
+        rounds = JSON.parse(this._meta("lucky_rounds_json", "[]"));
+      } catch {
+        rounds = [];
+      }
+    }
+
+    if (storedWindowId !== String(windowId) || !Array.isArray(rounds)) {
+      const windowStart = windowId * LUCKY_WINDOW_MS;
+      const windowEnd = windowStart + LUCKY_WINDOW_MS;
+      const firstRound = Math.ceil(windowStart / ROUND_MS);
+      const lastRound = Math.floor((windowEnd - 1) / ROUND_MS);
+      const totalRounds = Math.max(1, lastRound - firstRound + 1);
+      const count = 3 + randomIndex(2);
+      const selected = new Set();
+
+      while (selected.size < Math.min(count, totalRounds)) {
+        selected.add(firstRound + randomIndex(totalRounds));
+      }
+
+      rounds = [...selected].sort((a, b) => a - b);
+      this._setMeta("lucky_window_id", windowId);
+      this._setMeta("lucky_rounds_json", JSON.stringify(rounds));
+    }
+
+    return rounds;
+  }
+
+  _isLuckyRound(roundId) {
+    return this._luckySchedule(roundId).includes(roundId);
+  }
+
   async _ensureStarted(now = Date.now()) {
     const currentRound = roundIdAt(now);
     if (this._meta("started_round") === null) {
@@ -236,13 +320,22 @@ export class FruitGameStore extends DurableObject {
     const bets = this._bets(roundId);
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
     const players = new Set(bets.map((bet) => bet.user_id));
-    const mode = "weighted_random_75_20_5";
-    const winner = weightedRandomFruit();
+    const lucky11 = this._isLuckyRound(roundId);
+    const bonusFruits = lucky11 ? randomDistinctFruits(3) : [];
+    const winner = lucky11 ? bonusFruits[0] : weightedRandomFruit();
+    const mode = lucky11
+      ? "lucky_11_random_3"
+      : "weighted_random_75_20_5";
+    const winningKeys = lucky11
+      ? new Set(bonusFruits.map((fruit) => fruit.key))
+      : new Set([winner.key]);
 
     const payoutsByUser = new Map();
     for (const bet of bets) {
-      if (bet.fruit_key !== winner.key) continue;
-      const payout = bet.amount * winner.multiplier;
+      if (!winningKeys.has(bet.fruit_key)) continue;
+      const fruit = FRUIT_BY_KEY.get(bet.fruit_key);
+      if (!fruit) continue;
+      const payout = bet.amount * fruit.multiplier;
       payoutsByUser.set(
         bet.user_id,
         (payoutsByUser.get(bet.user_id) || 0) + payout,
@@ -265,18 +358,21 @@ export class FruitGameStore extends DurableObject {
       );
     }
 
-    const winnerStake = bets
-      .filter((bet) => bet.fruit_key === winner.key)
-      .reduce((sum, bet) => sum + bet.amount, 0);
-    const totalPayout = winnerStake * winner.multiplier;
+    let totalPayout = 0;
+    for (const bet of bets) {
+      if (!winningKeys.has(bet.fruit_key)) continue;
+      const fruit = FRUIT_BY_KEY.get(bet.fruit_key);
+      if (fruit) totalPayout += bet.amount * fruit.multiplier;
+    }
+
     const retained = totalBet - totalPayout;
-    const marginTargetMet = true;
 
     this.ctx.storage.sql.exec(
       `INSERT INTO fruit_results
         (round_id, fruit_key, mode, total_bet, total_payout, company_retained,
-         active_players, margin_target_met, settled_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         active_players, margin_target_met, settled_at, special_kind,
+         bonus_fruits_json, jackpot_hit, jackpot_payout)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       roundId,
       winner.key,
       mode,
@@ -284,8 +380,12 @@ export class FruitGameStore extends DurableObject {
       totalPayout,
       retained,
       players.size,
-      marginTargetMet ? 1 : 0,
+      1,
       settledAt,
+      lucky11 ? "lucky11" : null,
+      JSON.stringify(bonusFruits.map((fruit) => fruit.key)),
+      0,
+      0,
     );
   }
 
@@ -310,21 +410,35 @@ export class FruitGameStore extends DurableObject {
 
     const history = this.ctx.storage.sql.exec(
       `SELECT round_id, fruit_key, mode, total_bet, total_payout,
-              company_retained, active_players, margin_target_met, settled_at
+              company_retained, active_players, margin_target_met, settled_at,
+              special_kind, bonus_fruits_json, jackpot_hit, jackpot_payout
          FROM fruit_results
         ORDER BY round_id DESC
         LIMIT 20`,
     ).toArray().map((row) => {
       const fruit = FRUIT_BY_KEY.get(String(row.fruit_key));
+      let bonusKeys = [];
+      try {
+        bonusKeys = JSON.parse(String(row.bonus_fruits_json || "[]"));
+      } catch {
+        bonusKeys = [];
+      }
+      const bonusFruits = Array.isArray(bonusKeys)
+        ? bonusKeys.map((key) => FRUIT_BY_KEY.get(String(key))).filter(Boolean)
+        : [];
       return {
         round_id: Number(row.round_id),
         fruit,
         mode: String(row.mode),
+        special_kind: row.special_kind ? String(row.special_kind) : null,
+        bonus_fruits: bonusFruits,
         total_bet: Number(row.total_bet),
         total_payout: Number(row.total_payout),
         company_retained: Number(row.company_retained),
         active_players: Number(row.active_players),
         margin_target_met: Number(row.margin_target_met) === 1,
+        jackpot_hit: Number(row.jackpot_hit || 0) === 1,
+        jackpot_payout: Number(row.jackpot_payout || 0),
         settled_at: Number(row.settled_at),
       };
     });
@@ -349,6 +463,13 @@ export class FruitGameStore extends DurableObject {
         high_volume_player_threshold: HIGH_VOLUME_PLAYER_THRESHOLD,
         company_margin_percent: COMPANY_MARGIN_PERCENT,
         result_weights_percent: RESULT_WEIGHTS,
+        bet_amounts: ALLOWED_BET_AMOUNTS,
+        lucky_11: {
+          window_ms: LUCKY_WINDOW_MS,
+          events_per_window_min: 3,
+          events_per_window_max: 4,
+          random_bonus_fruits: 3,
+        },
         fruits: FRUITS,
       },
       jackpot: Number(this._meta("jackpot", "85763")),
@@ -371,8 +492,8 @@ export class FruitGameStore extends DurableObject {
 
     if (!userId) throw new Error("user_id is required");
     if (!FRUIT_BY_KEY.has(fruitKey)) throw new Error("Invalid fruit");
-    if (!Number.isInteger(amount) || amount <= 0) {
-      throw new Error("Amount must be a positive integer");
+    if (!Number.isInteger(amount) || !ALLOWED_BET_SET.has(amount)) {
+      throw new Error("Invalid bet amount");
     }
     if (remainingMs <= BET_LOCK_MS) {
       throw new Error("Betting is locked for this round");
