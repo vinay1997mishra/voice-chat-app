@@ -1113,9 +1113,23 @@ export default {
       }
 
       const rooms = await getAppDirectoryStore(env).listRooms();
-      const roomExists = rooms.some((room) => String(room.room_id) === roomId);
-      if (!roomExists) {
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) {
         return json({ ok: false, error: "Room not found" }, 404);
+      }
+
+      const kick = getRoomPresenceStore(env, roomId).kickStatus(
+        appSession.user.user_id,
+      );
+      if (kick) {
+        return json({
+          ok: false,
+          error: "You are kicked from this room.",
+          kick_expires_at: kick.expires_at,
+          permanent: kick.permanent,
+        }, 403);
       }
 
       const token = await createLiveKitAccessToken({
@@ -1191,6 +1205,77 @@ export default {
       return json(await getRoomPresenceStore(env, roomId).state());
     }
 
+    if (url.pathname === "/room-presence/admin" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) {
+        return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) !== String(appSession.user.user_id)) {
+        return json({ ok: false, error: "Only the room owner can manage admins" }, 403);
+      }
+
+      const store = getRoomPresenceStore(env, roomId);
+      return json(store.setManager(targetUserId, Boolean(body.enabled)));
+    }
+
+    if (url.pathname === "/room-presence/kick" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) {
+        return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const canModerate =
+        String(room.owner_id) === actorId || store.isManager(actorId);
+      if (!canModerate) {
+        return json({ ok: false, error: "Only room owner/admin can kick users" }, 403);
+      }
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner cannot be kicked" }, 400);
+      }
+
+      const rawDuration = body.duration_ms;
+      let durationMs = null;
+      if (rawDuration !== null && rawDuration !== undefined) {
+        durationMs = Number(rawDuration);
+        const allowed = new Set([
+          2 * 60 * 60 * 1000,
+          6 * 60 * 60 * 1000,
+          24 * 60 * 60 * 1000,
+        ]);
+        if (!allowed.has(durationMs)) {
+          return json({ ok: false, error: "Invalid kick duration" }, 400);
+        }
+      }
+
+      return json(store.kick({
+        target_user_id: targetUserId,
+        kicked_by: actorId,
+        duration_ms: durationMs,
+      }));
+    }
+
     if (
       (url.pathname === "/room-presence/join" ||
        url.pathname === "/room-presence/heartbeat" ||
@@ -1221,7 +1306,17 @@ export default {
         }
         return json(await store.leave(presenceBody));
       } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Room presence failed") }, 400);
+        const message = String(error?.message || "Room presence failed");
+        if (message.startsWith("KICKED_FROM_ROOM:")) {
+          const value = message.slice("KICKED_FROM_ROOM:".length);
+          return json({
+            ok: false,
+            error: "You are kicked from this room.",
+            permanent: value === "permanent",
+            kick_expires_at: value === "permanent" ? null : Number(value),
+          }, 403);
+        }
+        return json({ ok: false, error: message }, 400);
       }
     }
 
