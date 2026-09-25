@@ -49,6 +49,12 @@ export class RoomPresenceStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_seat_requests (
+        user_id TEXT PRIMARY KEY,
+        seat_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_seat_forces (
         user_id TEXT PRIMARY KEY,
         seat_index INTEGER,
@@ -128,6 +134,9 @@ export class RoomPresenceStore extends DurableObject {
     if (mode !== "free" && mode !== "apply") {
       throw new Error("mic_mode must be free or apply");
     }
+    if (mode === "free") {
+      this.ctx.storage.sql.exec("DELETE FROM room_seat_requests");
+    }
     this.ctx.storage.sql.exec(
       `INSERT INTO room_runtime_settings (id, mic_mode, updated_at)
        VALUES (1, ?, ?)
@@ -183,7 +192,118 @@ export class RoomPresenceStore extends DurableObject {
     return { ok: true, user_id: userId, enabled: Boolean(enabled) };
   }
 
-  seatInviteFor(userIdValue) {
+  seatRequests() {
+    return this.ctx.storage.sql.exec(
+      `SELECT user_id, seat_index, created_at
+         FROM room_seat_requests
+        ORDER BY created_at ASC`,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      seat_index: Number(row.seat_index),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  requestSeat(input) {
+    const userId = String(input?.user_id || "").trim();
+    const seatIndex = Number(input?.seat_index);
+    if (!userId) throw new Error("user_id is required");
+    if (!Number.isInteger(seatIndex) || seatIndex < 0) {
+      throw new Error("seat_index is required");
+    }
+    if (this.micMode() !== "apply") {
+      throw new Error("Seat requests are only used in invite mode");
+    }
+
+    const member = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!member) throw new Error("User is not in the room");
+    if (member.seat_index !== null && member.seat_index !== undefined) {
+      throw new Error("Leave your current seat first");
+    }
+
+    const occupied = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE seat_index = ? LIMIT 1",
+      seatIndex,
+    ).toArray()[0];
+    if (occupied) throw new Error("Seat is already occupied");
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_seat_requests (user_id, seat_index, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         seat_index = excluded.seat_index,
+         created_at = excluded.created_at`,
+      userId,
+      seatIndex,
+      now,
+    );
+    return {
+      ok: true,
+      server_time: now,
+      mic_mode: this.micMode(),
+      seat_requests: this.seatRequests(),
+      members: this._members(now),
+    };
+  }
+
+  resolveSeatRequest(input) {
+    const targetUserId = String(input?.target_user_id || "").trim();
+    const approved = Boolean(input?.approved);
+    if (!targetUserId) throw new Error("target_user_id is required");
+
+    const request = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_seat_requests WHERE user_id = ? LIMIT 1",
+      targetUserId,
+    ).toArray()[0];
+    if (!request) throw new Error("Seat request is no longer available");
+
+    const seatIndex = Number(request.seat_index);
+    if (approved) {
+      const occupied = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM room_members WHERE seat_index = ? AND user_id != ? LIMIT 1",
+        seatIndex,
+        targetUserId,
+      ).toArray()[0];
+      if (occupied) {
+        this.ctx.storage.sql.exec(
+          "DELETE FROM room_seat_requests WHERE user_id = ?",
+          targetUserId,
+        );
+        throw new Error("Seat is already occupied");
+      }
+
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_seat_forces (user_id, seat_index, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           seat_index = excluded.seat_index,
+           created_at = excluded.created_at`,
+        targetUserId,
+        seatIndex,
+        Date.now(),
+      );
+    }
+
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_requests WHERE user_id = ?",
+      targetUserId,
+    );
+    return {
+      ok: true,
+      approved,
+      target_user_id: targetUserId,
+      seat_index: approved ? seatIndex : null,
+      mic_mode: this.micMode(),
+      seat_requests: this.seatRequests(),
+      members: this._members(),
+    };
+  }
+
+    seatInviteFor(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return null;
     const row = this.ctx.storage.sql.exec(
@@ -229,6 +349,10 @@ export class RoomPresenceStore extends DurableObject {
     if (occupied) throw new Error("Seat is already occupied");
 
     const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_requests WHERE user_id = ?",
+      targetUserId,
+    );
     this.ctx.storage.sql.exec(
       `INSERT INTO room_seat_invites
         (target_user_id, seat_index, invited_by, created_at)
@@ -482,6 +606,10 @@ export class RoomPresenceStore extends DurableObject {
       "DELETE FROM room_members WHERE user_id = ?",
       targetUserId,
     );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_requests WHERE user_id = ?",
+      targetUserId,
+    );
 
     return {
       ok: true,
@@ -600,6 +728,10 @@ export class RoomPresenceStore extends DurableObject {
         "DELETE FROM room_mutes WHERE user_id = ?",
         userId,
       );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_requests WHERE user_id = ?",
+        userId,
+      );
     }
 
     this.ctx.storage.sql.exec(
@@ -643,6 +775,12 @@ export class RoomPresenceStore extends DurableObject {
         userId,
       );
     }
+    if (seatIndex !== null) {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_requests WHERE user_id = ?",
+        userId,
+      );
+    }
 
     return {
       ok: true,
@@ -652,6 +790,7 @@ export class RoomPresenceStore extends DurableObject {
       self_seat_forced: seatForced,
       self_forced_seat_index: seatForced ? seatIndex : null,
       pending_seat_invite: this.seatInviteFor(userId),
+      seat_requests: this.seatRequests(),
       members: this._members(now),
     };
   }
@@ -691,6 +830,7 @@ export class RoomPresenceStore extends DurableObject {
       server_time: now,
       mic_mode: this.micMode(),
       member_ttl_ms: MEMBER_TTL_MS,
+      seat_requests: this.seatRequests(),
       members: this._members(now),
     };
   }
