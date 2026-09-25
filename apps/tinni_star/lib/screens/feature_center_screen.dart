@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import 'anamika_connector_screen.dart';
 import 'games_screen.dart';
 import 'gifts_screen.dart';
 import 'vip_screen.dart';
@@ -340,18 +339,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
             ),
           );
           showText(value);
-        },
-      ),
-      _FeatureAction(
-        'Anamika Connector',
-        Icons.health_and_safety_rounded,
-        () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AnamikaConnectorScreen(state: state),
-            ),
-          );
         },
       ),
     ];
