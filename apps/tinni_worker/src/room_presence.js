@@ -54,6 +54,14 @@ export class RoomPresenceStore extends DurableObject {
         seat_index INTEGER,
         created_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS room_runtime_settings (
+        id INTEGER PRIMARY KEY,
+        mic_mode TEXT NOT NULL DEFAULT 'apply',
+        updated_at INTEGER NOT NULL
+      );
+      INSERT OR IGNORE INTO room_runtime_settings (id, mic_mode, updated_at)
+      VALUES (1, 'apply', 0);
     `);
 
     for (const migration of [
@@ -108,7 +116,31 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  isMember(userIdValue) {
+  micMode() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT mic_mode FROM room_runtime_settings WHERE id = 1 LIMIT 1",
+    ).toArray()[0];
+    return row?.mic_mode === "free" ? "free" : "apply";
+  }
+
+  setMicMode(modeValue) {
+    const mode = String(modeValue || "").trim().toLowerCase();
+    if (mode !== "free" && mode !== "apply") {
+      throw new Error("mic_mode must be free or apply");
+    }
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_runtime_settings (id, mic_mode, updated_at)
+       VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         mic_mode = excluded.mic_mode,
+         updated_at = excluded.updated_at`,
+      mode,
+      Date.now(),
+    );
+    return { ok: true, mic_mode: mode };
+  }
+
+    isMember(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return false;
     this._prune();
@@ -213,6 +245,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      mic_mode: this.micMode(),
       target_user_id: targetUserId,
       seat_index: seatIndex,
       members: this._members(now),
@@ -344,6 +377,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      mic_mode: this.micMode(),
       members: this._members(now),
     };
   }
@@ -452,6 +486,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      mic_mode: this.micMode(),
       kicked_user_id: targetUserId,
       expires_at: expiresAt,
       members: this._members(now),
@@ -612,6 +647,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      mic_mode: this.micMode(),
       self_mic_muted: this.muteStatus(userId, seatIndex),
       self_seat_forced: seatForced,
       self_forced_seat_index: seatForced ? seatIndex : null,
@@ -653,6 +689,7 @@ export class RoomPresenceStore extends DurableObject {
     return {
       ok: true,
       server_time: now,
+      mic_mode: this.micMode(),
       member_ttl_ms: MEMBER_TTL_MS,
       members: this._members(now),
     };
