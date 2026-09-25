@@ -1463,7 +1463,8 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
       const canModerate =
-        String(room.owner_id) === actorId || store.isManager(actorId);
+        String(room.owner_id) === actorId ||
+        (store.isManager(actorId) && store.isMember(actorId));
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can invite to seats" }, 403);
       }
@@ -1521,7 +1522,8 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
       const canModerate =
-        String(room.owner_id) === actorId || store.isManager(actorId);
+        String(room.owner_id) === actorId ||
+        (store.isManager(actorId) && store.isMember(actorId));
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can move users from seats" }, 403);
       }
@@ -1591,7 +1593,8 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
       const canModerate =
-        String(room.owner_id) === actorId || store.isManager(actorId);
+        String(room.owner_id) === actorId ||
+        (store.isManager(actorId) && store.isMember(actorId));
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can mute users" }, 403);
       }
@@ -1633,7 +1636,8 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
       const canModerate =
-        String(room.owner_id) === actorId || store.isManager(actorId);
+        String(room.owner_id) === actorId ||
+        (store.isManager(actorId) && store.isMember(actorId));
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can kick users" }, 403);
       }
