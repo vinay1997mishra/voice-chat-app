@@ -218,18 +218,59 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _snack('Seat ' + (selected + 1).toString() + ' invite sent to ' + member.displayName + '.');
   }
 
-  Future<void> _moveUserToAudience(RoomPresenceMember member) async {
-    int? seatIndex;
-    for (final entry in widget.state.roomControls.seatUsers.entries) {
-      if (entry.value == member.userId) {
-        seatIndex = entry.key;
-        break;
-      }
+  int? _seatIndexForMember(
+    RoomPresenceMember member, {
+    int? hint,
+  }) {
+    if (hint != null &&
+        hint >= 0 &&
+        hint < controller.seats.length &&
+        controller.seats[hint].occupied) {
+      return hint;
     }
-    seatIndex ??= controller.seats.indexWhere(
+    if (member.seatIndex != null &&
+        member.seatIndex! >= 0 &&
+        member.seatIndex! < controller.seats.length) {
+      return member.seatIndex;
+    }
+    for (final entry in widget.state.roomControls.seatUsers.entries) {
+      if (entry.value == member.userId) return entry.key;
+    }
+    final byName = controller.seats.indexWhere(
       (seat) => seat.userName == member.displayName,
     );
-    if (seatIndex < 0) {
+    return byName < 0 ? null : byName;
+  }
+
+  Future<void> _setUserSeatMute(
+    RoomPresenceMember member,
+    int seatIndex,
+    bool muted,
+  ) async {
+    try {
+      await widget.state.roomSession.setUserSeatMute(
+        member.userId,
+        seatIndex: seatIndex,
+        muted: muted,
+      );
+      controller.setSeatRoomMuted(seatIndex, muted);
+      _snack(
+        muted
+            ? member.displayName + ' muted on this seat.'
+            : member.displayName + ' unmuted on this seat.',
+      );
+      if (mounted) setState(() {});
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+    Future<void> _moveUserToAudience(
+    RoomPresenceMember member, {
+    int? seatIndexHint,
+  }) async {
+    final seatIndex = _seatIndexForMember(member, hint: seatIndexHint);
+    if (seatIndex == null) {
       _snack(member.displayName + ' is not on a seat.');
       return;
     }
@@ -293,7 +334,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _showUserProfile(RoomPresenceMember member) {
+  void _showUserProfile(
+    RoomPresenceMember member, {
+    int? seatIndexHint,
+  }) {
     if (!_canModerateSeats) return;
     if (member.userId == widget.state.auth.current?.userId) return;
     ImageProvider? avatar;
@@ -312,7 +356,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          final followed = widget.state.social.following.contains(member.userId);
+          var currentMember = member;
+          for (final item in widget.state.roomSession.liveMembers) {
+            if (item.userId == member.userId) {
+              currentMember = item;
+              break;
+            }
+          }
+          final followed =
+              widget.state.social.following.contains(currentMember.userId);
+          final seatIndex = _seatIndexForMember(
+            currentMember,
+            hint: seatIndexHint,
+          );
+          final seated = seatIndex != null;
+          final micMuted = seated && currentMember.micMuted;
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -329,17 +387,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         : null,
                   ),
                   const SizedBox(height: 10),
-                  Text(member.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
-                  Text('ID ' + member.userId, style: const TextStyle(color: RoyalPalette.muted)),
+                  Text(currentMember.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
+                  Text('ID ' + currentMember.userId, style: const TextStyle(color: RoyalPalette.muted)),
                   const SizedBox(height: 10),
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 7,
                     runSpacing: 7,
                     children: [
-                      Chip(label: Text('Family ' + _familyTagFor(member.userId))),
-                      Chip(label: Text('Host ' + _hostTagFor(member.userId))),
-                      Chip(label: Text('Agency ' + _agencyNameFor(member.userId))),
+                      Chip(label: Text('Family ' + _familyTagFor(currentMember.userId))),
+                      Chip(label: Text('Host ' + _hostTagFor(currentMember.userId))),
+                      Chip(label: Text('Agency ' + _agencyNameFor(currentMember.userId))),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -352,15 +410,78 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           icon: followed ? Icons.person_remove_rounded : Icons.person_add_rounded,
                           label: followed ? 'Unfollow' : 'Follow',
                           onTap: () {
-                            if (followed) { widget.state.social.unfollow(member.userId); } else { widget.state.social.follow(member.userId); }
+                            if (followed) { widget.state.social.unfollow(currentMember.userId); } else { widget.state.social.follow(currentMember.userId); }
                             setSheetState(() {});
                           },
                         ),
-                        _ProfileAction(icon: Icons.mail_rounded, label: 'Message', onTap: () { Navigator.pop(sheetContext); _openPrivateMessage(member); }),
-                        _ProfileAction(icon: Icons.event_seat_rounded, label: 'Seat Invite', onTap: () { Navigator.pop(sheetContext); _showSeatInvitePicker(member); }),
-                        _ProfileAction(icon: Icons.keyboard_arrow_down_rounded, label: 'Down Seat', onTap: () { Navigator.pop(sheetContext); _moveUserToAudience(member); }),
-                        _ProfileAction(icon: Icons.card_giftcard_rounded, label: 'Gift', onTap: () { Navigator.pop(sheetContext); Future<void>.delayed(Duration.zero, () { if (mounted) _showGiftSheet(preselectedUserId: member.userId); }); }),
-                        _ProfileAction(icon: Icons.logout_rounded, label: 'Kick', onTap: () { Navigator.pop(sheetContext); _showKickPicker(member); }),
+                        _ProfileAction(
+                          icon: Icons.mail_rounded,
+                          label: 'Message',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            _openPrivateMessage(currentMember);
+                          },
+                        ),
+                        if (seated)
+                          _ProfileAction(
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            label: 'Down Seat',
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              _moveUserToAudience(
+                                currentMember,
+                                seatIndexHint: seatIndex,
+                              );
+                            },
+                          )
+                        else
+                          _ProfileAction(
+                            icon: Icons.event_seat_rounded,
+                            label: 'Seat Invite',
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              _showSeatInvitePicker(currentMember);
+                            },
+                          ),
+                        _ProfileAction(
+                          icon: Icons.card_giftcard_rounded,
+                          label: 'Gift',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            Future<void>.delayed(Duration.zero, () {
+                              if (mounted) {
+                                _showGiftSheet(
+                                  preselectedUserId: currentMember.userId,
+                                );
+                              }
+                            });
+                          },
+                        ),
+                        if (seated)
+                          _ProfileAction(
+                            icon: micMuted
+                                ? Icons.mic_rounded
+                                : Icons.mic_off_rounded,
+                            label: micMuted ? 'Unmute' : 'Mute',
+                            onTap: () async {
+                              await _setUserSeatMute(
+                                currentMember,
+                                seatIndex,
+                                !micMuted,
+                              );
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                          ),
+                        _ProfileAction(
+                          icon: Icons.logout_rounded,
+                          label: 'Kick',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            _showKickPicker(currentMember);
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -1127,7 +1248,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               }
             }
             if (member != null) {
-              _showUserProfile(member);
+              _showUserProfile(member, seatIndexHint: index);
               return;
             }
           }
@@ -1551,10 +1672,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                     IconButton(
                       key: const Key('room-mic-button'),
-                      onPressed: controller.mySeat == null ? null : _toggleMic,
+                      tooltip: widget.state.roomSession.moderationMicMuted
+                          ? 'Muted by room owner/admin'
+                          : 'Microphone',
+                      onPressed: controller.mySeat == null ||
+                              widget.state.roomSession.moderationMicMuted
+                          ? null
+                          : _toggleMic,
                       icon: Icon(
-                        controller.micState == MicState.live ? Icons.mic_rounded : Icons.mic_off_rounded,
-                        color: controller.mySeat == null ? RoyalPalette.muted : RoyalPalette.gold,
+                        controller.micState == MicState.live
+                            ? Icons.mic_rounded
+                            : Icons.mic_off_rounded,
+                        color: controller.mySeat == null ||
+                                widget.state.roomSession.moderationMicMuted
+                            ? RoyalPalette.muted
+                            : RoyalPalette.gold,
                       ),
                     ),
                     IconButton(
