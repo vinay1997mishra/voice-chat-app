@@ -20,6 +20,8 @@ class RoomSummary {
     this.ownerName,
     this.ownerAvatarDataUrl,
     this.ownerFlagEmoji,
+    this.themeId = 'royal-dark',
+    this.themeAsset,
   });
 
   final String id;
@@ -39,6 +41,8 @@ class RoomSummary {
   final String? ownerName;
   final String? ownerAvatarDataUrl;
   final String? ownerFlagEmoji;
+  final String themeId;
+  final String? themeAsset;
 
   bool createdWithin(
     Duration age, {
@@ -68,6 +72,8 @@ class RoomSummary {
     String? ownerName,
     String? ownerAvatarDataUrl,
     String? ownerFlagEmoji,
+    String? themeId,
+    String? themeAsset,
   }) =>
       RoomSummary(
         id: id,
@@ -88,6 +94,8 @@ class RoomSummary {
         ownerAvatarDataUrl:
             ownerAvatarDataUrl ?? this.ownerAvatarDataUrl,
         ownerFlagEmoji: ownerFlagEmoji ?? this.ownerFlagEmoji,
+        themeId: themeId ?? this.themeId,
+        themeAsset: themeAsset ?? this.themeAsset,
       );
 }
 
@@ -286,7 +294,54 @@ class DiscoveryService {
     return room;
   }
 
-  Future<RoomThemeCatalog> fetchRoomThemes({
+  Future<RoomSummary> setRoomTheme({
+    required String authToken,
+    required String roomId,
+    required String themeId,
+    String? themeAsset,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/rooms/theme'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'room_id': roomId,
+        'theme_id': themeId,
+        'theme_asset': themeAsset,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to change room theme',
+      );
+    }
+
+    final room = _roomFromServer(_asMap(data['room']));
+    if (room == null) {
+      throw StateError('Server returned invalid room');
+    }
+    final index = rooms.indexWhere((item) => item.id == room.id);
+    if (index >= 0) {
+      rooms[index] = room;
+    } else {
+      rooms.insert(0, room);
+    }
+    return room;
+  }
+
+    Future<RoomThemeCatalog> fetchRoomThemes({
     required String authToken,
     required String roomId,
   }) async {
@@ -507,6 +562,8 @@ class DiscoveryService {
       ownerName: row['owner_name']?.toString(),
       ownerAvatarDataUrl: row['owner_avatar_data_url']?.toString(),
       ownerFlagEmoji: row['owner_flag_emoji']?.toString(),
+      themeId: row['theme_id']?.toString() ?? 'royal-dark',
+      themeAsset: row['theme_asset']?.toString(),
     );
   }
 
