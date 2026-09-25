@@ -35,8 +35,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/tinni_worker/package-lock.json
 
       - name: Install Worker dependencies
         if: steps.creds.outputs.ready == 'true'
