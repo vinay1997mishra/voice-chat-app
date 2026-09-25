@@ -242,10 +242,23 @@ class RoomControlService {
     return roomMode;
   }
 
+  static const List<String> availableThemes = <String>[
+    'royal-dark',
+    'night-blue',
+    'rose-gold',
+  ];
+
+  String setTheme(String value) {
+    if (!availableThemes.contains(value)) {
+      throw ArgumentError.value(value, 'value', 'Unknown room theme');
+    }
+    themeId = value;
+    return themeId;
+  }
+
   String cycleTheme() {
-    const themes = <String>['royal-dark', 'night-blue', 'rose-gold'];
-    final current = themes.indexOf(themeId);
-    themeId = themes[(current + 1) % themes.length];
+    final current = availableThemes.indexOf(themeId);
+    themeId = availableThemes[(current + 1) % availableThemes.length];
     return themeId;
   }
 
