@@ -41,6 +41,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
+  RoomSeatInvite? get pendingSeatInvite => presence.pendingSeatInvite;
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -138,7 +139,51 @@ class ActiveRoomSession extends ChangeNotifier {
     );
   }
 
-  Future<void> setMySeatEmote(String emote) async {
+  Future<void> inviteUserToSeat(
+    String targetUserId, {
+    required int seatIndex,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.inviteToSeat(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      seatIndex: seatIndex,
+    );
+  }
+
+  Future<void> respondToSeatInvite(bool accepted) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.respondSeatInvite(
+      roomId: roomId,
+      authToken: authToken,
+      accepted: accepted,
+    );
+    await _applyForcedSeatChange();
+  }
+
+  Future<void> moveUserToAudience(String targetUserId) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.removeFromSeat(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+    );
+  }
+
+    Future<void> setMySeatEmote(String emote) async {
     final roomId = room?.id;
     final authToken = _activeAuthToken;
     final seatIndex = controller?.mySeat;
@@ -223,6 +268,7 @@ class ActiveRoomSession extends ChangeNotifier {
         authToken: authToken,
         seatIndex: controller?.mySeat,
       );
+      await _applyForcedSeatChange();
       await _enforceModerationMute();
     } catch (_) {
       // Keep the room open; presence will retry on the next heartbeat.
@@ -241,6 +287,7 @@ class ActiveRoomSession extends ChangeNotifier {
           authToken: currentAuthToken,
           seatIndex: controller?.mySeat,
         );
+        await _applyForcedSeatChange();
         await _enforceModerationMute();
       } catch (error) {
         final message = error.toString().toLowerCase();
@@ -253,7 +300,21 @@ class ActiveRoomSession extends ChangeNotifier {
     });
   }
 
-  Future<void> _enforceModerationMute() async {
+  Future<void> _applyForcedSeatChange() async {
+    if (!presence.selfSeatForced) return;
+    final roomController = controller;
+    if (roomController == null) return;
+
+    roomController.forceMySeat(presence.selfForcedSeatIndex);
+    presence.selfSeatForced = false;
+    presence.selfForcedSeatIndex = null;
+
+    if (connected) {
+      await realtime.setMic(false);
+    }
+  }
+
+    Future<void> _enforceModerationMute() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
     if (!presence.selfMicMuted) return;
