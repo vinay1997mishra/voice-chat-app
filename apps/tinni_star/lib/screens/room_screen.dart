@@ -1882,7 +1882,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => GamesScreen(state: widget.state),
+              builder: (_) => GamesScreen(
+                state: widget.state,
+                onFruitJackpot: () {
+                  if (!mounted) return;
+                  setState(() {
+                    _fruitPartyOpen = false;
+                    _fruitJackpotOpen = true;
+                  });
+                },
+                onFruitParty: () {
+                  if (!mounted) return;
+                  setState(() {
+                    _fruitJackpotOpen = false;
+                    _fruitPartyOpen = true;
+                  });
+                },
+              ),
             ),
           );
         },
