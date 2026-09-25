@@ -1044,6 +1044,46 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+
+  sendOfficialMessage(toUserIdValue, textValue, contextValue = {}) {
+    const toUserId = String(toUserIdValue || "").trim();
+    const text = cleanText(textValue, 2000);
+    if (!toUserId) throw new Error("Target user ID is required");
+    if (!text) throw new Error("Message cannot be empty");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
+      toUserId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    const now = Date.now();
+    const id =
+      "official-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO direct_messages
+        (id, from_user_id, to_user_id, text, created_at)
+       VALUES (?, 'tinni-official', ?, ?, ?)`,
+      id,
+      toUserId,
+      text,
+      now,
+    );
+
+    return {
+      id,
+      from: "tinni-official",
+      from_name: "Tinni Official",
+      to: toUserId,
+      text,
+      created_at: now,
+      context: contextValue && typeof contextValue === "object"
+        ? contextValue
+        : {},
+    };
+  }
+
     async listRooms() {
     this._pruneRoomThemes();
     return this.ctx.storage.sql.exec(
