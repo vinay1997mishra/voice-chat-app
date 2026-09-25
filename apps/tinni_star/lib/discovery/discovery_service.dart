@@ -91,6 +91,43 @@ class RoomSummary {
       );
 }
 
+class RoomThemeRecord {
+  const RoomThemeRecord({
+    required this.id,
+    required this.name,
+    required this.asset,
+    required this.source,
+    required this.priceCoins,
+    required this.createdAt,
+    this.expiresAt,
+    this.roomId,
+  });
+
+  final String id;
+  final String name;
+  final String asset;
+  final String source;
+  final int priceCoins;
+  final DateTime createdAt;
+  final DateTime? expiresAt;
+  final String? roomId;
+
+  bool get isPanelTheme => source == 'panel';
+  bool get isUserTheme => source == 'user';
+}
+
+class RoomThemeCatalog {
+  const RoomThemeCatalog({
+    required this.userPriceCoins,
+    required this.userDurationDays,
+    required this.themes,
+  });
+
+  final int userPriceCoins;
+  final int userDurationDays;
+  final List<RoomThemeRecord> themes;
+}
+
 class RoomAccessResult {
   const RoomAccessResult({
     required this.allowed,
@@ -249,7 +286,100 @@ class DiscoveryService {
     return room;
   }
 
-  Future<RoomAccessResult> getRoomAccessStatus({
+  Future<RoomThemeCatalog> fetchRoomThemes({
+    required String authToken,
+    required String roomId,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.getUrl(
+      apiBase.replace(
+        path: '/room-themes',
+        queryParameters: <String, String>{'room_id': roomId},
+      ),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load room themes',
+      );
+    }
+
+    final rawThemes = data['themes'];
+    final themes = rawThemes is List
+        ? rawThemes
+            .whereType<Map>()
+            .map(_roomThemeFromServer)
+            .whereType<RoomThemeRecord>()
+            .toList()
+        : <RoomThemeRecord>[];
+
+    return RoomThemeCatalog(
+      userPriceCoins: _asInt(
+        data['user_price_coins'],
+        fallback: 10000000,
+      ),
+      userDurationDays: _asInt(
+        data['user_duration_days'],
+        fallback: 7,
+      ),
+      themes: List<RoomThemeRecord>.unmodifiable(themes),
+    );
+  }
+
+  Future<RoomThemeRecord> createRoomTheme({
+    required String authToken,
+    required String roomId,
+    required String name,
+    required String asset,
+    required bool policyConfirmed,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-themes'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'room_id': roomId,
+        'name': name.trim(),
+        'asset': asset,
+        'policy_confirmed': policyConfirmed,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to add room theme',
+      );
+    }
+
+    final theme = _roomThemeFromServer(_asMap(data['theme']));
+    if (theme == null) {
+      throw StateError('Server returned invalid room theme');
+    }
+    return theme;
+  }
+
+    Future<RoomAccessResult> getRoomAccessStatus({
     required String authToken,
     required String roomId,
   }) async {
@@ -325,7 +455,34 @@ class DiscoveryService {
     );
   }
 
-  RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
+  RoomThemeRecord? _roomThemeFromServer(Map<dynamic, dynamic> row) {
+    final id = row['id']?.toString() ?? '';
+    final name = row['name']?.toString() ?? '';
+    final asset = row['asset']?.toString() ?? '';
+    if (id.isEmpty || name.isEmpty || asset.isEmpty) return null;
+
+    final createdAtMs = _asInt(row['created_at']);
+    final expiresAtMs = row['expires_at'] == null
+        ? 0
+        : _asInt(row['expires_at']);
+
+    return RoomThemeRecord(
+      id: id,
+      name: name,
+      asset: asset,
+      source: row['source']?.toString() ?? 'user',
+      priceCoins: _asInt(row['price_coins']),
+      roomId: row['room_id']?.toString(),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        createdAtMs > 0 ? createdAtMs : DateTime.now().millisecondsSinceEpoch,
+      ),
+      expiresAt: expiresAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(expiresAtMs)
+          : null,
+    );
+  }
+
+    RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
     final id = row['id']?.toString() ?? '';
     final title = row['title']?.toString() ?? '';
     if (id.isEmpty || title.isEmpty) return null;
