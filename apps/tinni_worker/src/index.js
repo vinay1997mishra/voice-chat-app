@@ -1417,6 +1417,36 @@ export default {
       return json(await getRoomPresenceStore(env, roomId).state());
     }
 
+    if (url.pathname === "/room-presence/mic-mode" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) !== String(appSession.user.user_id)) {
+        return json({ ok: false, error: "Only the room owner can change mic mode" }, 403);
+      }
+
+      try {
+        return json(
+          getRoomPresenceStore(env, roomId).setMicMode(body.mic_mode),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to change mic mode"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-presence/admin" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
