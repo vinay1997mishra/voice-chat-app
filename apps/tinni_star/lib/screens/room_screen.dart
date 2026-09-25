@@ -1471,6 +1471,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ..add(preselectedUserId);
     }
 
+    var giftCategory = 'Popular';
+    const giftCategories = <String>[
+      'Popular',
+      'Normal',
+      'Luxury',
+      'CP',
+      'Backpack',
+    ];
+
     final roomGifts = <GiftDefinition>[
       const GiftDefinition(
         id: 'gold-dragon',
@@ -1498,6 +1507,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
       ...GiftService.catalog,
     ];
+
+    List<GiftDefinition> visibleGifts() {
+      switch (giftCategory) {
+        case 'Normal':
+          return roomGifts
+              .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
+              .toList();
+        case 'Luxury':
+          return roomGifts
+              .where(
+                (gift) =>
+                    gift.id == 'gold-dragon' ||
+                    gift.id == 'royal-crown' ||
+                    gift.id == 'star-castle' ||
+                    gift.id == 'crown',
+              )
+              .toList();
+        case 'CP':
+          return roomGifts
+              .where((gift) => gift.id == 'heart-ring')
+              .toList();
+        case 'Backpack':
+          return roomGifts
+              .where(
+                (gift) =>
+                    (widget.state.backpack.items[gift.id]?.quantity ?? 0) > 0,
+              )
+              .toList();
+        default:
+          return roomGifts;
+      }
+    }
 
     List<(String, String)> recipients() {
       final values = <(String, String)>[];
@@ -1535,32 +1576,45 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
           final roomRecipients = recipients();
+          final filteredGifts = visibleGifts();
           return SafeArea(
             child: SizedBox(
               height: 470,
               child: Column(
                 children: [
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Gift',
-                          style: TextStyle(
-                            color: RoyalPalette.gold,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Gift',
+                        style: TextStyle(
+                          color: RoyalPalette.gold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
                         ),
-                        Spacer(),
-                        Text(
-                          'Normal   Popular   Luxury',
-                          style: TextStyle(
-                            color: RoyalPalette.muted,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 42,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: giftCategories.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 7),
+                      itemBuilder: (_, index) {
+                        final value = giftCategories[index];
+                        return ChoiceChip(
+                          label: Text(value),
+                          selected: giftCategory == value,
+                          onSelected: (_) {
+                            setSheetState(() {
+                              giftCategory = value;
+                            });
+                          },
+                        );
+                      },
                     ),
                   ),
                   if (roomRecipients.isEmpty)
@@ -1661,7 +1715,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
-                      itemCount: roomGifts.length,
+                      itemCount: filteredGifts.length,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
@@ -1670,7 +1724,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         crossAxisSpacing: 10,
                       ),
                       itemBuilder: (_, index) {
-                        final gift = roomGifts[index];
+                        final gift = filteredGifts[index];
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
                           onTap: () {
@@ -1678,17 +1732,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               _snack('Select at least one recipient.');
                               return;
                             }
-                            final tx = widget.state.gifts.send(
-                              gift: gift,
-                              quantity: 1,
-                              maxCombo: controller.config.maxGiftCombo,
-                              senderId: senderId,
-                              receiverIds:
-                                  _selectedGiftRecipients.toList(growable: false),
-                            );
+                            GiftTransaction? tx;
+                            if (giftCategory == 'Backpack') {
+                              final consumed =
+                                  widget.state.backpack.consume(gift.id, 1);
+                              if (consumed) {
+                                tx = GiftTransaction(
+                                  gift: gift,
+                                  quantity: 1,
+                                  senderId: senderId,
+                                  receiverIds: _selectedGiftRecipients
+                                      .toList(growable: false),
+                                  totalCost: gift.price *
+                                      _selectedGiftRecipients.length,
+                                );
+                                widget.state.gifts.sent.insert(0, tx);
+                              }
+                            } else {
+                              tx = widget.state.gifts.send(
+                                gift: gift,
+                                quantity: 1,
+                                maxCombo: controller.config.maxGiftCombo,
+                                senderId: senderId,
+                                receiverIds: _selectedGiftRecipients
+                                    .toList(growable: false),
+                              );
+                            }
                             if (tx == null) {
                               _snack(
-                                'Gift failed, select a recipient or check balance.',
+                                giftCategory == 'Backpack'
+                                    ? 'This gift is not available in Backpack.'
+                                    : 'Gift failed, select a recipient or check balance.',
                               );
                               return;
                             }
@@ -1730,7 +1804,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 ),
                               ),
                               Text(
-                                '🪙 ${gift.price}',
+                                giftCategory == 'Backpack'
+                                    ? '🎒 x' +
+                                        (widget.state.backpack.items[gift.id]
+                                                    ?.quantity ??
+                                                0)
+                                            .toString()
+                                    : '🪙 ${gift.price}',
                                 style: const TextStyle(
                                   color: RoyalPalette.gold,
                                   fontSize: 10,
