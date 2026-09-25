@@ -34,7 +34,7 @@ class SocialService {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
+            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -73,6 +73,68 @@ class SocialService {
             ? raw.map((value) => value.toString()).where((id) => id.isNotEmpty)
             : const <String>[],
       );
+  }
+
+  Future<void> syncBlocked(String authToken) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(path: '/social/blocked'),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load blocked users',
+      );
+    }
+
+    final raw = data['blocked'];
+    blocked
+      ..clear()
+      ..addAll(
+        raw is List
+            ? raw.map((value) => value.toString()).where((id) => id.isNotEmpty)
+            : const <String>[],
+      );
+  }
+
+  Future<bool> setBlockedRemote({
+    required String authToken,
+    required String targetUserId,
+    required bool value,
+  }) async {
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/social/block'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, Object>{
+        'target_user_id': targetUserId,
+        'blocked': value,
+      }),
+    );
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to update block',
+      );
+    }
+
+    if (value) {
+      block(targetUserId);
+    } else {
+      unblock(targetUserId);
+    }
+    return value;
   }
 
   Future<bool> setFollowingRemote({
