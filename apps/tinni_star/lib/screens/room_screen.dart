@@ -118,6 +118,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  Future<void> _leaveSeatAndMute() async {
+    controller.leaveSeat();
+    await widget.state.roomSession.setMicFromController();
+    if (mounted) setState(() {});
+  }
+
   void _showGiftSheet() {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
@@ -710,9 +716,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               title: Text(
                 seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
               ),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
                 controller.toggleSeatRoomMute(index);
+                if (controller.mySeat == index) {
+                  await widget.state.roomSession.setMicFromController();
+                }
                 _snack(
                   seat.roomMuted
                       ? 'Seat ${index + 1} unmuted.'
@@ -744,9 +753,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   color: RoyalPalette.gold,
                 ),
                 title: const Text('Leave this seat'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  controller.leaveSeat();
+                  await _leaveSeatAndMute();
                 },
               ),
           ],
@@ -1219,11 +1228,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                     IconButton(
                       key: const Key('room-seat-button'),
-                      onPressed: () {
+                      onPressed: () async {
                         if (controller.mySeat == null) {
                           _snack('Tap any mic seat to join.');
                         } else {
-                          controller.leaveSeat();
+                          await _leaveSeatAndMute();
                         }
                       },
                       icon: const Icon(Icons.event_seat_rounded, color: RoyalPalette.gold),
