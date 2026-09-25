@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../community/family_service.dart';
+import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
@@ -50,6 +51,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
+        actions: [
+          UserSafetyMenuButton(
+            state: widget.state,
+            targetUserId: account.userId,
+            targetDisplayName: account.displayName,
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(14),
