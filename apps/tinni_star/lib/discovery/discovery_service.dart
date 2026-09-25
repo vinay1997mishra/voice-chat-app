@@ -91,12 +91,26 @@ class RoomSummary {
       );
 }
 
+class RoomAccessResult {
+  const RoomAccessResult({
+    required this.allowed,
+    required this.blocked,
+    required this.attemptsRemaining,
+    this.error,
+  });
+
+  final bool allowed;
+  final bool blocked;
+  final int attemptsRemaining;
+  final String? error;
+}
+
 class DiscoveryService {
   DiscoveryService({
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -187,7 +201,95 @@ class DiscoveryService {
     return room;
   }
 
-  RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
+  Future<RoomSummary> setRoomLock({
+    required String authToken,
+    required String roomId,
+    required bool locked,
+    String? password,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/rooms/lock'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'room_id': roomId,
+        'locked': locked,
+        'password': locked ? password : null,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to change room lock',
+      );
+    }
+
+    final room = _roomFromServer(_asMap(data['room']));
+    if (room == null) {
+      throw StateError('Server returned invalid room');
+    }
+
+    final index = rooms.indexWhere((item) => item.id == room.id);
+    if (index >= 0) {
+      rooms[index] = room;
+    } else {
+      rooms.insert(0, room);
+    }
+    return room;
+  }
+
+  Future<RoomAccessResult> verifyRoomPassword({
+    required String authToken,
+    required String roomId,
+    required String password,
+  }) async {
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/rooms/access'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, dynamic>{
+        'room_id': roomId,
+        'password': password,
+      }),
+    );
+
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode >= 500) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to verify room password',
+      );
+    }
+
+    return RoomAccessResult(
+      allowed: data['allowed'] == true,
+      blocked: data['blocked'] == true,
+      attemptsRemaining: _asInt(data['attempts_remaining']),
+      error: data['error']?.toString(),
+    );
+  }
+
+    RoomSummary? _roomFromServer(Map<dynamic, dynamic> row) {
     final id = row['id']?.toString() ?? '';
     final title = row['title']?.toString() ?? '';
     if (id.isEmpty || title.isEmpty) return null;
