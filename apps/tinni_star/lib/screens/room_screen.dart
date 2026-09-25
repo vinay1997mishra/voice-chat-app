@@ -1906,6 +1906,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             _openRoomThemeSelector();
           },
         ),
+      if (_canModerateSeats && controller.inviteMode)
+        (
+          widget.state.roomSession.seatRequests.isEmpty
+              ? 'Seat Requests'
+              : 'Requests ' +
+                  widget.state.roomSession.seatRequests.length.toString(),
+          Icons.how_to_reg_rounded,
+          _showSeatRequests,
+        ),
       (
         'Seat Controls',
         Icons.event_seat_rounded,
@@ -2159,6 +2168,157 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (mounted) setState(() {});
   }
+  Future<void> _handleUserSeatTap(int index) async {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+
+    if (!controller.inviteMode) {
+      final text = controller.requestOrJoinSeat(index);
+      _snack(text);
+      return;
+    }
+
+    if (seat.locked) {
+      _snack('Seat ' + (index + 1).toString() + ' is locked.');
+      return;
+    }
+    if (seat.occupied) {
+      _snack('Seat ' + (index + 1).toString() + ' is occupied.');
+      return;
+    }
+    if (controller.mySeat != null) {
+      _snack('Leave your current seat first.');
+      return;
+    }
+
+    try {
+      await widget.state.roomSession.requestMySeat(index);
+      _snack('Request sent for Seat ' + (index + 1).toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _showSeatRequests() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can review seat requests.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final requests = widget.state.roomSession.seatRequests;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              child: requests.isEmpty
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'No pending seat requests.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: requests.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final request = requests[index];
+                        var displayName = request.userId;
+                        for (final member
+                            in widget.state.roomSession.liveMembers) {
+                          if (member.userId == request.userId) {
+                            displayName = member.displayName;
+                            break;
+                          }
+                        }
+                        return ListTile(
+                          leading: const Icon(
+                            Icons.event_seat_rounded,
+                            color: RoyalPalette.gold,
+                          ),
+                          title: Text(displayName),
+                          subtitle: Text(
+                            'Seat ' +
+                                (request.seatIndex + 1).toString() +
+                                ' • ID ' +
+                                request.userId,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: false,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                              IconButton(
+                                tooltip: 'Approve',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: true,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    _snack(
+                                      displayName +
+                                          ' approved for Seat ' +
+                                          (request.seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.check_rounded,
+                                  color: RoyalPalette.gold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
@@ -2342,8 +2502,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             _showSeatControls(index);
             return;
           }
-          final text = controller.requestOrJoinSeat(index);
-          _snack(text);
+          _handleUserSeatTap(index);
         },
         onLongPress: () {
           if (_canModerateSeats) {
