@@ -8,7 +8,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
-import '../moderation/moderation_service.dart';
+import '../moderation/user_safety_menu.dart';
 import '../room/room_control_service.dart';
 import '../room/room_controller.dart';
 import '../room/room_models.dart';
@@ -1287,7 +1287,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     RoomPresenceMember member, {
     int? seatIndexHint,
   }) {
-    if (!_canModerateSeats) return;
     if (member.userId == widget.state.auth.current?.userId) return;
     ImageProvider? avatar;
     final avatarData = member.avatarDataUrl;
@@ -1326,6 +1325,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: UserSafetyMenuButton(
+                      state: widget.state,
+                      targetUserId: currentMember.userId,
+                      targetDisplayName: currentMember.displayName,
+                      roomId: widget.room.id,
+                      onBlockChanged: () {
+                        if (sheetContext.mounted) {
+                          setSheetState(() {});
+                        }
+                      },
+                    ),
+                  ),
                   CircleAvatar(
                     radius: 40,
                     backgroundColor: RoyalPalette.panel2,
@@ -1389,7 +1402,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             _openPrivateMessage(currentMember);
                           },
                         ),
-                        if (seated)
+                        if (_canModerateSeats && seated)
                           _ProfileAction(
                             icon: Icons.keyboard_arrow_down_rounded,
                             label: 'Down Seat',
@@ -1401,7 +1414,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               );
                             },
                           )
-                        else
+                        else if (_canModerateSeats)
                           _ProfileAction(
                             icon: Icons.event_seat_rounded,
                             label: 'Seat Invite',
@@ -1424,7 +1437,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             });
                           },
                         ),
-                        if (seated)
+                        if (_canModerateSeats && seated)
                           _ProfileAction(
                             icon: micMuted
                                 ? Icons.mic_rounded
@@ -1441,14 +1454,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               }
                             },
                           ),
-                        _ProfileAction(
-                          icon: Icons.logout_rounded,
-                          label: 'Kick',
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            _showKickPicker(currentMember);
-                          },
-                        ),
+                        if (_canModerateSeats)
+                          _ProfileAction(
+                            icon: Icons.logout_rounded,
+                            label: 'Kick',
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              _showKickPicker(currentMember);
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -1973,17 +1987,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         'Report',
         Icons.report_rounded,
         () {
-          final reporter = widget.state.auth.current?.userId ?? '10000000';
           final target = widget.room.ownerId ?? widget.room.id;
-          widget.state.moderation.report(
-            UserReport(
-              reporterId: reporter,
-              targetId: target,
-              category: ReportCategory.other,
-              details: 'Room report for ${widget.room.id}',
-            ),
+          if (target == widget.state.auth.current?.userId) {
+            _snack('You cannot report your own ID.');
+            return;
+          }
+          showReportUserSheet(
+            context: context,
+            state: widget.state,
+            targetUserId: target,
+            targetDisplayName: widget.room.title,
+            roomId: widget.room.id,
           );
-          _snack('Room report submitted.');
         },
       ),
     ];
@@ -2479,7 +2494,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
-          if (_canModerateSeats && occupied) {
+          if (occupied) {
             RoomPresenceMember? member = presenceMember;
             if (member == null) {
               final mappedUserId = widget.state.roomControls.seatUsers[index];
@@ -2493,7 +2508,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 }
               }
             }
-            if (member != null) {
+            if (member != null &&
+                member.userId != widget.state.auth.current?.userId) {
               _showUserProfile(member, seatIndexHint: index);
               return;
             }
@@ -2805,7 +2821,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                onTap: _canModerateSeats && !isMe
+                                onTap: !isMe
                                     ? () => _showUserProfile(member)
                                     : null,
                                 child: CircleAvatar(
