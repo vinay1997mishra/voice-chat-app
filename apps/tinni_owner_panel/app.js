@@ -565,6 +565,29 @@ async function loadOwnerNotifications() {
                 `).join("")}
               </div>`
             : ""}
+          ${item.type === "user_report" ? `
+            <div class="button-row" style="margin-top:12px;flex-wrap:wrap">
+              ${item.source_user_id ? `
+                <button
+                  type="button"
+                  class="btn secondary"
+                  data-official-message-user="${escapeHtml(item.source_user_id)}"
+                  data-official-message-name="${escapeHtml(item.source_display_name || "Reporter")}"
+                  data-official-message-kind="reporter"
+                  data-official-message-report="${escapeHtml(item.id)}"
+                >Message reporter</button>` : ""}
+              ${item.target_id ? `
+                <button
+                  type="button"
+                  class="btn secondary"
+                  data-official-message-user="${escapeHtml(item.target_id)}"
+                  data-official-message-name="${escapeHtml(item.metadata?.target_display_name || "Reported user")}"
+                  data-official-message-kind="reported_user"
+                  data-official-message-report="${escapeHtml(item.id)}"
+                >Message reported ID</button>` : ""}
+              <span class="badge gold">Sender: Tinni Official</span>
+            </div>`
+          : ""}
         </div>
       `;
     }).join("");
@@ -1143,6 +1166,47 @@ document.body.addEventListener("click", async e => {
       credentialsButton.dataset.panelId,
       credentialsButton.dataset.staffEmail
     );
+  }
+
+  const officialMessageButton = e.target.closest("[data-official-message-user]");
+  if (officialMessageButton) {
+    if (currentSession?.role !== "owner") {
+      toast("Only the Owner can send Tinni Official messages.");
+      return;
+    }
+
+    const targetUserId = officialMessageButton.dataset.officialMessageUser;
+    const targetName = officialMessageButton.dataset.officialMessageName || "User";
+    const recipientKind = officialMessageButton.dataset.officialMessageKind || "";
+    const reportId = officialMessageButton.dataset.officialMessageReport || "";
+    const message = prompt(
+      "Send as Tinni Official to " + targetName + " (ID " + targetUserId + ")",
+      ""
+    );
+    if (message === null) return;
+    if (!message.trim()) {
+      toast("Message cannot be empty.");
+      return;
+    }
+
+    officialMessageButton.disabled = true;
+    try {
+      await api("/api/owner/official-message", {
+        method: "POST",
+        body: JSON.stringify({
+          target_user_id: targetUserId,
+          message: message.trim(),
+          recipient_kind: recipientKind,
+          report_id: reportId,
+        }),
+      });
+      toast("Tinni Official message sent to ID " + targetUserId + ".");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      officialMessageButton.disabled = false;
+    }
+    return;
   }
 
   const notificationRead = e.target.closest("[data-notification-read]")?.dataset.notificationRead;
