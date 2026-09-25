@@ -65,6 +65,7 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
   bool connected = false;
+  String micMode = 'apply';
   bool selfMicMuted = false;
   bool selfSeatForced = false;
   int? selfForcedSeatIndex;
@@ -116,6 +117,7 @@ class RoomPresenceService extends ChangeNotifier {
     } finally {
       members.clear();
       connected = false;
+      micMode = 'apply';
       selfMicMuted = false;
       selfSeatForced = false;
       selfForcedSeatIndex = null;
@@ -156,7 +158,25 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> inviteToSeat({
+  Future<void> setMicMode({
+    required String roomId,
+    required String authToken,
+    required String micMode,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/mic-mode',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'mic_mode': micMode,
+      },
+      applyResponse: false,
+    );
+    this.micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
+    notifyListeners();
+  }
+
+    Future<void> inviteToSeat({
     required String roomId,
     required String authToken,
     required String targetUserId,
@@ -380,6 +400,9 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   void _apply(Map<String, dynamic> data) {
+    if (data['mic_mode'] != null) {
+      micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
+    }
     selfMicMuted = data['self_mic_muted'] == true;
     selfSeatForced = data['self_seat_forced'] == true;
     selfForcedSeatIndex = selfSeatForced
