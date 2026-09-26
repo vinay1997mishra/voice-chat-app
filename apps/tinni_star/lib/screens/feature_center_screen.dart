@@ -28,6 +28,39 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
     setState(() {});
   }
 
+  Color _featureColor(String title) {
+    final value = title.toLowerCase();
+    if (value.contains('cp')) return FeaturePalette.cp;
+    if (value.contains('vip') || value.contains('noble')) {
+      return FeaturePalette.vip;
+    }
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('family')) return FeaturePalette.family;
+    if (value.contains('wallet') || value.contains('recharge')) {
+      return FeaturePalette.wallet;
+    }
+    if (value.contains('store') || value.contains('inventory')) {
+      return FeaturePalette.store;
+    }
+    if (value.contains('ktv') || value.contains('music')) {
+      return FeaturePalette.music;
+    }
+    if (value.contains('rocket') || value.contains('lucky')) {
+      return FeaturePalette.rocket;
+    }
+    if (value.contains('backpack') || value.contains('atlas')) {
+      return FeaturePalette.backpack;
+    }
+    if (value.contains('dynamic') || value.contains('moment')) {
+      return FeaturePalette.moments;
+    }
+    if (value.contains('rank') || value.contains('hall')) {
+      return FeaturePalette.rank;
+    }
+    if (value.contains('custom')) return FeaturePalette.customGift;
+    return FeaturePalette.social;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -346,16 +379,41 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         ),
         itemBuilder: (_, index) {
           final item = modules[index];
-          return Card(
+          final color = _featureColor(item.title);
+          return Container(
+            decoration: BoxDecoration(
+              gradient: FeaturePalette.glow(color),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: color.withValues(alpha: 0.72),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.18),
+                  blurRadius: 14,
+                ),
+              ],
+            ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(18),
               onTap: item.action,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(item.icon, size: 34),
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(alpha: 0.15),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.75),
+                        ),
+                      ),
+                      child: Icon(item.icon, size: 31, color: color),
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       item.title,
