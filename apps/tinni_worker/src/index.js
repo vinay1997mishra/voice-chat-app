@@ -1463,7 +1463,7 @@ export default {
       }
 
       const directory = getAppDirectoryStore(env);
-      const callAccess = directory.callRoomAccess(
+      const callAccess = await directory.callRoomAccess(
         appSession.user.user_id,
         roomId,
       );
@@ -1477,7 +1477,7 @@ export default {
           return json({ ok: false, error: "Room not found" }, 404);
         }
 
-        const access = directory.roomAccessState(
+        const access = await directory.roomAccessState(
           appSession.user.user_id,
           roomId,
         );
@@ -1489,7 +1489,7 @@ export default {
           }, 403);
         }
 
-        const kick = getRoomPresenceStore(env, roomId).kickStatus(
+        const kick = await getRoomPresenceStore(env, roomId).kickStatus(
           appSession.user.user_id,
         );
         if (kick) {
@@ -1790,10 +1790,10 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const callId = String(url.searchParams.get("call_id") || "").trim();
       const directory = getAppDirectoryStore(env);
-      let call = directory.getCall(callId);
+      let call = await directory.getCall(callId);
       if (!call) return json({ ok: false, error: "Call not found" }, 404);
       if (call.state === "accepted") {
-        call = directory.settleCallBilling(callId, Date.now());
+        call = await directory.settleCallBilling(callId, Date.now());
       }
       if (
         call.caller_id !== appSession.user.user_id &&
@@ -2093,7 +2093,7 @@ export default {
 
       try {
         return json(
-          getRoomPresenceStore(env, roomId).setMicMode(body.mic_mode),
+          await getRoomPresenceStore(env, roomId).setMicMode(body.mic_mode),
         );
       } catch (error) {
         return json({
@@ -2123,7 +2123,7 @@ export default {
       }
 
       const store = getRoomPresenceStore(env, roomId);
-      return json(store.setManager(targetUserId, Boolean(body.enabled)));
+      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
     }
 
     if (url.pathname === "/room-presence/seat-request" && request.method === "POST") {
@@ -2141,7 +2141,7 @@ export default {
 
       try {
         return json(
-          getRoomPresenceStore(env, roomId).requestSeat({
+          await getRoomPresenceStore(env, roomId).requestSeat({
             user_id: appSession.user.user_id,
             seat_index: seatIndex,
           }),
@@ -2175,9 +2175,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({
           ok: false,
@@ -2187,7 +2188,7 @@ export default {
 
       try {
         return json(
-          store.resolveSeatRequest({
+          await store.resolveSeatRequest({
             target_user_id: targetUserId,
             approved: body.approved === true,
           }),
@@ -2222,15 +2223,16 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can invite to seats" }, 403);
       }
 
       try {
-        return json(store.inviteToSeat({
+        return json(await store.inviteToSeat({
           target_user_id: targetUserId,
           invited_by: actorId,
           seat_index: seatIndex,
@@ -2249,7 +2251,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getRoomPresenceStore(env, String(body.room_id || "").trim())
+          await getRoomPresenceStore(env, String(body.room_id || "").trim())
             .respondSeatInvite({
               user_id: appSession.user.user_id,
               accepted: body.accepted === true,
@@ -2281,15 +2283,16 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can move users from seats" }, 403);
       }
 
       try {
-        return json(store.removeFromSeat({
+        return json(await store.removeFromSeat({
           target_user_id: targetUserId,
         }));
       } catch (error) {
@@ -2315,7 +2318,7 @@ export default {
       }
 
       try {
-        const result = getRoomPresenceStore(env, roomId).setEmote({
+        const result = await getRoomPresenceStore(env, roomId).setEmote({
           user_id: appSession.user.user_id,
           seat_index: seatIndex,
           emote,
@@ -2352,9 +2355,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can mute users" }, 403);
       }
@@ -2363,7 +2367,7 @@ export default {
       }
 
       try {
-        return json(store.setMute({
+        return json(await store.setMute({
           target_user_id: targetUserId,
           seat_index: seatIndex,
           muted_by: actorId,
@@ -2395,9 +2399,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can kick users" }, 403);
       }
@@ -2419,7 +2424,7 @@ export default {
         }
       }
 
-      return json(store.kick({
+      return json(await store.kick({
         target_user_id: targetUserId,
         kicked_by: actorId,
         duration_ms: durationMs,
