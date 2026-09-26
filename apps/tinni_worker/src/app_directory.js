@@ -4,9 +4,11 @@ const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
 const ROOM_THEME_USER_PRICE_COINS = 10000000;
 const ROOM_THEME_USER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const DIRECT_CALL_COST_COINS_PER_MINUTE = 200000;
+const UNVERIFIED_UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 200000;
+const VERIFIED_UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
-const CALL_RECEIVER_REWARD_PERCENT = 80;
+const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
+const UNVERIFIED_RECEIVER_REWARD_PERCENT = 50;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
@@ -1376,13 +1378,13 @@ export class AppDirectoryStore extends DurableObject {
       dueMinutes,
       Math.floor(
         callerWallet.coins /
-          Number(row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE)
+          Number(row.cost_coins_per_minute || UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE)
       ),
     );
 
     if (affordableMinutes > 0) {
       const perMinuteCost = Number(
-        row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE
+        row.cost_coins_per_minute || UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE
       );
       const perMinuteReward = Number(row.receiver_diamonds_per_minute || 0);
       const callerCost = affordableMinutes * perMinuteCost;
@@ -1562,9 +1564,30 @@ export class AppDirectoryStore extends DurableObject {
     if (!["voice", "video"].includes(media)) {
       throw new Error("Unsupported call type");
     }
+    const receiverVerification = this.callVerificationStatus(receiverId);
+    const receiver = this.ctx.storage.sql.exec(
+      "SELECT gender FROM app_users WHERE user_id = ? LIMIT 1",
+      receiverId,
+    ).toArray()[0];
+    const receiverFemale =
+      String(receiver?.gender || "").toLowerCase() === "female";
+    const directCostPerMinute = receiverVerification.verified
+      ? VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE
+      : UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE;
+    const rewardPercent = receiverVerification.verified
+      ? VERIFIED_RECEIVER_REWARD_PERCENT
+      : UNVERIFIED_RECEIVER_REWARD_PERCENT;
+    const receiverRewardPerMinute = receiverFemale
+      ? Math.floor(directCostPerMinute * rewardPercent / 100)
+      : 0;
+
     const callerWallet = this.getWallet(callerId);
-    if (callerWallet.coins < DIRECT_CALL_COST_COINS_PER_MINUTE) {
-      throw new Error("At least 200,000 coins are required to start a friend call");
+    if (callerWallet.coins < directCostPerMinute) {
+      throw new Error(
+        "At least " +
+        directCostPerMinute.toLocaleString("en-US") +
+        " coins are required to start this friend call"
+      );
     }
 
     this.ctx.storage.sql.exec(
@@ -1579,15 +1602,7 @@ export class AppDirectoryStore extends DurableObject {
       receiverId,
     );
 
-    const receiverVerification = this.callVerificationStatus(receiverId);
-    const receiverEligible =
-      receiverVerification.eligible_for_receiver_earnings === true;
-    const receiverRewardPerMinute = receiverEligible
-      ? Math.floor(
-          DIRECT_CALL_COST_COINS_PER_MINUTE *
-            CALL_RECEIVER_REWARD_PERCENT / 100
-        )
-      : 0;
+    const receiverEligible = receiverFemale;
     const now = Date.now();
     const id = "call-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     const roomId = "call-" + id;
@@ -1603,7 +1618,7 @@ export class AppDirectoryStore extends DurableObject {
       media,
       roomId,
       receiverEligible ? 1 : 0,
-      DIRECT_CALL_COST_COINS_PER_MINUTE,
+      directCostPerMinute,
       receiverRewardPerMinute,
       now,
       now,
@@ -1612,7 +1627,7 @@ export class AppDirectoryStore extends DurableObject {
       call_kind: "direct",
       verified: receiverVerification.verified === true,
       gender: receiverVerification.gender,
-      cost_coins_per_minute: DIRECT_CALL_COST_COINS_PER_MINUTE,
+      cost_coins_per_minute: directCostPerMinute,
       receiver_diamonds_per_minute: receiverRewardPerMinute,
     });
     return this.getCall(id);
@@ -1644,7 +1659,7 @@ export class AppDirectoryStore extends DurableObject {
     const receiverRewardPerMinute = receiverEligible
       ? Math.floor(
           RANDOM_CALL_COST_COINS_PER_MINUTE *
-            CALL_RECEIVER_REWARD_PERCENT / 100
+            VERIFIED_RECEIVER_REWARD_PERCENT / 100
         )
       : 0;
 
@@ -1710,10 +1725,12 @@ export class AppDirectoryStore extends DurableObject {
 
     if (gender === "female") {
       text += verified
-        ? "Your ID is Verified. You can receive " +
+        ? "Your ID is Verified. You receive 80% = " +
           reward.toLocaleString("en-US") +
-          " diamonds/min on this call (80% receiver reward). "
-        : "Without verification you can answer this call, but you receive 0 diamonds. After one-time verification, eligible female IDs receive 80% of the call rate in diamonds. ";
+          " diamonds/min when you answer this call. "
+        : "Your ID is Unverified. You can answer this call and receive 50% = " +
+          reward.toLocaleString("en-US") +
+          " diamonds/min. Complete one-time verification to become eligible for the 80% verified rate. ";
     } else {
       text += verified
         ? "Your ID is Verified for the random-call pool. "
@@ -1765,7 +1782,7 @@ export class AppDirectoryStore extends DurableObject {
         Number(row.receiver_earning_eligible || 0) === 1,
       call_kind: String(row.call_kind || "direct"),
       cost_coins_per_minute: Number(
-        row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE
+        row.cost_coins_per_minute || UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE
       ),
       receiver_diamonds_per_minute: Number(
         row.receiver_diamonds_per_minute || 0
