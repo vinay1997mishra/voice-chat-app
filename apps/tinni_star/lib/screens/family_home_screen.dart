@@ -789,7 +789,7 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
           child: Text(
             'Deputy Family Leader',
             style: TextStyle(
-              color: RoyalPalette.gold,
+              color: FeaturePalette.family,
               fontWeight: FontWeight.w900,
             ),
           ),
