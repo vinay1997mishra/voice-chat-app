@@ -402,17 +402,12 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.15),
-                        border: Border.all(
-                          color: color.withValues(alpha: 0.75),
-                        ),
-                      ),
-                      child: Icon(item.icon, size: 31, color: color),
+                    ShiningIcon(
+                      icon: item.icon,
+                      color: color,
+                      size: 30,
+                      boxSize: 50,
+                      glow: 0.36,
                     ),
                     const SizedBox(height: 10),
                     Text(
