@@ -2768,12 +2768,21 @@ export default {
           result.user_id,
           { submission_id: result.submission_id },
         );
-        if (body.approve !== true) {
+        if (body.approve === true) {
+          getAppDirectoryStore(env).sendOfficialMessage(
+            result.user_id,
+            "Your Call ID verification is approved. Your ID stays Verified until Owner removes Verified status."
+          );
+        } else {
+          getAppDirectoryStore(env).sendOfficialMessage(
+            result.user_id,
+            "Your Call ID verification was rejected. Please contact the Official Manager for help with verification."
+          );
           await getStaffStore(env).createOwnerNotification({
             type: "call_verification_rejected",
             title: "Call verification rejected",
             message:
-              "The user will be instructed to contact the Official Manager.",
+              "The user was instructed to contact the Official Manager.",
             source_user_id: result.user_id,
             target_type: "call_verification",
             target_id: result.submission_id,
@@ -2811,6 +2820,10 @@ export default {
           "user",
           userId,
           { note: String(body.note || "") },
+        );
+        getAppDirectoryStore(env).sendOfficialMessage(
+          userId,
+          "Owner removed your Call ID Verified status. Verification will be required again to return to the Verified call benefits and random-call pool."
         );
         return json(result);
       } catch (error) {
