@@ -2999,6 +2999,19 @@ export default {
       return json(result);
     }
 
+    if (url.pathname === "/api/owner/room-live" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const presence = await getRoomPresenceStore(env, roomId).state();
+      return json({ ok: true, room, presence });
+    }
+
     if (url.pathname === "/api/owner/game-stats" && request.method === "GET") {
       if (!ownerOnly(session)) {
         return json({ ok: false, error: "Owner access required" }, 403);
