@@ -1742,6 +1742,27 @@ export default {
       }
     }
 
+    if (url.pathname === "/calls/random" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          call: getAppDirectoryStore(env).createRandomCall(
+            appSession.user.user_id,
+            body.gender,
+            body.media,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to start random call"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/calls" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
