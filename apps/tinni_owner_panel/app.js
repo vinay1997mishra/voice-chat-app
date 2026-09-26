@@ -865,6 +865,7 @@ function applySession(session) {
     loadOwnerNotifications();
     loadCallVerifications();
     loadVerifiedUsers();
+    loadGameStats().catch(() => null);
     loadAuditLog();
     return;
   }
@@ -1868,7 +1869,86 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
+  const catalogToggle = e.target.closest("[data-catalog-toggle]");
+  if (catalogToggle) {
+    const id = String(catalogToggle.dataset.catalogToggle || "");
+    const enabled = String(catalogToggle.dataset.nextEnabled) === "true";
+    try {
+      await api("/api/owner/catalog/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      await loadOwnerState();
+      toast(enabled ? "Item enabled." : "Item disabled.");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const catalogEdit = e.target.closest("[data-catalog-edit]")?.dataset.catalogEdit;
+  if (catalogEdit) {
+    const item = state.catalog.find((entry) => entry.id === catalogEdit);
+    if (!item) { toast("Catalog item not found."); return; }
+    const name = prompt("Name", item.name);
+    if (name === null || !name.trim()) return;
+    const data = { ...(item.data || {}) };
+
+    if (item.kind === "gift") {
+      const price = prompt("Coin price", String(data.coin_price || 0));
+      if (price === null) return;
+      const asset = prompt("Animation / asset URL", String(data.asset_url || ""));
+      if (asset === null) return;
+      data.coin_price = Number(price || 0);
+      data.asset_url = asset.trim();
+    } else if (item.kind === "entry" || item.kind === "frame") {
+      const asset = prompt("Asset URL", String(data.asset_url || ""));
+      if (asset === null) return;
+      const vipLevel = prompt("VIP level", String(data.vip_level || 0));
+      if (vipLevel === null) return;
+      data.asset_url = asset.trim();
+      data.vip_level = Number(vipLevel || 0);
+    } else if (item.kind === "banner") {
+      const asset = prompt("Banner image URL", String(data.asset_url || ""));
+      if (asset === null) return;
+      data.asset_url = asset.trim();
+    }
+
+    try {
+      await api("/api/owner/catalog/" + encodeURIComponent(catalogEdit), {
+        method: "PATCH",
+        body: JSON.stringify({ name: name.trim(), data }),
+      });
+      await loadOwnerState();
+      toast("Catalog item updated.");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const action = e.target.closest("[data-action]")?.dataset.action;
+  if (action === "user-search") {
+    const value = String(document.getElementById("userSearchId")?.value || "").trim();
+    if (!value) { toast("Enter a user ID, old ID, name or email."); return; }
+    try {
+      const result = await runOwnerAction("user-search", { user_id: value });
+      await renderUserInvestigation(result?.users || []);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+  if (action === "call-verification-refresh") {
+    await Promise.all([loadCallVerifications(), loadVerifiedUsers()]);
+    toast("Call Verification refreshed.");
+    return;
+  }
+  if (action === "complaints") {
+    setView("notifications");
+    await loadOwnerNotifications();
+    return;
+  }
   if (action === "notifications-refresh") {
     await loadOwnerNotifications();
     return;
@@ -1917,29 +1997,51 @@ document.body.addEventListener("click", async e => {
 
   const vipEdit = e.target.closest("[data-vip-edit]")?.dataset.vipEdit;
   if (vipEdit) {
-    const vip = state.vips.find(v => v.level === Number(vipEdit));
+    const vip = state.vips.find(v => v.id === vipEdit);
+    if (!vip) { toast("VIP not found."); return; }
     openAction("vip-edit", {
-      target_id: `VIP ${vip.level}`,
-      reason: `${vip.name} | Entry: ${vip.entry} | Frame: ${vip.frame}`
+      catalog_id: vip.id,
+      name: vip.name,
+      level: vip.level,
+      price: vip.price,
+      entry: vip.entry,
+      frame: vip.frame,
     });
+    return;
   }
 
   const vipToggle = e.target.closest("[data-vip-toggle]")?.dataset.vipToggle;
   if (vipToggle) {
-    const vip = state.vips.find(v => v.level === Number(vipToggle));
-    vip.enabled = !vip.enabled;
-    renderVips();
-    toast(`${vip.name} ${vip.enabled ? "enabled" : "disabled"} in preview`);
+    const vip = state.vips.find(v => v.id === vipToggle);
+    if (!vip) { toast("VIP not found."); return; }
+    try {
+      await api("/api/owner/catalog/" + encodeURIComponent(vip.id), {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !vip.enabled }),
+      });
+      await loadOwnerState();
+      toast(vip.name + (!vip.enabled ? " enabled." : " disabled."));
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
   }
 
   const policyKey = e.target.closest("[data-policy-edit]")?.dataset.policyEdit;
   if (policyKey) {
-    const value = prompt(`New value for ${pretty(policyKey)}`, state.policies[policyKey]);
+    const value = prompt("New value for " + pretty(policyKey), state.policies[policyKey]);
     if (value !== null && value !== "") {
-      state.policies[policyKey] = Number.isNaN(Number(value)) ? value : Number(value);
-      renderPolicies();
-      toast(`${pretty(policyKey)} changed in panel preview`);
+      try {
+        await runOwnerAction("policy-set", {
+          key: policyKey,
+          value: Number.isNaN(Number(value)) ? value : Number(value),
+        });
+        toast(pretty(policyKey) + " updated.");
+      } catch (error) {
+        toast(error.message);
+      }
     }
+    return;
   }
 });
 
@@ -1960,8 +2062,28 @@ document.getElementById("actionForm").addEventListener("submit", async e => {
   }
 });
 
-document.getElementById("userSearchId").addEventListener("keydown", e => {
-  if (e.key === "Enter") openAction("user-search", { user_id: e.target.value.trim() });
+document.getElementById("userSearchId")?.addEventListener("keydown", async e => {
+  if (e.key !== "Enter") return;
+  const value = e.target.value.trim();
+  if (!value) return;
+  try {
+    const result = await runOwnerAction("user-search", { user_id: value });
+    await renderUserInvestigation(result?.users || []);
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+document.getElementById("verifiedSearchInput")?.addEventListener("keydown", async e => {
+  if (e.key === "Enter") await loadVerifiedUsers(e.target.value.trim());
+});
+
+document.getElementById("manualCallVerifySearch")?.addEventListener("keydown", async e => {
+  if (e.key === "Enter") await searchDirectVerifyUsers(e.target.value.trim());
+});
+
+document.getElementById("ownerUserSearchInput")?.addEventListener("keydown", async e => {
+  if (e.key === "Enter") await searchOwnerMessagingUsers(e.target.value.trim());
 });
 
 renderFeatures();
