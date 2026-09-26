@@ -43,6 +43,12 @@ export class RoomPresenceStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_chat_bans (
+        user_id TEXT PRIMARY KEY,
+        banned_by TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_seat_invites (
         target_user_id TEXT PRIMARY KEY,
         seat_index INTEGER NOT NULL,
@@ -171,6 +177,55 @@ export class RoomPresenceStore extends DurableObject {
       userId,
     ).toArray()[0];
     return Boolean(row);
+  }
+
+  chatBanStatus(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_chat_bans WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return Boolean(row);
+  }
+
+  setChatBan(input) {
+    const targetUserId = String(input?.target_user_id || "").trim();
+    const bannedBy = String(input?.banned_by || "").trim();
+    const banned = Boolean(input?.banned);
+    if (!targetUserId) throw new Error("target_user_id is required");
+    if (!bannedBy) throw new Error("banned_by is required");
+
+    const member = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE user_id = ? LIMIT 1",
+      targetUserId,
+    ).toArray()[0];
+    if (!member) throw new Error("User is not in the room");
+
+    if (banned) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_chat_bans (user_id, banned_by, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           banned_by = excluded.banned_by,
+           updated_at = excluded.updated_at`,
+        targetUserId,
+        bannedBy,
+        Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_chat_bans WHERE user_id = ?",
+        targetUserId,
+      );
+    }
+
+    return {
+      ok: true,
+      target_user_id: targetUserId,
+      chat_banned: banned,
+      members: this._members(),
+    };
   }
 
   setManager(userIdValue, enabled) {
@@ -663,6 +718,7 @@ export class RoomPresenceStore extends DurableObject {
           ? null
           : Number(row.seat_index),
       mic_muted: this.muteStatus(row.user_id, row.seat_index),
+      chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
       seat_emote:
         row.seat_emote &&
@@ -831,6 +887,7 @@ export class RoomPresenceStore extends DurableObject {
       server_time: now,
       mic_mode: this.micMode(),
       self_mic_muted: this.muteStatus(userId, seatIndex),
+      self_chat_banned: this.chatBanStatus(userId),
       self_seat_forced: seatForced,
       self_forced_seat_index: seatForced ? seatIndex : null,
       pending_seat_invite: this.seatInviteFor(userId),
