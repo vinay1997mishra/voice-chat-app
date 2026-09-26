@@ -4,8 +4,9 @@ const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
 const ROOM_THEME_USER_PRICE_COINS = 10000000;
 const ROOM_THEME_USER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const CALL_COST_COINS_PER_MINUTE = 400000;
-const CALL_RECEIVER_DIAMONDS_PER_MINUTE = 320000;
+const DIRECT_CALL_COST_COINS_PER_MINUTE = 200000;
+const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
+const CALL_RECEIVER_REWARD_PERCENT = 80;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
@@ -349,6 +350,16 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_call_verification_status
         ON call_verification_submissions(status, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS random_call_stats (
+        user_id TEXT PRIMARY KEY,
+        offers INTEGER NOT NULL DEFAULT 0,
+        answered INTEGER NOT NULL DEFAULT 0,
+        completed_calls INTEGER NOT NULL DEFAULT 0,
+        total_minutes INTEGER NOT NULL DEFAULT 0,
+        last_offer_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -412,7 +423,11 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_calls ADD COLUMN caller_cost_coins INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_calls ADD COLUMN receiver_reward_diamonds INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_calls ADD COLUMN receiver_earning_eligible INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_calls ADD COLUMN end_reason TEXT"
+      "ALTER TABLE app_calls ADD COLUMN end_reason TEXT",
+      "ALTER TABLE app_calls ADD COLUMN call_kind TEXT NOT NULL DEFAULT 'direct'",
+      "ALTER TABLE app_calls ADD COLUMN cost_coins_per_minute INTEGER NOT NULL DEFAULT 200000",
+      "ALTER TABLE app_calls ADD COLUMN receiver_diamonds_per_minute INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_calls ADD COLUMN stats_recorded INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1137,16 +1152,20 @@ export class AppDirectoryStore extends DurableObject {
       String(userIdValue || "").trim(),
     ).toArray()[0];
     if (!user) throw new Error("User not found");
-    const isFemale = String(user.gender || "").toLowerCase() === "female";
+    const gender = String(user.gender || "").toLowerCase();
+    const supportedGender = VALID_GENDERS.has(gender);
+    const verified = Number(user.call_verified || 0) === 1;
     return {
       user_id: String(user.user_id),
-      required: isFemale,
-      eligible_for_receiver_earnings:
-        isFemale && Number(user.call_verified || 0) === 1,
-      verified: Number(user.call_verified || 0) === 1,
-      status: isFemale
+      gender,
+      required: false,
+      verification_available: supportedGender,
+      random_call_eligible: supportedGender && verified,
+      eligible_for_receiver_earnings: gender === "female" && verified,
+      verified,
+      status: supportedGender
         ? String(user.call_verification_status || "unverified")
-        : "not_required",
+        : "not_available",
       verified_at:
         user.call_verified_at == null ? null : Number(user.call_verified_at),
       revoked_at:
@@ -1163,8 +1182,8 @@ export class AppDirectoryStore extends DurableObject {
       userId,
     ).toArray()[0];
     if (!user) throw new Error("User not found");
-    if (String(user.gender || "").toLowerCase() !== "female") {
-      throw new Error("One-time call verification is only required for female accounts");
+    if (!VALID_GENDERS.has(String(user.gender || "").toLowerCase())) {
+      throw new Error("Call verification is unavailable for this account");
     }
     if (Number(user.call_verified || 0) === 1) {
       return {
@@ -1355,14 +1374,21 @@ export class AppDirectoryStore extends DurableObject {
     const callerWallet = this.getWallet(row.caller_id);
     const affordableMinutes = Math.min(
       dueMinutes,
-      Math.floor(callerWallet.coins / CALL_COST_COINS_PER_MINUTE),
+      Math.floor(
+        callerWallet.coins /
+          Number(row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE)
+      ),
     );
 
     if (affordableMinutes > 0) {
-      const callerCost = affordableMinutes * CALL_COST_COINS_PER_MINUTE;
+      const perMinuteCost = Number(
+        row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE
+      );
+      const perMinuteReward = Number(row.receiver_diamonds_per_minute || 0);
+      const callerCost = affordableMinutes * perMinuteCost;
       const receiverReward =
         Number(row.receiver_earning_eligible || 0) === 1
-          ? affordableMinutes * CALL_RECEIVER_DIAMONDS_PER_MINUTE
+          ? affordableMinutes * perMinuteReward
           : 0;
       this.ctx.storage.sql.exec(
         `UPDATE app_wallets
@@ -1407,8 +1433,121 @@ export class AppDirectoryStore extends DurableObject {
         now,
         callId,
       );
+      this._recordRandomCallCompletion(callId);
     }
     return this.getCall(callId);
+  }
+
+  _recordRandomCallCompletion(callIdValue) {
+    const callId = String(callIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM app_calls WHERE id = ? LIMIT 1",
+      callId,
+    ).toArray()[0];
+    if (!row || String(row.call_kind || "direct") !== "random") return;
+    if (Number(row.stats_recorded || 0) === 1) return;
+    const minutes = Number(row.billed_minutes || 0);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO random_call_stats
+        (user_id, offers, answered, completed_calls, total_minutes,
+         last_offer_at, updated_at)
+       VALUES (?, 0, 0, 1, ?, NULL, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         completed_calls = completed_calls + 1,
+         total_minutes = total_minutes + excluded.total_minutes,
+         updated_at = excluded.updated_at`,
+      String(row.receiver_id),
+      minutes,
+      Date.now(),
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE app_calls SET stats_recorded = 1 WHERE id = ?",
+      callId,
+    );
+  }
+
+  _isUserBusyInCall(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT id FROM app_calls
+        WHERE state IN ('ringing', 'accepted')
+          AND (caller_id = ? OR receiver_id = ?)
+        LIMIT 1`,
+      userId,
+      userId,
+    ).toArray()[0];
+    return Boolean(row);
+  }
+
+  _randomCallCandidate(callerIdValue, genderValue) {
+    const callerId = String(callerIdValue || "").trim();
+    const gender = String(genderValue || "").trim().toLowerCase();
+    if (!VALID_GENDERS.has(gender)) {
+      throw new Error("Choose Girls or Boys before starting a random call");
+    }
+
+    const candidates = this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name, u.gender, u.call_verified_at,
+              COALESCE(s.offers, 0) AS offers,
+              COALESCE(s.answered, 0) AS answered,
+              COALESCE(s.completed_calls, 0) AS completed_calls,
+              COALESCE(s.total_minutes, 0) AS total_minutes,
+              s.last_offer_at
+         FROM app_users u
+         LEFT JOIN random_call_stats s ON s.user_id = u.user_id
+        WHERE u.user_id != ?
+          AND u.gender = ?
+          AND u.call_verified = 1`,
+      callerId,
+      gender,
+    ).toArray().filter((row) => {
+      const id = String(row.user_id);
+      return !this._isUserBusyInCall(id) && !this.isBlockedBetween(callerId, id);
+    });
+
+    if (candidates.length === 0) return null;
+
+    const callerRandomCount = Number(
+      this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM app_calls
+          WHERE caller_id = ? AND call_kind = 'random'`,
+        callerId,
+      ).toArray()[0]?.count || 0
+    );
+
+    const now = Date.now();
+    const fresh = candidates.filter((row) =>
+      row.call_verified_at != null &&
+      now - Number(row.call_verified_at) <= 7 * 24 * 60 * 60 * 1000 &&
+      Number(row.offers || 0) < 5
+    );
+
+    let pool = candidates;
+    // 1 in every 5 random calls gives a fresh verified ID an exposure slot.
+    if (callerRandomCount % 5 === 4 && fresh.length > 0) {
+      pool = fresh;
+      pool.sort((a, b) => {
+        const offersDiff = Number(a.offers || 0) - Number(b.offers || 0);
+        if (offersDiff !== 0) return offersDiff;
+        return Number(a.call_verified_at || 0) - Number(b.call_verified_at || 0);
+      });
+    } else {
+      pool.sort((a, b) => {
+        const scoreA =
+          Number(a.completed_calls || 0) * 100 +
+          Number(a.answered || 0) * 20 +
+          Number(a.total_minutes || 0);
+        const scoreB =
+          Number(b.completed_calls || 0) * 100 +
+          Number(b.answered || 0) * 20 +
+          Number(b.total_minutes || 0);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return Number(a.last_offer_at || 0) - Number(b.last_offer_at || 0);
+      });
+    }
+    return pool[0] || null;
   }
 
   createCall(callerIdValue, receiverIdValue, mediaValue = "voice") {
@@ -1424,8 +1563,8 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Unsupported call type");
     }
     const callerWallet = this.getWallet(callerId);
-    if (callerWallet.coins < CALL_COST_COINS_PER_MINUTE) {
-      throw new Error("At least 400,000 coins are required to start a paid call");
+    if (callerWallet.coins < DIRECT_CALL_COST_COINS_PER_MINUTE) {
+      throw new Error("At least 200,000 coins are required to start a friend call");
     }
 
     this.ctx.storage.sql.exec(
@@ -1443,25 +1582,152 @@ export class AppDirectoryStore extends DurableObject {
     const receiverVerification = this.callVerificationStatus(receiverId);
     const receiverEligible =
       receiverVerification.eligible_for_receiver_earnings === true;
+    const receiverRewardPerMinute = receiverEligible
+      ? Math.floor(
+          DIRECT_CALL_COST_COINS_PER_MINUTE *
+            CALL_RECEIVER_REWARD_PERCENT / 100
+        )
+      : 0;
     const now = Date.now();
     const id = "call-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     const roomId = "call-" + id;
     this.ctx.storage.sql.exec(
       `INSERT INTO app_calls
         (id, caller_id, receiver_id, media, state, room_id,
-         receiver_earning_eligible, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?, ?)`,
+         receiver_earning_eligible, call_kind, cost_coins_per_minute,
+         receiver_diamonds_per_minute, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'ringing', ?, ?, 'direct', ?, ?, ?, ?)`,
       id,
       callerId,
       receiverId,
       media,
       roomId,
       receiverEligible ? 1 : 0,
+      DIRECT_CALL_COST_COINS_PER_MINUTE,
+      receiverRewardPerMinute,
       now,
       now,
     );
+    this._sendCallOfficialMessage(receiverId, {
+      call_kind: "direct",
+      verified: receiverVerification.verified === true,
+      gender: receiverVerification.gender,
+      cost_coins_per_minute: DIRECT_CALL_COST_COINS_PER_MINUTE,
+      receiver_diamonds_per_minute: receiverRewardPerMinute,
+    });
     return this.getCall(id);
   }
+
+  createRandomCall(callerIdValue, genderValue, mediaValue = "voice") {
+    const callerId = String(callerIdValue || "").trim();
+    const gender = String(genderValue || "").trim().toLowerCase();
+    const media = String(mediaValue || "voice").toLowerCase();
+    if (!callerId) throw new Error("caller ID is required");
+    if (!["voice", "video"].includes(media)) {
+      throw new Error("Unsupported call type");
+    }
+
+    const callerWallet = this.getWallet(callerId);
+    if (callerWallet.coins < RANDOM_CALL_COST_COINS_PER_MINUTE) {
+      throw new Error("At least 500,000 coins are required to start a random call");
+    }
+
+    const candidate = this._randomCallCandidate(callerId, gender);
+    if (!candidate) {
+      throw new Error("No verified available " + (gender === "female" ? "girl" : "boy") + " is free right now");
+    }
+
+    const receiverId = String(candidate.user_id);
+    const receiverVerification = this.callVerificationStatus(receiverId);
+    const receiverEligible =
+      receiverVerification.eligible_for_receiver_earnings === true;
+    const receiverRewardPerMinute = receiverEligible
+      ? Math.floor(
+          RANDOM_CALL_COST_COINS_PER_MINUTE *
+            CALL_RECEIVER_REWARD_PERCENT / 100
+        )
+      : 0;
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO random_call_stats
+        (user_id, offers, answered, completed_calls, total_minutes,
+         last_offer_at, updated_at)
+       VALUES (?, 1, 0, 0, 0, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         offers = offers + 1,
+         last_offer_at = excluded.last_offer_at,
+         updated_at = excluded.updated_at`,
+      receiverId,
+      now,
+      now,
+    );
+
+    const id = "call-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const roomId = "call-" + id;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO app_calls
+        (id, caller_id, receiver_id, media, state, room_id,
+         receiver_earning_eligible, call_kind, cost_coins_per_minute,
+         receiver_diamonds_per_minute, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'ringing', ?, ?, 'random', ?, ?, ?, ?)`,
+      id,
+      callerId,
+      receiverId,
+      media,
+      roomId,
+      receiverEligible ? 1 : 0,
+      RANDOM_CALL_COST_COINS_PER_MINUTE,
+      receiverRewardPerMinute,
+      now,
+      now,
+    );
+    this._sendCallOfficialMessage(receiverId, {
+      call_kind: "random",
+      verified: receiverVerification.verified === true,
+      gender: receiverVerification.gender,
+      cost_coins_per_minute: RANDOM_CALL_COST_COINS_PER_MINUTE,
+      receiver_diamonds_per_minute: receiverRewardPerMinute,
+    });
+    return this.getCall(id);
+  }
+
+  _sendCallOfficialMessage(receiverIdValue, input) {
+    const receiverId = String(receiverIdValue || "").trim();
+    if (!receiverId) return null;
+    const kind = String(input?.call_kind || "direct");
+    const verified = input?.verified === true;
+    const gender = String(input?.gender || "");
+    const cost = Number(input?.cost_coins_per_minute || 0);
+    const reward = Number(input?.receiver_diamonds_per_minute || 0);
+
+    let text =
+      "[CALL_VERIFY] Incoming " +
+      (kind === "random" ? "random" : "friend") +
+      " paid call. Caller cost: " +
+      cost.toLocaleString("en-US") +
+      " coins/min. ";
+
+    if (gender === "female") {
+      text += verified
+        ? "Your ID is Verified. You can receive " +
+          reward.toLocaleString("en-US") +
+          " diamonds/min on this call (80% receiver reward). "
+        : "Without verification you can answer this call, but you receive 0 diamonds. After one-time verification, eligible female IDs receive 80% of the call rate in diamonds. ";
+    } else {
+      text += verified
+        ? "Your ID is Verified for the random-call pool. "
+        : "Verification is optional for friend calls, but required to enter the verified random-call pool. ";
+    }
+    text +=
+      "Verification is done once and is asked again only if Owner removes Verified status. Open Verify Call ID from this Official message.";
+
+    return this.sendOfficialMessage(receiverId, text, {
+      action: "call_verification",
+      call_kind: kind,
+    });
+  }
+
 
   getCall(callIdValue) {
     const callId = String(callIdValue || "").trim();
@@ -1497,9 +1763,13 @@ export class AppDirectoryStore extends DurableObject {
       receiver_reward_diamonds: Number(row.receiver_reward_diamonds || 0),
       receiver_earning_eligible:
         Number(row.receiver_earning_eligible || 0) === 1,
-      cost_coins_per_minute: CALL_COST_COINS_PER_MINUTE,
-      receiver_diamonds_per_minute:
-        CALL_RECEIVER_DIAMONDS_PER_MINUTE,
+      call_kind: String(row.call_kind || "direct"),
+      cost_coins_per_minute: Number(
+        row.cost_coins_per_minute || DIRECT_CALL_COST_COINS_PER_MINUTE
+      ),
+      receiver_diamonds_per_minute: Number(
+        row.receiver_diamonds_per_minute || 0
+      ),
       end_reason: row.end_reason ? String(row.end_reason) : null,
       caller_balance_coins: callerWallet.coins,
       receiver_balance_diamonds: receiverWallet.diamonds,
@@ -1533,12 +1803,6 @@ export class AppDirectoryStore extends DurableObject {
     if (call.state !== "ringing") return call;
     const now = Date.now();
     if (acceptValue) {
-      const verification = this.callVerificationStatus(userId);
-      if (verification.required && !verification.verified) {
-        throw new Error(
-          "Complete the one-time call verification before accepting paid calls"
-        );
-      }
       this.ctx.storage.sql.exec(
         `UPDATE app_calls
             SET state = 'accepted',
@@ -1549,6 +1813,19 @@ export class AppDirectoryStore extends DurableObject {
         now,
         call.id,
       );
+      if (call.call_kind === "random") {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO random_call_stats
+            (user_id, offers, answered, completed_calls, total_minutes,
+             last_offer_at, updated_at)
+           VALUES (?, 0, 1, 0, 0, NULL, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             answered = answered + 1,
+             updated_at = excluded.updated_at`,
+          userId,
+          now,
+        );
+      }
       return this.settleCallBilling(call.id, now);
     }
     this.ctx.storage.sql.exec(
@@ -1574,6 +1851,7 @@ export class AppDirectoryStore extends DurableObject {
       Date.now(),
       call.id,
     );
+    this._recordRandomCallCompletion(call.id);
     return this.getCall(call.id);
   }
 
