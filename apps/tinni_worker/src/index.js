@@ -2450,6 +2450,7 @@ export default {
         family_tag: body.family_tag,
         host_tag: body.host_tag,
         agency_name: body.agency_name,
+        owner_tags: Array.isArray(user.tags) ? user.tags : [],
         seat_index:
           body.seat_index === null || body.seat_index === undefined
             ? null
