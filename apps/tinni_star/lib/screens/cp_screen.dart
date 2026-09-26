@@ -19,7 +19,9 @@ class _CpScreenState extends State<CpScreen> {
   @override
   void initState() {
     super.initState();
-    _syncFriends();
+    if (widget.state.social.friendProfiles.isEmpty) {
+      _syncFriends();
+    }
   }
 
   Future<void> _syncFriends() async {
