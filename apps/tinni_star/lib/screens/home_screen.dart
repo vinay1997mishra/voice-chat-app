@@ -1246,14 +1246,14 @@ class _TopRoomCard extends StatelessWidget {
                   ),
                 ),
                 child: Center(
-                  child: Icon(
-                    rank == 1
+                  child: ShiningIcon(
+                    icon: rank == 1
                         ? Icons.emoji_events_rounded
                         : Icons.groups_rounded,
-                    size: 50,
-                    color: favorite
-                        ? FeaturePalette.rank
-                        : FeaturePalette.discover,
+                    size: 38,
+                    boxSize: 66,
+                    color: accent,
+                    glow: 0.44,
                   ),
                 ),
               ),
