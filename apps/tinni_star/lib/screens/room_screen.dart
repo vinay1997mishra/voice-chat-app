@@ -3082,7 +3082,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   const Spacer(),
                   Text(
                     '🪙 ' + widget.state.wallet.coins.toString(),
-                    style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      color: FeaturePalette.wallet,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ],
               ),
