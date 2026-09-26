@@ -1113,24 +1113,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  String _familyTagFor(String userId) {
-    if (widget.state.family.exists && widget.state.family.isMember(userId)) {
-      return widget.state.family.tag ?? widget.state.family.name ?? 'Family';
-    }
-    return '—';
-  }
-
-  String _hostTagFor(String userId) {
-    final role = widget.state.roomControls.roles[userId];
-    if (role == RoomRole.host) return 'Host';
-    if (role == RoomRole.owner) return 'Owner';
-    if (role == RoomRole.admin) return 'Admin';
-    return '—';
-  }
-
-  String _agencyNameFor(String userId) =>
-      widget.state.roomControls.agencyNameFor(userId) ?? '—';
-
   Color _ownerTagColor(String colorHex) {
     final value = int.tryParse(
       colorHex.replaceFirst('#', ''),
@@ -1151,70 +1133,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
       ),
     );
-  }
-
-  Future<void> _showSeatInvitePicker(RoomPresenceMember member) async {
-    final available = <int>[
-      for (var index = 0; index < controller.seats.length; index++)
-        if (!controller.seats[index].occupied && !controller.seats[index].locked)
-          index,
-    ];
-    if (available.isEmpty) {
-      _snack('No empty seat is available.');
-      return;
-    }
-    final selected = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Invite ' + member.displayName + ' to seat',
-                style: const TextStyle(
-                  color: FeaturePalette.family,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final index in available)
-                    ActionChip(
-                      label: Text('Seat ' + (index + 1).toString()),
-                      onPressed: () => Navigator.pop(context, index),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected == null) return;
-    try {
-      await widget.state.roomSession.inviteUserToSeat(
-        member.userId,
-        seatIndex: selected,
-      );
-      _snack(
-        'Seat ' +
-            (selected + 1).toString() +
-            ' invite sent to ' +
-            member.displayName +
-            '.',
-      );
-    } catch (error) {
-      _snack(error.toString().replaceFirst('Bad state: ', ''));
-    }
   }
 
   int? _seatIndexForMember(
@@ -1259,25 +1177,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : member.displayName + ' unmuted on this seat.',
       );
       if (mounted) setState(() {});
-    } catch (error) {
-      _snack(error.toString().replaceFirst('Bad state: ', ''));
-    }
-  }
-
-    Future<void> _moveUserToAudience(
-    RoomPresenceMember member, {
-    int? seatIndexHint,
-  }) async {
-    final seatIndex = _seatIndexForMember(member, hint: seatIndexHint);
-    if (seatIndex == null) {
-      _snack(member.displayName + ' is not on a seat.');
-      return;
-    }
-    try {
-      await widget.state.roomSession.moveUserToAudience(member.userId);
-      controller.managerRemoveUserFromSeat(seatIndex);
-      widget.state.roomControls.kickFromMic(member.userId);
-      _snack(member.displayName + ' moved to audience.');
     } catch (error) {
       _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
