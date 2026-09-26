@@ -2289,3 +2289,27 @@ When giving this blueprint to a developer/AI coding agent, instruct them to:
 - Build and test a signed release before declaring a version complete.
 
 **End of Tinni Star Complete Implementation Blueprint v3**
+## Visual color and shine system
+
+Tinni Star uses **black + gold as the app shell/background identity**, not as the default color for every function. Functional modules must keep their own semantic color so users can recognize actions quickly.
+
+Semantic accents:
+- CP / relationship / hearts / rings: pink/rose.
+- VIP / Noble: progressive blue → violet → magenta, with higher-level legendary accents.
+- Gifts/custom gifts: purple/magenta; CP gifts pink; crown/dragon/rank gifts amber.
+- Family / seat-success / active mic: emerald green.
+- Games: per-game color — Fruit Jackpot amber, Fruit Party pink, Ludo green, UNO red.
+- Music/KTV/messages: cyan/teal.
+- Social/follow/discover: blue.
+- Wallet/coins: warm amber; diamonds: cyan.
+- Store/inventory: coral; backpack: green.
+- Rankings/trophies/crowns: amber/gold where premium rank context is intended.
+- Mute/kick/report/danger: red.
+- Emoji/emotes: bright orange-yellow.
+
+Shine rule:
+- Every functional accent must have a matching soft glow/halo, selected-state shine, colored border glow, or subtle feature gradient on the dark UI.
+- Active/live states shine more strongly; disabled/locked states stay muted.
+- A feature's glow must match its semantic color rather than falling back to generic gold.
+- Reusable `FeaturePalette`, `ShiningIcon`, and semantic `RoyalPanel.accentColor` treatments are the implementation baseline for future modules.
+- Gold remains appropriate for brand headings, royal framing, premium rank/crown contexts and the black/gold page shell.
