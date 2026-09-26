@@ -652,6 +652,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     key: Key('event-card-' + entry.key.toString()),
                     onTap: item.$4,
                     gradient: FeaturePalette.glow(color),
+                    accentColor: color,
                     child: Row(
                       children: [
                         ShiningIcon(
@@ -1126,6 +1127,7 @@ class _FeatureCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       onTap: onTap,
       gradient: FeaturePalette.glow(color),
+      accentColor: color,
       child: Column(
         children: [
           ShiningIcon(
