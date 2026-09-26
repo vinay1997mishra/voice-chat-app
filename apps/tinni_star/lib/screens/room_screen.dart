@@ -559,7 +559,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Text(
                     'Emoji & Emotes',
                     style: TextStyle(
-                      color: RoyalPalette.gold,
+                      color: FeaturePalette.games,
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
                     ),
@@ -809,7 +809,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 title: const Text(
                   'Room Theme',
                   style: TextStyle(
-                    color: RoyalPalette.gold,
+                    color: FeaturePalette.moments,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -843,19 +843,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: RoyalPalette.gold),
-                          color: RoyalPalette.panel,
+                          gradient: FeaturePalette.glow(
+                            FeaturePalette.moments,
+                          ),
+                          border: Border.all(color: FeaturePalette.moments),
+                          boxShadow: [
+                            BoxShadow(
+                              color: FeaturePalette.moments
+                                  .withValues(alpha: 0.24),
+                              blurRadius: 14,
+                            ),
+                          ],
                         ),
                         child: Row(
                           children: [
-                            const CircleAvatar(
-                              radius: 29,
-                              backgroundColor: RoyalPalette.panel2,
-                              child: Icon(
-                                Icons.add_rounded,
-                                color: RoyalPalette.gold,
-                                size: 34,
-                              ),
+                            const ShiningIcon(
+                              icon: Icons.add_rounded,
+                              color: FeaturePalette.moments,
+                              size: 30,
+                              boxSize: 58,
+                              glow: 0.42,
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -873,8 +880,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   Text(
                                     priceCoins.toString() + ' coins • ' + durationDays.toString() + ' days',
                                     style: const TextStyle(
-                                      color: RoyalPalette.gold,
+                                      color: FeaturePalette.wallet,
                                       fontSize: 11,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                   const Text(
@@ -920,10 +928,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: active ? RoyalPalette.gold : RoyalPalette.bronze,
+                          color: active
+                              ? FeaturePalette.moments
+                              : FeaturePalette.moments
+                                  .withValues(alpha: 0.32),
                           width: active ? 2 : 1,
                         ),
                         color: RoyalPalette.panel,
+                        boxShadow: active
+                            ? [
+                                BoxShadow(
+                                  color: FeaturePalette.moments
+                                      .withValues(alpha: 0.24),
+                                  blurRadius: 12,
+                                ),
+                              ]
+                            : null,
                       ),
                       child: Row(
                         children: [
@@ -939,7 +959,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       fit: BoxFit.cover,
                                     ),
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: RoyalPalette.deepGold),
+                              border: Border.all(
+                                color: FeaturePalette.moments
+                                    .withValues(alpha: 0.65),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -959,7 +982,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   const Text(
                                     'Added free from Owner Panel',
                                     style: TextStyle(
-                                      color: RoyalPalette.gold,
+                                      color: FeaturePalette.moments,
                                       fontSize: 10,
                                     ),
                                   )
@@ -979,7 +1002,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 ? Icons.check_circle_rounded
                                 : Icons.circle_outlined,
                             color: active
-                                ? RoyalPalette.gold
+                                ? FeaturePalette.moments
                                 : RoyalPalette.muted,
                           ),
                         ],
@@ -1037,9 +1060,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             children: [
               Expanded(
                 child: ListTile(
-                  leading: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: RoyalPalette.gold,
+                  leading: const ShiningIcon(
+                    icon: Icons.keyboard_arrow_down_rounded,
+                    color: FeaturePalette.social,
+                    size: 18,
+                    boxSize: 34,
+                    glow: 0.30,
                   ),
                   title: const Text('Minimize'),
                   subtitle: const Text('Stay in the room and return to the app.'),
@@ -1048,9 +1074,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
               Expanded(
                 child: ListTile(
-                  leading: const Icon(
-                    Icons.exit_to_app_rounded,
-                    color: RoyalPalette.gold,
+                  leading: const ShiningIcon(
+                    icon: Icons.exit_to_app_rounded,
+                    color: FeaturePalette.safety,
+                    size: 18,
+                    boxSize: 34,
+                    glow: 0.30,
                   ),
                   title: const Text('Exit'),
                   subtitle: const Text('Leave the room immediately.'),
@@ -1135,7 +1164,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               Text(
                 'Invite ' + member.displayName + ' to seat',
                 style: const TextStyle(
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.family,
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                 ),
@@ -1689,7 +1718,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       child: Text(
                         'Gift',
                         style: TextStyle(
-                          color: RoyalPalette.gold,
+                          color: FeaturePalette.gift,
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
                         ),
@@ -2830,7 +2859,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       )
                                     : Icon(
                                         Icons.star_rounded,
-                                        color: RoyalPalette.deepGold,
+                                        color: FeaturePalette.family,
                                         size: seatDiameter * 0.42,
                                       ),
                           ),
