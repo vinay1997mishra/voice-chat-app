@@ -268,6 +268,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       width: double.infinity,
                       child: FilledButton(
                         key: const Key('reset-password-verify-otp'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: FeaturePalette.email,
+                          foregroundColor: Colors.black,
+                          shadowColor: FeaturePalette.email,
+                          elevation: 5,
+                        ),
                         onPressed: _busy ? null : _verifyOtp,
                         child: const Text('Verify OTP'),
                       ),
@@ -315,6 +321,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       width: double.infinity,
                       child: FilledButton(
                         key: const Key('reset-password-save'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: FeaturePalette.email,
+                          foregroundColor: Colors.black,
+                          shadowColor: FeaturePalette.email,
+                          elevation: 5,
+                        ),
                         onPressed: _busy ? null : _savePassword,
                         child: Text(
                           _busy ? 'Saving…' : 'Save New Password',
