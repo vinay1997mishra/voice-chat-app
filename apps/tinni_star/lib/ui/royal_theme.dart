@@ -196,6 +196,7 @@ class RoyalPanel extends StatelessWidget {
     this.padding = const EdgeInsets.all(14),
     this.radius = 18,
     this.gradient,
+    this.accentColor,
     this.onTap,
   });
 
@@ -203,22 +204,31 @@ class RoyalPanel extends StatelessWidget {
   final EdgeInsets padding;
   final double radius;
   final Gradient? gradient;
+  final Color? accentColor;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final accent = accentColor ?? RoyalPalette.deepGold;
     final body = Container(
       padding: padding,
       decoration: BoxDecoration(
         gradient: gradient,
         color: gradient == null ? RoyalPalette.panel : null,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: RoyalPalette.deepGold, width: 1.1),
+        border: Border.all(
+          color: accent.withValues(
+            alpha: accentColor == null ? 1.0 : 0.78,
+          ),
+          width: accentColor == null ? 1.1 : 1.35,
+        ),
         boxShadow: [
           BoxShadow(
-            color: RoyalPalette.deepGold.withValues(alpha: 0.10),
-            blurRadius: 18,
-            spreadRadius: 1,
+            color: accent.withValues(
+              alpha: accentColor == null ? 0.10 : 0.28,
+            ),
+            blurRadius: accentColor == null ? 18 : 20,
+            spreadRadius: accentColor == null ? 1 : 1.2,
           ),
         ],
       ),
