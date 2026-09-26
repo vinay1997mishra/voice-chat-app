@@ -247,7 +247,12 @@ export class RoomPresenceStore extends DurableObject {
         userId,
       );
     }
-    return { ok: true, user_id: userId, enabled: Boolean(enabled) };
+    return {
+      ok: true,
+      user_id: userId,
+      enabled: Boolean(enabled),
+      members: this._members(),
+    };
   }
 
   seatRequests() {
