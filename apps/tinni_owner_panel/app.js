@@ -1477,13 +1477,22 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   window.location.replace("/login");
 });
 
-document.getElementById("quickActionBtn").addEventListener("click", () => openAction("user-search"));
+document.getElementById("quickActionBtn").addEventListener("click", () => {
+  setView("users");
+  document.getElementById("userSearchId")?.focus();
+});
 
-document.getElementById("globalSearch").addEventListener("keydown", e => {
+document.getElementById("globalSearch").addEventListener("keydown", async e => {
   if (e.key === "Enter" && e.target.value.trim()) {
+    const value = e.target.value.trim();
     setView("users");
-    document.getElementById("userSearchId").value = e.target.value.trim();
-    openAction("user-search", { user_id: e.target.value.trim() });
+    document.getElementById("userSearchId").value = value;
+    try {
+      const result = await runOwnerAction("user-search", { user_id: value });
+      await renderUserInvestigation(result?.users || []);
+    } catch (error) {
+      toast(error.message);
+    }
   }
 });
 
@@ -1515,6 +1524,18 @@ document.body.addEventListener("change", async e => {
 });
 
 document.body.addEventListener("change", async (event) => {
+  const ownerUserSelect = event.target.closest("[data-owner-user-select]");
+  if (ownerUserSelect) {
+    const userId = String(ownerUserSelect.dataset.ownerUserSelect || "");
+    if (ownerUserSelect.checked) {
+      ownerSelectedUsers.set(userId, true);
+    } else {
+      ownerSelectedUsers.delete(userId);
+    }
+    renderOwnerSelectedCount();
+    return;
+  }
+
   const enabledInput = event.target.closest("[data-staff-enabled]");
   if (enabledInput) {
     enabledInput.disabled = true;
@@ -1577,28 +1598,112 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
-  const manualVerifyButton = e.target.closest("[data-call-verify-manual]");
-  if (manualVerifyButton) {
-    const userId = String(document.getElementById("manualCallVerifyUserId")?.value || "").trim();
+  const verificationPageButton = e.target.closest("[data-verification-page]");
+  if (verificationPageButton) {
+    const page = verificationPageButton.dataset.verificationPage;
+    document.querySelectorAll(".verification-page").forEach((item) => {
+      item.hidden = item.id !== "verification-page-" + page;
+    });
+    document.querySelectorAll(".verification-tab").forEach((button) => {
+      const active = button.dataset.verificationPage === page;
+      button.classList.toggle("active", active);
+      button.classList.toggle("primary", active);
+      button.classList.toggle("secondary", !active);
+    });
+    if (page === "verified") await loadVerifiedUsers(document.getElementById("verifiedSearchInput")?.value || "");
+    if (page === "requests") await loadCallVerifications();
+    return;
+  }
+
+  const directSearchButton = e.target.closest("[data-call-verify-search]");
+  if (directSearchButton) {
+    await searchDirectVerifyUsers(document.getElementById("manualCallVerifySearch")?.value || "");
+    return;
+  }
+
+  const directVerifyUser = e.target.closest("[data-direct-verify-user]")?.dataset.directVerifyUser;
+  if (directVerifyUser) {
     const note = String(document.getElementById("manualCallVerifyNote")?.value || "").trim();
-    if (!userId) {
-      toast("Enter a User ID.");
-      return;
-    }
-    manualVerifyButton.disabled = true;
+    if (!confirm("Verify ID " + directVerifyUser + " directly without camera verification?")) return;
     try {
-      await api("/api/call-verifications/user/" + encodeURIComponent(userId) + "/verify", {
+      await api("/api/call-verifications/user/" + encodeURIComponent(directVerifyUser) + "/verify", {
         method: "POST",
         body: JSON.stringify({ note }),
       });
-      toast("ID " + userId + " verified by Owner.");
-      document.getElementById("manualCallVerifyUserId").value = "";
-      document.getElementById("manualCallVerifyNote").value = "";
-      await loadCallVerifications();
+      toast("ID " + directVerifyUser + " verified by Owner.");
+      await Promise.all([
+        loadVerifiedUsers(),
+        loadCallVerifications(),
+        searchDirectVerifyUsers(document.getElementById("manualCallVerifySearch")?.value || directVerifyUser),
+      ]);
     } catch (error) {
       toast(error.message);
-    } finally {
-      manualVerifyButton.disabled = false;
+    }
+    return;
+  }
+
+  const ownerUserSearchButton = e.target.closest("[data-owner-user-search]");
+  if (ownerUserSearchButton) {
+    await searchOwnerMessagingUsers(document.getElementById("ownerUserSearchInput")?.value || "");
+    return;
+  }
+
+  if (e.target.closest("[data-owner-user-clear]")) {
+    ownerSelectedUsers.clear();
+    renderOwnerSelectedCount();
+    document.querySelectorAll("[data-owner-user-select]").forEach((input) => { input.checked = false; });
+    toast("Selected IDs cleared.");
+    return;
+  }
+
+  if (e.target.closest("[data-owner-message-selected]")) {
+    const textValue = String(document.getElementById("ownerBulkMessage")?.value || "").trim();
+    const ids = [...ownerSelectedUsers.keys()];
+    if (!textValue) { toast("Write a message first."); return; }
+    if (ids.length === 0) { toast("Select at least one ID."); return; }
+    try {
+      const result = await api("/api/owner/messages", {
+        method: "POST",
+        body: JSON.stringify({ text: textValue, user_ids: ids, all_users: false }),
+      });
+      toast("Official message sent to " + result.sent + " selected IDs.");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-owner-message-all]")) {
+    const textValue = String(document.getElementById("ownerBulkMessage")?.value || "").trim();
+    if (!textValue) { toast("Write a message first."); return; }
+    if (!confirm("Send this Tinni Official message to ALL app users?")) return;
+    try {
+      const result = await api("/api/owner/messages", {
+        method: "POST",
+        body: JSON.stringify({ text: textValue, all_users: true }),
+      });
+      toast("Official message sent to " + result.sent + " users.");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-owner-tag-selected]")) {
+    const name = String(document.getElementById("ownerTagName")?.value || "").trim();
+    const color = String(document.getElementById("ownerTagColor")?.value || "#FFD54F");
+    const ids = [...ownerSelectedUsers.keys()];
+    if (!name) { toast("Write a tag name."); return; }
+    if (ids.length === 0) { toast("Select at least one ID."); return; }
+    try {
+      const result = await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({ user_ids: ids, name, color }),
+      });
+      toast(result.name + " tag applied to " + result.tagged + " IDs.");
+      await searchOwnerMessagingUsers(document.getElementById("ownerUserSearchInput")?.value || "");
+    } catch (error) {
+      toast(error.message);
     }
     return;
   }
@@ -1614,7 +1719,7 @@ document.body.addEventListener("click", async e => {
         }
       );
       toast("Call ID verified. It stays verified until Owner removes Verified status.");
-      await loadCallVerifications();
+      await Promise.all([loadCallVerifications(), loadVerifiedUsers()]);
     } catch (error) {
       toast(error.message);
     }
@@ -1653,7 +1758,9 @@ document.body.addEventListener("click", async e => {
         }
       );
       toast("Verified status removed. Verification will be required again.");
-      await loadCallVerifications();
+      await Promise.all([loadCallVerifications(), loadVerifiedUsers()]);
+      const directQuery = document.getElementById("manualCallVerifySearch")?.value || "";
+      if (directQuery) await searchDirectVerifyUsers(directQuery);
     } catch (error) {
       toast(error.message);
     }
