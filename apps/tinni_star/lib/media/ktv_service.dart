@@ -27,6 +27,8 @@ class KtvQueueEntry {
 }
 
 class KtvService {
+  static const int maxLocalSongs = 300;
+
   final List<Song> library = <Song>[
     const Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
     const Song(id: 's2', title: 'Star Voice', singer: 'Demo Artist'),
@@ -34,6 +36,9 @@ class KtvService {
 
   final List<KtvQueueEntry> queue = <KtvQueueEntry>[];
   KtvQueueEntry? current;
+
+  int get localSongCount => library.where((song) => song.local).length;
+  bool get canAddLocalSong => localSongCount < maxLocalSongs;
 
   List<Song> search(String text) {
     final query = text.trim().toLowerCase();
@@ -51,6 +56,9 @@ class KtvService {
     required String fileName,
     required String sourcePath,
   }) {
+    if (!canAddLocalSong) {
+      throw StateError('Maximum 300 phone songs can be added.');
+    }
     final dot = fileName.lastIndexOf('.');
     final title = dot > 0 ? fileName.substring(0, dot) : fileName;
     final song = Song(
@@ -62,6 +70,22 @@ class KtvService {
     );
     library.insert(0, song);
     return song;
+  }
+
+  bool removeLocalSong(String songId) {
+    final index = library.indexWhere(
+      (song) => song.local && song.id == songId,
+    );
+    if (index < 0) return false;
+
+    library.removeAt(index);
+    queue.removeWhere((entry) => entry.song.id == songId);
+
+    if (current?.song.id == songId) {
+      current = null;
+      startNext();
+    }
+    return true;
   }
 
   void addToQueue(Song song, String userId, {bool chorus = false}) {
