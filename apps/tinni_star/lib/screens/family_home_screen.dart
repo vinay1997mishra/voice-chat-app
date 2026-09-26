@@ -154,7 +154,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
         title: Text(
           _name,
           style: const TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.family,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -176,7 +176,13 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                 if (mounted) setState(() {});
               });
             },
-            icon: const Icon(Icons.manage_accounts_rounded),
+            icon: const ShiningIcon(
+              icon: Icons.manage_accounts_rounded,
+              color: FeaturePalette.family,
+              size: 18,
+              boxSize: 34,
+              glow: 0.30,
+            ),
           ),
         ],
       ),
@@ -208,7 +214,13 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                     decoration: BoxDecoration(
                       color: _familyTagColor,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: RoyalPalette.gold),
+                      border: Border.all(color: _familyTagColor),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _familyTagColor.withValues(alpha: 0.38),
+                          blurRadius: 10,
+                        ),
+                      ],
                     ),
                     child: Text(
                       _tag + ' • ' + widget.state.family.levelLabel,
@@ -223,7 +235,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                   Text(
                     'Family Level ' + widget.state.family.level.toString(),
                     style: const TextStyle(
-                      color: RoyalPalette.gold,
+                      color: FeaturePalette.family,
                       fontWeight: FontWeight.w800,
                       fontSize: 11,
                     ),
@@ -299,6 +311,8 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
           key: const Key('family-announcement'),
           onTap: widget.state.family.exists ? _editAnnouncement : null,
           padding: const EdgeInsets.all(11),
+          gradient: FeaturePalette.glow(FeaturePalette.family),
+          accentColor: FeaturePalette.family,
           child: Row(
             children: [
               Expanded(
@@ -311,10 +325,12 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                 ),
               ),
               if (widget.state.family.exists)
-                const Icon(
-                  Icons.edit_rounded,
-                  color: RoyalPalette.gold,
-                  size: 17,
+                const ShiningIcon(
+                  icon: Icons.edit_rounded,
+                  color: FeaturePalette.family,
+                  size: 15,
+                  boxSize: 28,
+                  glow: 0.28,
                 ),
             ],
           ),
@@ -368,9 +384,12 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                 if (mounted) setState(() {});
               });
             },
-            icon: const Icon(
-              Icons.chevron_right_rounded,
-              color: RoyalPalette.gold,
+            icon: const ShiningIcon(
+              icon: Icons.chevron_right_rounded,
+              color: FeaturePalette.family,
+              size: 16,
+              boxSize: 30,
+              glow: 0.26,
             ),
           ),
         ),
@@ -382,13 +401,25 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             separatorBuilder: (context, index) => const SizedBox(width: 9),
             itemBuilder: (context, index) => Column(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: RoyalPalette.deepGold,
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: FeaturePalette.family.withValues(alpha: 0.16),
+                    border: Border.all(color: FeaturePalette.family),
+                    boxShadow: [
+                      BoxShadow(
+                        color: FeaturePalette.family.withValues(alpha: 0.34),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
                   child: Text(
                     members[index].name.characters.first.toUpperCase(),
                     style: const TextStyle(
-                      color: Colors.black,
+                      color: FeaturePalette.family,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -418,16 +449,16 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
           key: const Key('family-room-card'),
           onTap: _openFamilyRoom,
           padding: const EdgeInsets.all(10),
+          gradient: FeaturePalette.glow(FeaturePalette.family),
+          accentColor: FeaturePalette.family,
           child: Row(
             children: [
-              const CircleAvatar(
-                radius: 30,
-                backgroundColor: RoyalPalette.deepGold,
-                child: Icon(
-                  Icons.mic_rounded,
-                  color: Colors.black,
-                  size: 30,
-                ),
+              const ShiningIcon(
+                icon: Icons.mic_rounded,
+                color: FeaturePalette.family,
+                size: 28,
+                boxSize: 58,
+                glow: 0.42,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -453,7 +484,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
               ),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: RoyalPalette.gold,
+                color: FeaturePalette.family,
               ),
             ],
           ),
@@ -483,12 +514,16 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: RoyalPanel(
                 padding: const EdgeInsets.all(10),
+                gradient: FeaturePalette.glow(FeaturePalette.moments),
+                accentColor: FeaturePalette.moments,
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: RoyalPalette.gold,
-                      size: 20,
+                    const ShiningIcon(
+                      icon: Icons.auto_awesome_rounded,
+                      color: FeaturePalette.moments,
+                      size: 17,
+                      boxSize: 32,
+                      glow: 0.28,
                     ),
                     const SizedBox(width: 9),
                     Expanded(
@@ -552,7 +587,7 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
         title: const Text(
           'Member Manage',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.family,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -599,15 +634,29 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
         final score = (members.length - index) * 1180000;
         return RoyalPanel(
           padding: const EdgeInsets.all(9),
+          gradient: FeaturePalette.glow(FeaturePalette.family),
+          accentColor: FeaturePalette.family,
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 25,
-                backgroundColor: RoyalPalette.deepGold,
+              Container(
+                width: 50,
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: FeaturePalette.family.withValues(alpha: 0.16),
+                  border: Border.all(color: FeaturePalette.family),
+                  boxShadow: [
+                    BoxShadow(
+                      color: FeaturePalette.family.withValues(alpha: 0.34),
+                      blurRadius: 12,
+                    ),
+                  ],
+                ),
                 child: Text(
                   member.name.characters.first.toUpperCase(),
                   style: const TextStyle(
-                    color: Colors.black,
+                    color: FeaturePalette.family,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -636,8 +685,9 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                         Text(
                           _roleLabel(member.role),
                           style: const TextStyle(
-                            color: RoyalPalette.gold,
+                            color: FeaturePalette.family,
                             fontSize: 10,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(width: 5),
@@ -650,7 +700,7 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                             color: widget.state.family.visualTier ==
                                     FamilyVisualTier.royalGold
                                 ? const Color(0xFFD49B14)
-                                : RoyalPalette.deepGold,
+                                : FeaturePalette.family,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -721,7 +771,7 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
           child: Text(
             'Family Leader',
             style: TextStyle(
-              color: RoyalPalette.gold,
+              color: FeaturePalette.family,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -854,7 +904,13 @@ class _StarCard extends StatelessWidget {
       accentColor: accent,
       child: Column(
         children: [
-          Icon(icon, color: accent, size: 32),
+          ShiningIcon(
+            icon: icon,
+            color: accent,
+            size: 26,
+            boxSize: 46,
+            glow: 0.34,
+          ),
           const SizedBox(height: 5),
           Text(
             title,
@@ -866,13 +922,25 @@ class _StarCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: RoyalPalette.deepGold,
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent.withValues(alpha: 0.15),
+              border: Border.all(color: accent),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.30),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
             child: Text(
               member?.name.characters.first.toUpperCase() ?? '?',
-              style: const TextStyle(
-                color: Colors.black,
+              style: TextStyle(
+                color: accent,
                 fontWeight: FontWeight.w900,
               ),
             ),
