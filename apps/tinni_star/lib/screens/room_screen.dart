@@ -1860,6 +1860,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Color _roomToolColor(String label) {
+    final value = label.toLowerCase();
+    if (value.contains('fruit jackpot')) return FeaturePalette.fruitJackpot;
+    if (value.contains('fruit party')) return FeaturePalette.fruitParty;
+    if (value.contains('game')) return FeaturePalette.games;
+    if (value.contains('sound')) return FeaturePalette.music;
+    if (value.contains('friend')) return FeaturePalette.family;
+    if (value.contains('event')) return FeaturePalette.fruitParty;
+    if (value.contains('effect')) return FeaturePalette.gift;
+    if (value.contains('notice')) return FeaturePalette.social;
+    if (value.contains('theme')) return FeaturePalette.moments;
+    if (value.contains('seat') || value.contains('request')) {
+      return FeaturePalette.family;
+    }
+    if (value.contains('lucky')) return FeaturePalette.rank;
+    if (value.contains('pk')) return FeaturePalette.games;
+    if (value.contains('locked') || value.contains('report')) {
+      return FeaturePalette.safety;
+    }
+    if (value.contains('open')) return FeaturePalette.family;
+    if (value.contains('screen')) return FeaturePalette.social;
+    if (value.contains('setting')) return FeaturePalette.discover;
+    return FeaturePalette.social;
+  }
+
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
@@ -2126,7 +2151,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 const ListTile(
                   title: Text(
                     'Room Settings',
-                    style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                    style: TextStyle(
+                      color: FeaturePalette.discover,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
                 SwitchListTile(
@@ -2308,9 +2336,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           }
                         }
                         return ListTile(
-                          leading: const Icon(
-                            Icons.event_seat_rounded,
+                          leading: const ShiningIcon(
+                            icon: Icons.event_seat_rounded,
                             color: FeaturePalette.family,
+                            size: 18,
+                            boxSize: 34,
+                            glow: 0.30,
                           ),
                           title: Text(displayName),
                           subtitle: Text(
@@ -2342,7 +2373,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     );
                                   }
                                 },
-                                icon: const Icon(Icons.close_rounded),
+                                icon: const ShiningIcon(
+                                  icon: Icons.close_rounded,
+                                  color: FeaturePalette.safety,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
                               ),
                               IconButton(
                                 tooltip: 'Approve',
@@ -2370,9 +2407,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     );
                                   }
                                 },
-                                icon: const Icon(
-                                  Icons.check_rounded,
-                                  color: RoyalPalette.gold,
+                                icon: const ShiningIcon(
+                                  icon: Icons.check_rounded,
+                                  color: FeaturePalette.family,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
                                 ),
                               ),
                             ],
@@ -2399,9 +2439,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           children: [
             ListTile(
               key: const Key('seat-control-lock'),
-              leading: Icon(
-                seat.locked ? Icons.lock_open_rounded : Icons.lock_rounded,
-                color: RoyalPalette.gold,
+              leading: ShiningIcon(
+                icon: seat.locked
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_rounded,
+                color: seat.locked
+                    ? FeaturePalette.family
+                    : FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
               ),
               title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
               onTap: () {
@@ -2416,11 +2463,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             ListTile(
               key: const Key('seat-control-mute'),
-              leading: Icon(
-                seat.roomMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
+              leading: ShiningIcon(
+                icon: seat.roomMuted
+                    ? Icons.mic_rounded
+                    : Icons.mic_off_rounded,
                 color: seat.roomMuted
                     ? FeaturePalette.safety
                     : FeaturePalette.family,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
               ),
               title: Text(
                 seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
@@ -2441,9 +2493,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             if (!seat.occupied && controller.mySeat == null)
               ListTile(
                 key: const Key('seat-control-take'),
-                leading: const Icon(
-                  Icons.event_seat_rounded,
+                leading: const ShiningIcon(
+                  icon: Icons.event_seat_rounded,
                   color: FeaturePalette.family,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
                 ),
                 title: const Text('Take Seat'),
                 subtitle: const Text(
@@ -2457,9 +2512,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             if (controller.mySeat == index)
               ListTile(
-                leading: const Icon(
-                  Icons.logout_rounded,
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
                   color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
                 ),
                 title: const Text('Leave this seat'),
                 onTap: () async {
@@ -2470,9 +2528,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             if (controller.mySeat != null && controller.mySeat != index)
               ListTile(
                 key: const Key('seat-control-leave-current'),
-                leading: const Icon(
-                  Icons.logout_rounded,
-                  color: RoyalPalette.gold,
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
                 ),
                 title: const Text('Leave current seat'),
                 subtitle: Text(
@@ -2605,14 +2666,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                       border: Border.all(
                         color: occupied
-                            ? RoyalPalette.gold
-                            : RoyalPalette.deepGold,
+                            ? FeaturePalette.social
+                            : FeaturePalette.family.withValues(alpha: 0.72),
                         width: occupied ? 3 : 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: RoyalPalette.gold.withValues(
-                            alpha: occupied ? 0.28 : 0.08,
+                          color: (occupied
+                                  ? FeaturePalette.social
+                                  : FeaturePalette.family)
+                              .withValues(
+                            alpha: occupied ? 0.34 : 0.14,
                           ),
                           blurRadius: compact ? 6 : 12,
                         ),
@@ -2624,14 +2688,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             child: seat.locked && !occupied
                                 ? Icon(
                                     Icons.lock_rounded,
-                                    color: RoyalPalette.gold,
+                                    color: FeaturePalette.safety,
                                     size: seatDiameter * 0.42,
                                   )
                                 : occupied
                                     ? Text(
                                         displayName.characters.first,
                                         style: TextStyle(
-                                          color: RoyalPalette.gold,
+                                          color: FeaturePalette.social,
                                           fontWeight: FontWeight.w900,
                                           fontSize: seatDiameter * 0.34,
                                         ),
