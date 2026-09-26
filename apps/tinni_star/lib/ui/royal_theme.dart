@@ -49,6 +49,60 @@ abstract final class FeaturePalette {
       );
 }
 
+class ShiningIcon extends StatelessWidget {
+  const ShiningIcon({
+    super.key,
+    required this.icon,
+    required this.color,
+    this.size = 28,
+    this.boxSize,
+    this.glow = 0.42,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+  final double? boxSize;
+  final double glow;
+
+  @override
+  Widget build(BuildContext context) {
+    final diameter = boxSize ?? size + 18;
+    return Container(
+      width: diameter,
+      height: diameter,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            color.withValues(alpha: 0.30),
+            color.withValues(alpha: 0.08),
+            Colors.transparent,
+          ],
+        ),
+        border: Border.all(
+          color: color.withValues(alpha: 0.70),
+          width: 1.15,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: glow),
+            blurRadius: 15,
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: color.withValues(alpha: glow * 0.45),
+            blurRadius: 26,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Icon(icon, color: color, size: size),
+    );
+  }
+}
+
 ThemeData buildRoyalTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: RoyalPalette.gold,
