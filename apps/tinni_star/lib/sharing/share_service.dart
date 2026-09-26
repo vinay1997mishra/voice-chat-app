@@ -1,4 +1,4 @@
-enum ShareTarget { whatsapp, facebook, instagram, snapchat, zalo, messenger, copyLink }
+enum ShareTarget { whatsapp, telegram, facebook, instagram, snapchat, zalo, messenger, copyLink }
 
 class SharePayload {
   const SharePayload({
