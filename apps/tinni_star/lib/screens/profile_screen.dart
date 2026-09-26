@@ -47,7 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text(
           'Mine',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.social,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -63,15 +63,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(14),
         children: [
           RoyalPanel(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF302007), Color(0xFF090705)],
-            ),
+            gradient: FeaturePalette.glow(FeaturePalette.social),
+            accentColor: FeaturePalette.social,
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 38,
-                  backgroundColor: RoyalPalette.deepGold,
-                  backgroundImage: avatar,
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: FeaturePalette.social,
+                      width: 2.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: FeaturePalette.social.withValues(alpha: 0.42),
+                        blurRadius: 16,
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 38,
+                    backgroundColor: RoyalPalette.panel2,
+                    backgroundImage: avatar,
                   child: avatar == null
                       ? Text(
                           account.displayName.characters.first.toUpperCase(),
@@ -277,7 +292,13 @@ class _FamilyTagBadge extends StatelessWidget {
           colors: [_color.withValues(alpha: 0.68), _color],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: RoyalPalette.gold),
+        border: Border.all(color: _color.withValues(alpha: 0.95)),
+        boxShadow: [
+          BoxShadow(
+            color: _color.withValues(alpha: 0.35),
+            blurRadius: 10,
+          ),
+        ],
       ),
       child: Text(
         (state.family.tag ?? 'Family') + ' • ' + state.family.levelLabel,
@@ -397,7 +418,13 @@ class _MineTile extends StatelessWidget {
                 ),
               ],
             ),
-            child: Icon(icon, color: color, size: 29),
+            child: ShiningIcon(
+              icon: icon,
+              color: color,
+              size: 24,
+              boxSize: 42,
+              glow: 0.34,
+            ),
           ),
           const SizedBox(height: 7),
           Text(
