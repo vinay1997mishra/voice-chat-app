@@ -658,7 +658,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   Text(
                     priceCoins.toString() + ' coins • ' + durationDays.toString() + ' days',
                     style: const TextStyle(
-                      color: RoyalPalette.gold,
+                      color: FeaturePalette.wallet,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -1249,7 +1249,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
-            const ListTile(title: Text('Kick duration', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900))),
+            const ListTile(
+              leading: ShiningIcon(
+                icon: Icons.person_remove_rounded,
+                color: FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(
+                'Kick duration',
+                style: TextStyle(
+                  color: FeaturePalette.safety,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
             ListTile(title: const Text('2 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 2))),
             ListTile(title: const Text('6 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 6))),
             ListTile(title: const Text('24 hours'), onTap: () => Navigator.pop(context, const Duration(hours: 24))),
@@ -1344,14 +1359,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       },
                     ),
                   ),
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: RoyalPalette.panel2,
-                    backgroundImage: avatar,
-                    child: avatar == null
-                        ? Text(member.displayName.isEmpty ? '?' : member.displayName.characters.first.toUpperCase(),
-                            style: const TextStyle(color: RoyalPalette.gold, fontSize: 28, fontWeight: FontWeight.w900))
-                        : null,
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: FeaturePalette.social,
+                        width: 2.3,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: FeaturePalette.social
+                              .withValues(alpha: 0.42),
+                          blurRadius: 16,
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: RoyalPalette.panel2,
+                      backgroundImage: avatar,
+                      child: avatar == null
+                          ? Text(
+                              member.displayName.isEmpty
+                                  ? '?'
+                                  : member.displayName.characters.first
+                                      .toUpperCase(),
+                              style: const TextStyle(
+                                color: FeaturePalette.social,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(currentMember.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
@@ -1362,9 +1404,48 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     spacing: 7,
                     runSpacing: 7,
                     children: [
-                      Chip(label: Text('Family ' + (currentMember.familyTag ?? _familyTagFor(currentMember.userId)))),
-                      Chip(label: Text('Host ' + (currentMember.hostTag ?? _hostTagFor(currentMember.userId)))),
-                      Chip(label: Text('Agency ' + (currentMember.agencyName ?? _agencyNameFor(currentMember.userId)))),
+                      Chip(
+                        backgroundColor:
+                            FeaturePalette.family.withValues(alpha: 0.14),
+                        side: const BorderSide(color: FeaturePalette.family),
+                        label: Text(
+                          'Family ' +
+                              (currentMember.familyTag ??
+                                  _familyTagFor(currentMember.userId)),
+                          style: const TextStyle(
+                            color: FeaturePalette.family,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Chip(
+                        backgroundColor:
+                            FeaturePalette.vip.withValues(alpha: 0.14),
+                        side: const BorderSide(color: FeaturePalette.vip),
+                        label: Text(
+                          'Host ' +
+                              (currentMember.hostTag ??
+                                  _hostTagFor(currentMember.userId)),
+                          style: const TextStyle(
+                            color: FeaturePalette.vip,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Chip(
+                        backgroundColor:
+                            FeaturePalette.social.withValues(alpha: 0.14),
+                        side: const BorderSide(color: FeaturePalette.social),
+                        label: Text(
+                          'Agency ' +
+                              (currentMember.agencyName ??
+                                  _agencyNameFor(currentMember.userId)),
+                          style: const TextStyle(
+                            color: FeaturePalette.social,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -1624,9 +1705,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       separatorBuilder: (_, _) => const SizedBox(width: 7),
                       itemBuilder: (_, index) {
                         final value = giftCategories[index];
+                        final color = value == 'CP'
+                            ? FeaturePalette.cp
+                            : value == 'Backpack'
+                                ? FeaturePalette.backpack
+                                : value == 'Luxury'
+                                    ? FeaturePalette.vip
+                                    : value == 'Normal'
+                                        ? FeaturePalette.social
+                                        : FeaturePalette.gift;
                         return ChoiceChip(
                           label: Text(value),
                           selected: giftCategory == value,
+                          selectedColor: color.withValues(alpha: 0.28),
+                          side: BorderSide(
+                            color: giftCategory == value
+                                ? color
+                                : RoyalPalette.bronze,
+                          ),
+                          labelStyle: TextStyle(
+                            color: giftCategory == value
+                                ? color
+                                : RoyalPalette.cream,
+                            fontWeight: FontWeight.w800,
+                          ),
                           onSelected: (_) {
                             setSheetState(() {
                               giftCategory = value;
@@ -1687,16 +1789,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     color: RoyalPalette.panel2,
                                     border: Border.all(
                                       color: selected
-                                          ? RoyalPalette.gold
-                                          : RoyalPalette.bronze,
+                                          ? FeaturePalette.gift
+                                          : FeaturePalette.social
+                                              .withValues(alpha: 0.45),
                                       width: selected ? 3 : 1.5,
                                     ),
                                     boxShadow: selected
                                         ? [
                                             BoxShadow(
-                                              color: RoyalPalette.gold
-                                                  .withValues(alpha: 0.28),
-                                              blurRadius: 10,
+                                              color: FeaturePalette.gift
+                                                  .withValues(alpha: 0.36),
+                                              blurRadius: 12,
                                             ),
                                           ]
                                         : const [],
@@ -1705,7 +1808,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     index == 0
                                         ? Icons.workspace_premium_rounded
                                         : Icons.person_rounded,
-                                    color: RoyalPalette.gold,
+                                    color: selected
+                                        ? FeaturePalette.gift
+                                        : FeaturePalette.social,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
