@@ -1151,9 +1151,26 @@ export default {
           picture: facebook.picture?.data?.url || "",
         });
 
+        const appReturnUrl =
+          "tinnistar://auth/facebook-complete?request_id=" +
+          encodeURIComponent(requestId);
         return new Response(
-          "<!doctype html><meta name='viewport' content='width=device-width'><body style='font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px'><h2>Tinni Star</h2><p>Facebook login complete. Return to the Tinni Star app.</p></body>",
-          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+          `<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="0;url=${appReturnUrl}">
+<body style="font-family:sans-serif;background:#080604;color:#fff3c4;padding:32px;text-align:center">
+  <h2>Tinni Star</h2>
+  <p>Facebook login complete. Opening Tinni Star…</p>
+  <p><a href="${appReturnUrl}" style="color:#ffd54f">Open Tinni Star</a></p>
+  <script>location.replace(${JSON.stringify(appReturnUrl)});</script>
+</body>`,
+          {
+            status: 200,
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "cache-control": "no-store",
+            },
+          },
         );
       } catch (error) {
         await store.failFacebookLogin(
