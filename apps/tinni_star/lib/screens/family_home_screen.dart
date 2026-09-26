@@ -810,8 +810,8 @@ class _FamilyTab extends StatelessWidget {
           gradient: selected
               ? const LinearGradient(
                   colors: [
-                    Color(0xFFFFE36A),
-                    Color(0xFFB8860B),
+                    Color(0xFF5BE0B1),
+                    Color(0xFF178C67),
                   ],
                 )
               : null,
@@ -821,7 +821,7 @@ class _FamilyTab extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.black : RoyalPalette.muted,
+            color: selected ? Colors.white : RoyalPalette.muted,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -843,11 +843,17 @@ class _StarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = icon == Icons.favorite_rounded
+        ? FeaturePalette.cp
+        : icon == Icons.diamond_rounded
+            ? FeaturePalette.diamond
+            : FeaturePalette.games;
     return RoyalPanel(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+      gradient: FeaturePalette.glow(accent),
       child: Column(
         children: [
-          Icon(icon, color: RoyalPalette.gold, size: 32),
+          Icon(icon, color: accent, size: 32),
           const SizedBox(height: 5),
           Text(
             title,
@@ -893,14 +899,14 @@ class _RoleAvatar extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: large ? 42 : 31,
-          backgroundColor: RoyalPalette.gold,
+          backgroundColor: FeaturePalette.family,
           child: CircleAvatar(
             radius: large ? 37 : 27,
             backgroundColor: RoyalPalette.panel,
             child: Text(
               member?.name.characters.first.toUpperCase() ?? '?',
               style: TextStyle(
-                color: RoyalPalette.gold,
+                color: FeaturePalette.family,
                 fontWeight: FontWeight.w900,
                 fontSize: large ? 28 : 20,
               ),
@@ -937,7 +943,7 @@ class _EmptyRoleSlot extends StatelessWidget {
           backgroundColor: RoyalPalette.panel2,
           child: Icon(
             locked ? Icons.lock_rounded : Icons.add_rounded,
-            color: RoyalPalette.gold,
+            color: FeaturePalette.family,
           ),
         ),
         const SizedBox(height: 5),
