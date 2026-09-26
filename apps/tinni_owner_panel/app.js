@@ -496,28 +496,20 @@ function auditDetailsText(details) {
 
 async function loadCallVerifications() {
   const root = document.getElementById("callVerificationList");
-  const panel = document.getElementById("callVerificationPanel");
-  if (!root || !panel) return;
-  if (currentSession?.role !== "owner") {
-    panel.hidden = true;
-    return;
-  }
-  panel.hidden = false;
-
+  if (!root || currentSession?.role !== "owner") return;
   try {
     const data = await api("/api/call-verifications");
-    const items = Array.isArray(data.submissions) ? data.submissions : [];
+    const items = (Array.isArray(data.submissions) ? data.submissions : [])
+      .filter((item) => item.status === "pending_owner");
     if (items.length === 0) {
       root.className = "empty-state";
-      root.textContent = "No call verification submissions yet.";
+      root.textContent = "No pending verification requests.";
       return;
     }
 
     root.className = "action-list";
     root.innerHTML = items.map((item) => {
       const photos = Array.isArray(item.photos) ? item.photos.slice(0, 3) : [];
-      const verified = item.call_verified === true;
-      const pending = item.status === "pending_owner";
       return `
         <article class="staff-panel-card">
           <div class="staff-panel-head">
@@ -526,27 +518,147 @@ async function loadCallVerifications() {
               <small>ID ${escapeHtml(item.user_id)} • ${escapeHtml(item.gender || "")}</small>
               <small>${item.system_passed ? "System pre-check passed" : "System pre-check needs review"}</small>
             </div>
-            <span class="badge ${verified ? "gold" : ""}">${verified ? "Verified" : escapeHtml(item.call_verification_status || item.status)}</span>
+            <span class="badge">Pending Owner</span>
           </div>
           <div style="display:flex;gap:8px;overflow-x:auto;margin:10px 0">
             ${photos.map((src, index) => `
-              <img
-                src="${escapeHtml(src)}"
-                alt="Verification photo ${index + 1}"
-                style="width:132px;height:168px;object-fit:cover;border-radius:12px;border:1px solid #5a4a25"
-              >
+              <a href="${escapeHtml(src)}" target="_blank" rel="noopener">
+                <img
+                  src="${escapeHtml(src)}"
+                  alt="Verification photo ${index + 1}"
+                  style="width:132px;height:168px;object-fit:cover;border-radius:12px;border:1px solid #5a4a25"
+                >
+              </a>
             `).join("")}
           </div>
           <div class="table-actions">
-            ${pending ? `<button data-call-verify-approve="${escapeHtml(item.id)}">Approve Verified</button><button data-call-verify-reject="${escapeHtml(item.id)}">Reject</button>` : ""}
-            ${verified ? `<button data-call-verify-revoke="${escapeHtml(item.user_id)}">Remove Verified</button>` : ""}
+            <button data-call-verify-approve="${escapeHtml(item.id)}">Approve Verified</button>
+            <button data-call-verify-reject="${escapeHtml(item.id)}">Reject</button>
           </div>
         </article>
       `;
     }).join("");
   } catch (error) {
     root.className = "empty-state";
-    root.textContent = error.message || "Unable to load call verification reviews.";
+    root.textContent = error.message || "Unable to load verification requests.";
+  }
+}
+
+async function loadVerifiedUsers(query = "") {
+  const root = document.getElementById("verifiedUsersList");
+  if (!root || currentSession?.role !== "owner") return;
+  try {
+    const data = await api("/api/owner/verified-users?q=" + encodeURIComponent(query));
+    const users = Array.isArray(data.users) ? data.users : [];
+    if (users.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No Verified IDs found.";
+      return;
+    }
+    root.className = "action-list";
+    root.innerHTML = users.map((user) => `
+      <div class="panel" style="margin-top:10px">
+        <div class="panel-head">
+          <div>
+            <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+            <p>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")}</p>
+            <small>Verified: ${escapeHtml(formatFullTimestamp(user.call_verified_at))}</small>
+          </div>
+          <span class="badge gold">Verified</span>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load Verified IDs.";
+  }
+}
+
+function userTagHtml(tags) {
+  const items = Array.isArray(tags) ? tags : [];
+  return items.map((tag) =>
+    `<span class="badge" style="border-color:${escapeHtml(tag.color)};color:${escapeHtml(tag.color)}">${escapeHtml(tag.name)}</span>`
+  ).join(" ");
+}
+
+async function searchDirectVerifyUsers(query) {
+  const root = document.getElementById("manualCallVerifyResults");
+  if (!root) return;
+  const value = String(query || "").trim();
+  if (!value) {
+    root.className = "empty-state";
+    root.textContent = "Enter an ID or name first.";
+    return;
+  }
+  try {
+    const data = await api("/api/owner/users/search?q=" + encodeURIComponent(value) + "&limit=20");
+    const users = Array.isArray(data.users) ? data.users : [];
+    if (users.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No matching ID found.";
+      return;
+    }
+    root.className = "action-list";
+    root.innerHTML = users.map((user) => `
+      <div class="panel" style="margin-top:10px">
+        <div class="panel-head">
+          <div>
+            <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+            <p>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
+            <div>${userTagHtml(user.tags)}</div>
+          </div>
+          <span class="badge ${user.call_verified ? "gold" : ""}">${user.call_verified ? "Verified" : "Not Verified"}</span>
+        </div>
+        <div class="button-row">
+          ${user.call_verified
+            ? `<button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>`
+            : `<button type="button" class="btn primary" data-direct-verify-user="${escapeHtml(user.user_id)}">Verify This ID</button>`}
+        </div>
+      </div>
+    `).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to search IDs.";
+  }
+}
+
+function renderOwnerSelectedCount() {
+  const root = document.getElementById("ownerSelectedCount");
+  if (root) root.textContent = ownerSelectedUsers.size + " selected";
+}
+
+async function searchOwnerMessagingUsers(query) {
+  const root = document.getElementById("ownerUserSearchResults");
+  if (!root) return;
+  try {
+    const data = await api("/api/owner/users/search?q=" + encodeURIComponent(String(query || "")) + "&limit=100");
+    const users = Array.isArray(data.users) ? data.users : [];
+    if (users.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No matching users.";
+      return;
+    }
+    root.className = "action-list";
+    root.innerHTML = users.map((user) => {
+      const checked = ownerSelectedUsers.has(String(user.user_id));
+      return `
+        <label class="panel" style="display:flex;align-items:center;gap:12px;margin-top:8px;cursor:pointer">
+          <input type="checkbox" data-owner-user-select="${escapeHtml(user.user_id)}" ${checked ? "checked" : ""}>
+          <div style="flex:1">
+            <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+            <div class="muted">ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</div>
+            <div style="margin-top:4px">${userTagHtml(user.tags)}</div>
+          </div>
+          <span class="badge ${user.call_verified ? "gold" : ""}">${user.call_verified ? "Verified" : "User"}</span>
+        </label>
+      `;
+    }).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to search users.";
   }
 }
 
