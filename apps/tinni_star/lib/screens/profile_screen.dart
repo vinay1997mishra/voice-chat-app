@@ -358,6 +358,7 @@ class _MineTile extends StatelessWidget {
     return RoyalPanel(
       padding: const EdgeInsets.all(8),
       gradient: FeaturePalette.glow(color),
+      accentColor: color,
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
