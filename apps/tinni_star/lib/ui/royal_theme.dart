@@ -12,6 +12,43 @@ abstract final class RoyalPalette {
   static const muted = Color(0xFFB8A77A);
 }
 
+abstract final class FeaturePalette {
+  // Black + gold remain the app shell/background identity.
+  // Functional modules use their own accent colors so the UI is not
+  // monochrome and important actions are easier to recognize.
+  static const cp = Color(0xFFFF4D8D);
+  static const cpSoft = Color(0xFFFF8FB7);
+  static const vip = Color(0xFF5B8CFF);
+  static const gift = Color(0xFFB45CFF);
+  static const family = Color(0xFF26C78D);
+  static const games = Color(0xFFFF8A3D);
+  static const music = Color(0xFF28C7D9);
+  static const social = Color(0xFF4F9DFF);
+  static const wallet = Color(0xFFFFC247);
+  static const store = Color(0xFFFF6B6B);
+  static const rank = Color(0xFFFFB300);
+  static const moments = Color(0xFF7C6CFF);
+  static const rocket = Color(0xFFFF5A65);
+  static const backpack = Color(0xFF45C08A);
+  static const customGift = Color(0xFFE86CFF);
+  static const safety = Color(0xFFEF5350);
+  static const diamond = Color(0xFF49D7FF);
+  static const ludo = Color(0xFF34C759);
+  static const uno = Color(0xFFFF3B30);
+  static const fruitJackpot = Color(0xFFFFC107);
+  static const fruitParty = Color(0xFFFF4DB8);
+
+  static LinearGradient glow(Color color) => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          color.withValues(alpha: 0.30),
+          RoyalPalette.panel,
+          color.withValues(alpha: 0.12),
+        ],
+      );
+}
+
 ThemeData buildRoyalTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: RoyalPalette.gold,
