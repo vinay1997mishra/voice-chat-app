@@ -105,6 +105,13 @@ void main() {
   });
 
   testWidgets('VIP monthly top-up opens Recharge page', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     final state = makeState();
     await tester.pumpWidget(
       MaterialApp(home: VipScreen(state: state)),
@@ -112,14 +119,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final topup = find.byKey(const Key('vip-monthly-topup-button'));
-    await tester.drag(
-      find.byType(ListView).first,
-      const Offset(0, -500),
-    );
-    await tester.pumpAndSettle();
     expect(topup, findsOneWidget);
-    await tester.ensureVisible(topup);
-    await tester.pumpAndSettle();
     await tester.tap(topup);
     await tester.pumpAndSettle();
 
