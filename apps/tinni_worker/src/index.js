@@ -1993,7 +1993,7 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      const ownerState = getAppDirectoryStore(env).ownerState();
+      const ownerState = await getAppDirectoryStore(env).ownerState();
       const gameConfig = ownerState.game_config || {};
       if (ownerState.features?.games === false || gameConfig.enabled === false) {
         return json({ ok: false, error: "Games are disabled by Owner" }, 403);
@@ -2027,7 +2027,7 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      const ownerState = getAppDirectoryStore(env).ownerState();
+      const ownerState = await getAppDirectoryStore(env).ownerState();
       const gameConfig = ownerState.game_config || {};
       if (ownerState.features?.games === false || gameConfig.enabled === false) {
         return json({ ok: false, error: "Games are disabled by Owner" }, 403);
@@ -2051,6 +2051,16 @@ export default {
           error: String(error?.message || "Unable to place Fruit Party bet"),
         }, 400);
       }
+    }
+
+    if (url.pathname === "/app-user/tags" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const requestedId = String(
+        url.searchParams.get("user_id") || appSession.user.user_id || "",
+      ).trim();
+      const tags = await getAppDirectoryStore(env).listUserTags(requestedId);
+      return json({ ok: true, user_id: requestedId, tags });
     }
 
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
@@ -2428,7 +2438,7 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const user = appSession.user;
       if (url.pathname.endsWith("/join")) {
-        const access = getAppDirectoryStore(env).roomAccessState(
+        const access = await getAppDirectoryStore(env).roomAccessState(
           user.user_id,
           roomId,
         );
@@ -2837,7 +2847,7 @@ export default {
           callVerificationManualVerifyMatch[1],
         );
         const result =
-          getAppDirectoryStore(env).verifyCallManually(
+          await getAppDirectoryStore(env).verifyCallManually(
             userId,
             body.note,
           );
@@ -2852,7 +2862,7 @@ export default {
             verification_method: "owner_override",
           },
         );
-        getAppDirectoryStore(env).sendOfficialMessage(
+        await getAppDirectoryStore(env).sendOfficialMessage(
           userId,
           "Owner manually verified your Call ID. Your ID stays Verified until Owner removes Verified status."
         );
@@ -2876,7 +2886,7 @@ export default {
       try {
         const userId = decodeURIComponent(callVerificationRevokeMatch[1]);
         const result =
-          getAppDirectoryStore(env).revokeCallVerification(
+          await getAppDirectoryStore(env).revokeCallVerification(
             userId,
             body.note,
           );
@@ -2888,7 +2898,7 @@ export default {
           userId,
           { note: String(body.note || "") },
         );
-        getAppDirectoryStore(env).sendOfficialMessage(
+        await getAppDirectoryStore(env).sendOfficialMessage(
           userId,
           "Owner removed your Call ID Verified status. Verification will be required again to return to the Verified call benefits and random-call pool."
         );
@@ -2907,8 +2917,8 @@ export default {
       }
       return json({
         ok: true,
-        state: getAppDirectoryStore(env).ownerState(),
-        dashboard: getAppDirectoryStore(env).ownerDashboard(),
+        state: await getAppDirectoryStore(env).ownerState(),
+        dashboard: await getAppDirectoryStore(env).ownerDashboard(),
       });
     }
 
@@ -2917,7 +2927,7 @@ export default {
         return json({ ok: false, error: "Owner access required" }, 403);
       }
       const query = String(url.searchParams.get("q") || "");
-      const users = getAppDirectoryStore(env).ownerSearchUsers(
+      const users = await getAppDirectoryStore(env).ownerSearchUsers(
         query,
         url.searchParams.get("limit") || 50,
       );
@@ -2930,7 +2940,7 @@ export default {
       }
       return json({
         ok: true,
-        users: getAppDirectoryStore(env).listVerifiedUsers(
+        users: await getAppDirectoryStore(env).listVerifiedUsers(
           String(url.searchParams.get("q") || ""),
         ),
       });
@@ -2942,7 +2952,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const result = getAppDirectoryStore(env).sendOwnerMessages(
+        const result = await getAppDirectoryStore(env).sendOwnerMessages(
           body.text,
           body.user_ids,
           body.all_users === true,
@@ -2967,7 +2977,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const result = getAppDirectoryStore(env).applyOwnerTag(
+        const result = await getAppDirectoryStore(env).applyOwnerTag(
           body.user_ids,
           body.name,
           body.color,
@@ -2995,7 +3005,7 @@ export default {
       }
       const userId = decodeURIComponent(ownerTagDeleteMatch[1]);
       const tagId = decodeURIComponent(ownerTagDeleteMatch[2]);
-      const result = getAppDirectoryStore(env).removeOwnerTag(userId, tagId);
+      const result = await getAppDirectoryStore(env).removeOwnerTag(userId, tagId);
       await writeAudit(env, session, "user.tag.remove", "user", userId, { tag_id: tagId });
       return json(result);
     }
@@ -3044,7 +3054,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const result = getAppDirectoryStore(env).ownerAction(body.action, body.data);
+        const result = await getAppDirectoryStore(env).ownerAction(body.action, body.data);
         await writeAudit(
           env,
           session,
@@ -3053,7 +3063,7 @@ export default {
           String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
           { data: body.data || {}, result },
         );
-        return json({ ok: true, result, state: getAppDirectoryStore(env).ownerState() });
+        return json({ ok: true, result, state: await getAppDirectoryStore(env).ownerState() });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Owner action failed") }, 400);
       }
@@ -3066,7 +3076,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const item = getAppDirectoryStore(env).ownerCatalogPatch(
+        const item = await getAppDirectoryStore(env).ownerCatalogPatch(
           decodeURIComponent(ownerCatalogMatch[1]),
           body,
         );
