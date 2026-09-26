@@ -41,6 +41,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('CP'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('CP'));
     await tester.pumpAndSettle();
 
@@ -55,33 +57,51 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Store / Inventory'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('store-screen')), findsOneWidget);
+    Future<void> openFeature(String label, Key destinationKey) async {
+      final finder = find.text(label);
+      await tester.scrollUntilVisible(
+        finder,
+        220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+      expect(find.byKey(destinationKey), findsOneWidget);
+    }
+
+    await openFeature(
+      'Store / Inventory',
+      const Key('store-screen'),
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CP / Courting'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('cp-screen')), findsOneWidget);
+    await openFeature(
+      'CP / Courting',
+      const Key('cp-screen'),
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CP Disconnect Flow'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('cp-disconnect-screen')), findsOneWidget);
+    await openFeature(
+      'CP Disconnect Flow',
+      const Key('cp-disconnect-screen'),
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Family'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('family-home-screen')), findsOneWidget);
+    await openFeature(
+      'Family',
+      const Key('family-home-screen'),
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Sharing'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('sharing-screen')), findsOneWidget);
+    await openFeature(
+      'Sharing',
+      const Key('sharing-screen'),
+    );
   });
 
   testWidgets('VIP monthly top-up opens Recharge page', (tester) async {
@@ -91,7 +111,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('vip-monthly-topup-button')));
+    final topup = find.byKey(const Key('vip-monthly-topup-button'));
+    await tester.scrollUntilVisible(
+      topup,
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(topup);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('recharge-screen')), findsOneWidget);
