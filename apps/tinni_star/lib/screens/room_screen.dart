@@ -9,6 +9,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
+import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
 import '../room/room_control_service.dart';
@@ -4741,7 +4742,7 @@ class _ProfileDetailRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 76,
+            width: 90,
             child: Text(
               label,
               style: const TextStyle(
