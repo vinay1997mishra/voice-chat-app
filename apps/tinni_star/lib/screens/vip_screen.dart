@@ -127,6 +127,22 @@ class _VipScreenState extends State<VipScreen> {
               );
             },
           ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            key: const Key('vip-monthly-topup-button'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RechargeScreen(state: widget.state),
+                ),
+              ).then((_) {
+                if (mounted) setState(() {});
+              });
+            },
+            icon: const Icon(Icons.bolt_rounded),
+            label: const Text('Monthly top-up to VIP'),
+          ),
           const SizedBox(height: 18),
           GoldSectionTitle('Privileges ' + selectedLevel.toString() + '/9'),
           const SizedBox(height: 10),
@@ -171,21 +187,6 @@ class _VipScreenState extends State<VipScreen> {
             },
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
-            key: const Key('vip-monthly-topup-button'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => RechargeScreen(state: widget.state),
-                ),
-              ).then((_) {
-                if (mounted) setState(() {});
-              });
-            },
-            icon: const Icon(Icons.bolt_rounded),
-            label: const Text('Monthly top-up to VIP'),
-          ),
         ],
       ),
     );
