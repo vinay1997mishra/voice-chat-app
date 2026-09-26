@@ -1808,7 +1808,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           },
                           child: Column(
                             children: [
-                              const Expanded(
+                              Expanded(
                                 child: Icon(
                                   Icons.card_giftcard_rounded,
                                   color: gift.id.contains('heart') ||
