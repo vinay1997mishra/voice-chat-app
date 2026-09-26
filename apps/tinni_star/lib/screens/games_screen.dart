@@ -21,10 +21,11 @@ class GamesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final games = <(String, IconData, VoidCallback)>[
+    final games = <(String, IconData, Color, VoidCallback)>[
       (
         'Fruit Jackpot',
         Icons.local_florist_rounded,
+        FeaturePalette.fruitJackpot,
         () {
           if (onFruitJackpot != null) {
             Navigator.pop(context);
@@ -44,6 +45,7 @@ class GamesScreen extends StatelessWidget {
       (
         'Fruit Party',
         Icons.celebration_rounded,
+        FeaturePalette.fruitParty,
         () {
           if (onFruitParty != null) {
             Navigator.pop(context);
@@ -63,6 +65,7 @@ class GamesScreen extends StatelessWidget {
       (
         'Ludo',
         Icons.grid_4x4_rounded,
+        FeaturePalette.ludo,
         () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const LudoScreen()),
@@ -71,6 +74,7 @@ class GamesScreen extends StatelessWidget {
       (
         'UNO',
         Icons.style_rounded,
+        FeaturePalette.uno,
         () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const UnoScreen()),
@@ -92,19 +96,29 @@ class GamesScreen extends StatelessWidget {
         itemBuilder: (_, index) {
           final game = games[index];
           return RoyalPanel(
-            onTap: game.$3,
-            gradient: LinearGradient(
-              colors: [
-                RoyalPalette.panel2,
-                index.isEven
-                    ? const Color(0xFF261B05)
-                    : const Color(0xFF17120A),
-              ],
-            ),
+            onTap: game.$4,
+            gradient: FeaturePalette.glow(game.$3),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(game.$2, color: RoyalPalette.gold, size: 38),
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: game.$3.withValues(alpha: 0.16),
+                    border: Border.all(
+                      color: game.$3.withValues(alpha: 0.78),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: game.$3.withValues(alpha: 0.28),
+                        blurRadius: 14,
+                      ),
+                    ],
+                  ),
+                  child: Icon(game.$2, color: game.$3, size: 34),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   game.$1,
