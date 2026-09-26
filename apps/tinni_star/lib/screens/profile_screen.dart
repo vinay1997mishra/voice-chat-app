@@ -87,16 +87,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     radius: 38,
                     backgroundColor: RoyalPalette.panel2,
                     backgroundImage: avatar,
-                  child: avatar == null
-                      ? Text(
-                          account.displayName.characters.first.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        )
-                      : null,
+                    child: avatar == null
+                        ? Text(
+                            account.displayName.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: FeaturePalette.social,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
