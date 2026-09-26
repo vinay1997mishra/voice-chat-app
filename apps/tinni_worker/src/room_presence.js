@@ -15,6 +15,7 @@ export class RoomPresenceStore extends DurableObject {
         family_tag TEXT,
         host_tag TEXT,
         agency_name TEXT,
+        owner_tags_json TEXT NOT NULL DEFAULT '[]',
         seat_index INTEGER,
         seat_emote TEXT,
         seat_emote_until INTEGER,
@@ -77,6 +78,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN family_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN host_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN agency_name TEXT",
+      "ALTER TABLE room_members ADD COLUMN owner_tags_json TEXT NOT NULL DEFAULT '[]'",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
@@ -638,6 +640,14 @@ export class RoomPresenceStore extends DurableObject {
       family_tag: row.family_tag ? String(row.family_tag) : null,
       host_tag: row.host_tag ? String(row.host_tag) : null,
       agency_name: row.agency_name ? String(row.agency_name) : null,
+      owner_tags: (() => {
+        try {
+          const value = JSON.parse(String(row.owner_tags_json || "[]"));
+          return Array.isArray(value) ? value : [];
+        } catch {
+          return [];
+        }
+      })(),
       seat_index:
         row.seat_index === null || row.seat_index === undefined
           ? null
@@ -675,6 +685,16 @@ export class RoomPresenceStore extends DurableObject {
     const familyTag = String(input?.family_tag || "").trim() || null;
     const hostTag = String(input?.host_tag || "").trim() || null;
     const agencyName = String(input?.agency_name || "").trim() || null;
+    const ownerTags = Array.isArray(input?.owner_tags)
+      ? input.owner_tags
+          .map((item) => ({
+            name: String(item?.name || "").trim().slice(0, 40),
+            color: String(item?.color || "#FFD54F").trim(),
+          }))
+          .filter((item) => item.name && /^#[0-9a-fA-F]{6}$/.test(item.color))
+          .slice(0, 12)
+      : [];
+    const ownerTagsJson = JSON.stringify(ownerTags);
     const rawSeatIndex = input?.seat_index;
     let seatIndex =
       rawSeatIndex === null || rawSeatIndex === undefined
@@ -737,9 +757,9 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
-         family_tag, host_tag, agency_name,
+         family_tag, host_tag, agency_name, owner_tags_json,
          seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
@@ -748,6 +768,7 @@ export class RoomPresenceStore extends DurableObject {
          family_tag = excluded.family_tag,
          host_tag = excluded.host_tag,
          agency_name = excluded.agency_name,
+         owner_tags_json = excluded.owner_tags_json,
          seat_index = excluded.seat_index,
          seat_emote = CASE
            WHEN room_members.seat_index IS excluded.seat_index THEN room_members.seat_emote
@@ -762,6 +783,7 @@ export class RoomPresenceStore extends DurableObject {
       familyTag,
       hostTag,
       agencyName,
+      ownerTagsJson,
       seatIndex,
       null,
       null,
