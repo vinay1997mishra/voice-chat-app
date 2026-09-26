@@ -851,6 +851,7 @@ class _StarCard extends StatelessWidget {
     return RoyalPanel(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
       gradient: FeaturePalette.glow(accent),
+      accentColor: accent,
       child: Column(
         children: [
           Icon(icon, color: accent, size: 32),
