@@ -73,7 +73,11 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         const SizedBox(height: 12),
         RoyalPanel(
           gradient: const LinearGradient(
-            colors: [Color(0xFF4B1B38), Color(0xFF150A12), Color(0xFF4B1B38)],
+            colors: [
+              Color(0xFF4E1430),
+              Color(0xFF1A0B18),
+              Color(0xFF3A1857),
+            ],
           ),
           child: Column(
             children: [
@@ -129,7 +133,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
                     child: Center(
                       child: Icon(
                         Icons.favorite_rounded,
-                        color: RoyalPalette.gold,
+                        color: FeaturePalette.cp,
                         size: 44,
                       ),
                     ),
@@ -184,7 +188,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
             children: [
               Icon(
                 Icons.favorite_border_rounded,
-                color: RoyalPalette.gold,
+                color: FeaturePalette.cp,
                 size: 54,
               ),
               SizedBox(height: 10),
@@ -219,7 +223,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
             children: [
               Icon(
                 Icons.card_giftcard_rounded,
-                color: RoyalPalette.gold,
+                color: FeaturePalette.gift,
                 size: 54,
               ),
               SizedBox(height: 10),
@@ -313,7 +317,7 @@ class _CoupleRankRow extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 5),
             child: Icon(
               Icons.favorite_rounded,
-              color: RoyalPalette.gold,
+              color: FeaturePalette.cp,
               size: 19,
             ),
           ),
@@ -338,7 +342,7 @@ class _CoupleRankRow extends StatelessWidget {
           Text(
             score.toString(),
             style: const TextStyle(
-              color: RoyalPalette.gold,
+              color: FeaturePalette.cpSoft,
               fontWeight: FontWeight.w900,
             ),
           ),
