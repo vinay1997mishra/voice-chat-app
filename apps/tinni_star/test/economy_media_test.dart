@@ -77,4 +77,40 @@ void main() {
     expect(ktv.library.first, same(song));
   });
 
+
+  test('phone music is capped at 300 songs', () {
+    final ktv = KtvService();
+    for (var i = 0; i < KtvService.maxLocalSongs; i++) {
+      ktv.addLocalSong(
+        fileName: 'Track ' + i.toString() + '.mp3',
+        sourcePath: '/phone/Music/' + i.toString() + '.mp3',
+      );
+    }
+    expect(ktv.localSongCount, KtvService.maxLocalSongs);
+    expect(ktv.canAddLocalSong, false);
+    expect(
+      () => ktv.addLocalSong(
+        fileName: 'Track 301.mp3',
+        sourcePath: '/phone/Music/301.mp3',
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('removing phone music also clears it from queue/current', () {
+    final ktv = KtvService();
+    final local = ktv.addLocalSong(
+      fileName: 'Wrong Song.mp3',
+      sourcePath: '/phone/Music/Wrong Song.mp3',
+    );
+    ktv.addToQueue(local, 'u1');
+    ktv.startNext();
+    expect(ktv.current?.song.id, local.id);
+
+    expect(ktv.removeLocalSong(local.id), true);
+    expect(ktv.library.any((song) => song.id == local.id), false);
+    expect(ktv.queue.any((entry) => entry.song.id == local.id), false);
+    expect(ktv.current?.song.id, isNot(local.id));
+  });
+
 }
