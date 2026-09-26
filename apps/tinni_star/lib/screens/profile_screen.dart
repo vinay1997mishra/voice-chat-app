@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../community/family_service.dart';
+import '../identity/owner_tag.dart';
 import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
@@ -21,6 +23,56 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final List<OwnerTag> _ownerTags = <OwnerTag>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOwnerTags();
+  }
+
+  Future<void> _loadOwnerTags() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final client = HttpClient();
+    try {
+      final uri = widget.state.roomPresence.apiBase.replace(
+        path: '/app-user/tags',
+        queryParameters: <String, String>{'user_id': account.userId},
+      );
+      final request = await client.getUrl(uri);
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ' + account.authToken,
+      );
+      request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      final response = await request.close();
+      final body = await utf8.decoder.bind(response).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) return;
+      final decoded = body.trim().isEmpty ? null : jsonDecode(body);
+      if (decoded is! Map) return;
+      final rawTags = decoded['tags'];
+      final tags = rawTags is List
+          ? rawTags
+              .whereType<Map>()
+              .map(OwnerTag.fromMap)
+              .where((tag) => tag.name.isNotEmpty)
+              .toList(growable: false)
+          : const <OwnerTag>[];
+      if (!mounted) return;
+      setState(() {
+        _ownerTags
+          ..clear()
+          ..addAll(tags);
+      });
+    } catch (_) {
+      // Profile remains usable even if tag refresh fails.
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.state.auth.current;
@@ -121,6 +173,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             account.countryName,
                         style: const TextStyle(color: RoyalPalette.muted),
                       ),
+                      if (_ownerTags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 5,
+                          children: [
+                            for (final tag in _ownerTags)
+                              _OwnerTagBadge(tag: tag),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 4),
                       Text(
                         account.age.toString() +
@@ -247,6 +310,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _OwnerTagBadge extends StatelessWidget {
+  const _OwnerTagBadge({required this.tag});
+
+  final OwnerTag tag;
+
+  Color get _color {
+    final value = int.tryParse(tag.colorHex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color;
+    return Container(
+      key: Key('profile-owner-tag-' + tag.name),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.28),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Text(
+        tag.name,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 10,
+        ),
       ),
     );
   }
