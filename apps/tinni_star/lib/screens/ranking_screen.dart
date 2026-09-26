@@ -82,7 +82,7 @@ class _RankingScreenState extends State<RankingScreen> {
         title: const Text(
           'Ranking Center',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.rank,
             fontWeight: FontWeight.w900,
           ),
         ),
