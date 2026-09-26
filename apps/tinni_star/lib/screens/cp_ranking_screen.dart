@@ -149,14 +149,12 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
                         ),
                       );
                     },
-                    child: const CircleAvatar(
-                      radius: 30,
-                      backgroundColor: RoyalPalette.panel2,
-                      child: Icon(
-                        Icons.add_rounded,
-                        color: RoyalPalette.gold,
-                        size: 30,
-                      ),
+                    child: const ShiningIcon(
+                      icon: Icons.add_rounded,
+                      color: FeaturePalette.cp,
+                      size: 30,
+                      boxSize: 60,
+                      glow: 0.46,
                     ),
                   ),
                 ],
