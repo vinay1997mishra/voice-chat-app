@@ -2013,6 +2013,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         builder: (sheetContext, setSheetState) {
           final songs = widget.state.ktv.library;
           final current = widget.state.ktv.current;
+          final localSongCount = widget.state.ktv.localSongCount;
+          final canAddLocalSong = widget.state.ktv.canAddLocalSong;
           return SafeArea(
             key: const Key('room-music-panel'),
             child: SizedBox(
@@ -2098,7 +2100,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const Key('room-add-music-button'),
-                        onPressed: () async {
+                        onPressed: canAddLocalSong
+                            ? () async {
                           final file = await FilePicker.pickFile(
                             dialogTitle: 'Add Music',
                             type: FileType.audio,
@@ -2122,9 +2125,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           }
                           setSheetState(() {});
                           _snack(song.title + ' added from phone.');
-                        },
+                        }
+                            : null,
                         icon: const Icon(Icons.library_music_rounded),
                         label: const Text('Add Music'),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        localSongCount.toString() +
+                            '/' +
+                            KtvService.maxLocalSongs.toString() +
+                            ' songs added',
+                        key: const Key('room-music-count'),
+                        style: TextStyle(
+                          color: canAddLocalSong
+                              ? RoyalPalette.muted
+                              : FeaturePalette.safety,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -2157,8 +2181,79 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       ? 'From phone • ' + song.singer
                                       : song.singer,
                                 ),
-                                trailing:
-                                    const Icon(Icons.playlist_add_rounded),
+                                trailing: song.local
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.playlist_add_rounded,
+                                          ),
+                                          IconButton(
+                                            key: Key(
+                                              'remove-music-' + song.id,
+                                            ),
+                                            tooltip: 'Remove Music',
+                                            icon: const Icon(
+                                              Icons.delete_outline_rounded,
+                                              color: FeaturePalette.safety,
+                                            ),
+                                            onPressed: () async {
+                                              final remove =
+                                                  await showDialog<bool>(
+                                                context: sheetContext,
+                                                builder: (dialogContext) =>
+                                                    AlertDialog(
+                                                  title: const Text(
+                                                    'Remove Music',
+                                                  ),
+                                                  content: Text(
+                                                    'Remove "' +
+                                                        song.title +
+                                                        '" from the music list?',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                        dialogContext,
+                                                        false,
+                                                      ),
+                                                      child: const Text(
+                                                        'Cancel',
+                                                      ),
+                                                    ),
+                                                    FilledButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                        dialogContext,
+                                                        true,
+                                                      ),
+                                                      child: const Text(
+                                                        'Remove',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                              if (remove != true ||
+                                                  !sheetContext.mounted) {
+                                                return;
+                                              }
+                                              final removed = widget.state.ktv
+                                                  .removeLocalSong(song.id);
+                                              if (removed) {
+                                                setSheetState(() {});
+                                                _snack(
+                                                  song.title + ' removed.',
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      )
+                                    : const Icon(
+                                        Icons.playlist_add_rounded,
+                                      ),
                                 onTap: () {
                                   widget.state.ktv
                                       .addToQueue(song, account.userId);
