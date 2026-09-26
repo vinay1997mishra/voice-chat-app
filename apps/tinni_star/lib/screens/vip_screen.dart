@@ -14,6 +14,24 @@ class VipScreen extends StatefulWidget {
 class _VipScreenState extends State<VipScreen> {
   int selectedLevel = 1;
 
+  Color _vipColor(int level) {
+    const colors = <Color>[
+      Color(0xFF4FC3F7),
+      Color(0xFF42A5F5),
+      Color(0xFF5C6BC0),
+      Color(0xFF7E57C2),
+      Color(0xFFAB47BC),
+      Color(0xFFEC407A),
+      Color(0xFFFF7043),
+      Color(0xFFFFA726),
+      Color(0xFFFFCA28),
+      Color(0xFF26C6DA),
+      Color(0xFF00C853),
+      Color(0xFFE040FB),
+    ];
+    return colors[(level - 1).clamp(0, colors.length - 1)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final current = widget.state.identity.vip.level;
@@ -43,47 +61,67 @@ class _VipScreenState extends State<VipScreen> {
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 final level = index + 1;
+                final color = _vipColor(level);
                 return ChoiceChip(
                   label: Text('VIP' + level.toString()),
                   selected: selectedLevel == level,
+                  selectedColor: color.withValues(alpha: 0.28),
+                  side: BorderSide(
+                    color: selectedLevel == level
+                        ? color
+                        : RoyalPalette.bronze,
+                  ),
+                  labelStyle: TextStyle(
+                    color: selectedLevel == level
+                        ? color
+                        : RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
                   onSelected: (_) => setState(() => selectedLevel = level),
                 );
               },
             ),
           ),
           const SizedBox(height: 14),
-          RoyalPanel(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF2B1A05), Color(0xFF0B0905), Color(0xFF34220A)],
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.workspace_premium_rounded, size: 64, color: RoyalPalette.gold),
-                Text(
-                  'VIP ' + selectedLevel.toString(),
-                  style: const TextStyle(
-                    color: RoyalPalette.gold,
-                    fontSize: 31,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+          Builder(
+            builder: (context) {
+              final color = _vipColor(selectedLevel);
+              return RoyalPanel(
+                gradient: FeaturePalette.glow(color),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 64,
+                      color: color,
+                    ),
+                    Text(
+                      'VIP ' + selectedLevel.toString(),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 31,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                 const Text(
                   'ROYAL PRIVILEGES',
                   style: TextStyle(color: RoyalPalette.muted, letterSpacing: 2.1),
                 ),
                 const SizedBox(height: 12),
-                LinearProgressIndicator(
-                  value: selectedLevel == current ? progress : 0,
-                  color: RoyalPalette.gold,
-                  backgroundColor: RoyalPalette.panel,
-                ),
+                    LinearProgressIndicator(
+                      value: selectedLevel == current ? progress : 0,
+                      color: color,
+                      backgroundColor: RoyalPalette.panel,
+                    ),
                 const SizedBox(height: 6),
                 Text(
                   'Current VIP ' + current.toString() + ' • XP ' + widget.state.identity.vip.experience.toString(),
                   style: const TextStyle(color: RoyalPalette.muted),
                 ),
-              ],
-            ),
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 18),
           GoldSectionTitle('Privileges ' + selectedLevel.toString() + '/9'),
@@ -101,14 +139,16 @@ class _VipScreenState extends State<VipScreen> {
             itemBuilder: (_, index) {
               final item = privileges[index];
               final unlocked = selectedLevel >= (index ~/ 2) + 1;
+              final color = _vipColor(selectedLevel);
               return RoyalPanel(
                 padding: const EdgeInsets.all(9),
+                gradient: unlocked ? FeaturePalette.glow(color) : null,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       unlocked ? item.$2 : Icons.lock_rounded,
-                      color: unlocked ? RoyalPalette.gold : RoyalPalette.muted,
+                      color: unlocked ? color : RoyalPalette.muted,
                     ),
                     const SizedBox(height: 8),
                     Text(
