@@ -159,6 +159,29 @@
               </div>
               <button class="btn secondary" data-action="call-verification-refresh">Refresh</button>
             </div>
+            <div class="panel" style="margin:12px 0">
+              <div class="panel-head">
+                <div>
+                  <h3>Owner Manual Verify</h3>
+                  <p>Verify any existing user ID directly without camera verification. This Owner override is audit logged.</p>
+                </div>
+              </div>
+              <div class="grid two">
+                <label>
+                  <span>User ID</span>
+                  <input id="manualCallVerifyUserId" placeholder="Enter user ID" inputmode="numeric" />
+                </label>
+                <label>
+                  <span>Owner Note (optional)</span>
+                  <input id="manualCallVerifyNote" placeholder="Reason / note" />
+                </label>
+              </div>
+              <div class="button-row" style="margin-top:10px">
+                <button class="btn primary" type="button" data-call-verify-manual>
+                  Verify ID Without Camera
+                </button>
+              </div>
+            </div>
             <div id="callVerificationList" class="empty-state">Loading verification reviews…</div>
           </article>
         </section>

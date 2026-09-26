@@ -2798,6 +2798,47 @@ export default {
       }
     }
 
+    const callVerificationManualVerifyMatch = url.pathname.match(
+      /^\/api\/call-verifications\/user\/([^/]+)\/verify$/,
+    );
+    if (callVerificationManualVerifyMatch && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const userId = decodeURIComponent(
+          callVerificationManualVerifyMatch[1],
+        );
+        const result =
+          getAppDirectoryStore(env).verifyCallManually(
+            userId,
+            body.note,
+          );
+        await writeAudit(
+          env,
+          session,
+          "call.verification.manual_verify",
+          "user",
+          userId,
+          {
+            note: String(body.note || ""),
+            verification_method: "owner_override",
+          },
+        );
+        getAppDirectoryStore(env).sendOfficialMessage(
+          userId,
+          "Owner manually verified your Call ID. Your ID stays Verified until Owner removes Verified status."
+        );
+        return json(result);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to verify ID"),
+        }, 400);
+      }
+    }
+
     const callVerificationRevokeMatch = url.pathname.match(
       /^\/api\/call-verifications\/user\/([^/]+)\/revoke$/,
     );

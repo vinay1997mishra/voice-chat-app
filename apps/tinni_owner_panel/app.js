@@ -1217,6 +1217,32 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
+  const manualVerifyButton = e.target.closest("[data-call-verify-manual]");
+  if (manualVerifyButton) {
+    const userId = String(document.getElementById("manualCallVerifyUserId")?.value || "").trim();
+    const note = String(document.getElementById("manualCallVerifyNote")?.value || "").trim();
+    if (!userId) {
+      toast("Enter a User ID.");
+      return;
+    }
+    manualVerifyButton.disabled = true;
+    try {
+      await api("/api/call-verifications/user/" + encodeURIComponent(userId) + "/verify", {
+        method: "POST",
+        body: JSON.stringify({ note }),
+      });
+      toast("ID " + userId + " verified by Owner.");
+      document.getElementById("manualCallVerifyUserId").value = "";
+      document.getElementById("manualCallVerifyNote").value = "";
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      manualVerifyButton.disabled = false;
+    }
+    return;
+  }
+
   const approveCallVerification = e.target.closest("[data-call-verify-approve]")?.dataset.callVerifyApprove;
   if (approveCallVerification) {
     try {
