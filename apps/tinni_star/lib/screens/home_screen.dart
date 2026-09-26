@@ -256,18 +256,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: const Key('home-ranking-button'),
                   tooltip: 'Rankings',
                   onPressed: () => openRankings(initialTab: 1),
-                  icon: const Icon(
-                    Icons.leaderboard_rounded,
-                    color: RoyalPalette.gold,
+                  icon: const ShiningIcon(
+                    icon: Icons.leaderboard_rounded,
+                    color: FeaturePalette.rank,
+                    size: 20,
+                    boxSize: 36,
+                    glow: 0.34,
                   ),
                 ),
                 IconButton(
                   key: const Key('home-search-button'),
                   tooltip: 'Search',
                   onPressed: openSearch,
-                  icon: const Icon(
-                    Icons.search_rounded,
-                    color: RoyalPalette.gold,
+                  icon: const ShiningIcon(
+                    icon: Icons.search_rounded,
+                    color: FeaturePalette.discover,
+                    size: 20,
+                    boxSize: 36,
+                    glow: 0.34,
                   ),
                 ),
               ],
@@ -317,16 +323,16 @@ class _HomeScreenState extends State<HomeScreen> {
           RoyalPanel(
             key: const Key('mine-create-my-room'),
             onTap: createRoom,
+            gradient: FeaturePalette.glow(FeaturePalette.family),
+            accentColor: FeaturePalette.family,
             child: const Row(
               children: [
-                CircleAvatar(
-                  radius: 34,
-                  backgroundColor: RoyalPalette.deepGold,
-                  child: Icon(
-                    Icons.add_home_rounded,
-                    color: Colors.black,
-                    size: 30,
-                  ),
+                ShiningIcon(
+                  icon: Icons.add_home_rounded,
+                  color: FeaturePalette.family,
+                  size: 30,
+                  boxSize: 58,
+                  glow: 0.42,
                 ),
                 SizedBox(width: 12),
                 Expanded(
@@ -353,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.family,
                 ),
               ],
             ),
@@ -374,9 +380,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     widget.state.discovery.clearRecent();
                     setState(() {});
                   },
-                  icon: const Icon(
-                    Icons.delete_sweep_rounded,
-                    color: RoyalPalette.gold,
+                  icon: const ShiningIcon(
+                    icon: Icons.delete_sweep_rounded,
+                    color: FeaturePalette.safety,
+                    size: 18,
+                    boxSize: 34,
+                    glow: 0.28,
                   ),
                 )
               : null,
@@ -385,9 +394,17 @@ class _HomeScreenState extends State<HomeScreen> {
         if (recent.isEmpty)
           RoyalPanel(
             onTap: () => _goToPage(1),
+            gradient: FeaturePalette.glow(FeaturePalette.discover),
+            accentColor: FeaturePalette.discover,
             child: const Row(
               children: [
-                Icon(Icons.history_rounded, color: RoyalPalette.gold),
+                ShiningIcon(
+                  icon: Icons.history_rounded,
+                  color: FeaturePalette.discover,
+                  size: 20,
+                  boxSize: 38,
+                  glow: 0.32,
+                ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -397,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.discover,
                 ),
               ],
             ),
@@ -606,15 +623,16 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
         RoyalPanel(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF401E00), Color(0xFF0B0804)],
-          ),
+          gradient: FeaturePalette.glow(FeaturePalette.fruitParty),
+          accentColor: FeaturePalette.fruitParty,
           child: const Row(
             children: [
-              Icon(
-                Icons.celebration_rounded,
-                color: RoyalPalette.gold,
-                size: 48,
+              ShiningIcon(
+                icon: Icons.celebration_rounded,
+                color: FeaturePalette.fruitParty,
+                size: 38,
+                boxSize: 64,
+                glow: 0.46,
               ),
               SizedBox(width: 12),
               Expanded(
@@ -624,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       'Royal Events',
                       style: TextStyle(
-                        color: RoyalPalette.gold,
+                        color: FeaturePalette.fruitParty,
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
                       ),
@@ -743,9 +761,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   countryFilterLabel = '🌍 All countries';
                 });
               },
-              icon: const Icon(
-                Icons.language_rounded,
-                color: RoyalPalette.gold,
+              icon: const ShiningIcon(
+                icon: Icons.language_rounded,
+                color: FeaturePalette.discover,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
               ),
             ),
           ],
@@ -754,9 +775,17 @@ class _HomeScreenState extends State<HomeScreen> {
         if (rooms.isEmpty)
           RoyalPanel(
             onTap: openSearch,
+            gradient: FeaturePalette.glow(FeaturePalette.discover),
+            accentColor: FeaturePalette.discover,
             child: const Row(
               children: [
-                Icon(Icons.public_off_rounded, color: RoyalPalette.gold),
+                ShiningIcon(
+                  icon: Icons.public_off_rounded,
+                  color: FeaturePalette.discover,
+                  size: 20,
+                  boxSize: 38,
+                  glow: 0.32,
+                ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -810,10 +839,16 @@ class _RoomArtwork extends StatelessWidget {
         height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          border: Border.all(color: RoyalPalette.gold),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF382608), Color(0xFF090704)],
+          border: Border.all(
+            color: FeaturePalette.discover.withValues(alpha: 0.72),
           ),
+          gradient: FeaturePalette.glow(FeaturePalette.discover),
+          boxShadow: [
+            BoxShadow(
+              color: FeaturePalette.discover.withValues(alpha: 0.24),
+              blurRadius: 12,
+            ),
+          ],
         ),
         child: hasRemotePhoto
             ? SizedBox.expand(
@@ -833,14 +868,14 @@ class _RoomArtwork extends StatelessWidget {
                 ? Text(
                     fallback!,
                     style: const TextStyle(
-                      color: RoyalPalette.gold,
+                      color: FeaturePalette.discover,
                       fontSize: 40,
                       fontWeight: FontWeight.w900,
                     ),
                   )
                 : Icon(
                     icon ?? Icons.graphic_eq_rounded,
-                    color: RoyalPalette.gold,
+                    color: FeaturePalette.discover,
                     size: 34,
                   ),
       ),
@@ -863,6 +898,8 @@ class _MineRoomCard extends StatelessWidget {
     return RoyalPanel(
       onTap: onTap,
       padding: const EdgeInsets.all(10),
+      gradient: FeaturePalette.glow(FeaturePalette.family),
+      accentColor: FeaturePalette.family,
       child: Row(
         children: [
           _RoomArtwork(
@@ -905,7 +942,7 @@ class _MineRoomCard extends StatelessWidget {
               Text(
                 '🎙 ' + room.online.toString(),
                 style: const TextStyle(
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.family,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                 ),
@@ -913,7 +950,7 @@ class _MineRoomCard extends StatelessWidget {
               const SizedBox(height: 28),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: RoyalPalette.gold,
+                color: FeaturePalette.family,
               ),
             ],
           ),
@@ -979,28 +1016,22 @@ class _PartyPromoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = _homeFeatureColor(title);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: RoyalPanel(
         onTap: onTap,
         radius: 22,
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF090603),
-            Color(0xFF6A3900),
-            Color(0xFF120A03),
-          ],
-        ),
+        gradient: FeaturePalette.glow(color),
+        accentColor: color,
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 37,
-              backgroundColor: RoyalPalette.deepGold,
-              child: Icon(
-                icon,
-                color: Colors.black,
-                size: 38,
-              ),
+            ShiningIcon(
+              icon: icon,
+              color: color,
+              size: 38,
+              boxSize: 70,
+              glow: 0.46,
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1011,8 +1042,8 @@ class _PartyPromoCard extends StatelessWidget {
                   Text(
                     title,
                     maxLines: 2,
-                    style: const TextStyle(
-                      color: RoyalPalette.gold,
+                    style: TextStyle(
+                      color: color,
                       fontWeight: FontWeight.w900,
                       fontSize: 21,
                     ),
@@ -1036,9 +1067,9 @@ class _PartyPromoCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
-              color: RoyalPalette.gold,
+              color: color,
             ),
           ],
         ),
@@ -1079,7 +1110,12 @@ class _InteractiveTopTabs extends StatelessWidget {
                         labels[i],
                         style: TextStyle(
                           color: selectedIndex == i
-                              ? RoyalPalette.gold
+                              ? <Color>[
+                                  FeaturePalette.social,
+                                  FeaturePalette.family,
+                                  FeaturePalette.fruitParty,
+                                  FeaturePalette.discover,
+                                ][i]
                               : RoyalPalette.muted,
                           fontWeight: selectedIndex == i
                               ? FontWeight.w900
@@ -1093,8 +1129,26 @@ class _InteractiveTopTabs extends StatelessWidget {
                         height: 4,
                         width: selectedIndex == i ? 28 : 0,
                         decoration: BoxDecoration(
-                          color: RoyalPalette.gold,
+                          color: <Color>[
+                            FeaturePalette.social,
+                            FeaturePalette.family,
+                            FeaturePalette.fruitParty,
+                            FeaturePalette.discover,
+                          ][i],
                           borderRadius: BorderRadius.circular(10),
+                          boxShadow: selectedIndex == i
+                              ? [
+                                  BoxShadow(
+                                    color: <Color>[
+                                      FeaturePalette.social,
+                                      FeaturePalette.family,
+                                      FeaturePalette.fruitParty,
+                                      FeaturePalette.discover,
+                                    ][i].withValues(alpha: 0.55),
+                                    blurRadius: 10,
+                                  ),
+                                ]
+                              : null,
                         ),
                       ),
                     ],
@@ -1165,10 +1219,17 @@ class _TopRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = rank == 1
+        ? FeaturePalette.rank
+        : rank == 2
+            ? const Color(0xFFC5D0DA)
+            : FeaturePalette.family;
     return RoyalPanel(
       key: Key('room-card-' + room.id),
       padding: const EdgeInsets.all(6),
       onTap: onTap,
+      gradient: FeaturePalette.glow(accent),
+      accentColor: accent,
       child: Column(
         children: [
           Stack(
@@ -1190,7 +1251,9 @@ class _TopRoomCard extends StatelessWidget {
                         ? Icons.emoji_events_rounded
                         : Icons.groups_rounded,
                     size: 50,
-                    color: RoyalPalette.gold,
+                    color: favorite
+                        ? FeaturePalette.rank
+                        : FeaturePalette.discover,
                   ),
                 ),
               ),
@@ -1198,7 +1261,7 @@ class _TopRoomCard extends StatelessWidget {
                 offset: const Offset(0, -7),
                 child: CircleAvatar(
                   radius: 17,
-                  backgroundColor: RoyalPalette.gold,
+                  backgroundColor: accent,
                   child: Text(
                     rank.toString(),
                     style: const TextStyle(
@@ -1256,6 +1319,8 @@ class _RoomListCard extends StatelessWidget {
       child: RoyalPanel(
         padding: const EdgeInsets.all(9),
         onTap: onTap,
+        gradient: FeaturePalette.glow(FeaturePalette.discover),
+        accentColor: FeaturePalette.discover,
         child: Row(
           children: [
             _RoomArtwork(
@@ -1293,10 +1358,12 @@ class _RoomListCard extends StatelessWidget {
                   const SizedBox(height: 7),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.workspace_premium_rounded,
-                        color: RoyalPalette.gold,
-                        size: 16,
+                      const ShiningIcon(
+                        icon: Icons.workspace_premium_rounded,
+                        color: FeaturePalette.vip,
+                        size: 14,
+                        boxSize: 26,
+                        glow: 0.28,
                       ),
                       const SizedBox(width: 5),
                       Text(
@@ -1402,13 +1469,25 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
           children: [
             ListTile(
               key: const Key('create-room-photo-gallery'),
-              leading: const Icon(Icons.photo_library_rounded, color: RoyalPalette.gold),
+              leading: const ShiningIcon(
+                icon: Icons.photo_library_rounded,
+                color: FeaturePalette.moments,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
               title: const Text('Gallery'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
               key: const Key('create-room-photo-camera'),
-              leading: const Icon(Icons.photo_camera_rounded, color: RoyalPalette.gold),
+              leading: const ShiningIcon(
+                icon: Icons.photo_camera_rounded,
+                color: FeaturePalette.discover,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
               title: const Text('Camera'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
@@ -1466,16 +1545,16 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                 borderRadius: BorderRadius.circular(48),
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: RoyalPalette.panel2,
-                      child: Icon(
-                        photoDataUrl == null
-                            ? Icons.add_a_photo_rounded
-                            : Icons.check_circle_rounded,
-                        color: RoyalPalette.gold,
-                        size: 34,
-                      ),
+                    ShiningIcon(
+                      icon: photoDataUrl == null
+                          ? Icons.add_a_photo_rounded
+                          : Icons.check_circle_rounded,
+                      color: photoDataUrl == null
+                          ? FeaturePalette.moments
+                          : FeaturePalette.family,
+                      size: 34,
+                      boxSize: 76,
+                      glow: 0.44,
                     ),
                     const SizedBox(height: 7),
                     Text(
@@ -1552,6 +1631,19 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                   ChoiceChip(
                     label: Text(count.toString()),
                     selected: seatCount == count,
+                    selectedColor:
+                        FeaturePalette.family.withValues(alpha: 0.28),
+                    side: BorderSide(
+                      color: seatCount == count
+                          ? FeaturePalette.family
+                          : RoyalPalette.bronze,
+                    ),
+                    labelStyle: TextStyle(
+                      color: seatCount == count
+                          ? FeaturePalette.family
+                          : RoyalPalette.cream,
+                      fontWeight: FontWeight.w800,
+                    ),
                     onSelected: (_) => setState(() => seatCount = count),
                   ),
               ],
