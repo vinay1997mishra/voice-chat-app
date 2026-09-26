@@ -103,10 +103,15 @@ void main() {
       'room-tool-gift',
       const Key('room-gift-panel'),
     );
-    await expectToolOpens(
-      'room-tool-music',
-      const Key('room-music-panel'),
-    );
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('room-tool-music')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-music-panel')), findsOneWidget);
+    expect(find.byKey(const Key('room-add-music-button')), findsOneWidget);
+    expect(find.text('Add Music'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await expectToolOpens(
       'room-tool-lucky-bag',
       const Key('room-lucky-bag-panel'),

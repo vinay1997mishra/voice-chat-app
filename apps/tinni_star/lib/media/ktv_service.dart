@@ -4,12 +4,14 @@ class Song {
     required this.title,
     required this.singer,
     this.local = false,
+    this.sourcePath,
   });
 
   final String id;
   final String title;
   final String singer;
   final bool local;
+  final String? sourcePath;
 }
 
 class KtvQueueEntry {
@@ -25,9 +27,9 @@ class KtvQueueEntry {
 }
 
 class KtvService {
-  final List<Song> library = const [
-    Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
-    Song(id: 's2', title: 'Star Voice', singer: 'Demo Artist'),
+  final List<Song> library = <Song>[
+    const Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
+    const Song(id: 's2', title: 'Star Voice', singer: 'Demo Artist'),
   ];
 
   final List<KtvQueueEntry> queue = <KtvQueueEntry>[];
@@ -43,6 +45,23 @@ class KtvService {
               song.singer.toLowerCase().contains(query),
         )
         .toList();
+  }
+
+  Song addLocalSong({
+    required String fileName,
+    required String sourcePath,
+  }) {
+    final dot = fileName.lastIndexOf('.');
+    final title = dot > 0 ? fileName.substring(0, dot) : fileName;
+    final song = Song(
+      id: 'local-' + DateTime.now().microsecondsSinceEpoch.toString(),
+      title: title.trim().isEmpty ? 'Phone Music' : title.trim(),
+      singer: 'From phone',
+      local: true,
+      sourcePath: sourcePath,
+    );
+    library.insert(0, song);
+    return song;
   }
 
   void addToQueue(Song song, String userId, {bool chorus = false}) {
