@@ -505,7 +505,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_calls ADD COLUMN call_kind TEXT NOT NULL DEFAULT 'direct'",
       "ALTER TABLE app_calls ADD COLUMN cost_coins_per_minute INTEGER NOT NULL DEFAULT 200000",
       "ALTER TABLE app_calls ADD COLUMN receiver_diamonds_per_minute INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_calls ADD COLUMN stats_recorded INTEGER NOT NULL DEFAULT 0"
+      "ALTER TABLE app_calls ADD COLUMN stats_recorded INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_wallets ADD COLUMN banned INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1890,24 +1891,25 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   getWallet(userIdValue) {
-    const userId = String(userIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) throw new Error("user ID is required");
     const now = Date.now();
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets
-        (user_id, coins, diamonds, updated_at)
-       VALUES (?, 2000000, 17125, ?)`,
+        (user_id, coins, diamonds, banned, updated_at)
+       VALUES (?, 2000000, 17125, 0, ?)`,
       userId,
       now,
     );
     const row = this.ctx.storage.sql.exec(
-      "SELECT user_id, coins, diamonds, updated_at FROM app_wallets WHERE user_id = ? LIMIT 1",
+      "SELECT user_id, coins, diamonds, banned, updated_at FROM app_wallets WHERE user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
     return {
       user_id: userId,
       coins: Number(row?.coins || 0),
       diamonds: Number(row?.diamonds || 0),
+      banned: Number(row?.banned || 0) === 1,
       updated_at: Number(row?.updated_at || now),
     };
   }
@@ -3203,6 +3205,19 @@ export class AppDirectoryStore extends DurableObject {
     const room = this._roomRow(roomId);
     if (!room) {
       return { ok: false, allowed: false, reason: "room_not_found" };
+    }
+
+    const roomControl = this.ctx.storage.sql.exec(
+      "SELECT banned FROM owner_room_controls WHERE room_id = ? LIMIT 1",
+      roomId,
+    ).toArray()[0];
+    if (Number(roomControl?.banned || 0) === 1) {
+      return { ok: false, allowed: false, reason: "room_banned" };
+    }
+
+    const userControl = this._userControls(userId);
+    if (userControl.locked_bypass) {
+      return { ok: true, allowed: true, owner_bypass: true, owner_override: true };
     }
 
     if (String(room.owner_id) === userId) {
