@@ -68,6 +68,7 @@ const dialogFields = document.getElementById("dialogFields");
 const dialogSubmit = document.getElementById("dialogSubmit");
 let pendingAction = null;
 let currentSession = null;
+const ownerSelectedUsers = new Map();
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -775,15 +776,54 @@ async function loadSession() {
   }
 }
 
+async function loadOwnerState() {
+  if (currentSession?.role !== "owner") return;
+  try {
+    const data = await api("/api/owner/state");
+    const serverState = data.state || {};
+    state.features = serverState.features || {};
+    state.policies = serverState.policies || {};
+    state.gameConfig = serverState.game_config || {};
+    state.treasury = Number(serverState.treasury?.balance || 0);
+    state.catalog = Array.isArray(serverState.catalog) ? serverState.catalog : [];
+    state.vips = state.catalog
+      .filter((item) => item.kind === "vip")
+      .map((item) => ({
+        id: item.id,
+        level: Number(item.data?.level || 0),
+        name: item.name,
+        enabled: item.enabled === true,
+        entry: String(item.data?.entry || ""),
+        frame: String(item.data?.frame || ""),
+        price: Number(item.data?.price || 0),
+      }))
+      .sort((a, b) => a.level - b.level);
+
+    document.getElementById("statOnline").textContent = fmt(data.dashboard?.users || 0);
+    document.getElementById("statRooms").textContent = fmt(data.dashboard?.active_rooms || 0);
+    document.getElementById("statSending").textContent = fmt(data.dashboard?.sending_today || 0);
+
+    renderFeatures();
+    renderRoles();
+    renderVips();
+    renderPolicies();
+    renderTreasury();
+    renderOwnerCatalogs();
+  } catch (error) {
+    toast(error.message || "Unable to load Owner state.");
+  }
+}
+
 function renderFeatures() {
   const root = document.getElementById("featureSwitches");
+  if (!root) return;
   root.innerHTML = "";
   Object.entries(state.features).forEach(([key, value]) => {
     const row = document.createElement("div");
     row.className = "switch-row";
     row.innerHTML = `
-      <div class="switch-copy"><strong>${pretty(key)}</strong><small>Master feature flag</small></div>
-      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${key}"><span class="slider"></span></label>
+      <div class="switch-copy"><strong>${pretty(key)}</strong><small>Server master feature flag</small></div>
+      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${escapeHtml(key)}"><span class="slider"></span></label>
     `;
     root.appendChild(row);
   });
@@ -791,52 +831,112 @@ function renderFeatures() {
 
 function renderModules() {
   const root = document.getElementById("moduleGrid");
+  if (!root) return;
+  const icons = ["◎","✓","✉","▣","◫","⌘","✦","♛","◆","◉","▰","♟","⚙","▦"];
   root.innerHTML = modules.map(([name, sub], i) => `
-    <button class="module-card" data-module="${name}">
-      <span class="module-icon">${["◎","▣","◫","⌘","✦","♛","◆","◉","▰","♟","⚙","▦"][i]}</span>
-      <b>${name}</b><small>${sub}</small>
+    <button class="module-card" data-module="${escapeHtml(name)}">
+      <span class="module-icon">${icons[i] || "◈"}</span>
+      <b>${escapeHtml(name)}</b><small>${escapeHtml(sub)}</small>
     </button>
   `).join("");
 }
 
 function renderHierarchyRules() {
-  document.getElementById("hierarchyRules").innerHTML = hierarchyRules.map(([a,b]) => `
-    <div class="rule"><strong>${a}</strong><span>${b}</span></div>
+  const root = document.getElementById("hierarchyRules");
+  if (!root) return;
+  root.innerHTML = hierarchyRules.map(([a,b]) => `
+    <div class="rule"><strong>${escapeHtml(a)}</strong><span>${escapeHtml(b)}</span></div>
   `).join("");
 }
 
 function renderRoles() {
-  document.getElementById("roleChips").innerHTML = roles.map(r => `<span class="chip">${r}</span>`).join("");
+  const root = document.getElementById("roleChips");
+  if (!root) return;
+  const items = state.catalog.filter((item) =>
+    (item.kind === "role" || item.kind === "post") && item.enabled !== false
+  );
+  root.innerHTML = items.length
+    ? items.map((item) => `
+        <span class="chip">
+          ${escapeHtml(item.name)}
+          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">×</button>
+        </span>
+      `).join("")
+    : '<span class="muted">No roles/posts yet.</span>';
 }
 
 function renderVips() {
   const root = document.getElementById("vipTable");
+  if (!root) return;
   root.innerHTML = state.vips.map(v => `
     <tr>
       <td>${v.level}</td>
-      <td>${v.name}</td>
+      <td>${escapeHtml(v.name)}</td>
       <td><span class="badge ${v.enabled ? "gold" : ""}">${v.enabled ? "Active" : "Off"}</span></td>
-      <td>${v.entry}</td>
-      <td>${v.frame}</td>
+      <td>${escapeHtml(v.entry)}</td>
+      <td>${escapeHtml(v.frame)}</td>
       <td>${fmt(v.price)}</td>
-      <td class="table-actions"><button data-vip-edit="${v.level}">Edit</button><button data-vip-toggle="${v.level}">${v.enabled ? "Disable" : "Enable"}</button></td>
+      <td class="table-actions">
+        <button data-vip-edit="${escapeHtml(v.id)}">Edit</button>
+        <button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>
+      </td>
     </tr>
   `).join("");
 }
 
 function renderPolicies() {
   const root = document.getElementById("policyList");
+  if (!root) return;
   root.innerHTML = Object.entries(state.policies).map(([key, value]) => `
     <div class="policy-row">
-      <div><strong>${pretty(key)}</strong><small>Current value: ${value}</small></div>
-      <button data-policy-edit="${key}">Edit</button>
+      <div><strong>${escapeHtml(pretty(key))}</strong><small>Current value: ${escapeHtml(value)}</small></div>
+      <button data-policy-edit="${escapeHtml(key)}">Edit</button>
     </div>
   `).join("");
 }
 
 function renderTreasury() {
-  document.getElementById("treasuryBalance").textContent = fmt(state.treasury);
-  document.getElementById("statTreasury").textContent = fmt(state.treasury);
+  const balance = Number(state.treasury || 0);
+  const wallet = document.getElementById("treasuryBalance");
+  const stat = document.getElementById("statTreasury");
+  if (wallet) wallet.textContent = fmt(balance);
+  if (stat) stat.textContent = fmt(balance);
+}
+
+function renderCatalogList(rootId, kind, emptyText) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  const items = state.catalog.filter((item) => item.kind === kind);
+  if (items.length === 0) {
+    root.className = "empty-state";
+    root.textContent = emptyText;
+    return;
+  }
+  root.className = "action-list";
+  root.innerHTML = items.map((item) => `
+    <div class="panel" style="margin-top:10px">
+      <div class="panel-head">
+        <div>
+          <strong>${escapeHtml(item.name)}</strong>
+          <p class="muted">${escapeHtml(JSON.stringify(item.data || {}))}</p>
+        </div>
+        <span class="badge ${item.enabled ? "gold" : ""}">${item.enabled ? "Active" : "Off"}</span>
+      </div>
+      <div class="button-row">
+        <button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>
+        <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
+          ${item.enabled ? "Disable" : "Enable"}
+        </button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderOwnerCatalogs() {
+  renderCatalogList("giftCatalogList", "gift", "No gifts added from Owner Panel yet.");
+  renderCatalogList("entryCatalogList", "entry", "No entry effects added yet.");
+  renderCatalogList("frameCatalogList", "frame", "No frames added yet.");
+  renderCatalogList("bannerCatalogList", "banner", "No banners added yet.");
 }
 
 function field(name, label, type = "text", placeholder = "", required = true) {
