@@ -186,10 +186,12 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         RoyalPanel(
           child: Column(
             children: [
-              Icon(
-                Icons.favorite_border_rounded,
+              ShiningIcon(
+                icon: Icons.favorite_border_rounded,
                 color: FeaturePalette.cp,
-                size: 54,
+                size: 40,
+                boxSize: 64,
+                glow: 0.48,
               ),
               SizedBox(height: 10),
               Text(
@@ -221,10 +223,12 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         RoyalPanel(
           child: Column(
             children: [
-              Icon(
-                Icons.card_giftcard_rounded,
+              ShiningIcon(
+                icon: Icons.card_giftcard_rounded,
                 color: FeaturePalette.gift,
-                size: 54,
+                size: 40,
+                boxSize: 64,
+                glow: 0.48,
               ),
               SizedBox(height: 10),
               Text(
@@ -261,12 +265,28 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         scrollDirection: Axis.horizontal,
         itemCount: labels.length,
         separatorBuilder: (context, index) => const SizedBox(width: 6),
-        itemBuilder: (context, index) => ChoiceChip(
-          key: Key(prefix + '-' + index.toString()),
-          label: Text(labels[index]),
-          selected: selected == index,
-          onSelected: (_) => onSelected(index),
-        ),
+        itemBuilder: (context, index) {
+          final label = labels[index].toLowerCase();
+          final color = label.contains('reward')
+              ? FeaturePalette.gift
+              : label.contains('love') || label.contains('cp')
+                  ? FeaturePalette.cp
+                  : FeaturePalette.social;
+          return ChoiceChip(
+            key: Key(prefix + '-' + index.toString()),
+            label: Text(labels[index]),
+            selected: selected == index,
+            selectedColor: color.withValues(alpha: 0.28),
+            side: BorderSide(
+              color: selected == index ? color : RoyalPalette.bronze,
+            ),
+            labelStyle: TextStyle(
+              color: selected == index ? color : RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+            ),
+            onSelected: (_) => onSelected(index),
+          );
+        },
       ),
     );
   }
@@ -290,9 +310,17 @@ class _CoupleRankRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
-        color: RoyalPalette.nearBlack.withValues(alpha: 0.72),
+        gradient: FeaturePalette.glow(FeaturePalette.cp),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: RoyalPalette.bronze),
+        border: Border.all(
+          color: FeaturePalette.cp.withValues(alpha: 0.70),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: FeaturePalette.cp.withValues(alpha: 0.20),
+            blurRadius: 12,
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -315,10 +343,12 @@ class _CoupleRankRow extends StatelessWidget {
           ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 5),
-            child: Icon(
-              Icons.favorite_rounded,
+            child: ShiningIcon(
+              icon: Icons.favorite_rounded,
               color: FeaturePalette.cp,
-              size: 19,
+              size: 15,
+              boxSize: 28,
+              glow: 0.30,
             ),
           ),
           CircleAvatar(
