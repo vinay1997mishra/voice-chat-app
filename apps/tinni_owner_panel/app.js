@@ -856,16 +856,15 @@ function applySession(session) {
   const clearAuditButton = document.getElementById("clearAuditBtn");
   if (clearAuditButton) clearAuditButton.hidden = !owner;
 
-  const callVerificationPanel = document.getElementById("callVerificationPanel");
-  if (callVerificationPanel) callVerificationPanel.hidden = !owner;
-
   if (owner) {
     document.body.classList.remove("auth-loading");
     document.body.classList.add("auth-ready");
+    loadOwnerState();
     loadStaffPanels();
     loadRoomThemes();
     loadOwnerNotifications();
     loadCallVerifications();
+    loadVerifiedUsers();
     loadAuditLog();
     return;
   }
@@ -1449,19 +1448,28 @@ document.getElementById("menuBtn").addEventListener("click", () => {
   document.getElementById("sidebar").classList.toggle("open");
 });
 
-document.getElementById("refreshBtn").addEventListener("click", () => {
-  checkHealth();
-  if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "rooms.theme_view")) {
-    loadRoomThemes();
-  }
+document.getElementById("refreshBtn").addEventListener("click", async () => {
+  await checkHealth();
   if (currentSession?.role === "owner") {
-    loadOwnerNotifications();
-    loadCallVerifications();
+    await Promise.all([
+      loadOwnerState(),
+      loadOwnerNotifications(),
+      loadCallVerifications(),
+      loadVerifiedUsers(),
+      loadStaffPanels(),
+      loadRoomThemes(),
+      loadAuditLog(),
+    ]);
+    toast("Owner Panel refreshed.");
+    return;
   }
-  if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "audit.view")) {
-    loadAuditLog();
+  if (hasPermission(new Set(currentSession?.permissions || []), "rooms.theme_view")) {
+    await loadRoomThemes();
   }
-  toast("Panel refreshed");
+  if (hasPermission(new Set(currentSession?.permissions || []), "audit.view")) {
+    await loadAuditLog();
+  }
+  toast("Panel refreshed.");
 });
 
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
@@ -1488,11 +1496,22 @@ document.body.addEventListener("change", (event) => {
     .forEach((input) => { input.checked = groupInput.checked; });
 });
 
-document.body.addEventListener("change", e => {
+document.body.addEventListener("change", async e => {
   const input = e.target.closest("[data-feature]");
   if (!input) return;
-  state.features[input.dataset.feature] = input.checked;
-  toast(`${pretty(input.dataset.feature)} ${input.checked ? "enabled" : "disabled"} in panel preview`);
+  input.disabled = true;
+  try {
+    await runOwnerAction("feature-set", {
+      key: input.dataset.feature,
+      enabled: input.checked,
+    });
+    toast(pretty(input.dataset.feature) + (input.checked ? " enabled." : " disabled."));
+  } catch (error) {
+    input.checked = !input.checked;
+    toast(error.message);
+  } finally {
+    input.disabled = false;
+  }
 });
 
 document.body.addEventListener("change", async (event) => {
