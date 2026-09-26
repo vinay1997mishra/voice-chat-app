@@ -290,7 +290,8 @@ export class AppDirectoryStore extends DurableObject {
         from_user_id TEXT NOT NULL,
         to_user_id TEXT NOT NULL,
         text TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        seen_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
         ON direct_messages(from_user_id, to_user_id, created_at DESC);
@@ -362,7 +363,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
       "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
-      "ALTER TABLE app_users ADD COLUMN auth_subject TEXT"
+      "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
+      "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -886,7 +888,7 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) return [];
     return this.ctx.storage.sql.exec(
-      `SELECT u.user_id, u.display_name
+      `SELECT u.user_id, u.display_name, u.avatar_data_url
          FROM app_follows mine
          JOIN app_follows theirs
            ON theirs.follower_id = mine.target_id
@@ -1176,6 +1178,24 @@ export class AppDirectoryStore extends DurableObject {
       : { allowed: false };
   }
 
+  markConversationSeen(userIdValue, peerUserIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const peerUserId = String(peerUserIdValue || "").trim();
+    if (!userId || !peerUserId) throw new Error("user IDs are required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE direct_messages
+          SET seen_at = ?
+        WHERE from_user_id = ?
+          AND to_user_id = ?
+          AND seen_at IS NULL`,
+      now,
+      peerUserId,
+      userId,
+    );
+    return now;
+  }
+
   listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {
     const userId = String(userIdValue || "").trim();
     const peerUserId = String(peerUserIdValue || "").trim();
@@ -1185,8 +1205,10 @@ export class AppDirectoryStore extends DurableObject {
       return [];
     }
 
+    this.markConversationSeen(userId, peerUserId);
+
     return this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at
+      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
          FROM direct_messages
         WHERE (from_user_id = ? AND to_user_id = ?)
            OR (from_user_id = ? AND to_user_id = ?)
@@ -1203,7 +1225,103 @@ export class AppDirectoryStore extends DurableObject {
       to: String(row.to_user_id),
       text: String(row.text),
       created_at: Number(row.created_at),
+      seen_at: row.seen_at == null ? null : Number(row.seen_at),
     }));
+  }
+
+  listMessageThreads(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user ID is required");
+
+    const threads = this.listFriends(userId).map((friend) => {
+      const friendId = String(friend.user_id);
+      const last = this.ctx.storage.sql.exec(
+        `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+           FROM direct_messages
+          WHERE (from_user_id = ? AND to_user_id = ?)
+             OR (from_user_id = ? AND to_user_id = ?)
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        userId,
+        friendId,
+        friendId,
+        userId,
+      ).toArray()[0];
+      const unread = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM direct_messages
+          WHERE from_user_id = ?
+            AND to_user_id = ?
+            AND seen_at IS NULL`,
+        friendId,
+        userId,
+      ).toArray()[0];
+
+      return {
+        user_id: friendId,
+        display_name: String(friend.display_name || friendId),
+        avatar_data_url: friend.avatar_data_url
+          ? String(friend.avatar_data_url)
+          : null,
+        is_friend: true,
+        last_message: last
+          ? {
+              id: String(last.id),
+              from: String(last.from_user_id),
+              to: String(last.to_user_id),
+              text: String(last.text),
+              created_at: Number(last.created_at),
+              seen_at: last.seen_at == null ? null : Number(last.seen_at),
+            }
+          : null,
+        unread_count: Number(unread?.count || 0),
+      };
+    });
+
+    const official = this.ctx.storage.sql.exec(
+      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+         FROM direct_messages
+        WHERE (from_user_id = 'tinni-official' AND to_user_id = ?)
+           OR (from_user_id = ? AND to_user_id = 'tinni-official')
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      userId,
+      userId,
+    ).toArray()[0];
+
+    if (official) {
+      const unreadOfficial = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM direct_messages
+          WHERE from_user_id = 'tinni-official'
+            AND to_user_id = ?
+            AND seen_at IS NULL`,
+        userId,
+      ).toArray()[0];
+      threads.push({
+        user_id: "tinni-official",
+        display_name: "Tinni Official",
+        avatar_data_url: null,
+        is_friend: false,
+        last_message: {
+          id: String(official.id),
+          from: String(official.from_user_id),
+          to: String(official.to_user_id),
+          text: String(official.text),
+          created_at: Number(official.created_at),
+          seen_at: official.seen_at == null ? null : Number(official.seen_at),
+        },
+        unread_count: Number(unreadOfficial?.count || 0),
+      });
+    }
+
+    threads.sort((a, b) => {
+      const aTime = Number(a.last_message?.created_at || 0);
+      const bTime = Number(b.last_message?.created_at || 0);
+      if (aTime !== bTime) return bTime - aTime;
+      return String(a.display_name).localeCompare(String(b.display_name));
+    });
+    return threads;
   }
 
   sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
@@ -1227,8 +1345,8 @@ export class AppDirectoryStore extends DurableObject {
       "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     this.ctx.storage.sql.exec(
       `INSERT INTO direct_messages
-        (id, from_user_id, to_user_id, text, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+        (id, from_user_id, to_user_id, text, created_at, seen_at)
+       VALUES (?, ?, ?, ?, ?, NULL)`,
       id,
       fromUserId,
       toUserId,
@@ -1241,6 +1359,7 @@ export class AppDirectoryStore extends DurableObject {
       to: toUserId,
       text,
       created_at: now,
+      seen_at: null,
     };
   }
 
@@ -1263,8 +1382,8 @@ export class AppDirectoryStore extends DurableObject {
 
     this.ctx.storage.sql.exec(
       `INSERT INTO direct_messages
-        (id, from_user_id, to_user_id, text, created_at)
-       VALUES (?, 'tinni-official', ?, ?, ?)`,
+        (id, from_user_id, to_user_id, text, created_at, seen_at)
+       VALUES (?, 'tinni-official', ?, ?, ?, NULL)`,
       id,
       toUserId,
       text,
@@ -1278,6 +1397,7 @@ export class AppDirectoryStore extends DurableObject {
       to: toUserId,
       text,
       created_at: now,
+      seen_at: null,
       context: contextValue && typeof contextValue === "object"
         ? contextValue
         : {},
