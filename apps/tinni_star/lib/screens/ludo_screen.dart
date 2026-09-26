@@ -47,7 +47,13 @@ class _LudoScreenState extends State<LudoScreen> {
           IconButton(
             tooltip: 'Restart',
             onPressed: () => setState(game.reset),
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const ShiningIcon(
+              icon: Icons.refresh_rounded,
+              color: FeaturePalette.ludo,
+              size: 18,
+              boxSize: 34,
+              glow: 0.30,
+            ),
           ),
         ],
       ),
@@ -57,11 +63,18 @@ class _LudoScreenState extends State<LudoScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: RoyalPanel(
+                gradient: FeaturePalette.glow(
+                  _playerColor(game.currentPlayer),
+                ),
+                accentColor: _playerColor(game.currentPlayer),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: _playerColor(game.currentPlayer),
-                      child: const Icon(Icons.person_rounded, color: Colors.white),
+                    ShiningIcon(
+                      icon: Icons.person_rounded,
+                      color: _playerColor(game.currentPlayer),
+                      size: 21,
+                      boxSize: 42,
+                      glow: 0.40,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -226,9 +239,10 @@ class _TokenButton extends StatelessWidget {
             ),
             boxShadow: enabled
                 ? [
-                    const BoxShadow(
-                      color: Colors.black38,
-                      blurRadius: 8,
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.55),
+                      blurRadius: 12,
+                      spreadRadius: 1,
                     ),
                   ]
                 : const [],
