@@ -335,6 +335,159 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             ],
           ),
         ),
+        const GoldSectionTitle('Top members of the family'),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _StarCard(
+                title: 'Charm Star',
+                icon: Icons.favorite_rounded,
+                member: members.isEmpty ? null : members.first,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StarCard(
+                title: 'Wealth Star',
+                icon: Icons.diamond_rounded,
+                member: members.length > 1 ? members[1] : members.firstOrNull,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StarCard(
+                title: 'Active star',
+                icon: Icons.local_fire_department_rounded,
+                member: members.length > 2 ? members[2] : members.firstOrNull,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        GoldSectionTitle(
+          'Member list',
+          trailing: IconButton(
+            key: const Key('family-member-list-chevron'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => FamilyMemberManageScreen(
+                    state: widget.state,
+                    familyName: _name,
+                    members: members,
+                  ),
+                ),
+              ).then((_) {
+                if (mounted) setState(() {});
+              });
+            },
+            icon: const ShiningIcon(
+              icon: Icons.chevron_right_rounded,
+              color: FeaturePalette.family,
+              size: 16,
+              boxSize: 30,
+              glow: 0.26,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 70,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: members.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 9),
+            itemBuilder: (context, index) => Column(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: FeaturePalette.family.withValues(alpha: 0.16),
+                    border: Border.all(color: FeaturePalette.family),
+                    boxShadow: [
+                      BoxShadow(
+                        color: FeaturePalette.family.withValues(alpha: 0.34),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    members[index].name.characters.first.toUpperCase(),
+                    style: const TextStyle(
+                      color: FeaturePalette.family,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    members[index].name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const GoldSectionTitle('Family room'),
+        const SizedBox(height: 8),
+        RoyalPanel(
+          key: const Key('family-room-card'),
+          onTap: _openFamilyRoom,
+          padding: const EdgeInsets.all(10),
+          gradient: FeaturePalette.glow(FeaturePalette.family),
+          accentColor: FeaturePalette.family,
+          child: Row(
+            children: [
+              const ShiningIcon(
+                icon: Icons.mic_rounded,
+                color: FeaturePalette.family,
+                size: 28,
+                boxSize: 58,
+                glow: 0.42,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _name + ' room',
+                      style: const TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      _tag + ' • family voice room',
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: FeaturePalette.family,
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 14),
         const GoldSectionTitle('Family functions'),
         const SizedBox(height: 8),
@@ -509,159 +662,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             ),
           ),
         const SizedBox(height: 18),
-        const GoldSectionTitle('Top members of the family'),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _StarCard(
-                title: 'Charm Star',
-                icon: Icons.favorite_rounded,
-                member: members.isEmpty ? null : members.first,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StarCard(
-                title: 'Wealth Star',
-                icon: Icons.diamond_rounded,
-                member: members.length > 1 ? members[1] : members.firstOrNull,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StarCard(
-                title: 'Active star',
-                icon: Icons.local_fire_department_rounded,
-                member: members.length > 2 ? members[2] : members.firstOrNull,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        GoldSectionTitle(
-          'Member list',
-          trailing: IconButton(
-            key: const Key('family-member-list-chevron'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FamilyMemberManageScreen(
-                    state: widget.state,
-                    familyName: _name,
-                    members: members,
-                  ),
-                ),
-              ).then((_) {
-                if (mounted) setState(() {});
-              });
-            },
-            icon: const ShiningIcon(
-              icon: Icons.chevron_right_rounded,
-              color: FeaturePalette.family,
-              size: 16,
-              boxSize: 30,
-              glow: 0.26,
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 70,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: members.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 9),
-            itemBuilder: (context, index) => Column(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: FeaturePalette.family.withValues(alpha: 0.16),
-                    border: Border.all(color: FeaturePalette.family),
-                    boxShadow: [
-                      BoxShadow(
-                        color: FeaturePalette.family.withValues(alpha: 0.34),
-                        blurRadius: 12,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    members[index].name.characters.first.toUpperCase(),
-                    style: const TextStyle(
-                      color: FeaturePalette.family,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                SizedBox(
-                  width: 58,
-                  child: Text(
-                    members[index].name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 9,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const GoldSectionTitle('Family room'),
-        const SizedBox(height: 8),
-        RoyalPanel(
-          key: const Key('family-room-card'),
-          onTap: _openFamilyRoom,
-          padding: const EdgeInsets.all(10),
-          gradient: FeaturePalette.glow(FeaturePalette.family),
-          accentColor: FeaturePalette.family,
-          child: Row(
-            children: [
-              const ShiningIcon(
-                icon: Icons.mic_rounded,
-                color: FeaturePalette.family,
-                size: 28,
-                boxSize: 58,
-                glow: 0.42,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _name + ' room',
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      _tag + ' • family voice room',
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: FeaturePalette.family,
-              ),
-            ],
-          ),
-        ),
+
       ],
     );
   }
