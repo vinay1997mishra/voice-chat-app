@@ -289,9 +289,25 @@ class _MessagesScreenState extends State<MessagesScreen> {
             top: false,
             child: Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: RoyalPalette.nearBlack,
-                border: Border(top: BorderSide(color: RoyalPalette.deepGold)),
+                border: Border(
+                  top: BorderSide(
+                    color: (_isOfficial
+                            ? FeaturePalette.rank
+                            : FeaturePalette.social)
+                        .withValues(alpha: 0.72),
+                  ),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isOfficial
+                            ? FeaturePalette.rank
+                            : FeaturePalette.social)
+                        .withValues(alpha: 0.14),
+                    blurRadius: 12,
+                  ),
+                ],
               ),
               child: _isOfficial
                   ? const Row(
