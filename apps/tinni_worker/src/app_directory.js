@@ -1327,6 +1327,53 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  verifyCallManually(userIdValue, noteValue = "") {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("User ID is required");
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id, display_name, gender FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+
+    const now = Date.now();
+    const note = cleanText(noteValue, 500);
+    this.ctx.storage.sql.exec(
+      `UPDATE app_users
+          SET call_verified = 1,
+              call_verification_status = 'verified_owner',
+              call_verified_at = ?,
+              call_verification_revoked_at = NULL,
+              updated_at = ?
+        WHERE user_id = ?`,
+      now,
+      now,
+      userId,
+    );
+    this.ctx.storage.sql.exec(
+      `UPDATE call_verification_submissions
+          SET status = 'approved_owner_override',
+              reviewed_at = ?,
+              review_note = ?
+        WHERE user_id = ?
+          AND status = 'pending_owner'`,
+      now,
+      note || "Verified manually by Owner",
+      userId,
+    );
+
+    return {
+      ok: true,
+      user_id: userId,
+      display_name: String(user.display_name || userId),
+      gender: String(user.gender || ""),
+      verified: true,
+      status: "verified_owner",
+      verified_at: now,
+      note,
+    };
+  }
+
   revokeCallVerification(userIdValue, noteValue = "") {
     const userId = String(userIdValue || "").trim();
     const user = this.ctx.storage.sql.exec(
