@@ -97,6 +97,19 @@ class _LoginScreenState extends State<LoginScreen> {
     if (mounted) setState(() {});
   }
 
+  Color _providerColor([String? provider]) {
+    switch (provider ?? pendingProvider) {
+      case 'facebook':
+        return FeaturePalette.facebook;
+      case 'email':
+        return FeaturePalette.email;
+      case 'google':
+        return FeaturePalette.google;
+      default:
+        return FeaturePalette.social;
+    }
+  }
+
   Future<void> _startAuthLinkListener() async {
     _authLinkSubscription ??= _appLinks.uriLinkStream.listen(
       _handleAuthUri,
@@ -713,6 +726,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final waitingForPassword = emailSetupToken != null;
 
     return RoyalPanel(
+      gradient: FeaturePalette.glow(FeaturePalette.email),
+      accentColor: FeaturePalette.email,
       child: Column(
         children: [
           Row(
@@ -874,12 +889,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildProviderPanel() {
     return RoyalPanel(
+      gradient: FeaturePalette.glow(FeaturePalette.social),
+      accentColor: FeaturePalette.social,
       child: Column(
         children: [
-          const Icon(
-            Icons.account_circle_rounded,
-            color: RoyalPalette.gold,
-            size: 56,
+          const ShiningIcon(
+            icon: Icons.account_circle_rounded,
+            color: FeaturePalette.social,
+            size: 40,
+            boxSize: 64,
+            glow: 0.44,
           ),
           const SizedBox(height: 12),
           const Text(
