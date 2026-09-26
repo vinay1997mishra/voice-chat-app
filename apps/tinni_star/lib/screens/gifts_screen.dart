@@ -95,7 +95,10 @@ class _GiftsScreenState extends State<GiftsScreen> {
             child: Center(
               child: Text(
                 '🪙 ' + widget.state.wallet.coins.toString(),
-                style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  color: FeaturePalette.wallet,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
@@ -196,7 +199,11 @@ class _GiftsScreenState extends State<GiftsScreen> {
                       ),
                       Text(
                         '🪙 ' + gift.price.toString(),
-                        style: const TextStyle(color: RoyalPalette.gold, fontSize: 10),
+                        style: const TextStyle(
+                          color: FeaturePalette.wallet,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
                   ),
@@ -208,9 +215,19 @@ class _GiftsScreenState extends State<GiftsScreen> {
             top: false,
             child: Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: RoyalPalette.nearBlack,
-                border: Border(top: BorderSide(color: RoyalPalette.deepGold)),
+                border: Border(
+                  top: BorderSide(
+                    color: FeaturePalette.backpack.withValues(alpha: 0.75),
+                  ),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: FeaturePalette.backpack.withValues(alpha: 0.16),
+                    blurRadius: 12,
+                  ),
+                ],
               ),
               child: const Row(
                 children: [
