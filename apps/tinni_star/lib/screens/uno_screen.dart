@@ -158,7 +158,7 @@ class _UnoScreenState extends State<UnoScreen> {
                     style: TextStyle(
                       color: game.winner == null
                           ? RoyalPalette.cream
-                          : RoyalPalette.gold,
+                          : _color(game.activeColor),
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -194,9 +194,22 @@ class _UnoScreenState extends State<UnoScreen> {
                             ),
                           ),
                           const SizedBox(height: 11),
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundColor: _color(game.activeColor),
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _color(game.activeColor),
+                              border: Border.all(color: Colors.white70),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _color(game.activeColor)
+                                      .withValues(alpha: 0.55),
+                                  blurRadius: 16,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
                             child: const Icon(
                               Icons.palette_rounded,
                               color: Colors.white,
@@ -205,6 +218,12 @@ class _UnoScreenState extends State<UnoScreen> {
                           const SizedBox(height: 16),
                           FilledButton.icon(
                             key: const Key('uno-draw-card'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _color(game.activeColor),
+                              foregroundColor: Colors.white,
+                              shadowColor: _color(game.activeColor),
+                              elevation: 5,
+                            ),
                             onPressed: !game.playerTurn || game.winner != null
                                 ? null
                                 : () {
