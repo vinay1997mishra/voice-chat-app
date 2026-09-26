@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:app_links/app_links.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -25,6 +27,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final AppAuthApi _api = AppAuthApi();
   final ImagePicker _imagePicker = ImagePicker();
+  final AppLinks _appLinks = AppLinks();
+  StreamSubscription<Uri>? _authLinkSubscription;
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
@@ -69,11 +73,13 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     signatureController.addListener(_refresh);
     _prepareAuth();
+    _startAuthLinkListener();
   }
 
   @override
   void dispose() {
     _facebookAttempt += 1;
+    _authLinkSubscription?.cancel();
     signatureController.removeListener(_refresh);
     nameController.dispose();
     ageController.dispose();
@@ -91,7 +97,43 @@ class _LoginScreenState extends State<LoginScreen> {
     if (mounted) setState(() {});
   }
 
-  int get signatureWords {
+  Future<void> _startAuthLinkListener() async {
+    _authLinkSubscription ??= _appLinks.uriLinkStream.listen(
+      _handleAuthUri,
+      onError: (_) {},
+    );
+
+    try {
+      final initial = await _appLinks.getInitialLink();
+      if (initial != null) {
+        _handleAuthUri(initial);
+      }
+    } catch (_) {
+      // Facebook polling still works if an initial link cannot be read.
+    }
+  }
+
+  void _handleAuthUri(Uri uri) {
+    if (!mounted ||
+        uri.scheme != 'tinnistar' ||
+        uri.host != 'auth' ||
+        uri.path != '/facebook-complete') {
+      return;
+    }
+
+    final requestId = uri.queryParameters['request_id']?.trim() ?? '';
+    if (requestId.isEmpty) return;
+
+    final attempt = ++_facebookAttempt;
+    setState(() {
+      busy = false;
+      waitingFacebook = true;
+      pendingFacebookRequestId = requestId;
+    });
+    unawaited(_pollFacebook(requestId, attempt));
+  }
+
+    int get signatureWords {
     final value = signatureController.text.trim();
     if (value.isEmpty) return 0;
     return value.split(RegExp(r'\s+')).length;
@@ -237,8 +279,10 @@ class _LoginScreenState extends State<LoginScreen> {
       for (var index = 0; index < 90; index += 1) {
         if (!mounted || attempt != _facebookAttempt) return;
 
-        await Future<void>.delayed(const Duration(seconds: 2));
-        if (!mounted || attempt != _facebookAttempt) return;
+        if (index > 0) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          if (!mounted || attempt != _facebookAttempt) return;
+        }
 
         final poll = await _api.pollFacebookLogin(requestId);
         if (poll.pending) continue;
@@ -632,10 +676,11 @@ class _LoginScreenState extends State<LoginScreen> {
     widget.state.profile.loadFromAccount(account);
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => TinniShell(state: widget.state),
       ),
+      (_) => false,
     );
   }
 
