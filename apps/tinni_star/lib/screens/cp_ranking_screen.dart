@@ -79,6 +79,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
               Color(0xFF3A1857),
             ],
           ),
+          accentColor: FeaturePalette.cp,
           child: Column(
             children: [
               const Text(
@@ -105,6 +106,8 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         ),
         const SizedBox(height: 14),
         RoyalPanel(
+          accentColor: FeaturePalette.cp,
+          gradient: FeaturePalette.glow(FeaturePalette.cp),
           child: Column(
             children: [
               const Text(
@@ -184,6 +187,8 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
       padding: const EdgeInsets.all(14),
       children: const [
         RoyalPanel(
+          accentColor: FeaturePalette.cp,
+          gradient: FeaturePalette.glow(FeaturePalette.cp),
           child: Column(
             children: [
               ShiningIcon(
@@ -221,6 +226,8 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
       padding: const EdgeInsets.all(14),
       children: const [
         RoyalPanel(
+          accentColor: FeaturePalette.gift,
+          gradient: FeaturePalette.glow(FeaturePalette.gift),
           child: Column(
             children: [
               ShiningIcon(
