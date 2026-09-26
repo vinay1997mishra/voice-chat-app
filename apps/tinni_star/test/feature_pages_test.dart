@@ -1,0 +1,104 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tinni_star/app/tinni_state.dart';
+import 'package:tinni_star/community/family_service.dart';
+import 'package:tinni_star/core/function_pack.dart';
+import 'package:tinni_star/screens/cp_disconnect_screen.dart';
+import 'package:tinni_star/screens/cp_screen.dart';
+import 'package:tinni_star/screens/feature_center_screen.dart';
+import 'package:tinni_star/screens/profile_screen.dart';
+import 'package:tinni_star/screens/recharge_screen.dart';
+import 'package:tinni_star/screens/sharing_screen.dart';
+import 'package:tinni_star/screens/store_screen.dart';
+import 'package:tinni_star/screens/vip_screen.dart';
+import 'package:tinni_star/social/social.dart';
+
+import 'test_account.dart';
+
+TinniState makeState() {
+  final state = TinniState(
+    runtime: FunctionPackRuntime(
+      signatureVerifier: const DevelopmentSignatureVerifier(),
+    ),
+  );
+  final account = attachTestAccount(state);
+  state.social.friendProfiles.add(
+    const SocialUser(id: 'friend-1', name: 'Friend One'),
+  );
+  state.social.friends.add('friend-1');
+  state.family.create(
+    familyName: 'Test Family',
+    familyTag: 'TF',
+    head: FamilyMember(
+      userId: account.userId,
+      name: account.displayName,
+      role: FamilyRole.head,
+    ),
+  );
+  return state;
+}
+
+void main() {
+  testWidgets('Mine CP opens the CP page', (tester) async {
+    final state = makeState();
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileScreen(state: state)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CP'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cp-screen')), findsOneWidget);
+  });
+
+  testWidgets('More routes store CP disconnect family and sharing to pages',
+      (tester) async {
+    final state = makeState();
+    await tester.pumpWidget(
+      MaterialApp(home: FeatureCenterScreen(state: state)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Store / Inventory'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('store-screen')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CP / Courting'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cp-screen')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CP Disconnect Flow'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cp-disconnect-screen')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Family'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('family-home-screen')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sharing'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sharing-screen')), findsOneWidget);
+  });
+
+  testWidgets('VIP monthly top-up opens Recharge page', (tester) async {
+    final state = makeState();
+    await tester.pumpWidget(
+      MaterialApp(home: VipScreen(state: state)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('vip-monthly-topup-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('recharge-screen')), findsOneWidget);
+  });
+}
