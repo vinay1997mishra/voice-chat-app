@@ -129,10 +129,9 @@
         <section class="view" id="view-users">
           <article class="panel">
             <div class="panel-head"><div><h2>User Search & Investigation</h2><p>Current ID + old ID lookup with live account data.</p></div><button class="btn primary" data-action="user-search">Search</button></div>
-            <div class="form-grid three">
-              <label><span>User / old ID</span><input id="userSearchId" placeholder="e.g. 10000001" /></label>
-              <label><span>Country</span><select><option>All countries</option><option>India</option><option>Philippines</option></select></label>
-              <label><span>Status</span><select><option>Any status</option><option>Online</option><option>Offline</option><option>Banned</option></select></label>
+            <div class="form-grid two">
+              <label><span>User / old ID / name / email</span><input id="userSearchId" placeholder="e.g. 10000001" /></label>
+              <div class="muted" style="align-self:end">Search reads live account, wallet, verification, owner controls and custom tags.</div>
             </div>
           </article>
           <div class="grid two">
@@ -326,12 +325,20 @@
 
         <section class="view" id="view-games">
           <div class="stats-grid">
-            <article class="stat-card"><span>Total Bets</span><strong>—</strong><small>Server data</small></article>
-            <article class="stat-card"><span>User Profit</span><strong>—</strong><small>Server data</small></article>
-            <article class="stat-card"><span>User Loss</span><strong>—</strong><small>Server data</small></article>
-            <article class="stat-card"><span>Game Status</span><strong>ON</strong><small>Master switch</small></article>
+            <article class="stat-card"><span>Total Bets</span><strong id="gameTotalBets">0</strong><small>Fruit Jackpot + Fruit Party</small></article>
+            <article class="stat-card"><span>Total Bet Coins</span><strong id="gameTotalBetCoins">0</strong><small>All recorded bets</small></article>
+            <article class="stat-card"><span>Total Payout</span><strong id="gameTotalPayout">0</strong><small>Recorded game payouts</small></article>
+            <article class="stat-card"><span>Game Status</span><strong id="gameStatusValue">—</strong><small id="gameLimitsValue">Server master switch</small></article>
           </div>
-          <article class="panel"><h2>Game Controls</h2><div class="action-list"><button data-action="game-switch">Enable / Disable Games</button><button data-action="game-limits">Bet Limits</button><button data-action="game-stats">User Betting Investigation</button></div></article>
+          <article class="panel">
+            <h2>Game Controls</h2>
+            <div class="action-list">
+              <button data-action="game-switch">Enable / Disable Games</button>
+              <button data-action="game-limits">Bet Limits</button>
+              <button data-action="game-stats">User Betting Investigation</button>
+            </div>
+            <div id="gameStatsResult" class="empty-state" style="margin-top:12px">Load game statistics or investigate a user ID.</div>
+          </article>
         </section>
 
         <section class="view" id="view-policies">
