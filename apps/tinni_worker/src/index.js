@@ -1678,6 +1678,70 @@ export default {
       }
     }
 
+    if (
+      url.pathname === "/calls/verification/status" &&
+      request.method === "GET"
+    ) {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          verification: getAppDirectoryStore(env).callVerificationStatus(
+            appSession.user.user_id,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load verification status"),
+        }, 400);
+      }
+    }
+
+    if (
+      url.pathname === "/calls/verification/submit" &&
+      request.method === "POST"
+    ) {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = getAppDirectoryStore(env).submitCallVerification(
+          appSession.user.user_id,
+          body,
+        );
+        if (!result.already_verified) {
+          const screenshots = Array.isArray(body.photos)
+            ? body.photos.slice(0, 3).map(String)
+            : [];
+          await getStaffStore(env).createOwnerNotification({
+            type: "call_verification",
+            title: "Call verification review",
+            message:
+              (body.system_passed === true
+                ? "System liveness pre-check passed. "
+                : "System liveness pre-check did not pass. ") +
+              "Review the 3 live photos and make the final decision.",
+            source_user_id: appSession.user.user_id,
+            source_display_name: appSession.user.display_name,
+            target_type: "call_verification",
+            target_id: result.submission_id,
+            metadata: {
+              screenshots,
+              system_passed: body.system_passed === true,
+            },
+          });
+        }
+        return json(result, result.already_verified ? 200 : 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to submit verification"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/calls" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1703,8 +1767,12 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const callId = String(url.searchParams.get("call_id") || "").trim();
-      const call = getAppDirectoryStore(env).getCall(callId);
+      const directory = getAppDirectoryStore(env);
+      let call = directory.getCall(callId);
       if (!call) return json({ ok: false, error: "Call not found" }, 404);
+      if (call.state === "accepted") {
+        call = directory.settleCallBilling(callId, Date.now());
+      }
       if (
         call.caller_id !== appSession.user.user_id &&
         call.receiver_id !== appSession.user.user_id
@@ -2638,6 +2706,98 @@ export default {
       return json(await getStaffStore(env).deleteOwnerNotification(
         decodeURIComponent(ownerNotificationMatch[1]),
       ));
+    }
+
+    if (
+      url.pathname === "/api/call-verifications" &&
+      request.method === "GET"
+    ) {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        submissions:
+          getAppDirectoryStore(env).listCallVerificationSubmissions(),
+      });
+    }
+
+    const callVerificationReviewMatch = url.pathname.match(
+      /^\/api\/call-verifications\/([^/]+)\/review$/,
+    );
+    if (callVerificationReviewMatch && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result =
+          getAppDirectoryStore(env).reviewCallVerification(
+            decodeURIComponent(callVerificationReviewMatch[1]),
+            body.approve === true,
+            body.note,
+          );
+        await writeAudit(
+          env,
+          session,
+          body.approve === true
+            ? "call.verification.approve"
+            : "call.verification.reject",
+          "user",
+          result.user_id,
+          { submission_id: result.submission_id },
+        );
+        if (body.approve !== true) {
+          await getStaffStore(env).createOwnerNotification({
+            type: "call_verification_rejected",
+            title: "Call verification rejected",
+            message:
+              "The user will be instructed to contact the Official Manager.",
+            source_user_id: result.user_id,
+            target_type: "call_verification",
+            target_id: result.submission_id,
+            metadata: {},
+          });
+        }
+        return json(result);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to review verification"),
+        }, 400);
+      }
+    }
+
+    const callVerificationRevokeMatch = url.pathname.match(
+      /^\/api\/call-verifications\/user\/([^/]+)\/revoke$/,
+    );
+    if (callVerificationRevokeMatch && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const userId = decodeURIComponent(callVerificationRevokeMatch[1]);
+        const result =
+          getAppDirectoryStore(env).revokeCallVerification(
+            userId,
+            body.note,
+          );
+        await writeAudit(
+          env,
+          session,
+          "call.verification.revoke",
+          "user",
+          userId,
+          { note: String(body.note || "") },
+        );
+        return json(result);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to revoke verification"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/api/audit/summary" && request.method === "GET") {
