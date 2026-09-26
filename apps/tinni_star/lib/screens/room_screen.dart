@@ -1348,7 +1348,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     RoomPresenceMember member, {
     int? seatIndexHint,
   }) {
-    if (member.userId == widget.state.auth.current?.userId) return;
+    final selfUserId = widget.state.auth.current?.userId;
+    final isSelf = member.userId == selfUserId;
     ImageProvider? avatar;
     final avatarData = member.avatarDataUrl;
     if (avatarData != null && avatarData.startsWith('data:image/')) {
@@ -1386,20 +1387,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: UserSafetyMenuButton(
-                      state: widget.state,
-                      targetUserId: currentMember.userId,
-                      targetDisplayName: currentMember.displayName,
-                      roomId: widget.room.id,
-                      onBlockChanged: () {
-                        if (sheetContext.mounted) {
-                          setSheetState(() {});
-                        }
-                      },
-                    ),
-                  ),
+                  if (!isSelf)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: UserSafetyMenuButton(
+                        state: widget.state,
+                        targetUserId: currentMember.userId,
+                        targetDisplayName: currentMember.displayName,
+                        roomId: widget.room.id,
+                        onBlockChanged: () {
+                          if (sheetContext.mounted) {
+                            setSheetState(() {});
+                          }
+                        },
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 8),
                   Container(
                     width: 84,
                     height: 84,
@@ -1508,6 +1512,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
+                      for (final medal in currentMember.ownerMedals)
+                        Chip(
+                          key: Key(
+                            'room-owner-medal-' +
+                                currentMember.userId +
+                                '-' +
+                                medal.name,
+                          ),
+                          avatar: Icon(
+                            Icons.workspace_premium_rounded,
+                            size: 16,
+                            color: _ownerTagColor(medal.colorHex),
+                          ),
+                          backgroundColor: _ownerTagColor(medal.colorHex)
+                              .withValues(alpha: 0.14),
+                          side: BorderSide(
+                            color: _ownerTagColor(medal.colorHex),
+                          ),
+                          label: Text(
+                            medal.name,
+                            style: TextStyle(
+                              color: _ownerTagColor(medal.colorHex),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -1516,7 +1546,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        _ProfileAction(
+                        if (isSelf)
+                          const _ProfileAction(
+                            icon: Icons.person_rounded,
+                            label: 'My ID',
+                            onTap: null,
+                          )
+                        else
+                          _ProfileAction(
                           icon: followed
                               ? Icons.person_remove_rounded
                               : Icons.person_add_rounded,
@@ -1542,7 +1579,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             }
                           },
                         ),
-                        _ProfileAction(
+                        if (!isSelf)
+                          _ProfileAction(
                           icon: Icons.mail_rounded,
                           label: 'Message',
                           onTap: () {
@@ -1571,7 +1609,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               _showSeatInvitePicker(currentMember);
                             },
                           ),
-                        _ProfileAction(
+                        if (!isSelf)
+                          _ProfileAction(
                           icon: Icons.card_giftcard_rounded,
                           label: 'Gift',
                           onTap: () {
@@ -3504,7 +3543,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Container(
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: Container(
                     width: seatDiameter,
                     height: seatDiameter,
                     decoration: BoxDecoration(
@@ -3558,6 +3605,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         size: seatDiameter * 0.42,
                                       ),
                           ),
+                    ),
                   ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
                     IgnorePointer(
@@ -3592,25 +3640,80 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             if (occupied &&
                 presenceMember != null &&
-                presenceMember.ownerTags.isNotEmpty)
-              Text(
-                presenceMember.ownerTags.first.name,
-                key: Key(
-                  'seat-owner-tag-' +
-                      presenceMember.userId +
-                      '-' +
-                      presenceMember.ownerTags.first.name,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _ownerTagColor(
-                    presenceMember.ownerTags.first.colorHex,
-                  ),
-                  fontSize: compact ? 6.0 : 7.5,
-                  height: 1.0,
-                  fontWeight: FontWeight.w900,
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
           ],
@@ -3639,7 +3742,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final screenSize = MediaQuery.sizeOf(context);
     final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
     final maxSeatAreaHeight = screenSize.height * 0.38;
-    final rowLabelSpace = widthSeatDiameter < 44 ? 23.0 : 30.0;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
