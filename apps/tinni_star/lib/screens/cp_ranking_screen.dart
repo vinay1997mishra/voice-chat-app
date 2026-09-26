@@ -185,7 +185,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
     return ListView(
       key: const Key('cp-true-love'),
       padding: const EdgeInsets.all(14),
-      children: const [
+      children: [
         RoyalPanel(
           accentColor: FeaturePalette.cp,
           gradient: FeaturePalette.glow(FeaturePalette.cp),
@@ -224,7 +224,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
     return ListView(
       key: const Key('cp-reward'),
       padding: const EdgeInsets.all(14),
-      children: const [
+      children: [
         RoyalPanel(
           accentColor: FeaturePalette.gift,
           gradient: FeaturePalette.glow(FeaturePalette.gift),
