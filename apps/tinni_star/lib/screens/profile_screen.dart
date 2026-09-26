@@ -288,22 +288,29 @@ class _FamilyTagBadge extends StatelessWidget {
 }
 
 class _GoldBadge extends StatelessWidget {
-  const _GoldBadge(this.text);
+  const _GoldBadge(this.text, {required this.color});
   final String text;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: RoyalPalette.deepGold.withValues(alpha: 0.25),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: RoyalPalette.gold),
+        border: Border.all(color: color),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.30),
+            blurRadius: 10,
+          ),
+        ],
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: RoyalPalette.gold,
+        style: TextStyle(
+          color: color,
           fontWeight: FontWeight.w800,
           fontSize: 10,
         ),
@@ -313,19 +320,26 @@ class _GoldBadge extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
   final String label;
   final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return RoyalPanel(
+      gradient: FeaturePalette.glow(color),
+      accentColor: color,
       child: Column(
         children: [
           Text(
             value,
-            style: const TextStyle(
-              color: RoyalPalette.gold,
+            style: TextStyle(
+              color: color,
               fontWeight: FontWeight.w900,
               fontSize: 18,
             ),
