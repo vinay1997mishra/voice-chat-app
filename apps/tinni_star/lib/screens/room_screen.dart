@@ -1811,7 +1811,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               const Expanded(
                                 child: Icon(
                                   Icons.card_giftcard_rounded,
-                                  color: RoyalPalette.gold,
+                                  color: gift.id.contains('heart') ||
+                                          gift.id.contains('ring')
+                                      ? FeaturePalette.cp
+                                      : gift.id.contains('dragon') ||
+                                              gift.id.contains('crown')
+                                          ? FeaturePalette.rank
+                                          : FeaturePalette.gift,
                                   size: 38,
                                 ),
                               ),
@@ -2300,7 +2306,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         return ListTile(
                           leading: const Icon(
                             Icons.event_seat_rounded,
-                            color: RoyalPalette.gold,
+                            color: FeaturePalette.family,
                           ),
                           title: Text(displayName),
                           subtitle: Text(
@@ -2408,7 +2414,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               key: const Key('seat-control-mute'),
               leading: Icon(
                 seat.roomMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
-                color: RoyalPalette.gold,
+                color: seat.roomMuted
+                    ? FeaturePalette.safety
+                    : FeaturePalette.family,
               ),
               title: Text(
                 seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
@@ -2431,7 +2439,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 key: const Key('seat-control-take'),
                 leading: const Icon(
                   Icons.event_seat_rounded,
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.family,
                 ),
                 title: const Text('Take Seat'),
                 subtitle: const Text(
@@ -2447,7 +2455,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ListTile(
                 leading: const Icon(
                   Icons.logout_rounded,
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.safety,
                 ),
                 title: const Text('Leave this seat'),
                 onTap: () async {
@@ -3020,7 +3028,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         onPressed: _showEmojiPicker,
                         icon: const Icon(
                           Icons.emoji_emotions_rounded,
-                          color: RoyalPalette.gold,
+                          color: FeaturePalette.games,
                         ),
                       ),
                     IconButton(
@@ -3045,7 +3053,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         color: controller.mySeat == null ||
                                 widget.state.roomSession.moderationMicMuted
                             ? RoyalPalette.muted
-                            : RoyalPalette.gold,
+                            : controller.micState == MicState.live
+                                ? FeaturePalette.family
+                                : FeaturePalette.safety,
                       ),
                     ),
                     IconButton(
@@ -3060,7 +3070,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
                       icon: const Icon(
                         Icons.card_giftcard_rounded,
-                        color: RoyalPalette.gold,
+                        color: FeaturePalette.gift,
                       ),
                     ),
                     IconButton(
@@ -3075,7 +3085,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       onPressed: _showRoomTools,
                       icon: const Icon(
                         Icons.grid_view_rounded,
-                        color: RoyalPalette.gold,
+                        color: FeaturePalette.social,
                       ),
                     ),
                     if (controller.inviteMode)
@@ -3097,7 +3107,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         },
                         icon: const Icon(
                           Icons.event_seat_rounded,
-                          color: RoyalPalette.gold,
+                          color: FeaturePalette.family,
                         ),
                       ),
                   ],
@@ -3159,11 +3169,26 @@ class _RoomThemeChoice {
   final bool panelFree;
 }
 class _ProfileAction extends StatelessWidget {
-  const _ProfileAction({required this.icon, required this.label, required this.onTap});
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
+  Color get _color {
+    final value = label.toLowerCase();
+    if (value.contains('follow')) return FeaturePalette.social;
+    if (value.contains('message')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('seat')) return FeaturePalette.family;
+    if (value.contains('mute')) return FeaturePalette.safety;
+    if (value.contains('kick')) return FeaturePalette.safety;
+    return FeaturePalette.social;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3179,8 +3204,8 @@ class _ProfileAction extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: RoyalPalette.panel2,
-                child: Icon(icon, color: RoyalPalette.gold, size: 20),
+                backgroundColor: _color.withValues(alpha: 0.16),
+                child: Icon(icon, color: _color, size: 20),
               ),
               const SizedBox(height: 5),
               Text(
