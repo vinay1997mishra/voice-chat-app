@@ -63,11 +63,18 @@ jobs:
 
       - name: Build installable APK
         working-directory: apps/tinni_star
-        run: flutter build apk --release
+        run: flutter build apk --release --split-per-abi
 
-      - name: Upload Tinni Star APK
+      - name: Upload Tinni Star ARM64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Tinni-Star
-          path: apps/tinni_star/build/app/outputs/flutter-apk/app-release.apk
+          name: Tinni-Star-ARM64
+          path: apps/tinni_star/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+
+      - name: Upload Tinni Star split APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tinni-Star-Split-APKs
+          path: apps/tinni_star/build/app/outputs/flutter-apk/app-*-release.apk
           if-no-files-found: error
