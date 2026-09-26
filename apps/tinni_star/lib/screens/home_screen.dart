@@ -11,6 +11,15 @@ import '../discovery/discovery_service.dart';
 import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
 
+import 'cp_ranking_screen.dart';
+import 'discover_screen.dart';
+import 'feature_center_screen.dart';
+import 'family_ranking_screen.dart';
+import 'gifts_screen.dart';
+import 'ranking_screen.dart';
+import 'room_screen.dart';
+import 'vip_screen.dart';
+
 Color _homeFeatureColor(String title) {
   final value = title.toLowerCase();
   if (value.contains('cp') || value.contains('heart')) {
@@ -36,14 +45,7 @@ Color _homeFeatureColor(String title) {
   }
   return FeaturePalette.social;
 }
-import 'cp_ranking_screen.dart';
-import 'discover_screen.dart';
-import 'feature_center_screen.dart';
-import 'family_ranking_screen.dart';
-import 'gifts_screen.dart';
-import 'ranking_screen.dart';
-import 'room_screen.dart';
-import 'vip_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.state});
