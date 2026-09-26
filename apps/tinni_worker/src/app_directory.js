@@ -556,6 +556,686 @@ export class AppDirectoryStore extends DurableObject {
     throw new Error("Unable to allocate user ID");
   }
 
+
+  _ownerSetting(keyValue, fallbackValue = null) {
+    const key = String(keyValue || "").trim();
+    if (!key) return fallbackValue;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT value_json FROM owner_settings WHERE key = ? LIMIT 1",
+      key,
+    ).toArray()[0];
+    if (!row) return fallbackValue;
+    try { return JSON.parse(String(row.value_json)); } catch { return fallbackValue; }
+  }
+
+  _setOwnerSetting(keyValue, value) {
+    const key = String(keyValue || "").trim();
+    if (!key) throw new Error("Setting key is required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      \`INSERT INTO owner_settings (key, value_json, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json,
+         updated_at = excluded.updated_at\`,
+      key, JSON.stringify(value), now,
+    );
+    return { key, value, updated_at: now };
+  }
+
+  _resolveOwnerUserId(userIdValue) {
+    const raw = String(userIdValue || "").trim();
+    if (!raw) return "";
+    const direct = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", raw,
+    ).toArray()[0];
+    if (direct) return String(direct.user_id);
+    const history = this.ctx.storage.sql.exec(
+      "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1", raw,
+    ).toArray()[0];
+    return history ? String(history.new_user_id) : raw;
+  }
+
+  listUserTags(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      \`SELECT id, name, color, created_at
+         FROM owner_user_tags
+        WHERE user_id = ?
+        ORDER BY created_at DESC\`, userId,
+    ).toArray().map((row) => ({
+      id: String(row.id), name: String(row.name), color: String(row.color),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  _userControls(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return {
+      banned: false, device_banned: false, invisible: false,
+      locked_bypass: false, vip_level: 0,
+    };
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM owner_user_controls WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    return {
+      banned: Number(row?.banned || 0) === 1,
+      device_banned: Number(row?.device_banned || 0) === 1,
+      invisible: Number(row?.invisible || 0) === 1,
+      locked_bypass: Number(row?.locked_bypass || 0) === 1,
+      vip_level: Number(row?.vip_level || 0),
+      updated_at: row?.updated_at == null ? null : Number(row.updated_at),
+    };
+  }
+
+  ownerSearchUsers(queryValue, limitValue = 50) {
+    const query = String(queryValue || "").trim();
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 50)));
+    let resolved = query;
+    if (query) {
+      const history = this.ctx.storage.sql.exec(
+        "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1", query,
+      ).toArray()[0];
+      if (history) resolved = String(history.new_user_id);
+    }
+    const like = "%" + (query || resolved) + "%";
+    const rows = query
+      ? this.ctx.storage.sql.exec(
+          \`SELECT * FROM app_users
+            WHERE user_id = ? OR user_id LIKE ? OR display_name LIKE ? OR email LIKE ?
+            ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, created_at DESC
+            LIMIT ?\`,
+          resolved, like, like, like, resolved, limit,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          "SELECT * FROM app_users ORDER BY created_at DESC LIMIT ?", limit,
+        ).toArray();
+    return rows.map((row) => {
+      const user = rowToUser(row);
+      return {
+        ...user,
+        controls: this._userControls(user.user_id),
+        wallet: this.getWallet(user.user_id),
+        tags: this.listUserTags(user.user_id),
+      };
+    });
+  }
+
+  listVerifiedUsers(queryValue = "") {
+    const query = String(queryValue || "").trim();
+    const like = "%" + query + "%";
+    return this.ctx.storage.sql.exec(
+      \`SELECT * FROM app_users
+        WHERE call_verified = 1
+          AND (? = '' OR user_id LIKE ? OR display_name LIKE ?)
+        ORDER BY call_verified_at DESC, user_id ASC
+        LIMIT 500\`, query, like, like,
+    ).toArray().map((row) => ({
+      ...rowToUser(row), tags: this.listUserTags(row.user_id),
+    }));
+  }
+
+  ownerCatalog(kindValue) {
+    const kind = String(kindValue || "").trim();
+    const rows = kind
+      ? this.ctx.storage.sql.exec(
+          "SELECT * FROM owner_catalog WHERE kind = ? ORDER BY updated_at DESC", kind,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          "SELECT * FROM owner_catalog ORDER BY kind, updated_at DESC",
+        ).toArray();
+    return rows.map((row) => {
+      let data = {};
+      try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
+      return {
+        id: String(row.id), kind: String(row.kind), name: String(row.name),
+        data, enabled: Number(row.enabled) === 1,
+        created_at: Number(row.created_at), updated_at: Number(row.updated_at),
+      };
+    });
+  }
+
+  ownerCatalogCreate(kindValue, nameValue, dataValue = {}, enabledValue = true) {
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    const name = cleanText(nameValue, 80);
+    if (!kind || !name) throw new Error("Catalog type and name are required");
+    const now = Date.now();
+    const id = kind + "-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const data = dataValue && typeof dataValue === "object" ? dataValue : {};
+    this.ctx.storage.sql.exec(
+      \`INSERT INTO owner_catalog
+        (id, kind, name, data_json, enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)\`,
+      id, kind, name, JSON.stringify(data), enabledValue === false ? 0 : 1, now, now,
+    );
+    return this.ownerCatalog(kind).find((item) => item.id === id);
+  }
+
+  ownerCatalogPatch(idValue, patchValue = {}) {
+    const id = String(idValue || "").trim();
+    const current = this.ctx.storage.sql.exec(
+      "SELECT * FROM owner_catalog WHERE id = ? LIMIT 1", id,
+    ).toArray()[0];
+    if (!current) throw new Error("Catalog item not found");
+    let data = {};
+    try { data = JSON.parse(String(current.data_json || "{}")); } catch {}
+    const patch = patchValue && typeof patchValue === "object" ? patchValue : {};
+    if (patch.data && typeof patch.data === "object") data = { ...data, ...patch.data };
+    const name = patch.name === undefined ? String(current.name) : cleanText(patch.name, 80);
+    const enabled = patch.enabled === undefined
+      ? Number(current.enabled) : patch.enabled === true ? 1 : 0;
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_catalog SET name = ?, data_json = ?, enabled = ?, updated_at = ? WHERE id = ?",
+      name, JSON.stringify(data), enabled, Date.now(), id,
+    );
+    return this.ownerCatalog(String(current.kind)).find((item) => item.id === id);
+  }
+
+  ownerState() {
+    const defaultFeatures = {
+      voice_rooms: true, gifts: true, vip: true, games: true,
+      host_system: true, agency_system: true, bd_system: true,
+      coin_seller: true, merchant: true, banners: true,
+      vehicle_entries: true, frames: true,
+    };
+    const defaultPolicies = {
+      coins_per_usd: 2000000, diamonds_per_coin: 1,
+      room_online_exp_per_minute: 50, room_online_daily_minutes_cap: 480,
+      host_first_target_received_coins: 4000000, host_first_target_usd: 1.6,
+      agency_commission_percent: 20, bd_target_1_usd: 500,
+      bd_target_1_percent: 7, bd_target_2_usd: 1000,
+      bd_target_2_percent: 10, minimum_transfer_usd: 2,
+    };
+    const treasury = this.ctx.storage.sql.exec(
+      "SELECT balance, updated_at FROM owner_treasury WHERE singleton_id = 1 LIMIT 1",
+    ).toArray()[0] || { balance: 0, updated_at: 0 };
+    return {
+      features: { ...defaultFeatures, ...(this._ownerSetting("features", {}) || {}) },
+      policies: { ...defaultPolicies, ...(this._ownerSetting("policies", {}) || {}) },
+      game_config: this._ownerSetting("game_config", {
+        enabled: true, min_bet: 1, max_bet: 1000000,
+      }),
+      treasury: {
+        balance: Number(treasury.balance || 0),
+        updated_at: Number(treasury.updated_at || 0),
+      },
+      catalog: this.ownerCatalog(),
+    };
+  }
+
+  ownerDashboard() {
+    const now = Date.now();
+    const dayStart = now - (now % 86400000);
+    const users = this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_users",
+    ).toArray()[0];
+    const rooms = this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_rooms",
+    ).toArray()[0];
+    const sending = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(caller_cost_coins), 0) AS total FROM app_calls WHERE updated_at >= ?",
+      dayStart,
+    ).toArray()[0];
+    const state = this.ownerState();
+    return {
+      users: Number(users?.count || 0),
+      active_rooms: Number(rooms?.count || 0),
+      sending_today: Number(sending?.total || 0),
+      treasury: state.treasury.balance,
+    };
+  }
+
+  sendOwnerMessages(textValue, userIdsValue = [], allUsersValue = false) {
+    const text = cleanText(textValue, 2000);
+    if (!text) throw new Error("Message cannot be empty");
+    let targets = [];
+    if (allUsersValue === true) {
+      targets = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_users ORDER BY created_at ASC LIMIT 20000",
+      ).toArray().map((row) => String(row.user_id));
+    } else {
+      const requested = Array.isArray(userIdsValue) ? userIdsValue : [];
+      if (requested.length === 0) throw new Error("Select at least one user");
+      if (requested.length > 500) throw new Error("A selected batch can contain at most 500 IDs");
+      targets = [...new Set(requested.map((value) =>
+        this._resolveOwnerUserId(value)).filter(Boolean))];
+    }
+    let sent = 0;
+    for (const userId of targets) {
+      const exists = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+      ).toArray()[0];
+      if (!exists) continue;
+      this.sendOfficialMessage(userId, text, { action: "owner_message" });
+      sent += 1;
+    }
+    return { ok: true, sent, requested: targets.length };
+  }
+
+  applyOwnerTag(userIdsValue, nameValue, colorValue) {
+    const requested = Array.isArray(userIdsValue) ? userIdsValue : [];
+    if (requested.length === 0) throw new Error("Select at least one user");
+    if (requested.length > 500) throw new Error("Tag batch is limited to 500 IDs");
+    const name = cleanText(nameValue, 40);
+    const color = String(colorValue || "").trim();
+    if (!name) throw new Error("Tag name is required");
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Choose a valid tag color");
+    let tagged = 0;
+    const now = Date.now();
+    for (const value of [...new Set(requested)]) {
+      const userId = this._resolveOwnerUserId(value);
+      const exists = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+      ).toArray()[0];
+      if (!exists) continue;
+      const duplicate = this.ctx.storage.sql.exec(
+        "SELECT id FROM owner_user_tags WHERE user_id = ? AND name = ? LIMIT 1",
+        userId, name,
+      ).toArray()[0];
+      if (duplicate) {
+        this.ctx.storage.sql.exec(
+          "UPDATE owner_user_tags SET color = ? WHERE id = ?", color, String(duplicate.id),
+        );
+      } else {
+        this.ctx.storage.sql.exec(
+          "INSERT INTO owner_user_tags (id, user_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)",
+          "tag-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8),
+          userId, name, color, now,
+        );
+      }
+      tagged += 1;
+    }
+    return { ok: true, tagged, name, color };
+  }
+
+  removeOwnerTag(userIdValue, tagIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const tagId = String(tagIdValue || "").trim();
+    this.ctx.storage.sql.exec(
+      "DELETE FROM owner_user_tags WHERE user_id = ? AND id = ?", userId, tagId,
+    );
+    return { ok: true, user_id: userId, tag_id: tagId };
+  }
+
+  _setUserControl(userIdValue, patchValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const exists = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!exists) throw new Error("User not found");
+    const current = this._userControls(userId);
+    const patch = patchValue && typeof patchValue === "object" ? patchValue : {};
+    const next = {
+      banned: patch.banned ?? current.banned,
+      device_banned: patch.device_banned ?? current.device_banned,
+      invisible: patch.invisible ?? current.invisible,
+      locked_bypass: patch.locked_bypass ?? current.locked_bypass,
+      vip_level: patch.vip_level ?? current.vip_level,
+    };
+    this.ctx.storage.sql.exec(
+      \`INSERT INTO owner_user_controls
+        (user_id, banned, device_banned, invisible, locked_bypass, vip_level, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         banned = excluded.banned, device_banned = excluded.device_banned,
+         invisible = excluded.invisible, locked_bypass = excluded.locked_bypass,
+         vip_level = excluded.vip_level, updated_at = excluded.updated_at\`,
+      userId, next.banned ? 1 : 0, next.device_banned ? 1 : 0,
+      next.invisible ? 1 : 0, next.locked_bypass ? 1 : 0,
+      Math.max(0, Number(next.vip_level || 0)), Date.now(),
+    );
+    return this._userControls(userId);
+  }
+
+  _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
+    const operation = String(operationValue || "").trim().toLowerCase();
+    const amount = Math.max(0, Math.floor(Number(amountValue || 0)));
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+
+    if (walletType === "normal") {
+      const now = Date.now();
+      this.ctx.storage.sql.exec(
+        "INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at) VALUES (?, 0, 0, ?)",
+        userId, now,
+      );
+      if (operation === "credit") {
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?",
+          amount, now, userId,
+        );
+      } else if (operation === "debit") {
+        const wallet = this.getWallet(userId);
+        if (wallet.coins < amount) throw new Error("Wallet balance is too low");
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
+          amount, now, userId,
+        );
+      } else if (operation === "ban" || operation === "unban") {
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET banned = ?, updated_at = ? WHERE user_id = ?",
+          operation === "ban" ? 1 : 0, now, userId,
+        );
+      }
+      return { wallet_type: "normal", ...this.getWallet(userId) };
+    }
+
+    if (!["coin_seller", "merchant"].includes(walletType)) {
+      throw new Error("Unsupported wallet type");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      \`INSERT OR IGNORE INTO owner_wallets
+        (user_id, wallet_type, balance, banned, updated_at)
+       VALUES (?, ?, 0, 0, ?)\`,
+      userId, walletType, now,
+    );
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM owner_wallets WHERE user_id = ? AND wallet_type = ? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    if (operation === "credit") {
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_wallets SET balance = balance + ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
+        amount, now, userId, walletType,
+      );
+    } else if (operation === "debit") {
+      if (Number(row?.balance || 0) < amount) throw new Error("Wallet balance is too low");
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_wallets SET balance = balance - ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
+        amount, now, userId, walletType,
+      );
+    } else if (operation === "ban" || operation === "unban") {
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_wallets SET banned = ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
+        operation === "ban" ? 1 : 0, now, userId, walletType,
+      );
+    } else if (operation !== "create") {
+      throw new Error("Unsupported wallet operation");
+    }
+    const updated = this.ctx.storage.sql.exec(
+      "SELECT * FROM owner_wallets WHERE user_id = ? AND wallet_type = ? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    return {
+      user_id: userId, wallet_type: walletType,
+      balance: Number(updated?.balance || 0),
+      banned: Number(updated?.banned || 0) === 1,
+      updated_at: Number(updated?.updated_at || now),
+    };
+  }
+
+  _ownerTreasuryAdd(amountValue) {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (amount <= 0) throw new Error("Enter a valid coin amount");
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_treasury SET balance = balance + ?, updated_at = ? WHERE singleton_id = 1",
+      amount, Date.now(),
+    );
+    return this.ownerState().treasury;
+  }
+
+  _ownerTreasurySend(userIdValue, walletTypeValue, amountValue) {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (amount <= 0) throw new Error("Enter a valid coin amount");
+    const treasury = this.ownerState().treasury;
+    if (treasury.balance < amount) throw new Error("Owner Treasury balance is not enough");
+    const walletType = String(walletTypeValue || "normal");
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_treasury SET balance = balance - ?, updated_at = ? WHERE singleton_id = 1",
+      amount, Date.now(),
+    );
+    const wallet = this._manageWallet(userIdValue, walletType, "credit", amount);
+    return { treasury: this.ownerState().treasury, wallet };
+  }
+
+  _setHierarchy(userIdValue, roleValue, parentValue, activeValue, dataValue = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!userId || !role) throw new Error("User ID and role are required");
+    const exists = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!exists) throw new Error("User not found");
+    const parent = parentValue ? this._resolveOwnerUserId(parentValue) : null;
+    this.ctx.storage.sql.exec(
+      \`INSERT INTO owner_hierarchy
+        (user_id, role, parent_user_id, active, data_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, role) DO UPDATE SET
+         parent_user_id = excluded.parent_user_id, active = excluded.active,
+         data_json = excluded.data_json, updated_at = excluded.updated_at\`,
+      userId, role, parent, activeValue === false ? 0 : 1,
+      JSON.stringify(dataValue && typeof dataValue === "object" ? dataValue : {}),
+      Date.now(),
+    );
+    return { user_id: userId, role, parent_user_id: parent, active: activeValue !== false };
+  }
+
+  _changeUserId(oldIdValue, newIdValue) {
+    const oldId = this._resolveOwnerUserId(oldIdValue);
+    const newId = String(newIdValue || "").trim();
+    if (!oldId || !newId) throw new Error("Current and new user ID are required");
+    if (!/^\d{6,12}$/.test(newId)) throw new Error("New public ID must contain 6 to 12 digits");
+    if (oldId === newId) return this.ownerSearchUsers(newId, 1)[0];
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", oldId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const taken = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", newId,
+    ).toArray()[0];
+    if (taken) throw new Error("New public ID is already in use");
+
+    const room = this.ctx.storage.sql.exec(
+      "SELECT id FROM app_rooms WHERE owner_id = ? LIMIT 1", oldId,
+    ).toArray()[0];
+    const oldRoomId = room ? String(room.id) : null;
+    const userColumns = [
+      ["app_user_identities","user_id"], ["app_wallets","user_id"],
+      ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
+      ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
+      ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
+      ["owner_hierarchy","user_id"], ["owner_hierarchy","parent_user_id"],
+      ["room_lock_attempts","user_id"], ["room_access_grants","user_id"],
+      ["room_themes","creator_user_id"], ["app_follows","follower_id"],
+      ["app_follows","target_id"], ["app_blocks","blocker_id"],
+      ["app_blocks","target_id"], ["direct_messages","from_user_id"],
+      ["direct_messages","to_user_id"], ["app_calls","caller_id"],
+      ["app_calls","receiver_id"],
+    ];
+    for (const pair of userColumns) {
+      const tableName = pair[0], columnName = pair[1];
+      this.ctx.storage.sql.exec(
+        "UPDATE " + tableName + " SET " + columnName + " = ? WHERE " + columnName + " = ?",
+        newId, oldId,
+      );
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE app_rooms SET owner_id = ? WHERE owner_id = ?", newId, oldId,
+    );
+
+    if (oldRoomId && oldRoomId === oldId) {
+      const roomColumns = [
+        ["room_locks","room_id"], ["room_lock_attempts","room_id"],
+        ["room_access_grants","room_id"], ["room_themes","room_id"],
+        ["owner_room_controls","room_id"],
+      ];
+      for (const pair of roomColumns) {
+        const tableName = pair[0], columnName = pair[1];
+        this.ctx.storage.sql.exec(
+          "UPDATE " + tableName + " SET " + columnName + " = ? WHERE " + columnName + " = ?",
+          newId, oldRoomId,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET id = ? WHERE id = ?", newId, oldRoomId,
+      );
+    }
+
+    this.ctx.storage.sql.exec(
+      "UPDATE app_users SET user_id = ?, updated_at = ? WHERE user_id = ?",
+      newId, Date.now(), oldId,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO user_id_history (old_user_id, new_user_id, changed_at) VALUES (?, ?, ?)",
+      oldId, newId, Date.now(),
+    );
+    return this.ownerSearchUsers(newId, 1)[0];
+  }
+
+  ownerAction(actionValue, dataValue = {}) {
+    const action = String(actionValue || "").trim();
+    const data = dataValue && typeof dataValue === "object" ? dataValue : {};
+    const on = (value) => ["on","enable","enabled","true","activate","grant","unban"]
+      .includes(String(value || "").toLowerCase());
+
+    switch (action) {
+      case "treasury-add": return this._ownerTreasuryAdd(data.amount);
+      case "treasury-send": return this._ownerTreasurySend(data.user_id, data.wallet_type, data.amount);
+      case "user-search": return { users: this.ownerSearchUsers(data.user_id || data.query, 50) };
+      case "user-ban": return this._setUserControl(data.user_id, { banned: String(data.status) === "ban" });
+      case "device-ban": return this._setUserControl(data.user_id, { device_banned: String(data.status) === "ban" });
+      case "user-invisible": return this._setUserControl(data.user_id, { invisible: on(data.status) });
+      case "locked-bypass": return this._setUserControl(data.user_id, { locked_bypass: on(data.status) });
+      case "vip-grant": return this._setUserControl(data.user_id, {
+        vip_level: String(data.operation) === "remove" ? 0 : Math.max(1, Number(data.vip_level || 1)),
+      });
+      case "id-change": return this._changeUserId(data.user_id, data.new_id);
+      case "room-ban": {
+        const roomId = String(data.room_id || "").trim();
+        if (!this._roomRow(roomId)) throw new Error("Room not found");
+        this.ctx.storage.sql.exec(
+          \`INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
+           VALUES (?, ?, NULL, ?)
+           ON CONFLICT(room_id) DO UPDATE SET banned = excluded.banned, updated_at = excluded.updated_at\`,
+          roomId, String(data.status) === "ban" ? 1 : 0, Date.now(),
+        );
+        return { room_id: roomId, banned: String(data.status) === "ban" };
+      }
+      case "room-name": {
+        const roomId = String(data.room_id || "").trim();
+        const name = cleanText(data.room_name, 60);
+        if (!name) throw new Error("Room name is required");
+        const existing = this._roomRow(roomId);
+        if (!existing) throw new Error("Room not found");
+        this.ctx.storage.sql.exec(
+          "UPDATE app_rooms SET title = ?, updated_at = ? WHERE id = ?",
+          name, Date.now(), roomId,
+        );
+        return { room_id: roomId, title: name };
+      }
+      case "room-dp": {
+        const roomId = String(data.room_id || "").trim();
+        if (!this._roomRow(roomId)) throw new Error("Room not found");
+        const asset = String(data.asset_url || "").trim();
+        this.ctx.storage.sql.exec(
+          "UPDATE app_rooms SET photo_data_url = ?, updated_at = ? WHERE id = ?",
+          asset || null, Date.now(), roomId,
+        );
+        return { room_id: roomId, photo_data_url: asset || null };
+      }
+      case "room-bg": {
+        const roomId = String(data.room_id || "").trim();
+        if (!this._roomRow(roomId)) throw new Error("Room not found");
+        const asset = String(data.asset_url || "").trim();
+        this.ctx.storage.sql.exec(
+          \`INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
+           VALUES (?, 0, ?, ?)
+           ON CONFLICT(room_id) DO UPDATE SET
+             background_asset = excluded.background_asset, updated_at = excluded.updated_at\`,
+          roomId, asset || null, Date.now(),
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE app_rooms SET theme_asset = ?, updated_at = ? WHERE id = ?",
+          asset || null, Date.now(), roomId,
+        );
+        return { room_id: roomId, background_asset: asset || null };
+      }
+      case "room-live": {
+        const roomId = String(data.room_id || data.target_id || "").trim();
+        const row = this.ctx.storage.sql.exec(
+          "SELECT * FROM app_rooms WHERE id = ? LIMIT 1", roomId,
+        ).toArray()[0];
+        if (!row) throw new Error("Room not found");
+        return { room: rowToRoom(row) };
+      }
+      case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount);
+      case "wallet-seller": return this._manageWallet(data.user_id, "coin_seller", data.operation, data.amount);
+      case "wallet-merchant": return this._manageWallet(data.user_id, "merchant", data.operation, data.amount);
+      case "bd-activate": return this._setHierarchy(data.user_id, "bd", null, String(data.operation) !== "remove");
+      case "agency-activate": return this._setHierarchy(data.user_id, "agency", null, String(data.operation) !== "remove");
+      case "agency-to-bd": return this._setHierarchy(data.agency_owner_id, "agency", data.bd_user_id, true);
+      case "agency-from-bd": return this._setHierarchy(data.agency_owner_id, "agency", null, true);
+      case "host-add": return this._setHierarchy(data.host_user_id, "host", data.agency_owner_id, true);
+      case "host-remove": return this._setHierarchy(data.host_user_id, "host", data.agency_owner_id, false);
+      case "bd-target": return this._setOwnerSetting("hierarchy.bd_target", data);
+      case "complaints": return { ok: true, message: "Complaints are available in Owner Notifications." };
+      case "role-new": return this.ownerCatalogCreate(
+        String(data.type || "role"), data.name, { color: data.color || "#FFD54F" },
+      );
+      case "vip-new": return this.ownerCatalogCreate("vip", data.name || "VIP", {
+        level: Number(data.level || data.vip_level || 1),
+        price: Number(data.price || 0), entry: data.entry || "", frame: data.frame || "",
+      });
+      case "gift-new": return this.ownerCatalogCreate("gift", data.name, {
+        coin_price: Number(data.coin_price || 0), asset_url: String(data.asset_url || ""),
+      });
+      case "entry-new": return this.ownerCatalogCreate("entry", data.name, {
+        asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
+      });
+      case "frame-new": return this.ownerCatalogCreate("frame", data.name, {
+        asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
+      });
+      case "banner-new": return this.ownerCatalogCreate("banner", data.title || "Banner", {
+        asset_url: String(data.asset_url || ""),
+        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : Date.now(),
+        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
+      });
+      case "policy-new":
+      case "policy-set": {
+        const policies = this.ownerState().policies;
+        policies[String(data.key || "").trim()] = data.value;
+        return this._setOwnerSetting("policies", policies);
+      }
+      case "feature-set": {
+        const features = this.ownerState().features;
+        features[String(data.key || "").trim()] = data.enabled === true;
+        return this._setOwnerSetting("features", features);
+      }
+      case "game-switch": {
+        const config = this.ownerState().game_config;
+        config.enabled = data.enabled !== undefined ? data.enabled === true : !config.enabled;
+        return this._setOwnerSetting("game_config", config);
+      }
+      case "game-limits": {
+        const config = this.ownerState().game_config;
+        if (data.min_bet !== undefined) config.min_bet = Number(data.min_bet);
+        if (data.max_bet !== undefined) config.max_bet = Number(data.max_bet);
+        return this._setOwnerSetting("game_config", config);
+      }
+      case "game-stats": {
+        const row = this.ctx.storage.sql.exec(
+          \`SELECT COUNT(*) AS calls, COALESCE(SUM(caller_cost_coins),0) AS spent,
+                  COALESCE(SUM(receiver_reward_diamonds),0) AS rewards
+             FROM app_calls\`,
+        ).toArray()[0];
+        return {
+          sessions: Number(row?.calls || 0), spent_coins: Number(row?.spent || 0),
+          reward_diamonds: Number(row?.rewards || 0),
+        };
+      }
+      case "catalog-toggle": return this.ownerCatalogPatch(data.id, { enabled: data.enabled === true });
+      case "catalog-edit": return this.ownerCatalogPatch(data.id, data.patch || {});
+      default: throw new Error("Unsupported Owner action: " + action);
+    }
+  }
+
   async getUserByProvider(providerValue, subjectValue) {
     const provider = String(providerValue || "").trim().toLowerCase();
     const subject = String(subjectValue || "").trim();
@@ -620,13 +1300,21 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async getUserById(userIdValue) {
-    const userId = String(userIdValue || "").trim();
-    if (!userId) return null;
+    const requestedId = String(userIdValue || "").trim();
+    if (!requestedId) return null;
+    const userId = this._resolveOwnerUserId(requestedId);
     const row = this.ctx.storage.sql.exec(
       `SELECT * FROM app_users WHERE user_id = ? LIMIT 1`,
       userId,
     ).toArray()[0];
-    return rowToUser(row);
+    const user = rowToUser(row);
+    if (!user) return null;
+    return {
+      ...user,
+      previous_user_id: requestedId !== userId ? requestedId : null,
+      controls: this._userControls(userId),
+      tags: this.listUserTags(userId),
+    };
   }
 
   async createUser(input) {
