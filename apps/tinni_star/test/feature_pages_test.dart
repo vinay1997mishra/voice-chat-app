@@ -3,13 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/community/family_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
-import 'package:tinni_star/screens/cp_disconnect_screen.dart';
-import 'package:tinni_star/screens/cp_screen.dart';
 import 'package:tinni_star/screens/feature_center_screen.dart';
 import 'package:tinni_star/screens/profile_screen.dart';
-import 'package:tinni_star/screens/recharge_screen.dart';
-import 'package:tinni_star/screens/sharing_screen.dart';
-import 'package:tinni_star/screens/store_screen.dart';
 import 'package:tinni_star/screens/vip_screen.dart';
 import 'package:tinni_star/social/social.dart';
 
