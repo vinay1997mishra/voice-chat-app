@@ -766,6 +766,9 @@ function applySession(session) {
   const clearAuditButton = document.getElementById("clearAuditBtn");
   if (clearAuditButton) clearAuditButton.hidden = !owner;
 
+  const callVerificationPanel = document.getElementById("callVerificationPanel");
+  if (callVerificationPanel) callVerificationPanel.hidden = !owner;
+
   if (owner) {
     document.body.classList.remove("auth-loading");
     document.body.classList.add("auth-ready");
