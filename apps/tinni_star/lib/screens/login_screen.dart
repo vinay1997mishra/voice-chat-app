@@ -528,17 +528,23 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(
-                Icons.photo_library_rounded,
-                color: RoyalPalette.gold,
+              leading: const ShiningIcon(
+                icon: Icons.photo_library_rounded,
+                color: FeaturePalette.moments,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
               ),
               title: const Text('Gallery'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(
-                Icons.photo_camera_rounded,
-                color: RoyalPalette.gold,
+              leading: const ShiningIcon(
+                icon: Icons.photo_camera_rounded,
+                color: FeaturePalette.discover,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
               ),
               title: const Text('Camera'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
@@ -794,6 +800,12 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               child: FilledButton(
                 key: const Key('email-password-login-button'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FeaturePalette.email,
+                  foregroundColor: Colors.black,
+                  shadowColor: FeaturePalette.email,
+                  elevation: 5,
+                ),
                 onPressed: busy ? null : _emailPasswordLogin,
                 child: const Text('Login with Tinni Password'),
               ),
@@ -811,6 +823,10 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 key: const Key('email-send-otp-button'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: FeaturePalette.email,
+                  side: const BorderSide(color: FeaturePalette.email),
+                ),
                 onPressed: busy || !emailReady ? null : _sendEmailOtp,
                 icon: const Icon(Icons.person_add_alt_1_rounded),
                 label: const Text('Create new Email ID'),
@@ -833,6 +849,12 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               child: FilledButton(
                 key: const Key('email-verify-otp-button'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FeaturePalette.email,
+                  foregroundColor: Colors.black,
+                  shadowColor: FeaturePalette.email,
+                  elevation: 5,
+                ),
                 onPressed: busy ? null : _verifyEmailOtp,
                 child: const Text('Verify OTP'),
               ),
@@ -841,7 +863,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const Text(
               'OTP verified. Create your Tinni password.',
               style: TextStyle(
-                color: RoyalPalette.gold,
+                color: FeaturePalette.email,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -873,6 +895,12 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               child: FilledButton(
                 key: const Key('email-save-password-button'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FeaturePalette.email,
+                  foregroundColor: Colors.black,
+                  shadowColor: FeaturePalette.email,
+                  elevation: 5,
+                ),
                 onPressed: busy ? null : _saveEmailPassword,
                 child: const Text('Save Tinni Password'),
               ),
@@ -922,6 +950,8 @@ class _LoginScreenState extends State<LoginScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: FeaturePalette.google,
                 foregroundColor: Colors.white,
+                shadowColor: FeaturePalette.google,
+                elevation: 6,
               ),
               onPressed: googleReady && !busy && !waitingFacebook
                   ? _googleLogin
@@ -960,6 +990,8 @@ class _LoginScreenState extends State<LoginScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: FeaturePalette.facebook,
                 foregroundColor: Colors.white,
+                shadowColor: FeaturePalette.facebook,
+                elevation: 6,
               ),
               onPressed: facebookReady && !busy && !waitingFacebook
                   ? _facebookLogin
@@ -1014,6 +1046,8 @@ class _LoginScreenState extends State<LoginScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: FeaturePalette.email,
                 foregroundColor: Colors.black,
+                shadowColor: FeaturePalette.email,
+                elevation: 6,
               ),
               onPressed: !busy && !waitingFacebook ? _openEmailMode : null,
               icon: const Icon(Icons.email_rounded),
@@ -1187,6 +1221,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ChoiceChip(
                       label: const Text('Male'),
                       selected: selectedGender == 'male',
+                      selectedColor:
+                          FeaturePalette.social.withValues(alpha: 0.28),
+                      side: BorderSide(
+                        color: selectedGender == 'male'
+                            ? FeaturePalette.social
+                            : RoyalPalette.bronze,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selectedGender == 'male'
+                            ? FeaturePalette.social
+                            : RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
                       onSelected: busy
                           ? null
                           : (_) => setState(() => selectedGender = 'male'),
@@ -1197,6 +1244,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ChoiceChip(
                       label: const Text('Female'),
                       selected: selectedGender == 'female',
+                      selectedColor:
+                          FeaturePalette.cp.withValues(alpha: 0.28),
+                      side: BorderSide(
+                        color: selectedGender == 'female'
+                            ? FeaturePalette.cp
+                            : RoyalPalette.bronze,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selectedGender == 'female'
+                            ? FeaturePalette.cp
+                            : RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
                       onSelected: busy
                           ? null
                           : (_) => setState(() => selectedGender = 'female'),
@@ -1225,6 +1285,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   key: const Key('create-real-id-button'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _providerColor(),
+                    foregroundColor: Colors.white,
+                    shadowColor: _providerColor(),
+                    elevation: 6,
+                  ),
                   onPressed:
                       busy || signatureWords > 150 ? null : _createId,
                   icon: const Icon(Icons.verified_user_rounded),
