@@ -337,6 +337,7 @@ class _TopRankPodium extends StatelessWidget {
   Widget build(BuildContext context) {
     return RoyalPanel(
       gradient: FeaturePalette.glow(accent),
+      accentColor: accent,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
