@@ -1575,7 +1575,7 @@ export default {
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
-      const result = getAppDirectoryStore(env).roomPasswordStatus(
+      const result = await getAppDirectoryStore(env).roomPasswordStatus(
         appSession.user.user_id,
         roomId,
       );
@@ -1611,7 +1611,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        following: getAppDirectoryStore(env).listFollowing(
+        following: await getAppDirectoryStore(env).listFollowing(
           appSession.user.user_id,
         ),
       });
@@ -1622,7 +1622,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        friends: getAppDirectoryStore(env).listFriends(
+        friends: await getAppDirectoryStore(env).listFriends(
           appSession.user.user_id,
         ),
       });
@@ -1634,7 +1634,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getAppDirectoryStore(env).setFollowing(
+          await getAppDirectoryStore(env).setFollowing(
             appSession.user.user_id,
             body.target_user_id,
             body.following === true,
@@ -1653,7 +1653,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        blocked: getAppDirectoryStore(env).listBlocked(
+        blocked: await getAppDirectoryStore(env).listBlocked(
           appSession.user.user_id,
         ),
       });
@@ -1665,7 +1665,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getAppDirectoryStore(env).setBlocked(
+          await getAppDirectoryStore(env).setBlocked(
             appSession.user.user_id,
             body.target_user_id,
             body.blocked === true,
@@ -1688,7 +1688,7 @@ export default {
       try {
         return json({
           ok: true,
-          verification: getAppDirectoryStore(env).callVerificationStatus(
+          verification: await getAppDirectoryStore(env).callVerificationStatus(
             appSession.user.user_id,
           ),
         });
@@ -1708,7 +1708,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const result = getAppDirectoryStore(env).submitCallVerification(
+        const result = await getAppDirectoryStore(env).submitCallVerification(
           appSession.user.user_id,
           body,
         );
@@ -1750,7 +1750,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).createRandomCall(
+          call: await getAppDirectoryStore(env).createRandomCall(
             appSession.user.user_id,
             body.gender,
             body.media,
@@ -1771,7 +1771,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).createCall(
+          call: await getAppDirectoryStore(env).createCall(
             appSession.user.user_id,
             body.receiver_id,
             body.media,
@@ -1809,7 +1809,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        call: getAppDirectoryStore(env).incomingCall(
+        call: await getAppDirectoryStore(env).incomingCall(
           appSession.user.user_id,
         ),
       });
@@ -1822,7 +1822,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).respondCall(
+          call: await getAppDirectoryStore(env).respondCall(
             appSession.user.user_id,
             body.call_id,
             body.accept === true,
@@ -1843,7 +1843,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).endCall(
+          call: await getAppDirectoryStore(env).endCall(
             appSession.user.user_id,
             body.call_id,
           ),
@@ -1862,7 +1862,7 @@ export default {
       try {
         return json({
           ok: true,
-          threads: getAppDirectoryStore(env).listMessageThreads(
+          threads: await getAppDirectoryStore(env).listMessageThreads(
             appSession.user.user_id,
           ),
         });
@@ -1886,7 +1886,7 @@ export default {
       try {
         return json({
           ok: true,
-          messages: getAppDirectoryStore(env).listDirectMessages(
+          messages: await getAppDirectoryStore(env).listDirectMessages(
             appSession.user.user_id,
             peerUserId,
             url.searchParams.get("limit"),
@@ -1905,7 +1905,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const message = getAppDirectoryStore(env).sendDirectMessage(
+        const message = await getAppDirectoryStore(env).sendDirectMessage(
           appSession.user.user_id,
           body.to_user_id,
           body.text,
@@ -1929,7 +1929,7 @@ export default {
       }
       try {
         return json(
-          getAppDirectoryStore(env).setRoomTheme(
+          await getAppDirectoryStore(env).setRoomTheme(
             appSession.user.user_id,
             roomId,
             body,
@@ -1950,7 +1950,7 @@ export default {
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
-      const themes = getAppDirectoryStore(env).listRoomThemes(roomId);
+      const themes = await getAppDirectoryStore(env).listRoomThemes(roomId);
       return json({
         ok: true,
         user_price_coins: 10000000,
@@ -1968,7 +1968,7 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
       try {
-        const theme = getAppDirectoryStore(env).createUserRoomTheme(
+        const theme = await getAppDirectoryStore(env).createUserRoomTheme(
           appSession.user.user_id,
           roomId,
           body,
@@ -2694,7 +2694,7 @@ export default {
       }
 
       try {
-        const officialMessage = getAppDirectoryStore(env).sendOfficialMessage(
+        const officialMessage = await getAppDirectoryStore(env).sendOfficialMessage(
           targetUserId,
           message,
           {
@@ -2775,7 +2775,7 @@ export default {
       return json({
         ok: true,
         submissions:
-          getAppDirectoryStore(env).listCallVerificationSubmissions(),
+          await getAppDirectoryStore(env).listCallVerificationSubmissions(),
       });
     }
 
@@ -2789,7 +2789,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         const result =
-          getAppDirectoryStore(env).reviewCallVerification(
+          await getAppDirectoryStore(env).reviewCallVerification(
             decodeURIComponent(callVerificationReviewMatch[1]),
             body.approve === true,
             body.note,
@@ -2805,12 +2805,12 @@ export default {
           { submission_id: result.submission_id },
         );
         if (body.approve === true) {
-          getAppDirectoryStore(env).sendOfficialMessage(
+          await getAppDirectoryStore(env).sendOfficialMessage(
             result.user_id,
             "Your Call ID verification is approved. Your ID stays Verified until Owner removes Verified status."
           );
         } else {
-          getAppDirectoryStore(env).sendOfficialMessage(
+          await getAppDirectoryStore(env).sendOfficialMessage(
             result.user_id,
             "Your Call ID verification was rejected. Please contact the Official Manager for help with verification."
           );
@@ -3189,7 +3189,7 @@ export default {
       if (!sessionHasPermission(session, "rooms.theme_view")) {
         return json({ ok: false, error: "Room theme view access required" }, 403);
       }
-      const themes = getAppDirectoryStore(env).listPanelRoomThemes();
+      const themes = await getAppDirectoryStore(env).listPanelRoomThemes();
       return json({ ok: true, themes });
     }
 
@@ -3199,7 +3199,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const theme = getAppDirectoryStore(env).createPanelRoomTheme(body);
+        const theme = await getAppDirectoryStore(env).createPanelRoomTheme(body);
         await writeAudit(env, session, "room.theme.create", "room_theme", theme.id, {
           name: theme.name,
           permanent: Boolean(theme.permanent),
@@ -3222,7 +3222,7 @@ export default {
       }
       try {
         const themeId = decodeURIComponent(roomThemeMatch[1]);
-        const result = getAppDirectoryStore(env).disableRoomTheme(themeId);
+        const result = await getAppDirectoryStore(env).disableRoomTheme(themeId);
         await writeAudit(env, session, "room.theme.remove", "room_theme", themeId, {});
         return json(result);
       } catch (error) {
