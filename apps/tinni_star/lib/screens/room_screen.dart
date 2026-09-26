@@ -4536,6 +4536,235 @@ class _RoomThemeChoice {
   final DateTime? expiresAt;
   final bool panelFree;
 }
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileAction extends StatelessWidget {
   const _ProfileAction({
     required this.icon,
