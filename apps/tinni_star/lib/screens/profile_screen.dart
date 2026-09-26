@@ -9,7 +9,6 @@ import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
-import 'gifts_screen.dart';
 import 'vip_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -193,8 +192,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           GridView.count(
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
-            crossAxisCount: 3,
-            childAspectRatio: 0.95,
+            crossAxisCount: 2,
+            childAspectRatio: 1.15,
             mainAxisSpacing: 9,
             crossAxisSpacing: 9,
             children: [
@@ -206,17 +205,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => VipScreen(state: widget.state),
-                  ),
-                ),
-              ),
-              _MineTile(
-                icon: Icons.card_giftcard_rounded,
-                label: 'Gift',
-                color: FeaturePalette.gift,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GiftsScreen(state: widget.state),
                   ),
                 ),
               ),

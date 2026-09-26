@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import 'gifts_screen.dart';
 import 'vip_screen.dart';
 import '../ui/royal_theme.dart';
 import '../calls/call_service.dart';
 import '../community/family_service.dart';
 import '../economy/economy.dart';
-import '../effects/effect_queue.dart';
 import '../party/party_service.dart';
 import '../relationship/cp_service.dart';
-import '../rewards/reward_service.dart';
 import '../sharing/share_service.dart';
 
 class FeatureCenterScreen extends StatefulWidget {
@@ -159,60 +156,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         },
       ),
       _FeatureAction(
-        'KTV / Music',
-        Icons.music_note_rounded,
-        () {
-          state.ktv.addToQueue(state.ktv.library.first, '10000000');
-          final entry = state.ktv.startNext();
-          state.ktvFeatures.reportSong(
-            songId: entry?.song.id ?? 'none',
-            kind: 'demo',
-            details: 'KTV feedback pipeline ready',
-          );
-          showText('Now singing: ' + (entry?.song.title ?? 'none'));
-        },
-      ),
-      _FeatureAction(
-        'Gifts',
-        Icons.card_giftcard_rounded,
-        () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => GiftsScreen(state: state)),
-          );
-        },
-      ),
-      _FeatureAction(
-        'Lucky Bag / Rocket',
-        Icons.rocket_launch_rounded,
-        () {
-          if (!state.rewards.luckyBags.containsKey('demo')) {
-            state.rewards.createLuckyBag(
-              id: 'demo',
-              senderId: '10000000',
-              totalSlots: 10,
-              reward: const LuckyBagReward(
-                kind: LuckyBagRewardKind.coins,
-                label: 'Lucky reward',
-                amount: 100,
-              ),
-            );
-          }
-          final reward = state.rewards.grab('demo', '10000000');
-          if (reward != null) {
-            state.wallet.creditCoins(reward.amount, reward.label);
-          }
-          state.rewards.launchRocket(1000);
-          state.rewards.addRebate(50);
-          showText(
-            'Rocket Lv.' +
-                state.rewards.rocket.level.toString() +
-                ' • rebate ' +
-                state.rewards.rebateCoins.toString(),
-          );
-        },
-      ),
-      _FeatureAction(
         'Gift Backpack / Atlas',
         Icons.backpack_rounded,
         () {
@@ -307,46 +250,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
           );
           state.calls.accept();
           showText('Friend voice call connected.');
-        },
-      ),
-      _FeatureAction(
-        'Room Controls',
-        Icons.meeting_room_rounded,
-        () {
-          state.roomControls.invite('20000000');
-          state.roomControls.applyForMic('20000000', 2);
-          state.roomControls.approveMic('20000000');
-          state.roomControls.setAdmin('20000000', true);
-          state.roomControls.setHostSeat(0);
-          state.roomControls.setBossSeat(1);
-          showText('Invite, mic, admin, host/boss seat controls updated.');
-        },
-      ),
-      _FeatureAction(
-        'Moderation',
-        Icons.shield_rounded,
-        () {
-          state.moderation.addAdmin('20000000');
-          state.moderation.banMic('30000000');
-          state.roomControls.banMic('30000000');
-          state.roomControls.blacklist('40000000');
-          showText('Admin, mic-ban and room blacklist updated.');
-        },
-      ),
-      _FeatureAction(
-        'Effects Queue',
-        Icons.animation_rounded,
-        () {
-          state.effects.enqueue(
-            const EffectRequest(
-              id: 'vip-entry-demo',
-              kind: EffectKind.vip,
-              asset: 'vip12-entry',
-              priority: 100,
-            ),
-          );
-          final effect = state.effects.takeNext();
-          showText('Playing effect: ' + (effect?.asset ?? 'none'));
         },
       ),
       _FeatureAction(
