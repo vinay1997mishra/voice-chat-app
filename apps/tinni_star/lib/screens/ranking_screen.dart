@@ -70,6 +70,12 @@ class _RankingScreenState extends State<RankingScreen> {
   @override
   Widget build(BuildContext context) {
     final items = _items();
+    final accent = <Color>[
+      FeaturePalette.social,
+      FeaturePalette.gift,
+      FeaturePalette.cp,
+      FeaturePalette.games,
+    ][_tab];
     return Scaffold(
       key: const Key('ranking-screen'),
       appBar: AppBar(
@@ -280,6 +286,16 @@ class _RankTabs extends StatelessWidget {
         itemCount: labels.length,
         separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
+          final label = labels[index].toLowerCase();
+          final color = compact
+              ? FeaturePalette.rank
+              : label.contains('gift')
+                  ? FeaturePalette.gift
+                  : label.contains('charm')
+                      ? FeaturePalette.cp
+                      : label.contains('game')
+                          ? FeaturePalette.games
+                          : FeaturePalette.social;
           return ChoiceChip(
             key: Key(
               'ranking-tab-' +
@@ -289,6 +305,14 @@ class _RankTabs extends StatelessWidget {
             ),
             label: Text(labels[index]),
             selected: selected == index,
+            selectedColor: color.withValues(alpha: 0.30),
+            side: BorderSide(
+              color: selected == index ? color : RoyalPalette.bronze,
+            ),
+            labelStyle: TextStyle(
+              color: selected == index ? color : RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+            ),
             onSelected: (_) => onSelected(index),
           );
         },
@@ -300,18 +324,18 @@ class _RankTabs extends StatelessWidget {
 class _TopRankPodium extends StatelessWidget {
   const _TopRankPodium({
     required this.items,
+    required this.accent,
     required this.onTap,
   });
 
   final List<_RankItem> items;
+  final Color accent;
   final ValueChanged<_RankItem> onTap;
 
   @override
   Widget build(BuildContext context) {
     return RoyalPanel(
-      gradient: const LinearGradient(
-        colors: [Color(0xFF5A3000), Color(0xFF160C02), Color(0xFF5A3000)],
-      ),
+      gradient: FeaturePalette.glow(accent),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -332,21 +356,40 @@ class _TopRankPodium extends StatelessWidget {
                         clipBehavior: Clip.none,
                         alignment: Alignment.topCenter,
                         children: [
-                          CircleAvatar(
-                            radius: i == 0 ? 39 : 31,
-                            backgroundColor: RoyalPalette.gold,
-                            child: CircleAvatar(
-                              radius: i == 0 ? 34 : 27,
-                              backgroundColor: RoyalPalette.panel,
-                              child: Text(
-                                items[i].name.characters.first.toUpperCase(),
-                                style: TextStyle(
-                                  color: RoyalPalette.gold,
-                                  fontSize: i == 0 ? 27 : 22,
-                                  fontWeight: FontWeight.w900,
+                          Builder(
+                            builder: (context) {
+                              final medal = i == 0
+                                  ? const Color(0xFFFFD54F)
+                                  : i == 1
+                                      ? const Color(0xFFC5D0DA)
+                                      : const Color(0xFFCD7F32);
+                              return Container(
+                                width: i == 0 ? 78 : 62,
+                                height: i == 0 ? 78 : 62,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: medal, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: medal.withValues(alpha: 0.55),
+                                      blurRadius: 18,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ),
+                                child: CircleAvatar(
+                                  backgroundColor: RoyalPalette.panel,
+                                  child: Text(
+                                    items[i].name.characters.first.toUpperCase(),
+                                    style: TextStyle(
+                                      color: medal,
+                                      fontSize: i == 0 ? 27 : 22,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                           Positioned(
                             top: -13,
@@ -354,7 +397,11 @@ class _TopRankPodium extends StatelessWidget {
                               i == 0
                                   ? Icons.workspace_premium_rounded
                                   : Icons.emoji_events_rounded,
-                              color: RoyalPalette.gold,
+                              color: i == 0
+                                  ? const Color(0xFFFFD54F)
+                                  : i == 1
+                                      ? const Color(0xFFC5D0DA)
+                                      : const Color(0xFFCD7F32),
                               size: i == 0 ? 30 : 24,
                             ),
                           ),
