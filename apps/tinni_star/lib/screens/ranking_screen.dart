@@ -122,6 +122,8 @@ class _RankingScreenState extends State<RankingScreen> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: RoyalPanel(
                       padding: const EdgeInsets.all(10),
+                      gradient: FeaturePalette.glow(accent),
+                      accentColor: accent,
                       onTap: items[i].room == null
                           ? null
                           : () => Navigator.pop(context, items[i].room),
@@ -132,19 +134,31 @@ class _RankingScreenState extends State<RankingScreen> {
                             child: Text(
                               (i + 1).toString(),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: RoyalPalette.gold,
+                              style: TextStyle(
+                                color: accent,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
                           ),
-                          CircleAvatar(
-                            radius: 23,
-                            backgroundColor: RoyalPalette.deepGold,
+                          Container(
+                            width: 46,
+                            height: 46,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accent.withValues(alpha: 0.15),
+                              border: Border.all(color: accent),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accent.withValues(alpha: 0.34),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
                             child: Text(
                               items[i].name.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.black,
+                              style: TextStyle(
+                                color: accent,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -173,16 +187,18 @@ class _RankingScreenState extends State<RankingScreen> {
                               ],
                             ),
                           ),
-                          const Icon(
-                            Icons.monetization_on_rounded,
-                            color: RoyalPalette.gold,
-                            size: 18,
+                          ShiningIcon(
+                            icon: Icons.monetization_on_rounded,
+                            color: accent,
+                            size: 14,
+                            boxSize: 28,
+                            glow: 0.26,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             _compact(items[i].score),
-                            style: const TextStyle(
-                              color: RoyalPalette.gold,
+                            style: TextStyle(
+                              color: accent,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -196,18 +212,16 @@ class _RankingScreenState extends State<RankingScreen> {
                     horizontal: 14,
                     vertical: 11,
                   ),
-                  child: const Row(
+                  gradient: FeaturePalette.glow(accent),
+                  accentColor: accent,
+                  child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: RoyalPalette.deepGold,
-                        child: Text(
-                          'M',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                      ShiningIcon(
+                        icon: Icons.person_rounded,
+                        color: accent,
+                        size: 20,
+                        boxSize: 44,
+                        glow: 0.32,
                       ),
                       SizedBox(width: 10),
                       Expanded(
@@ -423,8 +437,8 @@ class _TopRankPodium extends StatelessWidget {
                       ),
                       Text(
                         items[i].score.toString(),
-                        style: const TextStyle(
-                          color: RoyalPalette.gold,
+                        style: TextStyle(
+                          color: accent,
                           fontWeight: FontWeight.w900,
                           fontSize: 10,
                         ),
