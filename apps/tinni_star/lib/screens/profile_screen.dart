@@ -24,6 +24,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final List<OwnerTag> _ownerTags = <OwnerTag>[];
+  final List<OwnerTag> _ownerMedals = <OwnerTag>[];
 
   @override
   void initState() {
@@ -60,11 +61,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .where((tag) => tag.name.isNotEmpty)
               .toList(growable: false)
           : const <OwnerTag>[];
+      final rawMedals = decoded['medals'];
+      final medals = rawMedals is List
+          ? rawMedals
+              .whereType<Map>()
+              .map(OwnerTag.fromMap)
+              .where((medal) => medal.name.isNotEmpty)
+              .toList(growable: false)
+          : const <OwnerTag>[];
       if (!mounted) return;
       setState(() {
         _ownerTags
           ..clear()
           ..addAll(tags);
+        _ownerMedals
+          ..clear()
+          ..addAll(medals);
       });
     } catch (_) {
       // Profile remains usable even if tag refresh fails.
@@ -173,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             account.countryName,
                         style: const TextStyle(color: RoyalPalette.muted),
                       ),
-                      if (_ownerTags.isNotEmpty) ...[
+                      if (_ownerTags.isNotEmpty || _ownerMedals.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 6,
@@ -181,6 +193,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             for (final tag in _ownerTags)
                               _OwnerTagBadge(tag: tag),
+                            for (final medal in _ownerMedals)
+                              _OwnerTagBadge(
+                                tag: medal,
+                                medal: true,
+                              ),
                           ],
                         ),
                       ],
@@ -316,9 +333,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _OwnerTagBadge extends StatelessWidget {
-  const _OwnerTagBadge({required this.tag});
+  const _OwnerTagBadge({
+    required this.tag,
+    this.medal = false,
+  });
 
   final OwnerTag tag;
+  final bool medal;
 
   Color get _color {
     final value = int.tryParse(tag.colorHex.replaceFirst('#', ''), radix: 16);
@@ -329,7 +350,9 @@ class _OwnerTagBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _color;
     return Container(
-      key: Key('profile-owner-tag-' + tag.name),
+      key: Key(
+        (medal ? 'profile-owner-medal-' : 'profile-owner-tag-') + tag.name,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
@@ -342,13 +365,26 @@ class _OwnerTagBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        tag.name,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontSize: 10,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 12,
+              color: color,
+            ),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            tag.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          ),
+        ],
       ),
     );
   }
