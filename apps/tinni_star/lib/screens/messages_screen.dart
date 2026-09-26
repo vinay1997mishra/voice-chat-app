@@ -134,7 +134,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         title: const Text(
           'Message',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.message,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -152,24 +152,52 @@ class _MessagesScreenState extends State<MessagesScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: RoyalPanel(
+              gradient: FeaturePalette.glow(FeaturePalette.message),
+              accentColor: FeaturePalette.message,
               child: Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: RoyalPalette.deepGold,
-                    backgroundImage: avatar,
-                    child: avatar == null
-                        ? (_isOfficial
-                            ? const Icon(
-                                Icons.verified_rounded,
-                                color: Colors.black,
-                              )
-                            : Text(
-                                _targetName.isEmpty
-                                    ? '?'
-                                    : _targetName.characters.first.toUpperCase(),
-                                style: const TextStyle(color: Colors.black),
-                              ))
-                        : null,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _isOfficial
+                            ? FeaturePalette.rank
+                            : FeaturePalette.message,
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isOfficial
+                                  ? FeaturePalette.rank
+                                  : FeaturePalette.message)
+                              .withValues(alpha: 0.42),
+                          blurRadius: 14,
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor: RoyalPalette.panel,
+                      backgroundImage: avatar,
+                      child: avatar == null
+                          ? (_isOfficial
+                              ? const Icon(
+                                  Icons.verified_rounded,
+                                  color: FeaturePalette.rank,
+                                )
+                              : Text(
+                                  _targetName.isEmpty
+                                      ? '?'
+                                      : _targetName.characters.first
+                                          .toUpperCase(),
+                                  style: const TextStyle(
+                                    color: FeaturePalette.message,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ))
+                          : null,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -228,10 +256,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(11),
                             decoration: BoxDecoration(
-                              color: RoyalPalette.panel2,
+                              gradient: FeaturePalette.glow(
+                                mine
+                                    ? FeaturePalette.social
+                                    : FeaturePalette.message,
+                              ),
                               borderRadius: BorderRadius.circular(16),
-                              border:
-                                  Border.all(color: RoyalPalette.deepGold),
+                              border: Border.all(
+                                color: (mine
+                                        ? FeaturePalette.social
+                                        : FeaturePalette.message)
+                                    .withValues(alpha: 0.70),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (mine
+                                          ? FeaturePalette.social
+                                          : FeaturePalette.message)
+                                      .withValues(alpha: 0.18),
+                                  blurRadius: 10,
+                                ),
+                              ],
                             ),
                             child: Text(message.text),
                           ),
@@ -251,9 +296,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
               child: _isOfficial
                   ? const Row(
                       children: [
-                        Icon(
-                          Icons.verified_rounded,
-                          color: RoyalPalette.gold,
+                        ShiningIcon(
+                          icon: Icons.verified_rounded,
+                          color: FeaturePalette.rank,
+                          size: 18,
+                          boxSize: 34,
+                          glow: 0.34,
                         ),
                         SizedBox(width: 10),
                         Expanded(
@@ -294,9 +342,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(
-                                  Icons.send_rounded,
-                                  color: RoyalPalette.gold,
+                              : const ShiningIcon(
+                                  icon: Icons.send_rounded,
+                                  color: FeaturePalette.message,
+                                  size: 20,
+                                  boxSize: 36,
+                                  glow: 0.34,
                                 ),
                         ),
                       ],
