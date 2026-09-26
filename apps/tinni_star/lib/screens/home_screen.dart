@@ -1539,7 +1539,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
             const Text(
               'Create room',
               style: TextStyle(
-                color: RoyalPalette.gold,
+                color: FeaturePalette.family,
                 fontSize: 23,
                 fontWeight: FontWeight.w900,
               ),
