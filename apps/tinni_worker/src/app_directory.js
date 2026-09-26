@@ -615,11 +615,11 @@ export class AppDirectoryStore extends DurableObject {
     if (!key) throw new Error("Setting key is required");
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      \`INSERT INTO owner_settings (key, value_json, updated_at)
+      `INSERT INTO owner_settings (key, value_json, updated_at)
        VALUES (?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET
          value_json = excluded.value_json,
-         updated_at = excluded.updated_at\`,
+         updated_at = excluded.updated_at`,
       key, JSON.stringify(value), now,
     );
     return { key, value, updated_at: now };
@@ -642,10 +642,10 @@ export class AppDirectoryStore extends DurableObject {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return [];
     return this.ctx.storage.sql.exec(
-      \`SELECT id, name, color, created_at
+      `SELECT id, name, color, created_at
          FROM owner_user_tags
         WHERE user_id = ?
-        ORDER BY created_at DESC\`, userId,
+        ORDER BY created_at DESC`, userId,
     ).toArray().map((row) => ({
       id: String(row.id), name: String(row.name), color: String(row.color),
       created_at: Number(row.created_at),
@@ -745,10 +745,10 @@ export class AppDirectoryStore extends DurableObject {
     const like = "%" + (query || resolved) + "%";
     const rows = query
       ? this.ctx.storage.sql.exec(
-          \`SELECT * FROM app_users
+          `SELECT * FROM app_users
             WHERE user_id = ? OR user_id LIKE ? OR display_name LIKE ? OR email LIKE ?
             ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, created_at DESC
-            LIMIT ?\`,
+            LIMIT ?`,
           resolved, like, like, like, resolved, limit,
         ).toArray()
       : this.ctx.storage.sql.exec(
@@ -770,11 +770,11 @@ export class AppDirectoryStore extends DurableObject {
     const query = String(queryValue || "").trim();
     const like = "%" + query + "%";
     return this.ctx.storage.sql.exec(
-      \`SELECT * FROM app_users
+      `SELECT * FROM app_users
         WHERE call_verified = 1
           AND (? = '' OR user_id LIKE ? OR display_name LIKE ?)
         ORDER BY call_verified_at DESC, user_id ASC
-        LIMIT 500\`, query, like, like,
+        LIMIT 500`, query, like, like,
     ).toArray().map((row) => ({
       ...rowToUser(row),
       tags: this.listUserTags(row.user_id),
@@ -810,9 +810,9 @@ export class AppDirectoryStore extends DurableObject {
     const id = kind + "-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     const data = dataValue && typeof dataValue === "object" ? dataValue : {};
     this.ctx.storage.sql.exec(
-      \`INSERT INTO owner_catalog
+      `INSERT INTO owner_catalog
         (id, kind, name, data_json, enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)\`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       id, kind, name, JSON.stringify(data), enabledValue === false ? 0 : 1, now, now,
     );
     return this.ownerCatalog(kind).find((item) => item.id === id);
@@ -980,13 +980,13 @@ export class AppDirectoryStore extends DurableObject {
       vip_level: patch.vip_level ?? current.vip_level,
     };
     this.ctx.storage.sql.exec(
-      \`INSERT INTO owner_user_controls
+      `INSERT INTO owner_user_controls
         (user_id, banned, device_banned, invisible, locked_bypass, vip_level, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          banned = excluded.banned, device_banned = excluded.device_banned,
          invisible = excluded.invisible, locked_bypass = excluded.locked_bypass,
-         vip_level = excluded.vip_level, updated_at = excluded.updated_at\`,
+         vip_level = excluded.vip_level, updated_at = excluded.updated_at`,
       userId, next.banned ? 1 : 0, next.device_banned ? 1 : 0,
       next.invisible ? 1 : 0, next.locked_bypass ? 1 : 0,
       Math.max(0, Number(next.vip_level || 0)), Date.now(),
@@ -1036,9 +1036,9 @@ export class AppDirectoryStore extends DurableObject {
     }
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      \`INSERT OR IGNORE INTO owner_wallets
+      `INSERT OR IGNORE INTO owner_wallets
         (user_id, wallet_type, balance, banned, updated_at)
-       VALUES (?, ?, 0, 0, ?)\`,
+       VALUES (?, ?, 0, 0, ?)`,
       userId, walletType, now,
     );
     const row = this.ctx.storage.sql.exec(
@@ -1110,12 +1110,12 @@ export class AppDirectoryStore extends DurableObject {
     if (!exists) throw new Error("User not found");
     const parent = parentValue ? this._resolveOwnerUserId(parentValue) : null;
     this.ctx.storage.sql.exec(
-      \`INSERT INTO owner_hierarchy
+      `INSERT INTO owner_hierarchy
         (user_id, role, parent_user_id, active, data_json, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, role) DO UPDATE SET
          parent_user_id = excluded.parent_user_id, active = excluded.active,
-         data_json = excluded.data_json, updated_at = excluded.updated_at\`,
+         data_json = excluded.data_json, updated_at = excluded.updated_at`,
       userId, role, parent, activeValue === false ? 0 : 1,
       JSON.stringify(dataValue && typeof dataValue === "object" ? dataValue : {}),
       Date.now(),
@@ -1217,9 +1217,9 @@ export class AppDirectoryStore extends DurableObject {
         const roomId = String(data.room_id || "").trim();
         if (!this._roomRow(roomId)) throw new Error("Room not found");
         this.ctx.storage.sql.exec(
-          \`INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
+          `INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
            VALUES (?, ?, NULL, ?)
-           ON CONFLICT(room_id) DO UPDATE SET banned = excluded.banned, updated_at = excluded.updated_at\`,
+           ON CONFLICT(room_id) DO UPDATE SET banned = excluded.banned, updated_at = excluded.updated_at`,
           roomId, String(data.status) === "ban" ? 1 : 0, Date.now(),
         );
         return { room_id: roomId, banned: String(data.status) === "ban" };
@@ -1251,10 +1251,10 @@ export class AppDirectoryStore extends DurableObject {
         if (!this._roomRow(roomId)) throw new Error("Room not found");
         const asset = String(data.asset_url || "").trim();
         this.ctx.storage.sql.exec(
-          \`INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
+          `INSERT INTO owner_room_controls (room_id, banned, background_asset, updated_at)
            VALUES (?, 0, ?, ?)
            ON CONFLICT(room_id) DO UPDATE SET
-             background_asset = excluded.background_asset, updated_at = excluded.updated_at\`,
+             background_asset = excluded.background_asset, updated_at = excluded.updated_at`,
           roomId, asset || null, Date.now(),
         );
         this.ctx.storage.sql.exec(
@@ -1327,9 +1327,9 @@ export class AppDirectoryStore extends DurableObject {
       }
       case "game-stats": {
         const row = this.ctx.storage.sql.exec(
-          \`SELECT COUNT(*) AS calls, COALESCE(SUM(caller_cost_coins),0) AS spent,
+          `SELECT COUNT(*) AS calls, COALESCE(SUM(caller_cost_coins),0) AS spent,
                   COALESCE(SUM(receiver_reward_diamonds),0) AS rewards
-             FROM app_calls\`,
+             FROM app_calls`,
         ).toArray()[0];
         return {
           sessions: Number(row?.calls || 0), spent_coins: Number(row?.spent || 0),
