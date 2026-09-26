@@ -1022,6 +1022,12 @@ async function handleAction(action, data) {
     return;
   }
 
+  if (action === "call-verification-refresh") {
+    await loadCallVerifications();
+    toast("Call verification reviews refreshed.");
+    return;
+  }
+
   if (action === 'room-theme-new') {
     const name = String(data.name || '').trim();
     const asset = String(data.asset || '').trim();
@@ -1208,6 +1214,63 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
+  const approveCallVerification = e.target.closest("[data-call-verify-approve]")?.dataset.callVerifyApprove;
+  if (approveCallVerification) {
+    try {
+      await api(
+        "/api/call-verifications/" + encodeURIComponent(approveCallVerification) + "/review",
+        {
+          method: "POST",
+          body: JSON.stringify({ approve: true }),
+        }
+      );
+      toast("Call ID verified. It stays verified until Owner removes Verified status.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const rejectCallVerification = e.target.closest("[data-call-verify-reject]")?.dataset.callVerifyReject;
+  if (rejectCallVerification) {
+    const note = prompt("Reject reason / note (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/" + encodeURIComponent(rejectCallVerification) + "/review",
+        {
+          method: "POST",
+          body: JSON.stringify({ approve: false, note }),
+        }
+      );
+      toast("Verification rejected. User should contact the Official Manager.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const revokeCallVerification = e.target.closest("[data-call-verify-revoke]")?.dataset.callVerifyRevoke;
+  if (revokeCallVerification) {
+    if (!confirm("Remove Verified status from this ID?")) return;
+    const note = prompt("Reason (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" + encodeURIComponent(revokeCallVerification) + "/revoke",
+        {
+          method: "POST",
+          body: JSON.stringify({ note }),
+        }
+      );
+      toast("Verified status removed. Verification will be required again.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const roomThemeRemove = e.target.closest('[data-room-theme-remove]')?.dataset.roomThemeRemove;
   if (roomThemeRemove) {
     if (!confirm('Remove this global room theme?')) return;
