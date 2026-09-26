@@ -88,6 +88,7 @@ class _VipScreenState extends State<VipScreen> {
               final color = _vipColor(selectedLevel);
               return RoyalPanel(
                 gradient: FeaturePalette.glow(color),
+                accentColor: color,
                 child: Column(
                   children: [
                     ShiningIcon(
@@ -145,6 +146,7 @@ class _VipScreenState extends State<VipScreen> {
               return RoyalPanel(
                 padding: const EdgeInsets.all(9),
                 gradient: unlocked ? FeaturePalette.glow(color) : null,
+                accentColor: unlocked ? color : null,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
