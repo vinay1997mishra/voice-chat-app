@@ -4,6 +4,9 @@ const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
 const ROOM_THEME_USER_PRICE_COINS = 10000000;
 const ROOM_THEME_USER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const CALL_COST_COINS_PER_MINUTE = 400000;
+const CALL_RECEIVER_DIAMONDS_PER_MINUTE = 320000;
+const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
 
@@ -87,6 +90,16 @@ function rowToUser(row) {
     flag_emoji: String(row.flag_emoji),
     gender: String(row.gender),
     avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+    call_verified: Number(row.call_verified || 0) === 1,
+    call_verification_status: String(
+      row.call_verification_status || "unverified"
+    ),
+    call_verified_at:
+      row.call_verified_at == null ? null : Number(row.call_verified_at),
+    call_verification_revoked_at:
+      row.call_verification_revoked_at == null
+        ? null
+        : Number(row.call_verification_revoked_at),
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
   };
@@ -311,6 +324,31 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_calls_caller
         ON app_calls(caller_id, state, updated_at DESC);
 
+      CREATE TABLE IF NOT EXISTS app_wallets (
+        user_id TEXT PRIMARY KEY,
+        coins INTEGER NOT NULL DEFAULT 2000000,
+        diamonds INTEGER NOT NULL DEFAULT 17125,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS call_verification_submissions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        system_passed INTEGER NOT NULL DEFAULT 0,
+        system_details_json TEXT NOT NULL DEFAULT '{}',
+        photo_front_data_url TEXT NOT NULL,
+        photo_left_data_url TEXT NOT NULL,
+        photo_right_data_url TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        reviewed_at INTEGER,
+        review_note TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_call_verification_user
+        ON call_verification_submissions(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_call_verification_status
+        ON call_verification_submissions(status, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -364,7 +402,17 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
       "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
-      "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER"
+      "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
+      "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_users ADD COLUMN call_verification_status TEXT NOT NULL DEFAULT 'unverified'",
+      "ALTER TABLE app_users ADD COLUMN call_verified_at INTEGER",
+      "ALTER TABLE app_users ADD COLUMN call_verification_revoked_at INTEGER",
+      "ALTER TABLE app_calls ADD COLUMN accepted_at INTEGER",
+      "ALTER TABLE app_calls ADD COLUMN billed_minutes INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_calls ADD COLUMN caller_cost_coins INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_calls ADD COLUMN receiver_reward_diamonds INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_calls ADD COLUMN receiver_earning_eligible INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_calls ADD COLUMN end_reason TEXT"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -388,6 +436,11 @@ export class AppDirectoryStore extends DurableObject {
        SELECT auth_provider, auth_subject, user_id, created_at
          FROM app_users
         WHERE auth_subject IS NOT NULL AND auth_subject != ''`
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at)
+       SELECT user_id, 2000000, 17125, ? FROM app_users`,
+      Date.now(),
     );
   }
 
@@ -552,6 +605,13 @@ export class AppDirectoryStore extends DurableObject {
        VALUES (?, ?, ?, ?)`,
       provider,
       subject,
+      userId,
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_wallets
+        (user_id, coins, diamonds, updated_at)
+       VALUES (?, 2000000, 17125, ?)`,
       userId,
       now,
     );
@@ -820,6 +880,19 @@ export class AppDirectoryStore extends DurableObject {
       error: row.error ? String(row.error) : null,
       created_at: Number(row.created_at),
       updated_at: Number(row.updated_at),
+      accepted_at: row.accepted_at == null ? null : Number(row.accepted_at),
+      billed_minutes: Number(row.billed_minutes || 0),
+      caller_cost_coins: Number(row.caller_cost_coins || 0),
+      receiver_reward_diamonds: Number(row.receiver_reward_diamonds || 0),
+      receiver_earning_eligible:
+        Number(row.receiver_earning_eligible || 0) === 1,
+      cost_coins_per_minute: CALL_COST_COINS_PER_MINUTE,
+      receiver_diamonds_per_minute:
+        CALL_RECEIVER_DIAMONDS_PER_MINUTE,
+      end_reason: row.end_reason ? String(row.end_reason) : null,
+      caller_balance_coins: callerWallet.coins,
+      receiver_balance_diamonds: receiverWallet.diamonds,
+      receiver_verification: receiverVerification,
     };
   }
 
@@ -1044,6 +1117,313 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  getWallet(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user ID is required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO app_wallets
+        (user_id, coins, diamonds, updated_at)
+       VALUES (?, 2000000, 17125, ?)`,
+      userId,
+      now,
+    );
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id, coins, diamonds, updated_at FROM app_wallets WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return {
+      user_id: userId,
+      coins: Number(row?.coins || 0),
+      diamonds: Number(row?.diamonds || 0),
+      updated_at: Number(row?.updated_at || now),
+    };
+  }
+
+  callVerificationStatus(userIdValue) {
+    const user = this.ctx.storage.sql.exec(
+      `SELECT user_id, gender, call_verified, call_verification_status,
+              call_verified_at, call_verification_revoked_at
+         FROM app_users
+        WHERE user_id = ?
+        LIMIT 1`,
+      String(userIdValue || "").trim(),
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const isFemale = String(user.gender || "").toLowerCase() === "female";
+    return {
+      user_id: String(user.user_id),
+      required: isFemale,
+      eligible_for_receiver_earnings:
+        isFemale && Number(user.call_verified || 0) === 1,
+      verified: Number(user.call_verified || 0) === 1,
+      status: isFemale
+        ? String(user.call_verification_status || "unverified")
+        : "not_required",
+      verified_at:
+        user.call_verified_at == null ? null : Number(user.call_verified_at),
+      revoked_at:
+        user.call_verification_revoked_at == null
+          ? null
+          : Number(user.call_verification_revoked_at),
+    };
+  }
+
+  submitCallVerification(userIdValue, input) {
+    const userId = String(userIdValue || "").trim();
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id, gender, call_verified FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    if (String(user.gender || "").toLowerCase() !== "female") {
+      throw new Error("One-time call verification is only required for female accounts");
+    }
+    if (Number(user.call_verified || 0) === 1) {
+      return {
+        ok: true,
+        already_verified: true,
+        verification: this.callVerificationStatus(userId),
+      };
+    }
+
+    const photos = Array.isArray(input?.photos) ? input.photos : [];
+    if (photos.length !== 3) {
+      throw new Error("Exactly 3 live verification photos are required");
+    }
+    const normalized = photos.map((value) => String(value || ""));
+    for (const photo of normalized) {
+      if (!photo.startsWith("data:image/")) {
+        throw new Error("Verification photos must be image captures");
+      }
+      if (photo.length > CALL_VERIFICATION_IMAGE_MAX_LENGTH) {
+        throw new Error("Verification photo is too large");
+      }
+    }
+
+    const now = Date.now();
+    const id =
+      "verify-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const systemPassed = input?.system_passed === true;
+    const details =
+      input?.system_details && typeof input.system_details === "object"
+        ? input.system_details
+        : {};
+    this.ctx.storage.sql.exec(
+      `INSERT INTO call_verification_submissions
+        (id, user_id, status, system_passed, system_details_json,
+         photo_front_data_url, photo_left_data_url, photo_right_data_url,
+         created_at)
+       VALUES (?, ?, 'pending_owner', ?, ?, ?, ?, ?, ?)`,
+      id,
+      userId,
+      systemPassed ? 1 : 0,
+      JSON.stringify(details),
+      normalized[0],
+      normalized[1],
+      normalized[2],
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      `UPDATE app_users
+          SET call_verified = 0,
+              call_verification_status = 'pending_owner',
+              updated_at = ?
+        WHERE user_id = ?`,
+      now,
+      userId,
+    );
+    return {
+      ok: true,
+      already_verified: false,
+      submission_id: id,
+      status: "pending_owner",
+      system_passed: systemPassed,
+      contact_official_manager: !systemPassed,
+    };
+  }
+
+  listCallVerificationSubmissions() {
+    return this.ctx.storage.sql.exec(
+      `SELECT v.*, u.display_name, u.gender, u.call_verified,
+              u.call_verification_status
+         FROM call_verification_submissions v
+         JOIN app_users u ON u.user_id = v.user_id
+        ORDER BY
+          CASE v.status WHEN 'pending_owner' THEN 0 ELSE 1 END,
+          v.created_at DESC
+        LIMIT 300`,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      display_name: String(row.display_name || row.user_id),
+      gender: String(row.gender || ""),
+      status: String(row.status),
+      system_passed: Number(row.system_passed || 0) === 1,
+      system_details: JSON.parse(String(row.system_details_json || "{}")),
+      photos: [
+        String(row.photo_front_data_url),
+        String(row.photo_left_data_url),
+        String(row.photo_right_data_url),
+      ],
+      call_verified: Number(row.call_verified || 0) === 1,
+      call_verification_status: String(
+        row.call_verification_status || "unverified"
+      ),
+      created_at: Number(row.created_at),
+      reviewed_at:
+        row.reviewed_at == null ? null : Number(row.reviewed_at),
+      review_note: row.review_note ? String(row.review_note) : null,
+    }));
+  }
+
+  reviewCallVerification(submissionIdValue, approveValue, noteValue = "") {
+    const submissionId = String(submissionIdValue || "").trim();
+    const approve = approveValue === true;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM call_verification_submissions WHERE id = ? LIMIT 1",
+      submissionId,
+    ).toArray()[0];
+    if (!row) throw new Error("Verification submission not found");
+    const now = Date.now();
+    const status = approve ? "approved" : "rejected";
+    this.ctx.storage.sql.exec(
+      `UPDATE call_verification_submissions
+          SET status = ?, reviewed_at = ?, review_note = ?
+        WHERE id = ?`,
+      status,
+      now,
+      cleanText(noteValue, 500) || null,
+      submissionId,
+    );
+    this.ctx.storage.sql.exec(
+      `UPDATE app_users
+          SET call_verified = ?,
+              call_verification_status = ?,
+              call_verified_at = ?,
+              call_verification_revoked_at = NULL,
+              updated_at = ?
+        WHERE user_id = ?`,
+      approve ? 1 : 0,
+      approve ? "verified" : "rejected",
+      approve ? now : null,
+      now,
+      String(row.user_id),
+    );
+    return {
+      ok: true,
+      submission_id: submissionId,
+      user_id: String(row.user_id),
+      verified: approve,
+      status: approve ? "verified" : "rejected",
+    };
+  }
+
+  revokeCallVerification(userIdValue, noteValue = "") {
+    const userId = String(userIdValue || "").trim();
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE app_users
+          SET call_verified = 0,
+              call_verification_status = 'revoked',
+              call_verification_revoked_at = ?,
+              updated_at = ?
+        WHERE user_id = ?`,
+      now,
+      now,
+      userId,
+    );
+    return {
+      ok: true,
+      user_id: userId,
+      verified: false,
+      status: "revoked",
+      note: cleanText(noteValue, 500),
+    };
+  }
+
+  settleCallBilling(callIdValue, nowValue = Date.now()) {
+    const callId = String(callIdValue || "").trim();
+    const now = Number(nowValue || Date.now());
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM app_calls WHERE id = ? LIMIT 1",
+      callId,
+    ).toArray()[0];
+    if (!row || String(row.state) !== "accepted" || row.accepted_at == null) {
+      return row ? this.getCall(callId) : null;
+    }
+
+    const acceptedAt = Number(row.accepted_at);
+    const targetMinutes =
+      1 + Math.max(0, Math.floor((now - acceptedAt) / 60000));
+    const billedMinutes = Number(row.billed_minutes || 0);
+    const dueMinutes = targetMinutes - billedMinutes;
+    if (dueMinutes <= 0) return this.getCall(callId);
+
+    const callerWallet = this.getWallet(row.caller_id);
+    const affordableMinutes = Math.min(
+      dueMinutes,
+      Math.floor(callerWallet.coins / CALL_COST_COINS_PER_MINUTE),
+    );
+
+    if (affordableMinutes > 0) {
+      const callerCost = affordableMinutes * CALL_COST_COINS_PER_MINUTE;
+      const receiverReward =
+        Number(row.receiver_earning_eligible || 0) === 1
+          ? affordableMinutes * CALL_RECEIVER_DIAMONDS_PER_MINUTE
+          : 0;
+      this.ctx.storage.sql.exec(
+        `UPDATE app_wallets
+            SET coins = coins - ?, updated_at = ?
+          WHERE user_id = ?`,
+        callerCost,
+        now,
+        String(row.caller_id),
+      );
+      if (receiverReward > 0) {
+        this.ctx.storage.sql.exec(
+          `UPDATE app_wallets
+              SET diamonds = diamonds + ?, updated_at = ?
+            WHERE user_id = ?`,
+          receiverReward,
+          now,
+          String(row.receiver_id),
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `UPDATE app_calls
+            SET billed_minutes = billed_minutes + ?,
+                caller_cost_coins = caller_cost_coins + ?,
+                receiver_reward_diamonds = receiver_reward_diamonds + ?,
+                updated_at = ?
+          WHERE id = ?`,
+        affordableMinutes,
+        callerCost,
+        receiverReward,
+        now,
+        callId,
+      );
+    }
+
+    if (affordableMinutes < dueMinutes) {
+      this.ctx.storage.sql.exec(
+        `UPDATE app_calls
+            SET state = 'ended',
+                end_reason = 'insufficient_coins',
+                updated_at = ?
+          WHERE id = ?`,
+        now,
+        callId,
+      );
+    }
+    return this.getCall(callId);
+  }
+
   createCall(callerIdValue, receiverIdValue, mediaValue = "voice") {
     const callerId = String(callerIdValue || "").trim();
     const receiverId = String(receiverIdValue || "").trim();
@@ -1053,7 +1433,13 @@ export class AppDirectoryStore extends DurableObject {
     if (!this.areFriends(callerId, receiverId)) {
       throw new Error("Calls are limited to mutual friends");
     }
-    if (media !== "voice") throw new Error("Only voice calls are supported");
+    if (!["voice", "video"].includes(media)) {
+      throw new Error("Unsupported call type");
+    }
+    const callerWallet = this.getWallet(callerId);
+    if (callerWallet.coins < CALL_COST_COINS_PER_MINUTE) {
+      throw new Error("At least 400,000 coins are required to start a paid call");
+    }
 
     this.ctx.storage.sql.exec(
       `UPDATE app_calls
@@ -1067,18 +1453,23 @@ export class AppDirectoryStore extends DurableObject {
       receiverId,
     );
 
+    const receiverVerification = this.callVerificationStatus(receiverId);
+    const receiverEligible =
+      receiverVerification.eligible_for_receiver_earnings === true;
     const now = Date.now();
     const id = "call-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     const roomId = "call-" + id;
     this.ctx.storage.sql.exec(
       `INSERT INTO app_calls
-        (id, caller_id, receiver_id, media, state, room_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?)`,
+        (id, caller_id, receiver_id, media, state, room_id,
+         receiver_earning_eligible, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?, ?)`,
       id,
       callerId,
       receiverId,
       media,
       roomId,
+      receiverEligible ? 1 : 0,
       now,
       now,
     );
@@ -1099,6 +1490,9 @@ export class AppDirectoryStore extends DurableObject {
       callId,
     ).toArray()[0];
     if (!row) return null;
+    const callerWallet = this.getWallet(row.caller_id);
+    const receiverWallet = this.getWallet(row.receiver_id);
+    const receiverVerification = this.callVerificationStatus(row.receiver_id);
     return {
       id: String(row.id),
       caller_id: String(row.caller_id),
@@ -1137,10 +1531,29 @@ export class AppDirectoryStore extends DurableObject {
     if (!call) throw new Error("Call not found");
     if (call.receiver_id !== userId) throw new Error("Only the receiver can answer");
     if (call.state !== "ringing") return call;
+    const now = Date.now();
+    if (acceptValue) {
+      const verification = this.callVerificationStatus(userId);
+      if (verification.required && !verification.verified) {
+        throw new Error(
+          "Complete the one-time call verification before accepting paid calls"
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `UPDATE app_calls
+            SET state = 'accepted',
+                accepted_at = ?,
+                updated_at = ?
+          WHERE id = ?`,
+        now,
+        now,
+        call.id,
+      );
+      return this.settleCallBilling(call.id, now);
+    }
     this.ctx.storage.sql.exec(
-      "UPDATE app_calls SET state = ?, updated_at = ? WHERE id = ?",
-      acceptValue ? "accepted" : "rejected",
-      Date.now(),
+      "UPDATE app_calls SET state = 'rejected', updated_at = ? WHERE id = ?",
+      now,
       call.id,
     );
     return this.getCall(call.id);
@@ -1152,6 +1565,9 @@ export class AppDirectoryStore extends DurableObject {
     if (!call) throw new Error("Call not found");
     if (call.caller_id !== userId && call.receiver_id !== userId) {
       throw new Error("Not a call participant");
+    }
+    if (call.state === "accepted") {
+      this.settleCallBilling(call.id, Date.now());
     }
     this.ctx.storage.sql.exec(
       "UPDATE app_calls SET state = 'ended', updated_at = ? WHERE id = ?",
