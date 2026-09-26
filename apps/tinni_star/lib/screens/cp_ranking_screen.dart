@@ -31,7 +31,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
         title: const Text(
           'CP Ranking',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.cp,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -85,7 +85,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
               const Text(
                 'Top three last week',
                 style: TextStyle(
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.cpSoft,
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
                 ),
@@ -120,17 +120,12 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const CircleAvatar(
-                    radius: 30,
-                    backgroundColor: RoyalPalette.deepGold,
-                    child: Text(
-                      'M',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
-                      ),
-                    ),
+                  const ShiningIcon(
+                    icon: Icons.person_rounded,
+                    color: FeaturePalette.social,
+                    size: 30,
+                    boxSize: 60,
+                    glow: 0.40,
                   ),
                   const Expanded(
                     child: Center(
@@ -170,7 +165,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
               const Text(
                 'Bind with CP',
                 style: TextStyle(
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.cp,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -331,9 +326,29 @@ class _CoupleRankRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: RoyalPalette.gold,
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: rank == 1
+                  ? const Color(0xFFFFD54F)
+                  : rank == 2
+                      ? const Color(0xFFC5D0DA)
+                      : const Color(0xFFCD7F32),
+              boxShadow: [
+                BoxShadow(
+                  color: (rank == 1
+                          ? const Color(0xFFFFD54F)
+                          : rank == 2
+                              ? const Color(0xFFC5D0DA)
+                              : const Color(0xFFCD7F32))
+                      .withValues(alpha: 0.46),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
             child: Text(
               rank.toString(),
               style: const TextStyle(
