@@ -4242,7 +4242,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ],
-                              ],
                             ],
                           ),
                         );
