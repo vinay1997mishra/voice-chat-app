@@ -908,6 +908,9 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row) => ({
       user_id: String(row.user_id),
       display_name: String(row.display_name || row.user_id),
+      avatar_data_url: row.avatar_data_url
+        ? String(row.avatar_data_url)
+        : null,
     }));
   }
 
