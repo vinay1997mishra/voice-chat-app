@@ -1461,36 +1461,44 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
-      if (!room) {
-        return json({ ok: false, error: "Room not found" }, 404);
-      }
-
-      const access = getAppDirectoryStore(env).roomAccessState(
+      const directory = getAppDirectoryStore(env);
+      const callAccess = directory.callRoomAccess(
         appSession.user.user_id,
         roomId,
       );
-      if (!access.allowed) {
-        return json({
-          ok: false,
-          error: "Room password is required.",
-          room_locked: true,
-        }, 403);
-      }
 
-      const kick = getRoomPresenceStore(env, roomId).kickStatus(
-        appSession.user.user_id,
-      );
-      if (kick) {
-        return json({
-          ok: false,
-          error: "You are kicked from this room.",
-          kick_expires_at: kick.expires_at,
-          permanent: kick.permanent,
-        }, 403);
+      if (!callAccess.allowed) {
+        const rooms = await directory.listRooms();
+        const room = rooms.find(
+          (item) => String(item.id || item.room_id || "") === roomId,
+        );
+        if (!room) {
+          return json({ ok: false, error: "Room not found" }, 404);
+        }
+
+        const access = directory.roomAccessState(
+          appSession.user.user_id,
+          roomId,
+        );
+        if (!access.allowed) {
+          return json({
+            ok: false,
+            error: "Room password is required.",
+            room_locked: true,
+          }, 403);
+        }
+
+        const kick = getRoomPresenceStore(env, roomId).kickStatus(
+          appSession.user.user_id,
+        );
+        if (kick) {
+          return json({
+            ok: false,
+            error: "You are kicked from this room.",
+            kick_expires_at: kick.expires_at,
+            permanent: kick.permanent,
+          }, 403);
+        }
       }
 
       const token = await createLiveKitAccessToken({
@@ -1608,6 +1616,17 @@ export default {
       });
     }
 
+    if (url.pathname === "/social/friends" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        friends: getAppDirectoryStore(env).listFriends(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
     if (url.pathname === "/social/follow" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1655,6 +1674,79 @@ export default {
         return json({
           ok: false,
           error: String(error?.message || "Unable to update block"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/calls" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          call: getAppDirectoryStore(env).createCall(
+            appSession.user.user_id,
+            body.receiver_id,
+            body.media,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to start call"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/calls/incoming" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        call: getAppDirectoryStore(env).incomingCall(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
+    if (url.pathname === "/calls/respond" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          call: getAppDirectoryStore(env).respondCall(
+            appSession.user.user_id,
+            body.call_id,
+            body.accept === true,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to answer call"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/calls/end" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          call: getAppDirectoryStore(env).endCall(
+            appSession.user.user_id,
+            body.call_id,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to end call"),
         }, 400);
       }
     }
