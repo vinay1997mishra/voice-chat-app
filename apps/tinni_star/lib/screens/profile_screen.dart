@@ -137,9 +137,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           _GoldBadge(
                             'VIP' + identity.vip.level.toString(),
+                            color: FeaturePalette.vip,
                           ),
                           _GoldBadge(
                             'Noble ' + identity.noble.level.toString(),
+                            color: FeaturePalette.rank,
                           ),
                         ],
                       ),
@@ -156,6 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: _StatCard(
                   label: 'Coins',
                   value: widget.state.wallet.coins.toString(),
+                  color: FeaturePalette.wallet,
                 ),
               ),
               const SizedBox(width: 8),
@@ -163,6 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: _StatCard(
                   label: 'Diamonds',
                   value: widget.state.wallet.diamonds.toString(),
+                  color: FeaturePalette.diamond,
                 ),
               ),
             ],
