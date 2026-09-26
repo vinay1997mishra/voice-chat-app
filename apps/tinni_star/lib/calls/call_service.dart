@@ -110,6 +110,9 @@ class CallSession {
 
   static int _intValue(Object? value) => _intOrNull(value) ?? 0;
 
+  static Map<String, dynamic> _stringMap(Map source) =>
+      source.map((key, value) => MapEntry(key.toString(), value));
+
   static CallSession fromJson(Map<String, dynamic> data) {
     final stateText = data['state']?.toString() ?? 'ringing';
     final state = switch (stateText) {
@@ -159,6 +162,31 @@ class CallService {
 
   bool friendsOnly = true;
   CallSession? active;
+
+  CallSession initiate({
+    required String callerId,
+    required String receiverId,
+    required CallMedia media,
+    required bool isFriend,
+  }) {
+    if (friendsOnly && !isFriend) {
+      throw StateError('Calls are limited to friends');
+    }
+    if (active != null &&
+        active!.state != CallState.ended &&
+        active!.state != CallState.rejected) {
+      throw StateError('Another call is active');
+    }
+    active = CallSession(
+      id: 'local-' + DateTime.now().millisecondsSinceEpoch.toString(),
+      roomId: 'local-call',
+      callerId: callerId,
+      receiverId: receiverId,
+      media: media,
+      state: CallState.ringing,
+    );
+    return active!;
+  }
 
   Future<CallSession> startRemote({
     required String authToken,
