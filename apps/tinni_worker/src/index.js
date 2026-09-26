@@ -222,6 +222,7 @@ async function verifyAppSession(request, env) {
   const store = getAppDirectoryStore(env);
   const user = await store.getUserById(payload.userId);
   if (!user) return null;
+  if (user.controls?.banned || user.controls?.device_banned) return null;
 
   const provider = String(payload.provider || "google");
   const subject = String(payload.subject || payload.googleSub || "");
@@ -2872,6 +2873,144 @@ export default {
           ok: false,
           error: String(error?.message || "Unable to revoke verification"),
         }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/state" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        state: getAppDirectoryStore(env).ownerState(),
+        dashboard: getAppDirectoryStore(env).ownerDashboard(),
+      });
+    }
+
+    if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const query = String(url.searchParams.get("q") || "");
+      const users = getAppDirectoryStore(env).ownerSearchUsers(
+        query,
+        url.searchParams.get("limit") || 50,
+      );
+      return json({ ok: true, users });
+    }
+
+    if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        users: getAppDirectoryStore(env).listVerifiedUsers(
+          String(url.searchParams.get("q") || ""),
+        ),
+      });
+    }
+
+    if (url.pathname === "/api/owner/messages" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = getAppDirectoryStore(env).sendOwnerMessages(
+          body.text,
+          body.user_ids,
+          body.all_users === true,
+        );
+        await writeAudit(
+          env,
+          session,
+          body.all_users === true ? "message.broadcast_all" : "message.bulk_selected",
+          "users",
+          body.all_users === true ? "all" : (Array.isArray(body.user_ids) ? body.user_ids.join(",") : ""),
+          { sent: result.sent },
+        );
+        return json(result);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send message") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/tags" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = getAppDirectoryStore(env).applyOwnerTag(
+          body.user_ids,
+          body.name,
+          body.color,
+        );
+        await writeAudit(
+          env,
+          session,
+          "user.tag.apply",
+          "users",
+          Array.isArray(body.user_ids) ? body.user_ids.join(",") : "",
+          { name: result.name, color: result.color, tagged: result.tagged },
+        );
+        return json(result);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to apply tag") }, 400);
+      }
+    }
+
+    const ownerTagDeleteMatch = url.pathname.match(
+      /^\/api\/owner\/tags\/([^/]+)\/([^/]+)$/,
+    );
+    if (ownerTagDeleteMatch && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = decodeURIComponent(ownerTagDeleteMatch[1]);
+      const tagId = decodeURIComponent(ownerTagDeleteMatch[2]);
+      const result = getAppDirectoryStore(env).removeOwnerTag(userId, tagId);
+      await writeAudit(env, session, "user.tag.remove", "user", userId, { tag_id: tagId });
+      return json(result);
+    }
+
+    if (url.pathname === "/api/owner/action" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = getAppDirectoryStore(env).ownerAction(body.action, body.data);
+        await writeAudit(
+          env,
+          session,
+          "owner.action." + String(body.action || "unknown"),
+          "owner_action",
+          String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
+          { data: body.data || {}, result },
+        );
+        return json({ ok: true, result, state: getAppDirectoryStore(env).ownerState() });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Owner action failed") }, 400);
+      }
+    }
+
+    const ownerCatalogMatch = url.pathname.match(/^\/api\/owner\/catalog\/([^/]+)$/);
+    if (ownerCatalogMatch && request.method === "PATCH") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const item = getAppDirectoryStore(env).ownerCatalogPatch(
+          decodeURIComponent(ownerCatalogMatch[1]),
+          body,
+        );
+        await writeAudit(env, session, "owner.catalog.update", "catalog", item.id, body);
+        return json({ ok: true, item });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update item") }, 400);
       }
     }
 
