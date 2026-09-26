@@ -203,7 +203,7 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
         title: const Text(
           'Top Families of the Month',
           style: TextStyle(
-            color: RoyalPalette.gold,
+            color: FeaturePalette.family,
             fontWeight: FontWeight.w900,
             fontSize: 18,
           ),
@@ -223,7 +223,7 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
                 child: Text(
                   _scope,
                   style: const TextStyle(
-                    color: RoyalPalette.gold,
+                    color: FeaturePalette.family,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
