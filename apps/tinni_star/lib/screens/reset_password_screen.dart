@@ -190,13 +190,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           padding: const EdgeInsets.all(24),
           children: [
             RoyalPanel(
+              gradient: FeaturePalette.glow(FeaturePalette.email),
+              accentColor: FeaturePalette.email,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
-                    Icons.lock_reset_rounded,
-                    color: RoyalPalette.gold,
-                    size: 48,
+                  const ShiningIcon(
+                    icon: Icons.lock_reset_rounded,
+                    color: FeaturePalette.email,
+                    size: 36,
+                    boxSize: 62,
+                    glow: 0.44,
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -228,6 +232,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         key: const Key('reset-password-send-otp'),
                         onPressed:
                             _busy || !_emailOtpReady ? null : _sendOtp,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: FeaturePalette.email,
+                          foregroundColor: Colors.black,
+                        ),
                         icon: const Icon(Icons.mark_email_read_rounded),
                         label: const Text('Send OTP'),
                       ),
@@ -273,7 +281,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       'Gmail OTP verified',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: RoyalPalette.gold,
+                        color: FeaturePalette.email,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
