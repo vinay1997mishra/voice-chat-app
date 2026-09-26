@@ -344,6 +344,57 @@ export class FruitPartyStore extends DurableObject {
     );
   }
 
+  ownerStats(userIdValue = "") {
+    const userId = String(userIdValue || "").trim();
+    const totals = this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS bet_count,
+              COALESCE(SUM(amount), 0) AS total_bet,
+              COUNT(DISTINCT user_id) AS unique_players
+         FROM party_bets`
+    ).toArray()[0] || {};
+    const resultTotals = this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS rounds,
+              COALESCE(SUM(total_payout), 0) AS total_payout
+         FROM party_results`
+    ).toArray()[0] || {};
+
+    let player = null;
+    if (userId) {
+      const userBet = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS bet_count,
+                COALESCE(SUM(amount), 0) AS total_bet
+           FROM party_bets
+          WHERE user_id = ?`,
+        userId,
+      ).toArray()[0] || {};
+      const wallet = this.ctx.storage.sql.exec(
+        `SELECT balance, today_winnings
+           FROM party_wallets
+          WHERE user_id = ?
+          LIMIT 1`,
+        userId,
+      ).toArray()[0];
+      player = {
+        user_id: userId,
+        bet_count: Number(userBet.bet_count || 0),
+        total_bet: Number(userBet.total_bet || 0),
+        balance: Number(wallet?.balance || START_BALANCE),
+        today_winnings: Number(wallet?.today_winnings || 0),
+        net_profit: Number(wallet?.balance || START_BALANCE) - START_BALANCE,
+      };
+    }
+
+    return {
+      bet_count: Number(totals.bet_count || 0),
+      total_bet: Number(totals.total_bet || 0),
+      unique_players: Number(totals.unique_players || 0),
+      rounds: Number(resultTotals.rounds || 0),
+      total_payout: Number(resultTotals.total_payout || 0),
+      house_net: Number(totals.total_bet || 0) - Number(resultTotals.total_payout || 0),
+      player,
+    };
+  }
+
   async state(userIdValue = "") {
     const now = Date.now();
     await this._ensureStarted(now);

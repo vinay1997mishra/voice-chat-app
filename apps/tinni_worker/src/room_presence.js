@@ -15,6 +15,7 @@ export class RoomPresenceStore extends DurableObject {
         family_tag TEXT,
         host_tag TEXT,
         agency_name TEXT,
+        owner_tags_json TEXT NOT NULL DEFAULT '[]',
         seat_index INTEGER,
         seat_emote TEXT,
         seat_emote_until INTEGER,
@@ -40,6 +41,12 @@ export class RoomPresenceStore extends DurableObject {
         seat_index INTEGER NOT NULL,
         muted_by TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS room_chat_bans (
+        user_id TEXT PRIMARY KEY,
+        banned_by TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS room_seat_invites (
@@ -77,6 +84,8 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN family_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN host_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN agency_name TEXT",
+      "ALTER TABLE room_members ADD COLUMN owner_tags_json TEXT NOT NULL DEFAULT '[]'",
+      "ALTER TABLE room_members ADD COLUMN owner_medals_json TEXT NOT NULL DEFAULT '[]'",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
@@ -170,6 +179,55 @@ export class RoomPresenceStore extends DurableObject {
     return Boolean(row);
   }
 
+  chatBanStatus(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_chat_bans WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return Boolean(row);
+  }
+
+  setChatBan(input) {
+    const targetUserId = String(input?.target_user_id || "").trim();
+    const bannedBy = String(input?.banned_by || "").trim();
+    const banned = Boolean(input?.banned);
+    if (!targetUserId) throw new Error("target_user_id is required");
+    if (!bannedBy) throw new Error("banned_by is required");
+
+    const member = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE user_id = ? LIMIT 1",
+      targetUserId,
+    ).toArray()[0];
+    if (!member) throw new Error("User is not in the room");
+
+    if (banned) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_chat_bans (user_id, banned_by, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           banned_by = excluded.banned_by,
+           updated_at = excluded.updated_at`,
+        targetUserId,
+        bannedBy,
+        Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_chat_bans WHERE user_id = ?",
+        targetUserId,
+      );
+    }
+
+    return {
+      ok: true,
+      target_user_id: targetUserId,
+      chat_banned: banned,
+      members: this._members(),
+    };
+  }
+
   setManager(userIdValue, enabled) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user_id is required");
@@ -189,7 +247,12 @@ export class RoomPresenceStore extends DurableObject {
         userId,
       );
     }
-    return { ok: true, user_id: userId, enabled: Boolean(enabled) };
+    return {
+      ok: true,
+      user_id: userId,
+      enabled: Boolean(enabled),
+      members: this._members(),
+    };
   }
 
   seatRequests() {
@@ -626,6 +689,7 @@ export class RoomPresenceStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
               country_code, family_tag, host_tag, agency_name,
+              owner_tags_json, owner_medals_json,
               seat_index, seat_emote, seat_emote_until, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
@@ -638,11 +702,28 @@ export class RoomPresenceStore extends DurableObject {
       family_tag: row.family_tag ? String(row.family_tag) : null,
       host_tag: row.host_tag ? String(row.host_tag) : null,
       agency_name: row.agency_name ? String(row.agency_name) : null,
+      owner_tags: (() => {
+        try {
+          const value = JSON.parse(String(row.owner_tags_json || "[]"));
+          return Array.isArray(value) ? value : [];
+        } catch {
+          return [];
+        }
+      })(),
+      owner_medals: (() => {
+        try {
+          const value = JSON.parse(String(row.owner_medals_json || "[]"));
+          return Array.isArray(value) ? value : [];
+        } catch {
+          return [];
+        }
+      })(),
       seat_index:
         row.seat_index === null || row.seat_index === undefined
           ? null
           : Number(row.seat_index),
       mic_muted: this.muteStatus(row.user_id, row.seat_index),
+      chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
       seat_emote:
         row.seat_emote &&
@@ -675,6 +756,26 @@ export class RoomPresenceStore extends DurableObject {
     const familyTag = String(input?.family_tag || "").trim() || null;
     const hostTag = String(input?.host_tag || "").trim() || null;
     const agencyName = String(input?.agency_name || "").trim() || null;
+    const ownerTags = Array.isArray(input?.owner_tags)
+      ? input.owner_tags
+          .map((item) => ({
+            name: String(item?.name || "").trim().slice(0, 40),
+            color: String(item?.color || "#FFD54F").trim(),
+          }))
+          .filter((item) => item.name && /^#[0-9a-fA-F]{6}$/.test(item.color))
+          .slice(0, 12)
+      : [];
+    const ownerTagsJson = JSON.stringify(ownerTags);
+    const ownerMedals = Array.isArray(input?.owner_medals)
+      ? input.owner_medals
+          .map((item) => ({
+            name: String(item?.name || "").trim().slice(0, 40),
+            color: String(item?.color || "#FFD54F").trim(),
+          }))
+          .filter((item) => item.name && /^#[0-9a-fA-F]{6}$/.test(item.color))
+          .slice(0, 12)
+      : [];
+    const ownerMedalsJson = JSON.stringify(ownerMedals);
     const rawSeatIndex = input?.seat_index;
     let seatIndex =
       rawSeatIndex === null || rawSeatIndex === undefined
@@ -737,9 +838,9 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
-         family_tag, host_tag, agency_name,
+         family_tag, host_tag, agency_name, owner_tags_json, owner_medals_json,
          seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
@@ -748,6 +849,8 @@ export class RoomPresenceStore extends DurableObject {
          family_tag = excluded.family_tag,
          host_tag = excluded.host_tag,
          agency_name = excluded.agency_name,
+         owner_tags_json = excluded.owner_tags_json,
+         owner_medals_json = excluded.owner_medals_json,
          seat_index = excluded.seat_index,
          seat_emote = CASE
            WHEN room_members.seat_index IS excluded.seat_index THEN room_members.seat_emote
@@ -762,6 +865,8 @@ export class RoomPresenceStore extends DurableObject {
       familyTag,
       hostTag,
       agencyName,
+      ownerTagsJson,
+      ownerMedalsJson,
       seatIndex,
       null,
       null,
@@ -787,6 +892,7 @@ export class RoomPresenceStore extends DurableObject {
       server_time: now,
       mic_mode: this.micMode(),
       self_mic_muted: this.muteStatus(userId, seatIndex),
+      self_chat_banned: this.chatBanStatus(userId),
       self_seat_forced: seatForced,
       self_forced_seat_index: seatForced ? seatIndex : null,
       pending_seat_invite: this.seatInviteFor(userId),

@@ -47,6 +47,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
+  bool get moderationChatBanned => presence.selfChatBanned;
   RoomSeatInvite? get pendingSeatInvite => presence.pendingSeatInvite;
   List<RoomSeatRequest> get seatRequests =>
       List<RoomSeatRequest>.unmodifiable(presence.seatRequests);
@@ -148,6 +149,40 @@ class ActiveRoomSession extends ChangeNotifier {
       authToken: authToken,
       targetUserId: targetUserId,
       duration: duration,
+    );
+  }
+
+  Future<void> setRoomAdmin(
+    String targetUserId, {
+    required bool enabled,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setAdmin(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      enabled: enabled,
+    );
+  }
+
+  Future<void> setRoomChatBan(
+    String targetUserId, {
+    required bool banned,
+  }) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setChatBan(
+      roomId: roomId,
+      authToken: authToken,
+      targetUserId: targetUserId,
+      banned: banned,
     );
   }
 
