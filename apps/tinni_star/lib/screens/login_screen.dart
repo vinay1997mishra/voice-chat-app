@@ -1060,8 +1060,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? 'Email account'
                             : 'Google account'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: RoyalPalette.gold,
+                style: TextStyle(
+                  color: _providerColor(),
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -1070,21 +1070,38 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: InkWell(
                   onTap: busy ? null : _pickAvatar,
                   borderRadius: BorderRadius.circular(60),
-                  child: CircleAvatar(
-                    radius: 52,
-                    backgroundColor: RoyalPalette.panel2,
-                    backgroundImage: avatarDataUrl == null
-                        ? null
-                        : MemoryImage(
-                            base64Decode(avatarDataUrl!.split(',').last),
-                          ),
-                    child: avatarDataUrl == null
-                        ? const Icon(
-                            Icons.add_a_photo_rounded,
-                            color: RoyalPalette.gold,
-                            size: 36,
-                          )
-                        : null,
+                  child: Container(
+                    width: 104,
+                    height: 104,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _providerColor(),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _providerColor().withValues(alpha: 0.42),
+                          blurRadius: 18,
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: RoyalPalette.panel2,
+                      backgroundImage: avatarDataUrl == null
+                          ? null
+                          : MemoryImage(
+                              base64Decode(avatarDataUrl!.split(',').last),
+                            ),
+                      child: avatarDataUrl == null
+                          ? Icon(
+                              Icons.add_a_photo_rounded,
+                              color: _providerColor(),
+                              size: 36,
+                            )
+                          : null,
+                    ),
                   ),
                 ),
               ),
