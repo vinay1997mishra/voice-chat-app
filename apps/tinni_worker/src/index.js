@@ -1699,6 +1699,21 @@ export default {
       }
     }
 
+    if (url.pathname === "/calls/status" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const callId = String(url.searchParams.get("call_id") || "").trim();
+      const call = getAppDirectoryStore(env).getCall(callId);
+      if (!call) return json({ ok: false, error: "Call not found" }, 404);
+      if (
+        call.caller_id !== appSession.user.user_id &&
+        call.receiver_id !== appSession.user.user_id
+      ) {
+        return json({ ok: false, error: "Not a call participant" }, 403);
+      }
+      return json({ ok: true, call });
+    }
+
     if (url.pathname === "/calls/incoming" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
