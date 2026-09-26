@@ -880,19 +880,6 @@ export class AppDirectoryStore extends DurableObject {
       error: row.error ? String(row.error) : null,
       created_at: Number(row.created_at),
       updated_at: Number(row.updated_at),
-      accepted_at: row.accepted_at == null ? null : Number(row.accepted_at),
-      billed_minutes: Number(row.billed_minutes || 0),
-      caller_cost_coins: Number(row.caller_cost_coins || 0),
-      receiver_reward_diamonds: Number(row.receiver_reward_diamonds || 0),
-      receiver_earning_eligible:
-        Number(row.receiver_earning_eligible || 0) === 1,
-      cost_coins_per_minute: CALL_COST_COINS_PER_MINUTE,
-      receiver_diamonds_per_minute:
-        CALL_RECEIVER_DIAMONDS_PER_MINUTE,
-      end_reason: row.end_reason ? String(row.end_reason) : null,
-      caller_balance_coins: callerWallet.coins,
-      receiver_balance_diamonds: receiverWallet.diamonds,
-      receiver_verification: receiverVerification,
     };
   }
 
@@ -1504,6 +1491,19 @@ export class AppDirectoryStore extends DurableObject {
       room_id: String(row.room_id),
       created_at: Number(row.created_at),
       updated_at: Number(row.updated_at),
+      accepted_at: row.accepted_at == null ? null : Number(row.accepted_at),
+      billed_minutes: Number(row.billed_minutes || 0),
+      caller_cost_coins: Number(row.caller_cost_coins || 0),
+      receiver_reward_diamonds: Number(row.receiver_reward_diamonds || 0),
+      receiver_earning_eligible:
+        Number(row.receiver_earning_eligible || 0) === 1,
+      cost_coins_per_minute: CALL_COST_COINS_PER_MINUTE,
+      receiver_diamonds_per_minute:
+        CALL_RECEIVER_DIAMONDS_PER_MINUTE,
+      end_reason: row.end_reason ? String(row.end_reason) : null,
+      caller_balance_coins: callerWallet.coins,
+      receiver_balance_diamonds: receiverWallet.diamonds,
+      receiver_verification: receiverVerification,
     };
   }
 
