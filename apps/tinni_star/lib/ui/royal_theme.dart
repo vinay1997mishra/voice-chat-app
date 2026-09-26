@@ -24,6 +24,11 @@ abstract final class FeaturePalette {
   static const games = Color(0xFFFF8A3D);
   static const music = Color(0xFF28C7D9);
   static const social = Color(0xFF4F9DFF);
+  static const discover = Color(0xFF38BDF8);
+  static const message = Color(0xFF22C7A9);
+  static const email = Color(0xFFFFB74D);
+  static const facebook = Color(0xFF4A7CFF);
+  static const google = Color(0xFF5E97F6);
   static const wallet = Color(0xFFFFC247);
   static const store = Color(0xFFFF6B6B);
   static const rank = Color(0xFFFFB300);
