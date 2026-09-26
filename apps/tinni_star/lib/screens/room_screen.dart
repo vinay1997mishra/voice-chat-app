@@ -2099,6 +2099,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             itemBuilder: (_, index) {
               final tool = tools[index];
+              final color = _roomToolColor(tool.$1);
               return InkWell(
                 onTap: () {
                   Navigator.pop(context);
@@ -2106,20 +2107,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   if (mounted) setState(() {});
                 },
                 borderRadius: BorderRadius.circular(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: RoyalPalette.panel2,
-                      child: Icon(tool.$2, color: RoyalPalette.gold),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: FeaturePalette.glow(color),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.55),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      tool.$1,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 9),
-                    ),
-                  ],
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.18),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ShiningIcon(
+                        icon: tool.$2,
+                        color: color,
+                        size: 21,
+                        boxSize: 39,
+                        glow: 0.34,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        tool.$1,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: color,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
