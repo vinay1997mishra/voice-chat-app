@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../identity/owner_tag.dart';
+
 class RoomSeatRequest {
   const RoomSeatRequest({
     required this.userId,
@@ -39,6 +41,7 @@ class RoomPresenceMember {
     this.familyTag,
     this.hostTag,
     this.agencyName,
+    this.ownerTags = const <OwnerTag>[],
     this.seatIndex,
     this.micMuted = false,
     this.isAdmin = false,
@@ -54,6 +57,7 @@ class RoomPresenceMember {
   final String? familyTag;
   final String? hostTag;
   final String? agencyName;
+  final List<OwnerTag> ownerTags;
   final int? seatIndex;
   final bool micMuted;
   final bool isAdmin;
@@ -514,6 +518,13 @@ class RoomPresenceService extends ChangeNotifier {
                 familyTag: row['family_tag']?.toString(),
                 hostTag: row['host_tag']?.toString(),
                 agencyName: row['agency_name']?.toString(),
+                ownerTags: row['owner_tags'] is List
+                    ? (row['owner_tags'] as List)
+                        .whereType<Map>()
+                        .map(OwnerTag.fromMap)
+                        .where((tag) => tag.name.isNotEmpty)
+                        .toList(growable: false)
+                    : const <OwnerTag>[],
                 seatIndex: row['seat_index'] == null
                     ? null
                     : _asInt(row['seat_index']),
