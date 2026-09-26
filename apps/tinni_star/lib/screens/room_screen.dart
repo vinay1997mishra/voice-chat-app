@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
@@ -2091,6 +2092,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const Key('room-add-music-button'),
+                        onPressed: () async {
+                          final file = await FilePicker.pickFile(
+                            dialogTitle: 'Add Music',
+                            type: FileType.audio,
+                          );
+                          if (file == null || !sheetContext.mounted) return;
+                          final path = file.path;
+                          if (path == null || path.isEmpty) {
+                            _snack('This audio file could not be opened.');
+                            return;
+                          }
+                          final song = widget.state.ktv.addLocalSong(
+                            fileName: file.name,
+                            sourcePath: path,
+                          );
+                          widget.state.ktv.addToQueue(
+                            song,
+                            account.userId,
+                          );
+                          if (widget.state.ktv.current == null) {
+                            widget.state.ktv.startNext();
+                          }
+                          setSheetState(() {});
+                          _snack(song.title + ' added from phone.');
+                        },
+                        icon: const Icon(Icons.library_music_rounded),
+                        label: const Text('Add Music'),
+                      ),
+                    ),
+                  ),
                   Expanded(
                     child: songs.isEmpty
                         ? const Center(
@@ -2115,7 +2152,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   glow: 0.34,
                                 ),
                                 title: Text(song.title),
-                                subtitle: Text(song.singer),
+                                subtitle: Text(
+                                  song.local
+                                      ? 'From phone • ' + song.singer
+                                      : song.singer,
+                                ),
                                 trailing:
                                     const Icon(Icons.playlist_add_rounded),
                                 onTap: () {
