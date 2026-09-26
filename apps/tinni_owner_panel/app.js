@@ -1108,7 +1108,7 @@ function openAction(action, preset = {}) {
   pendingAction = action;
   dialogFields.innerHTML = "";
   dialogTitle.textContent = "Owner Action";
-  dialogHelp.textContent = "This web panel will send protected commands to the Tinni backend once the owner API is connected.";
+  dialogHelp.textContent = "This action is sent to the protected Tinni Owner backend and is audit logged.";
 
   const maps = {
     "treasury-add": ["Add Coins to Owner Treasury", field("amount","Coin amount","number","100000000")],
@@ -1138,6 +1138,12 @@ function openAction(action, preset = {}) {
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "bd-activate": ["BD Role", field("user_id","User ID") + selectField("operation","Operation",[["activate","Activate BD"],["remove","Remove BD"]])],
+    "bd-target": ["BD Targets / Commission",
+      field("target_1_usd","Target 1 USD","number",String(state.policies.bd_target_1_usd || 500)) +
+      field("target_1_percent","Target 1 %","number",String(state.policies.bd_target_1_percent || 7)) +
+      field("target_2_usd","Target 2 USD","number",String(state.policies.bd_target_2_usd || 1000)) +
+      field("target_2_percent","Target 2 %","number",String(state.policies.bd_target_2_percent || 10))
+    ],
     "agency-activate": ["Agency Role", field("user_id","User ID") + selectField("operation","Operation",[["activate","Activate Agency"],["remove","Remove Agency"]])],
     "agency-to-bd": ["Add Agency to BD", field("agency_owner_id","Agency owner ID") + field("bd_user_id","BD user ID")],
     "agency-from-bd": ["Remove Agency from BD", field("agency_owner_id","Agency owner ID") + field("bd_user_id","BD user ID")],
@@ -1149,7 +1155,32 @@ function openAction(action, preset = {}) {
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("vip_level","Assign VIP level","number")],
     "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
     "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
-    "role-new": ["Create Tag / Role / Post", field("name","Name") + selectField("type","Type",[["tag","Tag"],["role","Role"],["post","Post"]])],
+    "role-new": ["Create Role / Post", field("name","Name") + selectField("type","Type",[["role","Role"],["post","Post"]])],
+    "vip-new": ["Create New VIP",
+      field("name","VIP name","text","VIP 12") +
+      field("level","VIP level","number","12") +
+      field("price","Price / requirement","number","0") +
+      field("entry","Entry effect","text","") +
+      field("frame","Frame","text","")
+    ],
+    "vip-edit": ["Edit VIP",
+      field("catalog_id","Catalog ID","hidden","") +
+      field("name","VIP name") +
+      field("level","VIP level","number") +
+      field("price","Price / requirement","number") +
+      field("entry","Entry effect") +
+      field("frame","Frame")
+    ],
+    "game-switch": ["Game Master Switch",
+      selectField("enabled","Status",[["true","Enable games"],["false","Disable games"]])
+    ],
+    "game-limits": ["Game Bet Limits",
+      field("min_bet","Minimum bet","number",String(state.gameConfig.min_bet || 1)) +
+      field("max_bet","Maximum bet","number",String(state.gameConfig.max_bet || 1000000))
+    ],
+    "game-stats": ["User Betting Investigation",
+      field("user_id","User ID (blank = all users)","text","",false)
+    ],
     "policy-new": ["Create New Setting", field("key","Setting key") + field("value","Value")],
   };
 
@@ -1163,24 +1194,133 @@ function openAction(action, preset = {}) {
   dialog.showModal();
 }
 
+async function renderUserInvestigation(users) {
+  const root = document.getElementById("userDetails");
+  if (!root) return;
+  const items = Array.isArray(users) ? users : [];
+  if (items.length === 0) {
+    root.className = "empty-state";
+    root.textContent = "No matching user found.";
+    return;
+  }
+  root.className = "action-list";
+  root.innerHTML = items.map((user) => `
+    <div class="panel" style="margin-bottom:10px">
+      <div class="panel-head">
+        <div>
+          <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+          <p>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
+          ${user.previous_user_id ? `<small>Found through old ID: ${escapeHtml(user.previous_user_id)}</small>` : ""}
+        </div>
+        <span class="badge ${user.call_verified ? "gold" : ""}">${user.call_verified ? "Verified" : "Unverified"}</span>
+      </div>
+      <div class="rule-grid">
+        <div class="rule"><strong>Coins</strong><span>${fmt(user.wallet?.coins || 0)}</span></div>
+        <div class="rule"><strong>Diamonds</strong><span>${fmt(user.wallet?.diamonds || 0)}</span></div>
+        <div class="rule"><strong>ID Ban</strong><span>${user.controls?.banned ? "Banned" : "Active"}</span></div>
+        <div class="rule"><strong>Device Access</strong><span>${user.controls?.device_banned ? "Blocked" : "Active"}</span></div>
+        <div class="rule"><strong>Invisible</strong><span>${user.controls?.invisible ? "ON" : "OFF"}</span></div>
+        <div class="rule"><strong>Locked Bypass</strong><span>${user.controls?.locked_bypass ? "ON" : "OFF"}</span></div>
+        <div class="rule"><strong>VIP</strong><span>${Number(user.controls?.vip_level || 0) || "None"}</span></div>
+        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
+      </div>
+      <div style="margin-top:8px">${userTagHtml(user.tags)}</div>
+    </div>
+  `).join("");
+}
+
+function renderRoomInvestigation(result) {
+  const root = document.getElementById("roomSearchResult");
+  if (!root) return;
+  const room = result?.room;
+  if (!room) {
+    root.className = "empty-state";
+    root.textContent = "Room not found.";
+    return;
+  }
+  root.className = "action-list";
+  root.innerHTML = `
+    <div class="rule-grid">
+      <div class="rule"><strong>Room ID</strong><span>${escapeHtml(room.id)}</span></div>
+      <div class="rule"><strong>Owner ID</strong><span>${escapeHtml(room.owner_id)}</span></div>
+      <div class="rule"><strong>Name</strong><span>${escapeHtml(room.title)}</span></div>
+      <div class="rule"><strong>Country</strong><span>${escapeHtml(room.country_name || "")}</span></div>
+      <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count)}</span></div>
+      <div class="rule"><strong>Locked</strong><span>${room.locked ? "Yes" : "No"}</span></div>
+      <div class="rule"><strong>Theme</strong><span>${escapeHtml(room.theme_id || "royal-dark")}</span></div>
+      <div class="rule"><strong>Updated</strong><span>${escapeHtml(formatFullTimestamp(room.updated_at))}</span></div>
+    </div>
+  `;
+}
+
+async function loadGameStats(userId = "") {
+  const root = document.getElementById("gameStatsResult");
+  try {
+    const data = await api("/api/owner/game-stats?user_id=" + encodeURIComponent(String(userId || "").trim()));
+    const totals = data.totals || {};
+    const status = state.features.games !== false && state.gameConfig.enabled !== false;
+    document.getElementById("gameTotalBets").textContent = fmt(totals.bet_count || 0);
+    document.getElementById("gameTotalBetCoins").textContent = fmt(totals.total_bet || 0);
+    document.getElementById("gameTotalPayout").textContent = fmt(totals.total_payout || 0);
+    document.getElementById("gameStatusValue").textContent = status ? "ON" : "OFF";
+    document.getElementById("gameLimitsValue").textContent =
+      "Min " + fmt(state.gameConfig.min_bet || 0) + " • Max " + fmt(state.gameConfig.max_bet || 0);
+
+    if (root) {
+      const playerJackpot = data.jackpot?.player;
+      const playerParty = data.party?.player;
+      root.className = "action-list";
+      root.innerHTML = `
+        <div class="rule-grid">
+          <div class="rule"><strong>Jackpot bets</strong><span>${fmt(data.jackpot?.total_bet || 0)}</span></div>
+          <div class="rule"><strong>Jackpot payout</strong><span>${fmt(data.jackpot?.total_payout || 0)}</span></div>
+          <div class="rule"><strong>Party bets</strong><span>${fmt(data.party?.total_bet || 0)}</span></div>
+          <div class="rule"><strong>Party payout</strong><span>${fmt(data.party?.total_payout || 0)}</span></div>
+          <div class="rule"><strong>House net</strong><span>${fmt(totals.house_net || 0)}</span></div>
+          <div class="rule"><strong>Recorded players</strong><span>${fmt(totals.unique_players || 0)}</span></div>
+        </div>
+        ${data.user_id ? `
+          <h3 style="margin-top:12px">ID ${escapeHtml(data.user_id)}</h3>
+          <div class="rule-grid">
+            <div class="rule"><strong>Jackpot net</strong><span>${fmt(playerJackpot?.net_profit || 0)}</span></div>
+            <div class="rule"><strong>Party net</strong><span>${fmt(playerParty?.net_profit || 0)}</span></div>
+            <div class="rule"><strong>Jackpot bet coins</strong><span>${fmt(playerJackpot?.total_bet || 0)}</span></div>
+            <div class="rule"><strong>Party bet coins</strong><span>${fmt(playerParty?.total_bet || 0)}</span></div>
+          </div>` : ""}
+      `;
+    }
+    return data;
+  } catch (error) {
+    if (root) {
+      root.className = "empty-state";
+      root.textContent = error.message || "Unable to load game stats.";
+    }
+    throw error;
+  }
+}
+
+async function runOwnerAction(action, data = {}) {
+  const response = await api("/api/owner/action", {
+    method: "POST",
+    body: JSON.stringify({ action, data }),
+  });
+  await loadOwnerState();
+  return response.result;
+}
+
 async function handleAction(action, data) {
   if (action === "staff-credentials") {
     const panelId = String(data.panel_id || "");
     const staffEmail = String(data.staff_email || "").trim().toLowerCase();
     const password = String(data.login_password || "");
     const confirmPassword = String(data.confirm_password || "");
-
-    if (!staffEmail || !staffEmail.includes("@")) {
-      throw new Error("Enter a valid staff Gmail / Email.");
-    }
+    if (!staffEmail || !staffEmail.includes("@")) throw new Error("Enter a valid staff Gmail / Email.");
     if (password || confirmPassword) {
       if (password.length < 10) throw new Error("New password must be at least 10 characters.");
       if (password !== confirmPassword) throw new Error("New password and confirm password do not match.");
     }
-
     const patch = { staff_email: staffEmail };
     if (password) patch.password = password;
-
     await updateStaffPanelPower(panelId, patch);
     toast(password ? "Staff Gmail / password updated." : "Staff Gmail updated.");
     await loadStaffPanels();
@@ -1192,22 +1332,18 @@ async function handleAction(action, data) {
     const confirmPassword = String(data.confirm_password || "");
     if (password.length < 10) throw new Error("Staff password must be at least 10 characters.");
     if (password !== confirmPassword) throw new Error("Password and confirm password do not match.");
-
     const permissions = Object.entries(data)
       .filter(([key, value]) => key.startsWith("permission_") && value === "true")
       .map(([key]) => key.replace("permission_", ""));
-
-    const payload = {
-      name: String(data.name || "").trim(),
-      assigned_user_id: String(data.assigned_user_id || "").trim(),
-      staff_email: String(data.staff_email || "").trim().toLowerCase(),
-      password,
-      permissions,
-    };
-
     await api("/api/staff/panels", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        name: String(data.name || "").trim(),
+        assigned_user_id: String(data.assigned_user_id || "").trim(),
+        staff_email: String(data.staff_email || "").trim().toLowerCase(),
+        password,
+        permissions,
+      }),
     });
     toast("Staff panel created with login credentials.");
     await loadStaffPanels();
@@ -1215,77 +1351,93 @@ async function handleAction(action, data) {
   }
 
   if (action === "call-verification-refresh") {
-    await loadCallVerifications();
-    toast("Call verification reviews refreshed.");
+    await Promise.all([loadCallVerifications(), loadVerifiedUsers()]);
+    toast("Call Verification refreshed.");
     return;
   }
 
-  if (action === 'room-theme-new') {
-    const name = String(data.name || '').trim();
-    const asset = String(data.asset || '').trim();
-    const durationMode = String(data.duration_mode || 'scheduled');
-    const permanent = durationMode === 'permanent';
-
-    if (name.length < 2) throw new Error('Enter a theme name.');
-    if (!asset.startsWith('https://') && !asset.startsWith('data:image/')) {
-      throw new Error('Use an HTTPS image URL or image data URL.');
+  if (action === "room-theme-new") {
+    const name = String(data.name || "").trim();
+    const asset = String(data.asset || "").trim();
+    const permanent = String(data.duration_mode || "scheduled") === "permanent";
+    if (name.length < 2) throw new Error("Enter a theme name.");
+    if (!asset.startsWith("https://") && !asset.startsWith("data:image/")) {
+      throw new Error("Use an HTTPS image URL or image data URL.");
     }
-
     let startsAt = Date.now();
     if (data.starts_at) {
       const startDate = new Date(String(data.starts_at));
-      if (Number.isNaN(startDate.getTime())) throw new Error('Select a valid start date/time.');
+      if (Number.isNaN(startDate.getTime())) throw new Error("Select a valid start date/time.");
       startsAt = startDate.getTime();
     }
-
     let endsAt = null;
     if (!permanent) {
-      if (!data.ends_at) throw new Error('Select an end date/time or choose Permanent.');
+      if (!data.ends_at) throw new Error("Select an end date/time or choose Permanent.");
       const endDate = new Date(String(data.ends_at));
-      if (Number.isNaN(endDate.getTime())) throw new Error('Select a valid end date/time.');
+      if (Number.isNaN(endDate.getTime())) throw new Error("Select a valid end date/time.");
       endsAt = endDate.getTime();
-      if (endsAt <= startsAt) throw new Error('End date/time must be after start date/time.');
+      if (endsAt <= startsAt) throw new Error("End date/time must be after start date/time.");
     }
-
-    await api('/api/room-themes', {
-      method: 'POST',
-      body: JSON.stringify({
-        name,
-        asset,
-        permanent,
-        starts_at: startsAt,
-        ends_at: endsAt,
-      }),
+    await api("/api/room-themes", {
+      method: "POST",
+      body: JSON.stringify({ name, asset, permanent, starts_at: startsAt, ends_at: endsAt }),
     });
-    toast(
-      permanent
-        ? 'Permanent room theme added from Owner Panel.'
-        : 'Scheduled room theme added from Owner Panel.'
-    );
+    toast(permanent ? "Permanent room theme added." : "Scheduled room theme added.");
     await loadRoomThemes();
     return;
   }
-  if (action === "treasury-add") {
-    const amount = Number(data.amount || 0);
-    if (amount <= 0) throw new Error("Enter a valid coin amount");
-    state.treasury += amount;
-    renderTreasury();
-    toast(`${fmt(amount)} coins added to Owner Treasury preview`);
+
+  if (action === "vip-edit") {
+    const id = String(data.catalog_id || "").trim();
+    if (!id) throw new Error("VIP catalog ID is missing");
+    await api("/api/owner/catalog/" + encodeURIComponent(id), {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: String(data.name || "").trim(),
+        data: {
+          level: Number(data.level || 0),
+          price: Number(data.price || 0),
+          entry: String(data.entry || "").trim(),
+          frame: String(data.frame || "").trim(),
+        },
+      }),
+    });
+    await loadOwnerState();
+    toast("VIP updated.");
     return;
   }
 
-  if (action === "treasury-send") {
-    const amount = Number(data.amount || 0);
-    if (amount <= 0 || amount > state.treasury) throw new Error("Treasury balance is not enough");
-    state.treasury -= amount;
-    renderTreasury();
-    toast(`Preview transfer: ${fmt(amount)} coins → ${data.user_id} (${data.wallet_type})`);
+  if (action === "game-stats") {
+    await loadGameStats(String(data.user_id || "").trim());
+    toast(data.user_id ? "User game stats loaded." : "Game stats loaded.");
     return;
   }
 
-  // Owner APIs are intentionally not guessed. Until the protected backend routes exist,
-  // the panel keeps the UI ready and refuses to pretend the server action succeeded.
-  throw new Error("Owner API for this action is not connected yet");
+  const payload = { ...data };
+  if (action === "game-switch") payload.enabled = String(data.enabled) === "true";
+  if (action === "game-limits") {
+    payload.min_bet = Number(data.min_bet || 0);
+    payload.max_bet = Number(data.max_bet || 0);
+    if (payload.min_bet < 0 || payload.max_bet <= 0 || payload.max_bet < payload.min_bet) {
+      throw new Error("Enter valid minimum and maximum bet limits.");
+    }
+  }
+  if (action === "policy-new" && !String(data.key || "").trim()) {
+    throw new Error("Setting key is required.");
+  }
+
+  const result = await runOwnerAction(action, payload);
+
+  if (action === "user-search") {
+    await renderUserInvestigation(result?.users || []);
+  } else if (action === "room-live") {
+    renderRoomInvestigation(result);
+  } else if (action === "complaints") {
+    setView("notifications");
+    await loadOwnerNotifications();
+  }
+
+  toast(pretty(action) + " completed.");
 }
 
 document.getElementById("nav").addEventListener("click", e => {
