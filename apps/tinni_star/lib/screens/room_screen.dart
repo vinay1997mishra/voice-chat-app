@@ -1600,7 +1600,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       type: FileType.custom,
       allowedExtensions: const <String>['png', 'jpg', 'jpeg', 'webp', 'mp4'],
     );
-    if (file == null) return;
+    if (file == null || !mounted) return;
     final path = file.path;
     if (path == null || path.isEmpty) {
       _snack('This custom gift file could not be opened.');
