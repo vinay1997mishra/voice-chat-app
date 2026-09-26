@@ -81,10 +81,50 @@ class _TinniShellState extends State<TinniShell> {
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.groups_rounded), label: 'Party'),
-          NavigationDestination(icon: Icon(Icons.explore_rounded), label: 'Discover'),
-          NavigationDestination(icon: Icon(Icons.mail_rounded), label: 'Message'),
-          NavigationDestination(icon: Icon(Icons.person_rounded), label: 'Mine'),
+          NavigationDestination(
+            icon: Icon(Icons.groups_rounded, color: FeaturePalette.family),
+            selectedIcon: ShiningIcon(
+              icon: Icons.groups_rounded,
+              color: FeaturePalette.family,
+              size: 20,
+              boxSize: 36,
+              glow: 0.34,
+            ),
+            label: 'Party',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.explore_rounded, color: FeaturePalette.discover),
+            selectedIcon: ShiningIcon(
+              icon: Icons.explore_rounded,
+              color: FeaturePalette.discover,
+              size: 20,
+              boxSize: 36,
+              glow: 0.34,
+            ),
+            label: 'Discover',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mail_rounded, color: FeaturePalette.message),
+            selectedIcon: ShiningIcon(
+              icon: Icons.mail_rounded,
+              color: FeaturePalette.message,
+              size: 20,
+              boxSize: 36,
+              glow: 0.34,
+            ),
+            label: 'Message',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_rounded, color: FeaturePalette.social),
+            selectedIcon: ShiningIcon(
+              icon: Icons.person_rounded,
+              color: FeaturePalette.social,
+              size: 20,
+              boxSize: 36,
+              glow: 0.34,
+            ),
+            label: 'Mine',
+          ),
         ],
       ),
     );
@@ -113,10 +153,12 @@ class _MiniRoomBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const CircleAvatar(
-                radius: 19,
-                backgroundColor: RoyalPalette.deepGold,
-                child: Icon(Icons.graphic_eq_rounded, color: Colors.black, size: 21),
+              const ShiningIcon(
+                icon: Icons.graphic_eq_rounded,
+                color: FeaturePalette.family,
+                size: 21,
+                boxSize: 40,
+                glow: 0.36,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -147,7 +189,13 @@ class _MiniRoomBar extends StatelessWidget {
               IconButton(
                 tooltip: 'Close voice room',
                 onPressed: () => session.close(),
-                icon: const Icon(Icons.close_rounded, color: RoyalPalette.gold),
+                icon: const ShiningIcon(
+                  icon: Icons.close_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
               ),
             ],
           ),
