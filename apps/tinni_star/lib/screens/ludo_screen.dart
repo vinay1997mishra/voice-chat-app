@@ -423,7 +423,7 @@ class _LudoBoardPainter extends CustomPainter {
       ..close();
     canvas.drawPath(
       center,
-      Paint()..color = RoyalPalette.gold.withValues(alpha: .9),
+      Paint()..color = FeaturePalette.ludo.withValues(alpha: .9),
     );
 
     final centerText = TextPainter(
