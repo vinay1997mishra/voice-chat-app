@@ -42,6 +42,7 @@ class RoomPresenceMember {
     this.hostTag,
     this.agencyName,
     this.ownerTags = const <OwnerTag>[],
+    this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
     this.micMuted = false,
     this.isAdmin = false,
@@ -58,6 +59,7 @@ class RoomPresenceMember {
   final String? hostTag;
   final String? agencyName;
   final List<OwnerTag> ownerTags;
+  final List<OwnerTag> ownerMedals;
   final int? seatIndex;
   final bool micMuted;
   final bool isAdmin;
@@ -523,6 +525,13 @@ class RoomPresenceService extends ChangeNotifier {
                         .whereType<Map>()
                         .map(OwnerTag.fromMap)
                         .where((tag) => tag.name.isNotEmpty)
+                        .toList(growable: false)
+                    : const <OwnerTag>[],
+                ownerMedals: row['owner_medals'] is List
+                    ? (row['owner_medals'] as List)
+                        .whereType<Map>()
+                        .map(OwnerTag.fromMap)
+                        .where((medal) => medal.name.isNotEmpty)
                         .toList(growable: false)
                     : const <OwnerTag>[],
                 seatIndex: row['seat_index'] == null
