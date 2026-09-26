@@ -2699,6 +2699,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               final tool = tools[index];
               final color = _roomToolColor(tool.$1);
               return InkWell(
+                key: Key(
+                  'room-tool-' +
+                      tool.$1.toLowerCase().replaceAll(' ', '-'),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   tool.$3();
