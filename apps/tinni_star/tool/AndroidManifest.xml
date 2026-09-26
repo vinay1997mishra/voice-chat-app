@@ -16,7 +16,8 @@
     <application
         android:label="Tinni Star"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@drawable/tinni_star_icon"
+        android:roundIcon="@drawable/tinni_star_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"
