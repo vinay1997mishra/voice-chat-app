@@ -65,7 +65,7 @@ class CallService {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
