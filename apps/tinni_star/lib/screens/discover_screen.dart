@@ -53,7 +53,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final rooms = results ?? _roomsForMode();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discover', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Discover',
+          style: TextStyle(
+            color: FeaturePalette.discover,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(14),
@@ -62,7 +68,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             controller: search,
             decoration: InputDecoration(
               hintText: 'Search room ID or name',
-              prefixIcon: const Icon(Icons.search_rounded, color: RoyalPalette.gold),
+              prefixIcon: const ShiningIcon(
+                icon: Icons.search_rounded,
+                color: FeaturePalette.discover,
+                size: 18,
+                boxSize: 34,
+                glow: 0.28,
+              ),
               suffixIcon: IconButton(
                 onPressed: () {
                   search.clear();
@@ -90,14 +102,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             },
           ),
           const SizedBox(height: 16),
-          const GoldSectionTitle('Royal Rooms'),
+          const Text(
+            'Royal Rooms',
+            style: TextStyle(
+              color: FeaturePalette.discover,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 10),
           if (rooms.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 42),
               child: Column(
                 children: [
-                  Icon(Icons.travel_explore_rounded, size: 42, color: RoyalPalette.gold),
+                  ShiningIcon(
+                    icon: Icons.travel_explore_rounded,
+                    size: 34,
+                    boxSize: 58,
+                    color: FeaturePalette.discover,
+                    glow: 0.42,
+                  ),
                   SizedBox(height: 10),
                   Text('No rooms in this list yet.'),
                 ],
@@ -110,13 +135,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 padding: const EdgeInsets.only(bottom: 9),
                 child: RoyalPanel(
                   padding: const EdgeInsets.all(10),
+                  gradient: FeaturePalette.glow(FeaturePalette.discover),
+                  accentColor: FeaturePalette.discover,
                   onTap: () => _openRoom(room),
                   child: Row(
                     children: [
-                      const CircleAvatar(
-                        radius: 28,
-                        backgroundColor: RoyalPalette.deepGold,
-                        child: Icon(Icons.graphic_eq_rounded, color: Colors.black),
+                      const ShiningIcon(
+                        icon: Icons.graphic_eq_rounded,
+                        color: FeaturePalette.discover,
+                        size: 28,
+                        boxSize: 56,
+                        glow: 0.40,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -142,7 +171,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         },
                         icon: Icon(
                           favorite ? Icons.star_rounded : Icons.star_border_rounded,
-                          color: RoyalPalette.gold,
+                          color: favorite
+                              ? FeaturePalette.rank
+                              : FeaturePalette.discover,
                         ),
                       ),
                     ],
