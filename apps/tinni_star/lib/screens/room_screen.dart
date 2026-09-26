@@ -1994,12 +1994,170 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _showRoomMusic() {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      _snack('Please sign in to use room music.');
+      return;
+    }
+    final songs = widget.state.ktv.library;
+    if (songs.isEmpty) {
+      _snack('No music is available right now.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          itemCount: songs.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, index) {
+            final song = songs[index];
+            return ListTile(
+              leading: const ShiningIcon(
+                icon: Icons.music_note_rounded,
+                color: FeaturePalette.music,
+                size: 20,
+                boxSize: 38,
+                glow: 0.34,
+              ),
+              title: Text(song.title),
+              subtitle: Text(song.singer),
+              trailing: const Icon(Icons.playlist_add_rounded),
+              onTap: () {
+                widget.state.ktv.addToQueue(song, account.userId);
+                if (widget.state.ktv.current == null) {
+                  widget.state.ktv.startNext();
+                }
+                Navigator.pop(sheetContext);
+                _snack('Music added: ' + song.title);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openRoomLuckyBag() {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      _snack('Please sign in to use Lucky Bag.');
+      return;
+    }
+
+    final bagId = 'room-' + widget.room.id + '-lucky';
+    var bag = widget.state.rewards.luckyBags[bagId];
+    if (bag == null || bag.expired || bag.remaining <= 0) {
+      bag = widget.state.rewards.createLuckyBag(
+        id: bagId,
+        senderId: account.userId,
+        totalSlots: 10,
+        reward: const LuckyBagReward(
+          kind: LuckyBagRewardKind.coins,
+          label: 'Room Lucky Bag',
+          amount: 100,
+        ),
+      );
+    }
+
+    final reward = widget.state.rewards.grab(bagId, account.userId);
+    if (reward == null) {
+      _snack('You already grabbed this Lucky Bag.');
+      return;
+    }
+
+    if (reward.kind == LuckyBagRewardKind.coins) {
+      widget.state.wallet.creditCoins(reward.amount, reward.label);
+    }
+    widget.state.rewards.launchRocket(1000);
+    widget.state.rewards.addRebate(50);
+    _snack(
+      reward.label +
+          ': +' +
+          reward.amount.toString() +
+          ' • ' +
+          bag.remaining.toString() +
+          ' left',
+    );
+  }
+
+  void _showRoomModerationCenter() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can use moderation.');
+      return;
+    }
+
+    final currentUserId = widget.state.auth.current?.userId;
+    final members = widget.state.roomSession.liveMembers
+        .where((member) => member.userId != currentUserId)
+        .toList(growable: false);
+    if (members.isEmpty) {
+      _snack('No other users are in the room.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          itemCount: members.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, index) {
+            final member = members[index];
+            final seat = member.seatIndex;
+            return ListTile(
+              leading: const ShiningIcon(
+                icon: Icons.shield_rounded,
+                color: FeaturePalette.safety,
+                size: 20,
+                boxSize: 38,
+                glow: 0.34,
+              ),
+              title: Text(member.displayName),
+              subtitle: Text(
+                seat == null
+                    ? 'Audience'
+                    : 'Seat ' + (seat + 1).toString(),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Future<void>.delayed(Duration.zero, () {
+                  if (mounted) {
+                    _showUserProfile(member, seatIndexHint: seat);
+                  }
+                });
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Color _roomToolColor(String label) {
     final value = label.toLowerCase();
     if (value.contains('fruit jackpot')) return FeaturePalette.fruitJackpot;
     if (value.contains('fruit party')) return FeaturePalette.fruitParty;
     if (value.contains('game')) return FeaturePalette.games;
-    if (value.contains('sound')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('music') || value.contains('sound')) {
+      return FeaturePalette.music;
+    }
+    if (value.contains('lucky bag') || value.contains('rocket')) {
+      return FeaturePalette.rocket;
+    }
+    if (value.contains('moderation')) return FeaturePalette.safety;
     if (value.contains('friend')) return FeaturePalette.family;
     if (value.contains('event')) return FeaturePalette.fruitParty;
     if (value.contains('effect')) return FeaturePalette.gift;
@@ -2022,6 +2180,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
+      (
+        'Gift',
+        Icons.card_giftcard_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showGiftSheet();
+          });
+        },
+      ),
+      (
+        'Music',
+        Icons.music_note_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomMusic();
+          });
+        },
+      ),
+      (
+        'Lucky Bag',
+        Icons.rocket_launch_rounded,
+        _openRoomLuckyBag,
+      ),
+      (
+        'Moderation',
+        Icons.shield_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomModerationCenter();
+          });
+        },
+      ),
       (
         'Fruit Jackpot',
         Icons.local_florist_rounded,
