@@ -1547,10 +1547,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       scrollDirection: Axis.horizontal,
                       children: [
                         if (isSelf)
-                          const _ProfileAction(
+                          _ProfileAction(
                             icon: Icons.person_rounded,
                             label: 'My ID',
-                            onTap: null,
+                            onTap: () {},
                           )
                         else
                           _ProfileAction(
@@ -1588,7 +1588,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             _openPrivateMessage(currentMember);
                           },
                         ),
-                        if (_canModerateSeats && seated)
+                        if (!isSelf && _canModerateSeats && seated)
                           _ProfileAction(
                             icon: Icons.keyboard_arrow_down_rounded,
                             label: 'Down Seat',
@@ -1600,7 +1600,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               );
                             },
                           )
-                        else if (_canModerateSeats)
+                        else if (!isSelf && _canModerateSeats)
                           _ProfileAction(
                             icon: Icons.event_seat_rounded,
                             label: 'Seat Invite',
@@ -1624,7 +1624,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             });
                           },
                         ),
-                        if (_canModerateSeats && seated)
+                        if (!isSelf && _canModerateSeats && seated)
                           _ProfileAction(
                             icon: micMuted
                                 ? Icons.mic_rounded
@@ -1641,7 +1641,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               }
                             },
                           ),
-                        if (_canModerateSeats)
+                        if (!isSelf && _canModerateSeats)
                           _ProfileAction(
                             icon: Icons.logout_rounded,
                             label: 'Kick',
@@ -3935,7 +3935,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             SizedBox(
               key: const Key('room-live-users'),
-              height: 78,
+              height: 108,
               child: session.liveMembers.isEmpty
                   ? const Center(
                       child: Text(
@@ -3971,7 +3971,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           }
                         }
                         return Container(
-                          width: 74,
+                          width: 104,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 5,
                             vertical: 6,
@@ -3999,9 +3999,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                onTap: !isMe
-                                    ? () => _showUserProfile(member)
-                                    : null,
+                                onTap: () => _showUserProfile(member),
                                 child: CircleAvatar(
                                   radius: 17,
                                   backgroundColor: RoyalPalette.panel2,
@@ -4042,6 +4040,100 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   fontSize: 7.5,
                                 ),
                               ),
+                              if (member.ownerTags.isNotEmpty ||
+                                  member.ownerMedals.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                SizedBox(
+                                  height: 16,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final tag in member.ownerTags)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-tag-' +
+                                                member.userId +
+                                                '-' +
+                                                tag.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            tag.name,
+                                            style: TextStyle(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                              fontSize: 6,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ),
+                                      for (final medal in member.ownerMedals)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-medal-' +
+                                                member.userId +
+                                                '-' +
+                                                medal.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                medal.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.workspace_premium_rounded,
+                                                size: 7,
+                                                color: _ownerTagColor(
+                                                  medal.colorHex,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 1),
+                                              Text(
+                                                medal.name,
+                                                style: TextStyle(
+                                                  color: _ownerTagColor(
+                                                    medal.colorHex,
+                                                  ),
+                                                  fontSize: 6,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         );
