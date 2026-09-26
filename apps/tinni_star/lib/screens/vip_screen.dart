@@ -90,10 +90,12 @@ class _VipScreenState extends State<VipScreen> {
                 gradient: FeaturePalette.glow(color),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.workspace_premium_rounded,
-                      size: 64,
+                    ShiningIcon(
+                      icon: Icons.workspace_premium_rounded,
+                      size: 46,
+                      boxSize: 72,
                       color: color,
+                      glow: 0.48,
                     ),
                     Text(
                       'VIP ' + selectedLevel.toString(),
@@ -146,9 +148,12 @@ class _VipScreenState extends State<VipScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      unlocked ? item.$2 : Icons.lock_rounded,
+                    ShiningIcon(
+                      icon: unlocked ? item.$2 : Icons.lock_rounded,
                       color: unlocked ? color : RoyalPalette.muted,
+                      size: 20,
+                      boxSize: 38,
+                      glow: unlocked ? 0.32 : 0.06,
                     ),
                     const SizedBox(height: 8),
                     Text(
