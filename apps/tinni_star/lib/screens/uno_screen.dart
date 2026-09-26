@@ -106,7 +106,13 @@ class _UnoScreenState extends State<UnoScreen> {
           IconButton(
             tooltip: 'Restart',
             onPressed: () => setState(game.reset),
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const ShiningIcon(
+              icon: Icons.refresh_rounded,
+              color: FeaturePalette.uno,
+              size: 18,
+              boxSize: 34,
+              glow: 0.30,
+            ),
           ),
         ],
       ),
@@ -143,9 +149,8 @@ class _UnoScreenState extends State<UnoScreen> {
             const Spacer(),
             RoyalPanel(
               padding: const EdgeInsets.symmetric(vertical: 18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF241A08), Color(0xFF0B0905)],
-              ),
+              gradient: FeaturePalette.glow(_color(game.activeColor)),
+              accentColor: _color(game.activeColor),
               child: Column(
                 children: [
                   Text(
@@ -288,13 +293,13 @@ class _UnoCardView extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: highlighted ? RoyalPalette.gold : Colors.white70,
+          color: highlighted ? color : Colors.white70,
           width: highlighted ? 3 : 1.5,
         ),
         boxShadow: highlighted
             ? [
                 BoxShadow(
-                  color: RoyalPalette.gold.withValues(alpha: .25),
+                  color: color.withValues(alpha: .45),
                   blurRadius: 12,
                 ),
               ]
@@ -353,13 +358,13 @@ class _UnoBackCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(9),
         color: const Color(0xFF151515),
-        border: Border.all(color: RoyalPalette.gold),
+        border: Border.all(color: FeaturePalette.uno),
       ),
       alignment: Alignment.center,
       child: const Text(
         'UNO',
         style: TextStyle(
-          color: RoyalPalette.gold,
+          color: FeaturePalette.uno,
           fontWeight: FontWeight.w900,
           fontSize: 11,
         ),
