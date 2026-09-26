@@ -1382,6 +1382,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final seated = seatIndex != null;
           final micMuted = seated && currentMember.micMuted;
           return SafeArea(
+            key: Key('room-user-profile-card-' + currentMember.userId),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               child: Column(
@@ -3544,6 +3545,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 alignment: Alignment.center,
                 children: [
                   GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
                     behavior: HitTestBehavior.opaque,
                     onTap: presenceMember == null
                         ? null
@@ -3999,6 +4003,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
+                                key: Key('room-live-user-dp-' + member.userId),
                                 onTap: () => _showUserProfile(member),
                                 child: CircleAvatar(
                                   radius: 17,
