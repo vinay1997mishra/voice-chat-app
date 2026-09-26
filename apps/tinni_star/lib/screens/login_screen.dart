@@ -734,8 +734,13 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               IconButton(
                 onPressed: busy ? null : _closeEmailMode,
-                icon: const Icon(Icons.arrow_back_rounded),
-                color: RoyalPalette.gold,
+                icon: const ShiningIcon(
+                  icon: Icons.arrow_back_rounded,
+                  color: FeaturePalette.email,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.28,
+                ),
               ),
               const Expanded(
                 child: Text(
@@ -914,6 +919,10 @@ class _LoginScreenState extends State<LoginScreen> {
             width: double.infinity,
             child: FilledButton.icon(
               key: const Key('google-login-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: FeaturePalette.google,
+                foregroundColor: Colors.white,
+              ),
               onPressed: googleReady && !busy && !waitingFacebook
                   ? _googleLogin
                   : null,
@@ -948,6 +957,10 @@ class _LoginScreenState extends State<LoginScreen> {
             width: double.infinity,
             child: FilledButton.icon(
               key: const Key('facebook-login-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: FeaturePalette.facebook,
+                foregroundColor: Colors.white,
+              ),
               onPressed: facebookReady && !busy && !waitingFacebook
                   ? _facebookLogin
                   : null,
@@ -998,6 +1011,10 @@ class _LoginScreenState extends State<LoginScreen> {
             width: double.infinity,
             child: FilledButton.icon(
               key: const Key('email-login-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: FeaturePalette.email,
+                foregroundColor: Colors.black,
+              ),
               onPressed: !busy && !waitingFacebook ? _openEmailMode : null,
               icon: const Icon(Icons.email_rounded),
               label: const Text('Login with Email / Gmail'),
