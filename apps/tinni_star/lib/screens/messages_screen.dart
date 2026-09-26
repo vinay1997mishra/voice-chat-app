@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
 import '../moderation/user_safety_menu.dart';
-import '../social/social.dart';
 import '../ui/royal_theme.dart';
 import 'call_screen.dart';
 
