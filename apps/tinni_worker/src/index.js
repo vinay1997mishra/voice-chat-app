@@ -222,6 +222,7 @@ async function verifyAppSession(request, env) {
   const store = getAppDirectoryStore(env);
   const user = await store.getUserById(payload.userId);
   if (!user) return null;
+  if (user.controls?.banned || user.controls?.device_banned) return null;
 
   const provider = String(payload.provider || "google");
   const subject = String(payload.subject || payload.googleSub || "");
@@ -1462,7 +1463,7 @@ export default {
       }
 
       const directory = getAppDirectoryStore(env);
-      const callAccess = directory.callRoomAccess(
+      const callAccess = await directory.callRoomAccess(
         appSession.user.user_id,
         roomId,
       );
@@ -1476,7 +1477,7 @@ export default {
           return json({ ok: false, error: "Room not found" }, 404);
         }
 
-        const access = directory.roomAccessState(
+        const access = await directory.roomAccessState(
           appSession.user.user_id,
           roomId,
         );
@@ -1488,7 +1489,7 @@ export default {
           }, 403);
         }
 
-        const kick = getRoomPresenceStore(env, roomId).kickStatus(
+        const kick = await getRoomPresenceStore(env, roomId).kickStatus(
           appSession.user.user_id,
         );
         if (kick) {
@@ -1574,7 +1575,7 @@ export default {
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
-      const result = getAppDirectoryStore(env).roomPasswordStatus(
+      const result = await getAppDirectoryStore(env).roomPasswordStatus(
         appSession.user.user_id,
         roomId,
       );
@@ -1610,7 +1611,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        following: getAppDirectoryStore(env).listFollowing(
+        following: await getAppDirectoryStore(env).listFollowing(
           appSession.user.user_id,
         ),
       });
@@ -1621,7 +1622,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        friends: getAppDirectoryStore(env).listFriends(
+        friends: await getAppDirectoryStore(env).listFriends(
           appSession.user.user_id,
         ),
       });
@@ -1633,7 +1634,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getAppDirectoryStore(env).setFollowing(
+          await getAppDirectoryStore(env).setFollowing(
             appSession.user.user_id,
             body.target_user_id,
             body.following === true,
@@ -1652,7 +1653,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        blocked: getAppDirectoryStore(env).listBlocked(
+        blocked: await getAppDirectoryStore(env).listBlocked(
           appSession.user.user_id,
         ),
       });
@@ -1664,7 +1665,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getAppDirectoryStore(env).setBlocked(
+          await getAppDirectoryStore(env).setBlocked(
             appSession.user.user_id,
             body.target_user_id,
             body.blocked === true,
@@ -1687,7 +1688,7 @@ export default {
       try {
         return json({
           ok: true,
-          verification: getAppDirectoryStore(env).callVerificationStatus(
+          verification: await getAppDirectoryStore(env).callVerificationStatus(
             appSession.user.user_id,
           ),
         });
@@ -1707,7 +1708,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const result = getAppDirectoryStore(env).submitCallVerification(
+        const result = await getAppDirectoryStore(env).submitCallVerification(
           appSession.user.user_id,
           body,
         );
@@ -1749,7 +1750,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).createRandomCall(
+          call: await getAppDirectoryStore(env).createRandomCall(
             appSession.user.user_id,
             body.gender,
             body.media,
@@ -1770,7 +1771,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).createCall(
+          call: await getAppDirectoryStore(env).createCall(
             appSession.user.user_id,
             body.receiver_id,
             body.media,
@@ -1789,10 +1790,10 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const callId = String(url.searchParams.get("call_id") || "").trim();
       const directory = getAppDirectoryStore(env);
-      let call = directory.getCall(callId);
+      let call = await directory.getCall(callId);
       if (!call) return json({ ok: false, error: "Call not found" }, 404);
       if (call.state === "accepted") {
-        call = directory.settleCallBilling(callId, Date.now());
+        call = await directory.settleCallBilling(callId, Date.now());
       }
       if (
         call.caller_id !== appSession.user.user_id &&
@@ -1808,7 +1809,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        call: getAppDirectoryStore(env).incomingCall(
+        call: await getAppDirectoryStore(env).incomingCall(
           appSession.user.user_id,
         ),
       });
@@ -1821,7 +1822,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).respondCall(
+          call: await getAppDirectoryStore(env).respondCall(
             appSession.user.user_id,
             body.call_id,
             body.accept === true,
@@ -1842,7 +1843,7 @@ export default {
       try {
         return json({
           ok: true,
-          call: getAppDirectoryStore(env).endCall(
+          call: await getAppDirectoryStore(env).endCall(
             appSession.user.user_id,
             body.call_id,
           ),
@@ -1861,7 +1862,7 @@ export default {
       try {
         return json({
           ok: true,
-          threads: getAppDirectoryStore(env).listMessageThreads(
+          threads: await getAppDirectoryStore(env).listMessageThreads(
             appSession.user.user_id,
           ),
         });
@@ -1885,7 +1886,7 @@ export default {
       try {
         return json({
           ok: true,
-          messages: getAppDirectoryStore(env).listDirectMessages(
+          messages: await getAppDirectoryStore(env).listDirectMessages(
             appSession.user.user_id,
             peerUserId,
             url.searchParams.get("limit"),
@@ -1904,7 +1905,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        const message = getAppDirectoryStore(env).sendDirectMessage(
+        const message = await getAppDirectoryStore(env).sendDirectMessage(
           appSession.user.user_id,
           body.to_user_id,
           body.text,
@@ -1928,7 +1929,7 @@ export default {
       }
       try {
         return json(
-          getAppDirectoryStore(env).setRoomTheme(
+          await getAppDirectoryStore(env).setRoomTheme(
             appSession.user.user_id,
             roomId,
             body,
@@ -1949,7 +1950,7 @@ export default {
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
-      const themes = getAppDirectoryStore(env).listRoomThemes(roomId);
+      const themes = await getAppDirectoryStore(env).listRoomThemes(roomId);
       return json({
         ok: true,
         user_price_coins: 10000000,
@@ -1967,7 +1968,7 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
       try {
-        const theme = getAppDirectoryStore(env).createUserRoomTheme(
+        const theme = await getAppDirectoryStore(env).createUserRoomTheme(
           appSession.user.user_id,
           roomId,
           body,
@@ -1992,6 +1993,18 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      const ownerState = await getAppDirectoryStore(env).ownerState();
+      const gameConfig = ownerState.game_config || {};
+      if (ownerState.features?.games === false || gameConfig.enabled === false) {
+        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      }
+      const amount = Number(body.amount || 0);
+      if (Number.isFinite(Number(gameConfig.min_bet)) && amount < Number(gameConfig.min_bet)) {
+        return json({ ok: false, error: "Bet is below Owner minimum" }, 400);
+      }
+      if (Number.isFinite(Number(gameConfig.max_bet)) && amount > Number(gameConfig.max_bet)) {
+        return json({ ok: false, error: "Bet is above Owner maximum" }, 400);
+      }
       try {
         const state = await getFruitGameStore(env).placeBet({
           ...body,
@@ -2014,6 +2027,18 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      const ownerState = await getAppDirectoryStore(env).ownerState();
+      const gameConfig = ownerState.game_config || {};
+      if (ownerState.features?.games === false || gameConfig.enabled === false) {
+        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      }
+      const amount = Number(body.amount || 0);
+      if (Number.isFinite(Number(gameConfig.min_bet)) && amount < Number(gameConfig.min_bet)) {
+        return json({ ok: false, error: "Bet is below Owner minimum" }, 400);
+      }
+      if (Number.isFinite(Number(gameConfig.max_bet)) && amount > Number(gameConfig.max_bet)) {
+        return json({ ok: false, error: "Bet is above Owner maximum" }, 400);
+      }
       try {
         const state = await getFruitPartyStore(env).placeBet({
           ...body,
@@ -2026,6 +2051,18 @@ export default {
           error: String(error?.message || "Unable to place Fruit Party bet"),
         }, 400);
       }
+    }
+
+    if (url.pathname === "/app-user/tags" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const requestedId = String(
+        url.searchParams.get("user_id") || appSession.user.user_id || "",
+      ).trim();
+      const directory = getAppDirectoryStore(env);
+      const tags = await directory.listUserTags(requestedId);
+      const medals = await directory.listUserMedals(requestedId);
+      return json({ ok: true, user_id: requestedId, tags, medals });
     }
 
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
@@ -2056,7 +2093,7 @@ export default {
 
       try {
         return json(
-          getRoomPresenceStore(env, roomId).setMicMode(body.mic_mode),
+          await getRoomPresenceStore(env, roomId).setMicMode(body.mic_mode),
         );
       } catch (error) {
         return json({
@@ -2081,12 +2118,66 @@ export default {
         (item) => String(item.id || item.room_id || "") === roomId,
       );
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      if (String(room.owner_id) !== String(appSession.user.user_id)) {
-        return json({ ok: false, error: "Only the room owner can manage admins" }, 403);
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      const canManageAdmins =
+        String(room.owner_id) === actorId || (actorIsManager && actorIsMember);
+      if (!canManageAdmins) {
+        return json({ ok: false, error: "Only room owner/admin can manage admins" }, 403);
+      }
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
+      }
+      const targetIsMember = await store.isMember(targetUserId);
+      if (!targetIsMember) {
+        return json({ ok: false, error: "Target user is not in the room" }, 400);
+      }
+      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
+    }
+
+    if (url.pathname === "/room-presence/chat-ban" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) {
+        return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner cannot be chat banned" }, 400);
       }
 
       const store = getRoomPresenceStore(env, roomId);
-      return json(store.setManager(targetUserId, Boolean(body.enabled)));
+      const actorId = String(appSession.user.user_id);
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      const canModerate =
+        String(room.owner_id) === actorId || (actorIsManager && actorIsMember);
+      if (!canModerate) {
+        return json({ ok: false, error: "Only room owner/admin can control room chat" }, 403);
+      }
+
+      try {
+        return json(await store.setChatBan({
+          target_user_id: targetUserId,
+          banned_by: actorId,
+          banned: body.banned === true,
+        }));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update chat ban"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/room-presence/seat-request" && request.method === "POST") {
@@ -2104,7 +2195,7 @@ export default {
 
       try {
         return json(
-          getRoomPresenceStore(env, roomId).requestSeat({
+          await getRoomPresenceStore(env, roomId).requestSeat({
             user_id: appSession.user.user_id,
             seat_index: seatIndex,
           }),
@@ -2138,9 +2229,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({
           ok: false,
@@ -2150,7 +2242,7 @@ export default {
 
       try {
         return json(
-          store.resolveSeatRequest({
+          await store.resolveSeatRequest({
             target_user_id: targetUserId,
             approved: body.approved === true,
           }),
@@ -2185,15 +2277,16 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can invite to seats" }, 403);
       }
 
       try {
-        return json(store.inviteToSeat({
+        return json(await store.inviteToSeat({
           target_user_id: targetUserId,
           invited_by: actorId,
           seat_index: seatIndex,
@@ -2212,7 +2305,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         return json(
-          getRoomPresenceStore(env, String(body.room_id || "").trim())
+          await getRoomPresenceStore(env, String(body.room_id || "").trim())
             .respondSeatInvite({
               user_id: appSession.user.user_id,
               accepted: body.accepted === true,
@@ -2244,15 +2337,16 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can move users from seats" }, 403);
       }
 
       try {
-        return json(store.removeFromSeat({
+        return json(await store.removeFromSeat({
           target_user_id: targetUserId,
         }));
       } catch (error) {
@@ -2278,7 +2372,7 @@ export default {
       }
 
       try {
-        const result = getRoomPresenceStore(env, roomId).setEmote({
+        const result = await getRoomPresenceStore(env, roomId).setEmote({
           user_id: appSession.user.user_id,
           seat_index: seatIndex,
           emote,
@@ -2315,9 +2409,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can mute users" }, 403);
       }
@@ -2326,7 +2421,7 @@ export default {
       }
 
       try {
-        return json(store.setMute({
+        return json(await store.setMute({
           target_user_id: targetUserId,
           seat_index: seatIndex,
           muted_by: actorId,
@@ -2358,9 +2453,10 @@ export default {
 
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
       const canModerate =
-        String(room.owner_id) === actorId ||
-        (store.isManager(actorId) && store.isMember(actorId));
+        String(room.owner_id) === actorId || (isManager && isMember);
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can kick users" }, 403);
       }
@@ -2382,7 +2478,7 @@ export default {
         }
       }
 
-      return json(store.kick({
+      return json(await store.kick({
         target_user_id: targetUserId,
         kicked_by: actorId,
         duration_ms: durationMs,
@@ -2403,7 +2499,7 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const user = appSession.user;
       if (url.pathname.endsWith("/join")) {
-        const access = getAppDirectoryStore(env).roomAccessState(
+        const access = await getAppDirectoryStore(env).roomAccessState(
           user.user_id,
           roomId,
         );
@@ -2425,6 +2521,8 @@ export default {
         family_tag: body.family_tag,
         host_tag: body.host_tag,
         agency_name: body.agency_name,
+        owner_tags: Array.isArray(user.tags) ? user.tags : [],
+        owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
           body.seat_index === null || body.seat_index === undefined
             ? null
@@ -2658,7 +2756,7 @@ export default {
       }
 
       try {
-        const officialMessage = getAppDirectoryStore(env).sendOfficialMessage(
+        const officialMessage = await getAppDirectoryStore(env).sendOfficialMessage(
           targetUserId,
           message,
           {
@@ -2739,7 +2837,7 @@ export default {
       return json({
         ok: true,
         submissions:
-          getAppDirectoryStore(env).listCallVerificationSubmissions(),
+          await getAppDirectoryStore(env).listCallVerificationSubmissions(),
       });
     }
 
@@ -2753,7 +2851,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       try {
         const result =
-          getAppDirectoryStore(env).reviewCallVerification(
+          await getAppDirectoryStore(env).reviewCallVerification(
             decodeURIComponent(callVerificationReviewMatch[1]),
             body.approve === true,
             body.note,
@@ -2769,12 +2867,12 @@ export default {
           { submission_id: result.submission_id },
         );
         if (body.approve === true) {
-          getAppDirectoryStore(env).sendOfficialMessage(
+          await getAppDirectoryStore(env).sendOfficialMessage(
             result.user_id,
             "Your Call ID verification is approved. Your ID stays Verified until Owner removes Verified status."
           );
         } else {
-          getAppDirectoryStore(env).sendOfficialMessage(
+          await getAppDirectoryStore(env).sendOfficialMessage(
             result.user_id,
             "Your Call ID verification was rejected. Please contact the Official Manager for help with verification."
           );
@@ -2811,7 +2909,7 @@ export default {
           callVerificationManualVerifyMatch[1],
         );
         const result =
-          getAppDirectoryStore(env).verifyCallManually(
+          await getAppDirectoryStore(env).verifyCallManually(
             userId,
             body.note,
           );
@@ -2826,7 +2924,7 @@ export default {
             verification_method: "owner_override",
           },
         );
-        getAppDirectoryStore(env).sendOfficialMessage(
+        await getAppDirectoryStore(env).sendOfficialMessage(
           userId,
           "Owner manually verified your Call ID. Your ID stays Verified until Owner removes Verified status."
         );
@@ -2850,7 +2948,7 @@ export default {
       try {
         const userId = decodeURIComponent(callVerificationRevokeMatch[1]);
         const result =
-          getAppDirectoryStore(env).revokeCallVerification(
+          await getAppDirectoryStore(env).revokeCallVerification(
             userId,
             body.note,
           );
@@ -2862,7 +2960,7 @@ export default {
           userId,
           { note: String(body.note || "") },
         );
-        getAppDirectoryStore(env).sendOfficialMessage(
+        await getAppDirectoryStore(env).sendOfficialMessage(
           userId,
           "Owner removed your Call ID Verified status. Verification will be required again to return to the Verified call benefits and random-call pool."
         );
@@ -2872,6 +2970,182 @@ export default {
           ok: false,
           error: String(error?.message || "Unable to revoke verification"),
         }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/state" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        state: await getAppDirectoryStore(env).ownerState(),
+        dashboard: await getAppDirectoryStore(env).ownerDashboard(),
+      });
+    }
+
+    if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const query = String(url.searchParams.get("q") || "");
+      const users = await getAppDirectoryStore(env).ownerSearchUsers(
+        query,
+        url.searchParams.get("limit") || 50,
+      );
+      return json({ ok: true, users });
+    }
+
+    if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        users: await getAppDirectoryStore(env).listVerifiedUsers(
+          String(url.searchParams.get("q") || ""),
+        ),
+      });
+    }
+
+    if (url.pathname === "/api/owner/messages" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).sendOwnerMessages(
+          body.text,
+          body.user_ids,
+          body.all_users === true,
+        );
+        await writeAudit(
+          env,
+          session,
+          body.all_users === true ? "message.broadcast_all" : "message.bulk_selected",
+          "users",
+          body.all_users === true ? "all" : (Array.isArray(body.user_ids) ? body.user_ids.join(",") : ""),
+          { sent: result.sent },
+        );
+        return json(result);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send message") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/tags" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).applyOwnerTag(
+          body.user_ids,
+          body.name,
+          body.color,
+        );
+        await writeAudit(
+          env,
+          session,
+          "user.tag.apply",
+          "users",
+          Array.isArray(body.user_ids) ? body.user_ids.join(",") : "",
+          { name: result.name, color: result.color, tagged: result.tagged },
+        );
+        return json(result);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to apply tag") }, 400);
+      }
+    }
+
+    const ownerTagDeleteMatch = url.pathname.match(
+      /^\/api\/owner\/tags\/([^/]+)\/([^/]+)$/,
+    );
+    if (ownerTagDeleteMatch && request.method === "DELETE") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = decodeURIComponent(ownerTagDeleteMatch[1]);
+      const tagId = decodeURIComponent(ownerTagDeleteMatch[2]);
+      const result = await getAppDirectoryStore(env).removeOwnerTag(userId, tagId);
+      await writeAudit(env, session, "user.tag.remove", "user", userId, { tag_id: tagId });
+      return json(result);
+    }
+
+    if (url.pathname === "/api/owner/room-live" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const presence = await getRoomPresenceStore(env, roomId).state();
+      return json({ ok: true, room, presence });
+    }
+
+    if (url.pathname === "/api/owner/game-stats" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const jackpot = await getFruitGameStore(env).ownerStats(userId);
+      const party = await getFruitPartyStore(env).ownerStats(userId);
+      return json({
+        ok: true,
+        user_id: userId || null,
+        jackpot,
+        party,
+        totals: {
+          bet_count: Number(jackpot.bet_count || 0) + Number(party.bet_count || 0),
+          total_bet: Number(jackpot.total_bet || 0) + Number(party.total_bet || 0),
+          total_payout: Number(jackpot.total_payout || 0) + Number(party.total_payout || 0),
+          unique_players: Math.max(
+            Number(jackpot.unique_players || 0),
+            Number(party.unique_players || 0),
+          ),
+          house_net: Number(jackpot.house_net || 0) + Number(party.house_net || 0),
+        },
+      });
+    }
+
+    if (url.pathname === "/api/owner/action" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).ownerAction(body.action, body.data);
+        await writeAudit(
+          env,
+          session,
+          "owner.action." + String(body.action || "unknown"),
+          "owner_action",
+          String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
+          { data: body.data || {}, result },
+        );
+        return json({ ok: true, result, state: await getAppDirectoryStore(env).ownerState() });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Owner action failed") }, 400);
+      }
+    }
+
+    const ownerCatalogMatch = url.pathname.match(/^\/api\/owner\/catalog\/([^/]+)$/);
+    if (ownerCatalogMatch && request.method === "PATCH") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const item = await getAppDirectoryStore(env).ownerCatalogPatch(
+          decodeURIComponent(ownerCatalogMatch[1]),
+          body,
+        );
+        await writeAudit(env, session, "owner.catalog.update", "catalog", item.id, body);
+        return json({ ok: true, item });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update item") }, 400);
       }
     }
 
@@ -2977,7 +3251,7 @@ export default {
       if (!sessionHasPermission(session, "rooms.theme_view")) {
         return json({ ok: false, error: "Room theme view access required" }, 403);
       }
-      const themes = getAppDirectoryStore(env).listPanelRoomThemes();
+      const themes = await getAppDirectoryStore(env).listPanelRoomThemes();
       return json({ ok: true, themes });
     }
 
@@ -2987,7 +3261,7 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       try {
-        const theme = getAppDirectoryStore(env).createPanelRoomTheme(body);
+        const theme = await getAppDirectoryStore(env).createPanelRoomTheme(body);
         await writeAudit(env, session, "room.theme.create", "room_theme", theme.id, {
           name: theme.name,
           permanent: Boolean(theme.permanent),
@@ -3010,7 +3284,7 @@ export default {
       }
       try {
         const themeId = decodeURIComponent(roomThemeMatch[1]);
-        const result = getAppDirectoryStore(env).disableRoomTheme(themeId);
+        const result = await getAppDirectoryStore(env).disableRoomTheme(themeId);
         await writeAudit(env, session, "room.theme.remove", "room_theme", themeId, {});
         return json(result);
       } catch (error) {

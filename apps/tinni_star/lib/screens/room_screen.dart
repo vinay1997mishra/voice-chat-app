@@ -9,6 +9,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
+import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
 import '../room/room_control_service.dart';
@@ -1130,6 +1131,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String _agencyNameFor(String userId) =>
       widget.state.roomControls.agencyNameFor(userId) ?? '—';
 
+  Color _ownerTagColor(String colorHex) {
+    final value = int.tryParse(
+      colorHex.replaceFirst('#', ''),
+      radix: 16,
+    );
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
   Future<void> _openPrivateMessage(RoomPresenceMember member) async {
     await Navigator.push(
       context,
@@ -1336,25 +1345,66 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _toggleRoomAdmin(
+    RoomPresenceMember member,
+    bool enabled,
+  ) async {
+    try {
+      await widget.state.roomSession.setRoomAdmin(
+        member.userId,
+        enabled: enabled,
+      );
+      _snack(
+        enabled
+            ? member.displayName + ' is now a room admin.'
+            : member.displayName + ' removed from room admin.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _toggleRoomChatBan(
+    RoomPresenceMember member,
+    bool banned,
+  ) async {
+    try {
+      await widget.state.roomSession.setRoomChatBan(
+        member.userId,
+        banned: banned,
+      );
+      _snack(
+        banned
+            ? member.displayName + ' chat banned in this room.'
+            : member.displayName + ' chat unbanned.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _openFullRoomProfile(RoomPresenceMember member) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _RoomMemberProfilePage(member: member),
+      ),
+    );
+  }
+
   void _showUserProfile(
     RoomPresenceMember member, {
     int? seatIndexHint,
   }) {
-    if (member.userId == widget.state.auth.current?.userId) return;
-    ImageProvider? avatar;
-    final avatarData = member.avatarDataUrl;
-    if (avatarData != null && avatarData.startsWith('data:image/')) {
-      try {
-        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
-      } catch (_) {
-        avatar = null;
-      }
-    }
+    final selfUserId = widget.state.auth.current?.userId;
+    final isSelf = member.userId == selfUserId;
+
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: RoyalPalette.nearBlack,
+      showDragHandle: false,
+      useSafeArea: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
           var currentMember = member;
@@ -1364,228 +1414,339 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               break;
             }
           }
+
           final followed =
               widget.state.social.following.contains(currentMember.userId);
           final seatIndex = _seatIndexForMember(
             currentMember,
             hint: seatIndexHint,
           );
-          final seated = seatIndex != null;
-          final micMuted = seated && currentMember.micMuted;
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: Column(
+          final micMuted = currentMember.micMuted;
+          final canModerate = !isSelf && _canModerateSeats;
+          final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.44;
+
+          ImageProvider? avatar;
+          final avatarData = currentMember.avatarDataUrl;
+          if (avatarData != null && avatarData.startsWith('data:image/')) {
+            try {
+              avatar = MemoryImage(base64Decode(avatarData.split(',').last));
+            } catch (_) {
+              avatar = null;
+            }
+          }
+
+          Widget tagPill(
+            String name,
+            String colorHex, {
+            bool medal = false,
+            String? keyPrefix,
+          }) {
+            final color = _ownerTagColor(colorHex);
+            return Container(
+              key: Key(
+                (keyPrefix ?? (medal ? 'room-owner-medal-' : 'room-owner-tag-')) +
+                    currentMember.userId +
+                    '-' +
+                    name,
+              ),
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color),
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: UserSafetyMenuButton(
-                      state: widget.state,
-                      targetUserId: currentMember.userId,
-                      targetDisplayName: currentMember.displayName,
-                      roomId: widget.room.id,
-                      onBlockChanged: () {
-                        if (sheetContext.mounted) {
-                          setSheetState(() {});
-                        }
-                      },
+                  if (medal) ...[
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 13,
+                      color: color,
+                    ),
+                    const SizedBox(width: 3),
+                  ],
+                  Text(
+                    name,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: FeaturePalette.social,
-                        width: 2.3,
+                ],
+              ),
+            );
+          }
+
+          Widget badgeRow({
+            required String label,
+            required List<Widget> children,
+          }) {
+            return SizedBox(
+              height: 31,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: FeaturePalette.social
-                              .withValues(alpha: 0.42),
-                          blurRadius: 16,
-                        ),
-                      ],
-                    ),
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: RoyalPalette.panel2,
-                      backgroundImage: avatar,
-                      child: avatar == null
-                          ? Text(
-                              member.displayName.isEmpty
-                                  ? '?'
-                                  : member.displayName.characters.first
-                                      .toUpperCase(),
-                              style: const TextStyle(
-                                color: FeaturePalette.social,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            )
-                          : null,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(currentMember.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
-                  Text('ID ' + currentMember.userId, style: const TextStyle(color: RoyalPalette.muted)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 7,
-                    runSpacing: 7,
+                  Expanded(
+                    child: children.isEmpty
+                        ? const Text(
+                            '—',
+                            style: TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 10,
+                            ),
+                          )
+                        : ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: children,
+                          ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              key: Key('room-user-profile-card-' + currentMember.userId),
+              width: double.infinity,
+              height: sheetHeight,
+              decoration: const BoxDecoration(
+                color: RoyalPalette.nearBlack,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(22),
+                ),
+                border: Border(
+                  top: BorderSide(color: RoyalPalette.bronze),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
                     children: [
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.family.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.family),
-                        label: Text(
-                          'Family ' +
-                              (currentMember.familyTag ??
-                                  _familyTagFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.family,
-                            fontWeight: FontWeight.w800,
-                          ),
+                      GestureDetector(
+                        key: Key(
+                          'room-profile-card-dp-' + currentMember.userId,
+                        ),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          Future<void>.delayed(Duration.zero, () {
+                            if (mounted) {
+                              _openFullRoomProfile(currentMember);
+                            }
+                          });
+                        },
+                        child: CircleAvatar(
+                          radius: 32,
+                          backgroundColor: RoyalPalette.panel2,
+                          backgroundImage: avatar,
+                          child: avatar == null
+                              ? Text(
+                                  currentMember.displayName.isEmpty
+                                      ? '?'
+                                      : currentMember
+                                          .displayName.characters.first
+                                          .toUpperCase(),
+                                  style: const TextStyle(
+                                    color: FeaturePalette.social,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                )
+                              : null,
                         ),
                       ),
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.vip.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.vip),
-                        label: Text(
-                          'Host ' +
-                              (currentMember.hostTag ??
-                                  _hostTagFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.vip,
-                            fontWeight: FontWeight.w800,
-                          ),
+                      const SizedBox(height: 5),
+                      Text(
+                        currentMember.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.social.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.social),
-                        label: Text(
-                          'Agency ' +
-                              (currentMember.agencyName ??
-                                  _agencyNameFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.social,
-                            fontWeight: FontWeight.w800,
+                      Text(
+                        'ID ' + currentMember.userId,
+                        style: const TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      badgeRow(
+                        label: 'Tags',
+                        children: [
+                          for (final tag in currentMember.ownerTags)
+                            tagPill(tag.name, tag.colorHex),
+                        ],
+                      ),
+                      badgeRow(
+                        label: 'Medals',
+                        children: [
+                          for (final medal in currentMember.ownerMedals)
+                            tagPill(
+                              medal.name,
+                              medal.colorHex,
+                              medal: true,
+                            ),
+                        ],
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        height: 67,
+                        child: ListView(
+                          key: Key(
+                            'room-profile-card-actions-' +
+                                currentMember.userId,
                           ),
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: followed
+                                    ? Icons.person_remove_rounded
+                                    : Icons.person_add_rounded,
+                                label: followed ? 'Unfollow' : 'Follow',
+                                onTap: () async {
+                                  final account = widget.state.auth.current;
+                                  if (account == null) return;
+                                  try {
+                                    await widget.state.social
+                                        .setFollowingRemote(
+                                      authToken: account.authToken,
+                                      targetUserId: currentMember.userId,
+                                      value: !followed,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: currentMember.isAdmin
+                                    ? Icons.remove_moderator_rounded
+                                    : Icons.admin_panel_settings_rounded,
+                                label: currentMember.isAdmin
+                                    ? 'Remove Admin'
+                                    : 'Set Admin',
+                                onTap: () async {
+                                  await _toggleRoomAdmin(
+                                    currentMember,
+                                    !currentMember.isAdmin,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: Icons.card_giftcard_rounded,
+                                label: 'Gifting',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  Future<void>.delayed(Duration.zero, () {
+                                    if (mounted) {
+                                      _showGiftSheet(
+                                        preselectedUserId:
+                                            currentMember.userId,
+                                      );
+                                    }
+                                  });
+                                },
+                              ),
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: Icons.mail_rounded,
+                                label: 'Message',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  _openPrivateMessage(currentMember);
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: micMuted
+                                    ? Icons.mic_rounded
+                                    : Icons.mic_off_rounded,
+                                label: micMuted ? 'Unmute' : 'Mute',
+                                onTap: () async {
+                                  if (seatIndex == null) {
+                                    _snack(
+                                      currentMember.displayName +
+                                          ' is not on a seat.',
+                                    );
+                                    return;
+                                  }
+                                  await _setUserSeatMute(
+                                    currentMember,
+                                    seatIndex,
+                                    !micMuted,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: currentMember.chatBanned
+                                    ? Icons.chat_rounded
+                                    : Icons.comments_disabled_rounded,
+                                label: currentMember.chatBanned
+                                    ? 'Chat Unban'
+                                    : 'Chat Ban',
+                                onTap: () async {
+                                  await _toggleRoomChatBan(
+                                    currentMember,
+                                    !currentMember.chatBanned,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: Icons.logout_rounded,
+                                label: 'Kick',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  _showKickPicker(currentMember);
+                                },
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 82,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        _ProfileAction(
-                          icon: followed
-                              ? Icons.person_remove_rounded
-                              : Icons.person_add_rounded,
-                          label: followed ? 'Unfollow' : 'Follow',
-                          onTap: () async {
-                            final account = widget.state.auth.current;
-                            if (account == null) return;
-                            try {
-                              await widget.state.social.setFollowingRemote(
-                                authToken: account.authToken,
-                                targetUserId: currentMember.userId,
-                                value: !followed,
-                              );
-                              if (sheetContext.mounted) {
-                                setSheetState(() {});
-                              }
-                            } catch (error) {
-                              _snack(
-                                error
-                                    .toString()
-                                    .replaceFirst('Bad state: ', ''),
-                              );
-                            }
-                          },
-                        ),
-                        _ProfileAction(
-                          icon: Icons.mail_rounded,
-                          label: 'Message',
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            _openPrivateMessage(currentMember);
-                          },
-                        ),
-                        if (_canModerateSeats && seated)
-                          _ProfileAction(
-                            icon: Icons.keyboard_arrow_down_rounded,
-                            label: 'Down Seat',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _moveUserToAudience(
-                                currentMember,
-                                seatIndexHint: seatIndex,
-                              );
-                            },
-                          )
-                        else if (_canModerateSeats)
-                          _ProfileAction(
-                            icon: Icons.event_seat_rounded,
-                            label: 'Seat Invite',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _showSeatInvitePicker(currentMember);
-                            },
-                          ),
-                        _ProfileAction(
-                          icon: Icons.card_giftcard_rounded,
-                          label: 'Gift',
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            Future<void>.delayed(Duration.zero, () {
-                              if (mounted) {
-                                _showGiftSheet(
-                                  preselectedUserId: currentMember.userId,
-                                );
-                              }
-                            });
-                          },
-                        ),
-                        if (_canModerateSeats && seated)
-                          _ProfileAction(
-                            icon: micMuted
-                                ? Icons.mic_rounded
-                                : Icons.mic_off_rounded,
-                            label: micMuted ? 'Unmute' : 'Mute',
-                            onTap: () async {
-                              await _setUserSeatMute(
-                                currentMember,
-                                seatIndex,
-                                !micMuted,
-                              );
-                              if (sheetContext.mounted) {
-                                setSheetState(() {});
-                              }
-                            },
-                          ),
-                        if (_canModerateSeats)
-                          _ProfileAction(
-                            icon: Icons.logout_rounded,
-                            label: 'Kick',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _showKickPicker(currentMember);
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -3475,7 +3636,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Container(
+                  GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: Container(
                     width: seatDiameter,
                     height: seatDiameter,
                     decoration: BoxDecoration(
@@ -3529,6 +3701,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         size: seatDiameter * 0.42,
                                       ),
                           ),
+                    ),
                   ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
                     IgnorePointer(
@@ -3561,6 +3734,84 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 fontWeight: occupied ? FontWeight.w800 : FontWeight.w500,
               ),
             ),
+            if (occupied &&
+                presenceMember != null &&
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -3587,7 +3838,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final screenSize = MediaQuery.sizeOf(context);
     final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
     final maxSeatAreaHeight = screenSize.height * 0.38;
-    final rowLabelSpace = widthSeatDiameter < 44 ? 16.0 : 22.0;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
@@ -3780,7 +4031,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             SizedBox(
               key: const Key('room-live-users'),
-              height: 78,
+              height: 126,
               child: session.liveMembers.isEmpty
                   ? const Center(
                       child: Text(
@@ -3816,7 +4067,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           }
                         }
                         return Container(
-                          width: 74,
+                          width: 104,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 5,
                             vertical: 6,
@@ -3844,9 +4095,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                onTap: !isMe
-                                    ? () => _showUserProfile(member)
-                                    : null,
+                                key: Key('room-live-user-dp-' + member.userId),
+                                onTap: () => _showUserProfile(member),
                                 child: CircleAvatar(
                                   radius: 17,
                                   backgroundColor: RoyalPalette.panel2,
@@ -3887,6 +4137,111 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   fontSize: 7.5,
                                 ),
                               ),
+                              if (member.ownerTags.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                SizedBox(
+                                  height: 15,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final tag in member.ownerTags)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-tag-' +
+                                                member.userId +
+                                                '-' +
+                                                tag.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            tag.name,
+                                            style: TextStyle(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                              fontSize: 6,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (member.ownerMedals.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                SizedBox(
+                                  height: 15,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final medal in member.ownerMedals)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-medal-' +
+                                                member.userId +
+                                                '-' +
+                                                medal.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                medal.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.workspace_premium_rounded,
+                                                size: 7,
+                                                color: _ownerTagColor(
+                                                  medal.colorHex,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 1),
+                                              Text(
+                                                medal.name,
+                                                style: TextStyle(
+                                                  color: _ownerTagColor(
+                                                    medal.colorHex,
+                                                  ),
+                                                  fontSize: 6,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         );
@@ -3992,12 +4347,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: MediaQuery.sizeOf(context).width * 0.28,
                       child: TextField(
                         controller: chat,
-                        decoration: const InputDecoration(
-                          hintText: 'Chat',
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : 'Chat',
                           isDense: true,
-                          contentPadding: EdgeInsets.fromLTRB(10, 10, 8, 10),
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
                         ),
                         onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
                           controller.sendMessage(chat.text);
                           chat.clear();
                         },
@@ -4171,6 +4536,235 @@ class _RoomThemeChoice {
   final DateTime? expiresAt;
   final bool panelFree;
 }
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileAction extends StatelessWidget {
   const _ProfileAction({
     required this.icon,

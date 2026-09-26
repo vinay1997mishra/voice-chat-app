@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../identity/owner_tag.dart';
+
 class RoomSeatRequest {
   const RoomSeatRequest({
     required this.userId,
@@ -39,8 +41,11 @@ class RoomPresenceMember {
     this.familyTag,
     this.hostTag,
     this.agencyName,
+    this.ownerTags = const <OwnerTag>[],
+    this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
     this.micMuted = false,
+    this.chatBanned = false,
     this.isAdmin = false,
     this.seatEmote,
     this.seatEmoteUntil,
@@ -54,8 +59,11 @@ class RoomPresenceMember {
   final String? familyTag;
   final String? hostTag;
   final String? agencyName;
+  final List<OwnerTag> ownerTags;
+  final List<OwnerTag> ownerMedals;
   final int? seatIndex;
   final bool micMuted;
+  final bool chatBanned;
   final bool isAdmin;
   final String? seatEmote;
   final DateTime? seatEmoteUntil;
@@ -79,6 +87,7 @@ class RoomPresenceService extends ChangeNotifier {
   bool connected = false;
   String micMode = 'apply';
   bool selfMicMuted = false;
+  bool selfChatBanned = false;
   bool selfSeatForced = false;
   int? selfForcedSeatIndex;
   RoomSeatInvite? pendingSeatInvite;
@@ -132,6 +141,7 @@ class RoomPresenceService extends ChangeNotifier {
       connected = false;
       micMode = 'apply';
       selfMicMuted = false;
+      selfChatBanned = false;
       selfSeatForced = false;
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
@@ -170,6 +180,40 @@ class RoomPresenceService extends ChangeNotifier {
     }
     _apply(data);
     notifyListeners();
+  }
+
+  Future<void> setAdmin({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    required bool enabled,
+  }) async {
+    await _commandPost(
+      '/room-presence/admin',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'enabled': enabled,
+      },
+    );
+  }
+
+  Future<void> setChatBan({
+    required String roomId,
+    required String authToken,
+    required String targetUserId,
+    required bool banned,
+  }) async {
+    await _commandPost(
+      '/room-presence/chat-ban',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'target_user_id': targetUserId,
+        'banned': banned,
+      },
+    );
   }
 
   Future<void> setMicMode({
@@ -453,6 +497,9 @@ class RoomPresenceService extends ChangeNotifier {
     if (data.containsKey('self_mic_muted')) {
       selfMicMuted = data['self_mic_muted'] == true;
     }
+    if (data.containsKey('self_chat_banned')) {
+      selfChatBanned = data['self_chat_banned'] == true;
+    }
 
     if (data.containsKey('self_seat_forced')) {
       selfSeatForced = data['self_seat_forced'] == true;
@@ -514,10 +561,25 @@ class RoomPresenceService extends ChangeNotifier {
                 familyTag: row['family_tag']?.toString(),
                 hostTag: row['host_tag']?.toString(),
                 agencyName: row['agency_name']?.toString(),
+                ownerTags: row['owner_tags'] is List
+                    ? (row['owner_tags'] as List)
+                        .whereType<Map>()
+                        .map(OwnerTag.fromMap)
+                        .where((tag) => tag.name.isNotEmpty)
+                        .toList(growable: false)
+                    : const <OwnerTag>[],
+                ownerMedals: row['owner_medals'] is List
+                    ? (row['owner_medals'] as List)
+                        .whereType<Map>()
+                        .map(OwnerTag.fromMap)
+                        .where((medal) => medal.name.isNotEmpty)
+                        .toList(growable: false)
+                    : const <OwnerTag>[],
                 seatIndex: row['seat_index'] == null
                     ? null
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
+                chatBanned: row['chat_banned'] == true,
                 isAdmin: row['is_admin'] == true,
                 seatEmote: row['seat_emote']?.toString(),
                 seatEmoteUntil: row['seat_emote_until'] == null

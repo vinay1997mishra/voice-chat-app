@@ -4,6 +4,8 @@ import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/discovery/discovery_service.dart';
+import 'package:tinni_star/identity/owner_tag.dart';
+import 'package:tinni_star/room/room_presence_service.dart';
 
 import 'test_account.dart';
 
@@ -16,6 +18,21 @@ void main() {
       ),
     );
     final account = attachTestAccount(state);
+    final now = DateTime.now();
+    state.roomPresence.members.add(
+      RoomPresenceMember(
+        userId: '92000002',
+        displayName: 'Tagged Friend',
+        joinedAt: now,
+        lastSeen: now,
+        ownerTags: const <OwnerTag>[
+          OwnerTag(name: 'Official Host', colorHex: '#FF4081'),
+        ],
+        ownerMedals: const <OwnerTag>[
+          OwnerTag(name: 'Verified', colorHex: '#4FC3F7'),
+        ],
+      ),
+    );
     state.discovery.rooms.add(
       RoomSummary(
         id: account.userId,
@@ -45,6 +62,38 @@ void main() {
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
     expect(find.byKey(const Key('room-rank-hall-button')), findsOneWidget);
+
+    expect(
+      find.byKey(const Key('live-owner-tag-92000002-Official Host')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('live-owner-medal-92000002-Verified')),
+      findsOneWidget,
+    );
+
+    final taggedDp =
+        find.byKey(const Key('room-live-user-dp-92000002'));
+    expect(taggedDp, findsOneWidget);
+    await tester.ensureVisible(taggedDp);
+    await tester.tap(taggedDp);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('room-user-profile-card-92000002')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-owner-tag-92000002-Official Host')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-owner-medal-92000002-Verified')),
+      findsOneWidget,
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-power-button')));
     await tester.pumpAndSettle();
