@@ -6,11 +6,13 @@ class SocialUser {
     required this.id,
     required this.name,
     this.inRoomId,
+    this.avatarDataUrl,
   });
 
   final String id;
   final String name;
   final String? inRoomId;
+  final String? avatarDataUrl;
 }
 
 class ChatMessage {
@@ -20,6 +22,7 @@ class ChatMessage {
     required this.text,
     this.id,
     this.createdAt,
+    this.seenAt,
   });
 
   final String from;
@@ -27,6 +30,25 @@ class ChatMessage {
   final String text;
   final String? id;
   final DateTime? createdAt;
+  final DateTime? seenAt;
+}
+
+class MessageThread {
+  const MessageThread({
+    required this.userId,
+    required this.displayName,
+    required this.isFriend,
+    this.avatarDataUrl,
+    this.lastMessage,
+    this.unreadCount = 0,
+  });
+
+  final String userId;
+  final String displayName;
+  final bool isFriend;
+  final String? avatarDataUrl;
+  final ChatMessage? lastMessage;
+  final int unreadCount;
 }
 
 class SocialService {
@@ -45,6 +67,7 @@ class SocialService {
   final List<SocialUser> friendProfiles = <SocialUser>[];
   final Set<String> blocked = <String>{};
   final List<ChatMessage> directMessages = <ChatMessage>[];
+  final List<MessageThread> messageThreads = <MessageThread>[];
 
   void follow(String userId) => following.add(userId);
   void unfollow(String userId) => following.remove(userId);
@@ -106,6 +129,7 @@ class SocialService {
                 item['name']?.toString() ??
                 id,
             inRoomId: item['in_room_id']?.toString(),
+            avatarDataUrl: item['avatar_data_url']?.toString(),
           ),
         );
       }
@@ -243,6 +267,89 @@ class SocialService {
     return true;
   }
 
+  Future<List<MessageThread>> syncInbox(String authToken) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(path: '/messages/inbox'),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load inbox',
+      );
+    }
+
+    final values = <MessageThread>[];
+    final raw = data['threads'];
+    if (raw is List) {
+      for (final item in raw.whereType<Map>()) {
+        final userId = item['user_id']?.toString() ?? '';
+        if (userId.isEmpty) continue;
+        ChatMessage? lastMessage;
+        final rawMessage = item['last_message'];
+        if (rawMessage is Map) {
+          final from = rawMessage['from']?.toString() ?? '';
+          final to = rawMessage['to']?.toString() ?? '';
+          final text = rawMessage['text']?.toString() ?? '';
+          if (from.isNotEmpty && to.isNotEmpty && text.isNotEmpty) {
+            final createdAtMs = _asInt(rawMessage['created_at']);
+            final seenAtMs = _asInt(rawMessage['seen_at']);
+            lastMessage = ChatMessage(
+              id: rawMessage['id']?.toString(),
+              from: from,
+              to: to,
+              text: text,
+              createdAt: createdAtMs > 0
+                  ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
+                  : null,
+              seenAt: seenAtMs > 0
+                  ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
+                  : null,
+            );
+          }
+        }
+        values.add(
+          MessageThread(
+            userId: userId,
+            displayName:
+                item['display_name']?.toString() ?? userId,
+            avatarDataUrl: item['avatar_data_url']?.toString(),
+            isFriend: item['is_friend'] == true,
+            lastMessage: lastMessage,
+            unreadCount: _asInt(item['unread_count']),
+          ),
+        );
+      }
+    }
+
+    messageThreads
+      ..clear()
+      ..addAll(values);
+
+    final friendThreads = values.where((thread) => thread.isFriend).toList();
+    friendProfiles
+      ..clear()
+      ..addAll(
+        friendThreads.map(
+          (thread) => SocialUser(
+            id: thread.userId,
+            name: thread.displayName,
+            avatarDataUrl: thread.avatarDataUrl,
+          ),
+        ),
+      );
+    friends
+      ..clear()
+      ..addAll(friendThreads.map((thread) => thread.userId));
+
+    return values;
+  }
+
   Future<List<ChatMessage>> loadConversation({
     required String authToken,
     required String myUserId,
@@ -279,6 +386,7 @@ class SocialService {
         final text = item['text']?.toString() ?? '';
         if (from.isEmpty || to.isEmpty || text.isEmpty) continue;
         final createdAtMs = _asInt(item['created_at']);
+        final seenAtMs = _asInt(item['seen_at']);
         values.add(
           ChatMessage(
             id: item['id']?.toString(),
@@ -287,6 +395,9 @@ class SocialService {
             text: text,
             createdAt: createdAtMs > 0
                 ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
+                : null,
+            seenAt: seenAtMs > 0
+                ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
                 : null,
           ),
         );
@@ -337,6 +448,7 @@ class SocialService {
     final raw = data['message'];
     if (raw is! Map) throw StateError('Server returned invalid message');
     final createdAtMs = _asInt(raw['created_at']);
+    final seenAtMs = _asInt(raw['seen_at']);
     final message = ChatMessage(
       id: raw['id']?.toString(),
       from: raw['from']?.toString() ?? from,
@@ -345,6 +457,9 @@ class SocialService {
       createdAt: createdAtMs > 0
           ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
           : DateTime.now(),
+      seenAt: seenAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
+          : null,
     );
     directMessages.add(message);
     return message;

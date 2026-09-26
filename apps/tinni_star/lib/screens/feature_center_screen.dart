@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
-import 'call_screen.dart';
 import 'cp_disconnect_screen.dart';
 import 'cp_screen.dart';
 import 'family_home_screen.dart';
@@ -117,11 +116,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         () {
           showText('Birthday and party events are opened from active events.');
         },
-      ),
-      _FeatureAction(
-        'Calls',
-        Icons.call_rounded,
-        () => _open(CallScreen(state: state)),
       ),
       _FeatureAction(
         'Sharing',
