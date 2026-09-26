@@ -652,6 +652,67 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  listUserMedals(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return [];
+    const user = this.ctx.storage.sql.exec(
+      "SELECT call_verified FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) return [];
+
+    const medals = [];
+    if (Number(user.call_verified || 0) === 1) {
+      medals.push({ name: "Verified", color: "#4FC3F7" });
+    }
+
+    const controls = this._userControls(userId);
+    if (Number(controls.vip_level || 0) > 0) {
+      medals.push({
+        name: "VIP " + Number(controls.vip_level || 0),
+        color: "#FFD54F",
+      });
+    }
+
+    const roles = this.ctx.storage.sql.exec(
+      "SELECT role FROM owner_hierarchy WHERE user_id = ? AND active = 1 ORDER BY updated_at DESC",
+      userId,
+    ).toArray();
+    const roleColors = {
+      host: "#FFB74D",
+      agency: "#AB47BC",
+      bd: "#66BB6A",
+      manager: "#42A5F5",
+      admin: "#EF5350",
+      "super admin": "#EC407A",
+      merchant: "#26A69A",
+      "coin seller": "#8D6E63",
+    };
+    for (const row of roles) {
+      const role = String(row.role || "").trim();
+      if (!role) continue;
+      const label = role
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+      medals.push({
+        name: label,
+        color: roleColors[role.toLowerCase()] || "#90CAF9",
+      });
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const medal of medals) {
+      const key = medal.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(medal);
+    }
+    return deduped.slice(0, 12);
+  }
+
   _userControls(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return {
@@ -700,6 +761,7 @@ export class AppDirectoryStore extends DurableObject {
         controls: this._userControls(user.user_id),
         wallet: this.getWallet(user.user_id),
         tags: this.listUserTags(user.user_id),
+        medals: this.listUserMedals(user.user_id),
       };
     });
   }
@@ -714,7 +776,9 @@ export class AppDirectoryStore extends DurableObject {
         ORDER BY call_verified_at DESC, user_id ASC
         LIMIT 500\`, query, like, like,
     ).toArray().map((row) => ({
-      ...rowToUser(row), tags: this.listUserTags(row.user_id),
+      ...rowToUser(row),
+      tags: this.listUserTags(row.user_id),
+      medals: this.listUserMedals(row.user_id),
     }));
   }
 
@@ -1356,6 +1420,7 @@ export class AppDirectoryStore extends DurableObject {
       previous_user_id: requestedId !== userId ? requestedId : null,
       controls: this._userControls(userId),
       tags: this.listUserTags(userId),
+      medals: this.listUserMedals(userId),
     };
   }
 
