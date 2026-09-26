@@ -447,10 +447,12 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: EdgeInsets.symmetric(vertical: 48),
             child: Column(
               children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: 62,
-                  color: RoyalPalette.bronze,
+                ShiningIcon(
+                  icon: Icons.inventory_2_outlined,
+                  size: 42,
+                  boxSize: 68,
+                  color: FeaturePalette.social,
+                  glow: 0.34,
                 ),
                 SizedBox(height: 12),
                 Text(
@@ -1382,11 +1384,16 @@ class _RoomListCard extends StatelessWidget {
                     state.discovery.toggleFavorite(room.id);
                     onFavoriteChanged();
                   },
-                  icon: Icon(
-                    favorite
+                  icon: ShiningIcon(
+                    icon: favorite
                         ? Icons.star_rounded
                         : Icons.star_border_rounded,
-                    color: RoyalPalette.gold,
+                    color: favorite
+                        ? FeaturePalette.rank
+                        : FeaturePalette.discover,
+                    size: 17,
+                    boxSize: 32,
+                    glow: favorite ? 0.34 : 0.22,
                   ),
                 ),
                 Text(
