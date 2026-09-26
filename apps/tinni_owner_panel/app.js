@@ -516,6 +516,62 @@ function auditDetailsText(details) {
     .join(" • ");
 }
 
+async function loadCallVerifications() {
+  const root = document.getElementById("callVerificationList");
+  const panel = document.getElementById("callVerificationPanel");
+  if (!root || !panel) return;
+  if (currentSession?.role !== "owner") {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  try {
+    const data = await api("/api/call-verifications");
+    const items = Array.isArray(data.submissions) ? data.submissions : [];
+    if (items.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No call verification submissions yet.";
+      return;
+    }
+
+    root.className = "action-list";
+    root.innerHTML = items.map((item) => {
+      const photos = Array.isArray(item.photos) ? item.photos.slice(0, 3) : [];
+      const verified = item.call_verified === true;
+      const pending = item.status === "pending_owner";
+      return `
+        <article class="staff-panel-card">
+          <div class="staff-panel-head">
+            <div class="staff-panel-identity">
+              <strong>${escapeHtml(item.display_name || item.user_id)}</strong>
+              <small>ID ${escapeHtml(item.user_id)} • ${escapeHtml(item.gender || "")}</small>
+              <small>${item.system_passed ? "System pre-check passed" : "System pre-check needs review"}</small>
+            </div>
+            <span class="badge ${verified ? "gold" : ""}">${verified ? "Verified" : escapeHtml(item.call_verification_status || item.status)}</span>
+          </div>
+          <div style="display:flex;gap:8px;overflow-x:auto;margin:10px 0">
+            ${photos.map((src, index) => `
+              <img
+                src="${escapeHtml(src)}"
+                alt="Verification photo ${index + 1}"
+                style="width:132px;height:168px;object-fit:cover;border-radius:12px;border:1px solid #5a4a25"
+              >
+            `).join("")}
+          </div>
+          <div class="table-actions">
+            ${pending ? `<button data-call-verify-approve="${escapeHtml(item.id)}">Approve Verified</button><button data-call-verify-reject="${escapeHtml(item.id)}">Reject</button>` : ""}
+            ${verified ? `<button data-call-verify-revoke="${escapeHtml(item.user_id)}">Remove Verified</button>` : ""}
+          </div>
+        </article>
+      `;
+    }).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load call verification reviews.";
+  }
+}
+
 async function loadOwnerNotifications() {
   const root = document.getElementById("ownerNotifications");
   if (!root || currentSession?.role !== "owner") return;
@@ -716,6 +772,7 @@ function applySession(session) {
     loadStaffPanels();
     loadRoomThemes();
     loadOwnerNotifications();
+    loadCallVerifications();
     loadAuditLog();
     return;
   }
@@ -1047,7 +1104,10 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
   if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "rooms.theme_view")) {
     loadRoomThemes();
   }
-  if (currentSession?.role === "owner") loadOwnerNotifications();
+  if (currentSession?.role === "owner") {
+    loadOwnerNotifications();
+    loadCallVerifications();
+  }
   if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "audit.view")) {
     loadAuditLog();
   }
