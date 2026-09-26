@@ -112,11 +112,13 @@ void main() {
     await tester.pumpAndSettle();
 
     final topup = find.byKey(const Key('vip-monthly-topup-button'));
-    await tester.scrollUntilVisible(
-      topup,
-      300,
-      scrollable: find.byType(Scrollable).last,
+    await tester.drag(
+      find.byType(ListView).first,
+      const Offset(0, -500),
     );
+    await tester.pumpAndSettle();
+    expect(topup, findsOneWidget);
+    await tester.ensureVisible(topup);
     await tester.pumpAndSettle();
     await tester.tap(topup);
     await tester.pumpAndSettle();
