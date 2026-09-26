@@ -1130,6 +1130,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String _agencyNameFor(String userId) =>
       widget.state.roomControls.agencyNameFor(userId) ?? '—';
 
+  Color _ownerTagColor(String colorHex) {
+    final value = int.tryParse(
+      colorHex.replaceFirst('#', ''),
+      radix: 16,
+    );
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
   Future<void> _openPrivateMessage(RoomPresenceMember member) async {
     await Navigator.push(
       context,
@@ -1479,6 +1487,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                      for (final tag in currentMember.ownerTags)
+                        Chip(
+                          key: Key(
+                            'room-owner-tag-' +
+                                currentMember.userId +
+                                '-' +
+                                tag.name,
+                          ),
+                          backgroundColor: _ownerTagColor(tag.colorHex)
+                              .withValues(alpha: 0.14),
+                          side: BorderSide(
+                            color: _ownerTagColor(tag.colorHex),
+                          ),
+                          label: Text(
+                            tag.name,
+                            style: TextStyle(
+                              color: _ownerTagColor(tag.colorHex),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -3561,6 +3590,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 fontWeight: occupied ? FontWeight.w800 : FontWeight.w500,
               ),
             ),
+            if (occupied &&
+                presenceMember != null &&
+                presenceMember.ownerTags.isNotEmpty)
+              Text(
+                presenceMember.ownerTags.first.name,
+                key: Key(
+                  'seat-owner-tag-' +
+                      presenceMember.userId +
+                      '-' +
+                      presenceMember.ownerTags.first.name,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _ownerTagColor(
+                    presenceMember.ownerTags.first.colorHex,
+                  ),
+                  fontSize: compact ? 6.0 : 7.5,
+                  height: 1.0,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
           ],
         ),
       ),
@@ -3587,7 +3639,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final screenSize = MediaQuery.sizeOf(context);
     final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
     final maxSeatAreaHeight = screenSize.height * 0.38;
-    final rowLabelSpace = widthSeatDiameter < 44 ? 16.0 : 22.0;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 23.0 : 30.0;
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
