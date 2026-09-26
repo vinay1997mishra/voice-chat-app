@@ -1809,16 +1809,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           child: Column(
                             children: [
                               Expanded(
-                                child: Icon(
-                                  Icons.card_giftcard_rounded,
-                                  color: gift.id.contains('heart') ||
-                                          gift.id.contains('ring')
-                                      ? FeaturePalette.cp
-                                      : gift.id.contains('dragon') ||
-                                              gift.id.contains('crown')
-                                          ? FeaturePalette.rank
-                                          : FeaturePalette.gift,
-                                  size: 38,
+                                child: Center(
+                                  child: ShiningIcon(
+                                    icon: Icons.card_giftcard_rounded,
+                                    color: gift.id.contains('heart') ||
+                                            gift.id.contains('ring')
+                                        ? FeaturePalette.cp
+                                        : gift.id.contains('dragon') ||
+                                                gift.id.contains('crown')
+                                            ? FeaturePalette.rank
+                                            : FeaturePalette.gift,
+                                    size: 30,
+                                    boxSize: 50,
+                                    glow: 0.38,
+                                  ),
                                 ),
                               ),
                               Text(
@@ -3026,9 +3030,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           minHeight: 46,
                         ),
                         onPressed: _showEmojiPicker,
-                        icon: const Icon(
-                          Icons.emoji_emotions_rounded,
+                        icon: const ShiningIcon(
+                          icon: Icons.emoji_emotions_rounded,
                           color: FeaturePalette.games,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
                         ),
                       ),
                     IconButton(
@@ -3046,8 +3053,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               widget.state.roomSession.moderationMicMuted
                           ? null
                           : _toggleMic,
-                      icon: Icon(
-                        controller.micState == MicState.live
+                      icon: ShiningIcon(
+                        icon: controller.micState == MicState.live
                             ? Icons.mic_rounded
                             : Icons.mic_off_rounded,
                         color: controller.mySeat == null ||
@@ -3056,6 +3063,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             : controller.micState == MicState.live
                                 ? FeaturePalette.family
                                 : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
                       ),
                     ),
                     IconButton(
@@ -3068,9 +3078,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         minHeight: 48,
                       ),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
-                      icon: const Icon(
-                        Icons.card_giftcard_rounded,
+                      icon: const ShiningIcon(
+                        icon: Icons.card_giftcard_rounded,
                         color: FeaturePalette.gift,
+                        size: 24,
+                        boxSize: 40,
+                        glow: 0.40,
                       ),
                     ),
                     IconButton(
@@ -3083,9 +3096,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         minHeight: 46,
                       ),
                       onPressed: _showRoomTools,
-                      icon: const Icon(
-                        Icons.grid_view_rounded,
+                      icon: const ShiningIcon(
+                        icon: Icons.grid_view_rounded,
                         color: FeaturePalette.social,
+                        size: 22,
+                        boxSize: 38,
+                        glow: 0.34,
                       ),
                     ),
                     if (controller.inviteMode)
@@ -3105,9 +3121,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             await _leaveSeatAndMute();
                           }
                         },
-                        icon: const Icon(
-                          Icons.event_seat_rounded,
+                        icon: const ShiningIcon(
+                          icon: Icons.event_seat_rounded,
                           color: FeaturePalette.family,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
                         ),
                       ),
                   ],
@@ -3202,10 +3221,12 @@ class _ProfileAction extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: _color.withValues(alpha: 0.16),
-                child: Icon(icon, color: _color, size: 20),
+              ShiningIcon(
+                icon: icon,
+                color: _color,
+                size: 20,
+                boxSize: 40,
+                glow: 0.34,
               ),
               const SizedBox(height: 5),
               Text(
