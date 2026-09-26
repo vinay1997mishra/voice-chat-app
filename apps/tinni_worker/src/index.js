@@ -2059,8 +2059,10 @@ export default {
       const requestedId = String(
         url.searchParams.get("user_id") || appSession.user.user_id || "",
       ).trim();
-      const tags = await getAppDirectoryStore(env).listUserTags(requestedId);
-      return json({ ok: true, user_id: requestedId, tags });
+      const directory = getAppDirectoryStore(env);
+      const tags = await directory.listUserTags(requestedId);
+      const medals = await directory.listUserMedals(requestedId);
+      return json({ ok: true, user_id: requestedId, tags, medals });
     }
 
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
@@ -2461,6 +2463,7 @@ export default {
         host_tag: body.host_tag,
         agency_name: body.agency_name,
         owner_tags: Array.isArray(user.tags) ? user.tags : [],
+        owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
           body.seat_index === null || body.seat_index === undefined
             ? null
