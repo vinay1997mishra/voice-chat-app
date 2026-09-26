@@ -14,6 +14,7 @@ import '../room/room_controller.dart';
 import '../room/room_models.dart';
 import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
+import '../rewards/reward_service.dart';
 import '../ui/royal_theme.dart';
 import 'games_screen.dart';
 import 'fruit_jackpot_panel.dart';
