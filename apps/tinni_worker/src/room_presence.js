@@ -627,7 +627,7 @@ export class RoomPresenceStore extends DurableObject {
     this._prune(now);
     return this.ctx.storage.sql.exec(
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
-              country_code, family_tag, host_tag, agency_name,
+              country_code, family_tag, host_tag, agency_name, owner_tags_json,
               seat_index, seat_emote, seat_emote_until, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
