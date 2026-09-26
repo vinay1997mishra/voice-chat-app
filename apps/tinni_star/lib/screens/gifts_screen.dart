@@ -214,9 +214,21 @@ class _GiftsScreenState extends State<GiftsScreen> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.backpack_rounded, color: RoyalPalette.gold),
+                  ShiningIcon(
+                    icon: Icons.backpack_rounded,
+                    color: FeaturePalette.backpack,
+                    size: 18,
+                    boxSize: 34,
+                    glow: 0.30,
+                  ),
                   SizedBox(width: 8),
-                  Text('Backpack'),
+                  Text(
+                    'Backpack',
+                    style: TextStyle(
+                      color: FeaturePalette.backpack,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   Spacer(),
                   Text('Tap any gift to send', style: TextStyle(color: RoyalPalette.muted)),
                 ],
