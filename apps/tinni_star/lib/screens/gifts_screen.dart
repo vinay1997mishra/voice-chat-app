@@ -149,6 +149,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                 return RoyalPanel(
                   padding: const EdgeInsets.all(8),
                   gradient: FeaturePalette.glow(color),
+                  accentColor: color,
                   onTap: () => send(gift),
                   child: Column(
                     children: [
