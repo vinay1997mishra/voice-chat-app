@@ -109,6 +109,7 @@ class _RankingScreenState extends State<RankingScreen> {
                 if (items.isNotEmpty)
                   _TopRankPodium(
                     items: items.take(3).toList(),
+                    accent: accent,
                     onTap: (item) {
                       final room = item.room;
                       if (room == null) return;
