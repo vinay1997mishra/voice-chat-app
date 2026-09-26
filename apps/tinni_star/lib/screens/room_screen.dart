@@ -1344,26 +1344,66 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _toggleRoomAdmin(
+    RoomPresenceMember member,
+    bool enabled,
+  ) async {
+    try {
+      await widget.state.roomSession.setRoomAdmin(
+        member.userId,
+        enabled: enabled,
+      );
+      _snack(
+        enabled
+            ? member.displayName + ' is now a room admin.'
+            : member.displayName + ' removed from room admin.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _toggleRoomChatBan(
+    RoomPresenceMember member,
+    bool banned,
+  ) async {
+    try {
+      await widget.state.roomSession.setRoomChatBan(
+        member.userId,
+        banned: banned,
+      );
+      _snack(
+        banned
+            ? member.displayName + ' chat banned in this room.'
+            : member.displayName + ' chat unbanned.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _openFullRoomProfile(RoomPresenceMember member) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _RoomMemberProfilePage(member: member),
+      ),
+    );
+  }
+
   void _showUserProfile(
     RoomPresenceMember member, {
     int? seatIndexHint,
   }) {
     final selfUserId = widget.state.auth.current?.userId;
     final isSelf = member.userId == selfUserId;
-    ImageProvider? avatar;
-    final avatarData = member.avatarDataUrl;
-    if (avatarData != null && avatarData.startsWith('data:image/')) {
-      try {
-        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
-      } catch (_) {
-        avatar = null;
-      }
-    }
+
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: RoyalPalette.nearBlack,
+      showDragHandle: false,
+      useSafeArea: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
           var currentMember = member;
@@ -1373,288 +1413,339 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               break;
             }
           }
+
           final followed =
               widget.state.social.following.contains(currentMember.userId);
           final seatIndex = _seatIndexForMember(
             currentMember,
             hint: seatIndexHint,
           );
-          final seated = seatIndex != null;
-          final micMuted = seated && currentMember.micMuted;
-          return SafeArea(
-            key: Key('room-user-profile-card-' + currentMember.userId),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: Column(
+          final micMuted = currentMember.micMuted;
+          final canModerate = !isSelf && _canModerateSeats;
+          final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.44;
+
+          ImageProvider? avatar;
+          final avatarData = currentMember.avatarDataUrl;
+          if (avatarData != null && avatarData.startsWith('data:image/')) {
+            try {
+              avatar = MemoryImage(base64Decode(avatarData.split(',').last));
+            } catch (_) {
+              avatar = null;
+            }
+          }
+
+          Widget tagPill(
+            String name,
+            String colorHex, {
+            bool medal = false,
+            String? keyPrefix,
+          }) {
+            final color = _ownerTagColor(colorHex);
+            return Container(
+              key: Key(
+                (keyPrefix ?? (medal ? 'room-owner-medal-' : 'room-owner-tag-')) +
+                    currentMember.userId +
+                    '-' +
+                    name,
+              ),
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color),
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!isSelf)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: UserSafetyMenuButton(
-                        state: widget.state,
-                        targetUserId: currentMember.userId,
-                        targetDisplayName: currentMember.displayName,
-                        roomId: widget.room.id,
-                        onBlockChanged: () {
-                          if (sheetContext.mounted) {
-                            setSheetState(() {});
-                          }
-                        },
-                      ),
-                    )
-                  else
-                    const SizedBox(height: 8),
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: FeaturePalette.social,
-                        width: 2.3,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: FeaturePalette.social
-                              .withValues(alpha: 0.42),
-                          blurRadius: 16,
-                        ),
-                      ],
+                  if (medal) ...[
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 13,
+                      color: color,
                     ),
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: RoyalPalette.panel2,
-                      backgroundImage: avatar,
-                      child: avatar == null
-                          ? Text(
-                              member.displayName.isEmpty
-                                  ? '?'
-                                  : member.displayName.characters.first
-                                      .toUpperCase(),
-                              style: const TextStyle(
-                                color: FeaturePalette.social,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(currentMember.displayName, style: const TextStyle(color: RoyalPalette.cream, fontSize: 20, fontWeight: FontWeight.w900)),
-                  Text('ID ' + currentMember.userId, style: const TextStyle(color: RoyalPalette.muted)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: [
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.family.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.family),
-                        label: Text(
-                          'Family ' +
-                              (currentMember.familyTag ??
-                                  _familyTagFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.family,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.vip.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.vip),
-                        label: Text(
-                          'Host ' +
-                              (currentMember.hostTag ??
-                                  _hostTagFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.vip,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Chip(
-                        backgroundColor:
-                            FeaturePalette.social.withValues(alpha: 0.14),
-                        side: const BorderSide(color: FeaturePalette.social),
-                        label: Text(
-                          'Agency ' +
-                              (currentMember.agencyName ??
-                                  _agencyNameFor(currentMember.userId)),
-                          style: const TextStyle(
-                            color: FeaturePalette.social,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      for (final tag in currentMember.ownerTags)
-                        Chip(
-                          key: Key(
-                            'room-owner-tag-' +
-                                currentMember.userId +
-                                '-' +
-                                tag.name,
-                          ),
-                          backgroundColor: _ownerTagColor(tag.colorHex)
-                              .withValues(alpha: 0.14),
-                          side: BorderSide(
-                            color: _ownerTagColor(tag.colorHex),
-                          ),
-                          label: Text(
-                            tag.name,
-                            style: TextStyle(
-                              color: _ownerTagColor(tag.colorHex),
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                      for (final medal in currentMember.ownerMedals)
-                        Chip(
-                          key: Key(
-                            'room-owner-medal-' +
-                                currentMember.userId +
-                                '-' +
-                                medal.name,
-                          ),
-                          avatar: Icon(
-                            Icons.workspace_premium_rounded,
-                            size: 16,
-                            color: _ownerTagColor(medal.colorHex),
-                          ),
-                          backgroundColor: _ownerTagColor(medal.colorHex)
-                              .withValues(alpha: 0.14),
-                          side: BorderSide(
-                            color: _ownerTagColor(medal.colorHex),
-                          ),
-                          label: Text(
-                            medal.name,
-                            style: TextStyle(
-                              color: _ownerTagColor(medal.colorHex),
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 82,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        if (isSelf)
-                          _ProfileAction(
-                            icon: Icons.person_rounded,
-                            label: 'My ID',
-                            onTap: () {},
-                          )
-                        else
-                          _ProfileAction(
-                          icon: followed
-                              ? Icons.person_remove_rounded
-                              : Icons.person_add_rounded,
-                          label: followed ? 'Unfollow' : 'Follow',
-                          onTap: () async {
-                            final account = widget.state.auth.current;
-                            if (account == null) return;
-                            try {
-                              await widget.state.social.setFollowingRemote(
-                                authToken: account.authToken,
-                                targetUserId: currentMember.userId,
-                                value: !followed,
-                              );
-                              if (sheetContext.mounted) {
-                                setSheetState(() {});
-                              }
-                            } catch (error) {
-                              _snack(
-                                error
-                                    .toString()
-                                    .replaceFirst('Bad state: ', ''),
-                              );
-                            }
-                          },
-                        ),
-                        if (!isSelf)
-                          _ProfileAction(
-                          icon: Icons.mail_rounded,
-                          label: 'Message',
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            _openPrivateMessage(currentMember);
-                          },
-                        ),
-                        if (!isSelf && _canModerateSeats && seated)
-                          _ProfileAction(
-                            icon: Icons.keyboard_arrow_down_rounded,
-                            label: 'Down Seat',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _moveUserToAudience(
-                                currentMember,
-                                seatIndexHint: seatIndex,
-                              );
-                            },
-                          )
-                        else if (!isSelf && _canModerateSeats)
-                          _ProfileAction(
-                            icon: Icons.event_seat_rounded,
-                            label: 'Seat Invite',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _showSeatInvitePicker(currentMember);
-                            },
-                          ),
-                        if (!isSelf)
-                          _ProfileAction(
-                          icon: Icons.card_giftcard_rounded,
-                          label: 'Gift',
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            Future<void>.delayed(Duration.zero, () {
-                              if (mounted) {
-                                _showGiftSheet(
-                                  preselectedUserId: currentMember.userId,
-                                );
-                              }
-                            });
-                          },
-                        ),
-                        if (!isSelf && _canModerateSeats && seated)
-                          _ProfileAction(
-                            icon: micMuted
-                                ? Icons.mic_rounded
-                                : Icons.mic_off_rounded,
-                            label: micMuted ? 'Unmute' : 'Mute',
-                            onTap: () async {
-                              await _setUserSeatMute(
-                                currentMember,
-                                seatIndex,
-                                !micMuted,
-                              );
-                              if (sheetContext.mounted) {
-                                setSheetState(() {});
-                              }
-                            },
-                          ),
-                        if (!isSelf && _canModerateSeats)
-                          _ProfileAction(
-                            icon: Icons.logout_rounded,
-                            label: 'Kick',
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              _showKickPicker(currentMember);
-                            },
-                          ),
-                      ],
+                    const SizedBox(width: 3),
+                  ],
+                  Text(
+                    name,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
+              ),
+            );
+          }
+
+          Widget badgeRow({
+            required String label,
+            required List<Widget> children,
+          }) {
+            return SizedBox(
+              height: 31,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: children.isEmpty
+                        ? const Text(
+                            '—',
+                            style: TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 10,
+                            ),
+                          )
+                        : ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: children,
+                          ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              key: Key('room-user-profile-card-' + currentMember.userId),
+              width: double.infinity,
+              height: sheetHeight,
+              decoration: const BoxDecoration(
+                color: RoyalPalette.nearBlack,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(22),
+                ),
+                border: Border(
+                  top: BorderSide(color: RoyalPalette.bronze),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        key: Key(
+                          'room-profile-card-dp-' + currentMember.userId,
+                        ),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          Future<void>.delayed(Duration.zero, () {
+                            if (mounted) {
+                              _openFullRoomProfile(currentMember);
+                            }
+                          });
+                        },
+                        child: CircleAvatar(
+                          radius: 32,
+                          backgroundColor: RoyalPalette.panel2,
+                          backgroundImage: avatar,
+                          child: avatar == null
+                              ? Text(
+                                  currentMember.displayName.isEmpty
+                                      ? '?'
+                                      : currentMember
+                                          .displayName.characters.first
+                                          .toUpperCase(),
+                                  style: const TextStyle(
+                                    color: FeaturePalette.social,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        currentMember.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        'ID ' + currentMember.userId,
+                        style: const TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      badgeRow(
+                        label: 'Tags',
+                        children: [
+                          for (final tag in currentMember.ownerTags)
+                            tagPill(tag.name, tag.colorHex),
+                        ],
+                      ),
+                      badgeRow(
+                        label: 'Medals',
+                        children: [
+                          for (final medal in currentMember.ownerMedals)
+                            tagPill(
+                              medal.name,
+                              medal.colorHex,
+                              medal: true,
+                            ),
+                        ],
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        height: 67,
+                        child: ListView(
+                          key: Key(
+                            'room-profile-card-actions-' +
+                                currentMember.userId,
+                          ),
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: followed
+                                    ? Icons.person_remove_rounded
+                                    : Icons.person_add_rounded,
+                                label: followed ? 'Unfollow' : 'Follow',
+                                onTap: () async {
+                                  final account = widget.state.auth.current;
+                                  if (account == null) return;
+                                  try {
+                                    await widget.state.social
+                                        .setFollowingRemote(
+                                      authToken: account.authToken,
+                                      targetUserId: currentMember.userId,
+                                      value: !followed,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: currentMember.isAdmin
+                                    ? Icons.remove_moderator_rounded
+                                    : Icons.admin_panel_settings_rounded,
+                                label: currentMember.isAdmin
+                                    ? 'Remove Admin'
+                                    : 'Set Admin',
+                                onTap: () async {
+                                  await _toggleRoomAdmin(
+                                    currentMember,
+                                    !currentMember.isAdmin,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: Icons.card_giftcard_rounded,
+                                label: 'Gifting',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  Future<void>.delayed(Duration.zero, () {
+                                    if (mounted) {
+                                      _showGiftSheet(
+                                        preselectedUserId:
+                                            currentMember.userId,
+                                      );
+                                    }
+                                  });
+                                },
+                              ),
+                            if (!isSelf)
+                              _ProfileAction(
+                                icon: Icons.mail_rounded,
+                                label: 'Message',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  _openPrivateMessage(currentMember);
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: micMuted
+                                    ? Icons.mic_rounded
+                                    : Icons.mic_off_rounded,
+                                label: micMuted ? 'Unmute' : 'Mute',
+                                onTap: () async {
+                                  if (seatIndex == null) {
+                                    _snack(
+                                      currentMember.displayName +
+                                          ' is not on a seat.',
+                                    );
+                                    return;
+                                  }
+                                  await _setUserSeatMute(
+                                    currentMember,
+                                    seatIndex,
+                                    !micMuted,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: currentMember.chatBanned
+                                    ? Icons.chat_rounded
+                                    : Icons.comments_disabled_rounded,
+                                label: currentMember.chatBanned
+                                    ? 'Chat Unban'
+                                    : 'Chat Ban',
+                                onTap: () async {
+                                  await _toggleRoomChatBan(
+                                    currentMember,
+                                    !currentMember.chatBanned,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            if (canModerate)
+                              _ProfileAction(
+                                icon: Icons.logout_rounded,
+                                label: 'Kick',
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  _showKickPicker(currentMember);
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           );
