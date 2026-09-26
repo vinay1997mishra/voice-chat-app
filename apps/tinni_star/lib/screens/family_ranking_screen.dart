@@ -129,12 +129,25 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
             const SizedBox(height: 8),
             for (final family in _families.take(6))
               ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: RoyalPalette.deepGold,
+                leading: Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: FeaturePalette.family.withValues(alpha: 0.18),
+                    border: Border.all(color: FeaturePalette.family),
+                    boxShadow: [
+                      BoxShadow(
+                        color: FeaturePalette.family.withValues(alpha: 0.42),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
                   child: Text(
                     family.name.characters.first.toUpperCase(),
                     style: const TextStyle(
-                      color: Colors.black,
+                      color: FeaturePalette.family,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -143,7 +156,7 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
                 subtitle: Text(family.tag),
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
-                  color: RoyalPalette.gold,
+                  color: FeaturePalette.family,
                 ),
                 onTap: () => Navigator.pop(context, family),
               ),
