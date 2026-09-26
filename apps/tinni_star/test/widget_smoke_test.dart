@@ -103,6 +103,11 @@ void main() {
       'room-tool-gift',
       const Key('room-gift-panel'),
     );
+    final removableSong = state.ktv.addLocalSong(
+      fileName: 'Wrong Song.mp3',
+      sourcePath: '/phone/Music/Wrong Song.mp3',
+    );
+
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('room-tool-music')));
@@ -110,6 +115,11 @@ void main() {
     expect(find.byKey(const Key('room-music-panel')), findsOneWidget);
     expect(find.byKey(const Key('room-add-music-button')), findsOneWidget);
     expect(find.text('Add Music'), findsOneWidget);
+    expect(find.byKey(const Key('room-music-count')), findsOneWidget);
+    expect(
+      find.byKey(Key('remove-music-' + removableSong.id)),
+      findsOneWidget,
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
     await expectToolOpens(
