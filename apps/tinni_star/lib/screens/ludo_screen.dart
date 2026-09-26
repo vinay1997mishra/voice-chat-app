@@ -102,6 +102,12 @@ class _LudoScreenState extends State<LudoScreen> {
                     ),
                     FilledButton(
                       key: const Key('ludo-roll-dice'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _playerColor(game.currentPlayer),
+                        foregroundColor: Colors.white,
+                        shadowColor: _playerColor(game.currentPlayer),
+                        elevation: 5,
+                      ),
                       onPressed: game.winner != null || game.rolled != null
                           ? null
                           : () => setState(game.roll),
@@ -164,11 +170,26 @@ class _LudoScreenState extends State<LudoScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: player == game.currentPlayer
-                                  ? RoyalPalette.gold
-                                  : RoyalPalette.bronze,
+                            gradient: FeaturePalette.glow(
+                              _playerColor(player),
                             ),
+                            border: Border.all(
+                              color: _playerColor(player).withValues(
+                                alpha: player == game.currentPlayer ? 1 : 0.55,
+                              ),
+                              width: player == game.currentPlayer ? 2 : 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _playerColor(player).withValues(
+                                  alpha: player == game.currentPlayer
+                                      ? 0.38
+                                      : 0.14,
+                                ),
+                                blurRadius:
+                                    player == game.currentPlayer ? 14 : 8,
+                              ),
+                            ],
                           ),
                           child: Column(
                             children: [
