@@ -1993,6 +1993,18 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      const ownerState = getAppDirectoryStore(env).ownerState();
+      const gameConfig = ownerState.game_config || {};
+      if (ownerState.features?.games === false || gameConfig.enabled === false) {
+        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      }
+      const amount = Number(body.amount || 0);
+      if (Number.isFinite(Number(gameConfig.min_bet)) && amount < Number(gameConfig.min_bet)) {
+        return json({ ok: false, error: "Bet is below Owner minimum" }, 400);
+      }
+      if (Number.isFinite(Number(gameConfig.max_bet)) && amount > Number(gameConfig.max_bet)) {
+        return json({ ok: false, error: "Bet is above Owner maximum" }, 400);
+      }
       try {
         const state = await getFruitGameStore(env).placeBet({
           ...body,
@@ -2015,6 +2027,18 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      const ownerState = getAppDirectoryStore(env).ownerState();
+      const gameConfig = ownerState.game_config || {};
+      if (ownerState.features?.games === false || gameConfig.enabled === false) {
+        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      }
+      const amount = Number(body.amount || 0);
+      if (Number.isFinite(Number(gameConfig.min_bet)) && amount < Number(gameConfig.min_bet)) {
+        return json({ ok: false, error: "Bet is below Owner minimum" }, 400);
+      }
+      if (Number.isFinite(Number(gameConfig.max_bet)) && amount > Number(gameConfig.max_bet)) {
+        return json({ ok: false, error: "Bet is above Owner maximum" }, 400);
+      }
       try {
         const state = await getFruitPartyStore(env).placeBet({
           ...body,
@@ -2973,6 +2997,31 @@ export default {
       const result = getAppDirectoryStore(env).removeOwnerTag(userId, tagId);
       await writeAudit(env, session, "user.tag.remove", "user", userId, { tag_id: tagId });
       return json(result);
+    }
+
+    if (url.pathname === "/api/owner/game-stats" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const jackpot = await getFruitGameStore(env).ownerStats(userId);
+      const party = await getFruitPartyStore(env).ownerStats(userId);
+      return json({
+        ok: true,
+        user_id: userId || null,
+        jackpot,
+        party,
+        totals: {
+          bet_count: Number(jackpot.bet_count || 0) + Number(party.bet_count || 0),
+          total_bet: Number(jackpot.total_bet || 0) + Number(party.total_bet || 0),
+          total_payout: Number(jackpot.total_payout || 0) + Number(party.total_payout || 0),
+          unique_players: Math.max(
+            Number(jackpot.unique_players || 0),
+            Number(party.unique_players || 0),
+          ),
+          house_net: Number(jackpot.house_net || 0) + Number(party.house_net || 0),
+        },
+      });
     }
 
     if (url.pathname === "/api/owner/action" && request.method === "POST") {
