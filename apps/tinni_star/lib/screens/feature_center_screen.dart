@@ -367,7 +367,15 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
 
     return Scaffold(
       backgroundColor: RoyalPalette.black,
-      appBar: AppBar(title: const Text('Feature Center', style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900))),
+      appBar: AppBar(
+        title: const Text(
+          'Feature Center',
+          style: TextStyle(
+            color: FeaturePalette.discover,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
       body: GridView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: modules.length,
