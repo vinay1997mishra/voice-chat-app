@@ -117,6 +117,21 @@ class CallService {
     return active!;
   }
 
+  Future<CallSession> statusRemote({
+    required String authToken,
+    required String callId,
+  }) async {
+    final data = await _request(
+      method: 'GET',
+      path: '/calls/status?call_id=' + Uri.encodeQueryComponent(callId),
+      authToken: authToken,
+    );
+    final raw = data['call'];
+    if (raw is! Map) throw StateError('Server returned an invalid call');
+    active = CallSession.fromJson(_stringMap(raw));
+    return active!;
+  }
+
   Future<CallSession?> incomingRemote({
     required String authToken,
   }) async {
@@ -193,7 +208,11 @@ class CallService {
     required String authToken,
     Map<String, Object?>? body,
   }) async {
-    final uri = apiBase.replace(path: path);
+    final rawUri = Uri.parse(path);
+    final uri = apiBase.replace(
+      path: rawUri.path,
+      query: rawUri.hasQuery ? rawUri.query : null,
+    );
     final request = method == 'GET'
         ? await _httpClient.getUrl(uri)
         : await _httpClient.postUrl(uri);
