@@ -1053,11 +1053,13 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `UPDATE app_calls
           SET state = 'ended', updated_at = ?
-        WHERE (caller_id = ? OR receiver_id = ?)
+        WHERE (caller_id IN (?, ?) OR receiver_id IN (?, ?))
           AND state IN ('ringing', 'accepted')`,
       Date.now(),
       callerId,
+      receiverId,
       callerId,
+      receiverId,
     );
 
     const now = Date.now();
