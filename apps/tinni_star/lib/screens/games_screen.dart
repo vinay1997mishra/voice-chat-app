@@ -98,6 +98,7 @@ class GamesScreen extends StatelessWidget {
           return RoyalPanel(
             onTap: game.$4,
             gradient: FeaturePalette.glow(game.$3),
+            accentColor: game.$3,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
