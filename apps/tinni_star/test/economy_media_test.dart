@@ -6,6 +6,7 @@ import 'package:tinni_star/economy/entitlement_service.dart';
 import 'package:tinni_star/economy/recharge_service.dart';
 import 'package:tinni_star/effects/effect_players.dart';
 import 'package:tinni_star/effects/effect_queue.dart';
+import 'package:tinni_star/media/ktv_service.dart';
 
 void main() {
   test('unverified billing receipt cannot credit wallet', () {
@@ -63,4 +64,17 @@ void main() {
     await router.play(request);
     expect((router.mp4 as LocalEffectPlayer).playing, 'gift.mp4');
   });
+
+  test('phone music can be added to the KTV library', () {
+    final ktv = KtvService();
+    final song = ktv.addLocalSong(
+      fileName: 'My Track.mp3',
+      sourcePath: '/phone/Music/My Track.mp3',
+    );
+    expect(song.title, 'My Track');
+    expect(song.local, true);
+    expect(song.sourcePath, '/phone/Music/My Track.mp3');
+    expect(ktv.library.first, same(song));
+  });
+
 }
