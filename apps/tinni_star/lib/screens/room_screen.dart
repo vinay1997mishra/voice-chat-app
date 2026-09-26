@@ -22,6 +22,7 @@ import 'games_screen.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
+import 'ranking_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -1593,6 +1594,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _createRoomCustomGift() async {
+    final file = await FilePicker.pickFile(
+      dialogTitle: 'Custom Gift',
+      type: FileType.custom,
+      allowedExtensions: const <String>['png', 'jpg', 'jpeg', 'webp', 'mp4'],
+    );
+    if (file == null) return;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      _snack('This custom gift file could not be opened.');
+      return;
+    }
+
+    final nameController = TextEditingController(
+      text: file.name.contains('.')
+          ? file.name.substring(0, file.name.lastIndexOf('.'))
+          : file.name,
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Custom Gift'),
+        content: TextField(
+          controller: nameController,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'Gift name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = nameController.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (name == null || name.isEmpty) return;
+
+    final lower = file.name.toLowerCase();
+    final assetType = lower.endsWith('.mp4') ? 'video' : 'image';
+    final id = 'custom-' + DateTime.now().microsecondsSinceEpoch.toString();
+    widget.state.customGifts.create(
+      id: id,
+      name: name,
+      assetType: assetType,
+      assetPath: path,
+    );
+    widget.state.customGifts.submit(id);
+    _snack(name + ' added to Custom Gifts and sent for review.');
+  }
+
   void _showGiftSheet({String? preselectedUserId}) {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
@@ -1715,18 +1774,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               height: 470,
               child: Column(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Gift',
-                        style: TextStyle(
-                          color: FeaturePalette.gift,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 10, 4),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Gift',
+                            style: TextStyle(
+                              color: FeaturePalette.gift,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
-                      ),
+                        TextButton.icon(
+                          key: const Key('room-custom-gift-button'),
+                          onPressed: _createRoomCustomGift,
+                          icon: const Icon(Icons.draw_rounded),
+                          label: const Text('Custom Gift'),
+                        ),
+                      ],
                     ),
                   ),
                   SizedBox(
@@ -2743,13 +2811,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _showSeatRequests,
         ),
       (
-        'Seat Controls',
-        Icons.event_seat_rounded,
-        () {
-          _snack(_canModerateSeats ? 'Tap an empty seat for seat controls.' : 'Tap a free seat to join or apply for mic.');
-        },
-      ),
-      (
         controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
         Icons.confirmation_number_rounded,
         () {
@@ -3568,6 +3629,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ],
           ),
           actions: [
+            IconButton(
+              key: const Key('room-rank-hall-button'),
+              tooltip: 'Rank / Hall',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RankingScreen(
+                      state: widget.state,
+                      initialTab: 0,
+                    ),
+                  ),
+                );
+              },
+              icon: const ShiningIcon(
+                icon: Icons.leaderboard_rounded,
+                color: FeaturePalette.rank,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
             IconButton(
               key: const Key('room-power-button'),
               tooltip: 'Room options',
