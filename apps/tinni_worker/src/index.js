@@ -1766,6 +1766,24 @@ export default {
       }
     }
 
+    if (url.pathname === "/messages/inbox" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          threads: getAppDirectoryStore(env).listMessageThreads(
+            appSession.user.user_id,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load inbox"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/messages" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
