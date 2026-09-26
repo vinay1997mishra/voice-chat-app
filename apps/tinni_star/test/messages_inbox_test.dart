@@ -20,7 +20,7 @@ TinniState makeState() {
 }
 
 void main() {
-  testWidgets('bottom Message tab opens inbox with friend call button',
+  testWidgets('bottom Message tab opens inbox with random call header',
       (tester) async {
     final state = makeState();
     state.social.messageThreads.add(
@@ -48,7 +48,11 @@ void main() {
 
     expect(find.byKey(const Key('messages-inbox')), findsOneWidget);
     expect(find.byKey(const Key('message-thread-friend-1')), findsOneWidget);
-    expect(find.byKey(const Key('message-call-friend-1')), findsOneWidget);
+    expect(
+      find.byKey(const Key('messages-random-call-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('message-call-friend-1')), findsNothing);
     expect(find.text('2'), findsOneWidget);
   });
 
@@ -93,6 +97,38 @@ void main() {
     expect(find.text('Seen'), findsOneWidget);
     expect(find.byKey(const Key('message-input')), findsOneWidget);
     expect(find.byKey(const Key('message-send-button')), findsOneWidget);
+  });
+
+  testWidgets('Official paid call notice shows verification action',
+      (tester) async {
+    final state = makeState();
+    state.social.directMessages.add(
+      const ChatMessage(
+        id: 'official-call-1',
+        from: 'tinni-official',
+        to: '91000001',
+        text:
+            '[CALL_VERIFY] Incoming friend paid call. Your ID is Unverified.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MessagesScreen(
+          state: state,
+          targetUserId: 'tinni-official',
+          targetName: 'Tinni Official',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.byKey(const Key('official-call-verify-official-call-1')),
+      findsOneWidget,
+    );
+    expect(find.text('Verify Call ID'), findsOneWidget);
   });
 
   testWidgets('Calls tile is removed from More', (tester) async {

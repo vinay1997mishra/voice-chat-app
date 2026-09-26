@@ -484,6 +484,27 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                         : Colors.redAccent,
                   ),
                 ),
+                const SizedBox(height: 8),
+                if (widget.state.auth.current?.userId == widget.call.callerId)
+                  Text(
+                    'Cost ' +
+                        widget.call.costCoinsPerMinute.toString() +
+                        ' coins/min',
+                    style: const TextStyle(
+                      color: FeaturePalette.wallet,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  )
+                else if (widget.call.receiverDiamondsPerMinute > 0)
+                  Text(
+                    'You receive ' +
+                        widget.call.receiverDiamondsPerMinute.toString() +
+                        ' diamonds/min',
+                    style: const TextStyle(
+                      color: FeaturePalette.gift,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 const SizedBox(height: 30),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

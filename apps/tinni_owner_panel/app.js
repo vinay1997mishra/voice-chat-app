@@ -516,6 +516,62 @@ function auditDetailsText(details) {
     .join(" • ");
 }
 
+async function loadCallVerifications() {
+  const root = document.getElementById("callVerificationList");
+  const panel = document.getElementById("callVerificationPanel");
+  if (!root || !panel) return;
+  if (currentSession?.role !== "owner") {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  try {
+    const data = await api("/api/call-verifications");
+    const items = Array.isArray(data.submissions) ? data.submissions : [];
+    if (items.length === 0) {
+      root.className = "empty-state";
+      root.textContent = "No call verification submissions yet.";
+      return;
+    }
+
+    root.className = "action-list";
+    root.innerHTML = items.map((item) => {
+      const photos = Array.isArray(item.photos) ? item.photos.slice(0, 3) : [];
+      const verified = item.call_verified === true;
+      const pending = item.status === "pending_owner";
+      return `
+        <article class="staff-panel-card">
+          <div class="staff-panel-head">
+            <div class="staff-panel-identity">
+              <strong>${escapeHtml(item.display_name || item.user_id)}</strong>
+              <small>ID ${escapeHtml(item.user_id)} • ${escapeHtml(item.gender || "")}</small>
+              <small>${item.system_passed ? "System pre-check passed" : "System pre-check needs review"}</small>
+            </div>
+            <span class="badge ${verified ? "gold" : ""}">${verified ? "Verified" : escapeHtml(item.call_verification_status || item.status)}</span>
+          </div>
+          <div style="display:flex;gap:8px;overflow-x:auto;margin:10px 0">
+            ${photos.map((src, index) => `
+              <img
+                src="${escapeHtml(src)}"
+                alt="Verification photo ${index + 1}"
+                style="width:132px;height:168px;object-fit:cover;border-radius:12px;border:1px solid #5a4a25"
+              >
+            `).join("")}
+          </div>
+          <div class="table-actions">
+            ${pending ? `<button data-call-verify-approve="${escapeHtml(item.id)}">Approve Verified</button><button data-call-verify-reject="${escapeHtml(item.id)}">Reject</button>` : ""}
+            ${verified ? `<button data-call-verify-revoke="${escapeHtml(item.user_id)}">Remove Verified</button>` : ""}
+          </div>
+        </article>
+      `;
+    }).join("");
+  } catch (error) {
+    root.className = "empty-state";
+    root.textContent = error.message || "Unable to load call verification reviews.";
+  }
+}
+
 async function loadOwnerNotifications() {
   const root = document.getElementById("ownerNotifications");
   if (!root || currentSession?.role !== "owner") return;
@@ -710,12 +766,16 @@ function applySession(session) {
   const clearAuditButton = document.getElementById("clearAuditBtn");
   if (clearAuditButton) clearAuditButton.hidden = !owner;
 
+  const callVerificationPanel = document.getElementById("callVerificationPanel");
+  if (callVerificationPanel) callVerificationPanel.hidden = !owner;
+
   if (owner) {
     document.body.classList.remove("auth-loading");
     document.body.classList.add("auth-ready");
     loadStaffPanels();
     loadRoomThemes();
     loadOwnerNotifications();
+    loadCallVerifications();
     loadAuditLog();
     return;
   }
@@ -965,6 +1025,12 @@ async function handleAction(action, data) {
     return;
   }
 
+  if (action === "call-verification-refresh") {
+    await loadCallVerifications();
+    toast("Call verification reviews refreshed.");
+    return;
+  }
+
   if (action === 'room-theme-new') {
     const name = String(data.name || '').trim();
     const asset = String(data.asset || '').trim();
@@ -1047,7 +1113,10 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
   if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "rooms.theme_view")) {
     loadRoomThemes();
   }
-  if (currentSession?.role === "owner") loadOwnerNotifications();
+  if (currentSession?.role === "owner") {
+    loadOwnerNotifications();
+    loadCallVerifications();
+  }
   if (currentSession?.role === "owner" || hasPermission(new Set(currentSession?.permissions || []), "audit.view")) {
     loadAuditLog();
   }
@@ -1148,6 +1217,63 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
+  const approveCallVerification = e.target.closest("[data-call-verify-approve]")?.dataset.callVerifyApprove;
+  if (approveCallVerification) {
+    try {
+      await api(
+        "/api/call-verifications/" + encodeURIComponent(approveCallVerification) + "/review",
+        {
+          method: "POST",
+          body: JSON.stringify({ approve: true }),
+        }
+      );
+      toast("Call ID verified. It stays verified until Owner removes Verified status.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const rejectCallVerification = e.target.closest("[data-call-verify-reject]")?.dataset.callVerifyReject;
+  if (rejectCallVerification) {
+    const note = prompt("Reject reason / note (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/" + encodeURIComponent(rejectCallVerification) + "/review",
+        {
+          method: "POST",
+          body: JSON.stringify({ approve: false, note }),
+        }
+      );
+      toast("Verification rejected. User should contact the Official Manager.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const revokeCallVerification = e.target.closest("[data-call-verify-revoke]")?.dataset.callVerifyRevoke;
+  if (revokeCallVerification) {
+    if (!confirm("Remove Verified status from this ID?")) return;
+    const note = prompt("Reason (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" + encodeURIComponent(revokeCallVerification) + "/revoke",
+        {
+          method: "POST",
+          body: JSON.stringify({ note }),
+        }
+      );
+      toast("Verified status removed. Verification will be required again.");
+      await loadCallVerifications();
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const roomThemeRemove = e.target.closest('[data-room-theme-remove]')?.dataset.roomThemeRemove;
   if (roomThemeRemove) {
     if (!confirm('Remove this global room theme?')) return;

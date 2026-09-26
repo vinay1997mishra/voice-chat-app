@@ -8,6 +8,7 @@ import '../calls/call_service.dart';
 import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'call_screen.dart';
+import 'call_verification_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({
@@ -208,6 +209,98 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
+  Future<void> _startRandomCall() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final gender = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Random Call',
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '500,000 coins per minute. Calls go only to available Verified IDs. Best ranked available IDs are tried first, with rotation for newly verified IDs.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: RoyalPalette.muted, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const Key('random-call-girls'),
+                      onPressed: () => Navigator.pop(sheetContext, 'female'),
+                      icon: const Icon(Icons.woman_rounded),
+                      label: const Text('Girls'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const Key('random-call-boys'),
+                      onPressed: () => Navigator.pop(sheetContext, 'male'),
+                      icon: const Icon(Icons.man_rounded),
+                      label: const Text('Boys'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (gender == null || !mounted) return;
+    try {
+      final call = await widget.state.calls.startRandomRemote(
+        authToken: account.authToken,
+        gender: gender,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ActiveCallScreen(
+            state: widget.state,
+            call: call,
+            peerName: call.receiverName ?? 'Random Call',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openCallVerification() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CallVerificationScreen(state: widget.state),
+      ),
+    );
+    if (mounted) await _refreshSilently();
+  }
+
   Future<void> send() async {
     if (sending || _isInbox) return;
     final account = widget.state.auth.current;
@@ -334,6 +427,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
+        actions: [
+          IconButton(
+            key: const Key('messages-random-call-button'),
+            tooltip: 'Random Call',
+            onPressed: _startRandomCall,
+            icon: const ShiningIcon(
+              icon: Icons.call_rounded,
+              color: FeaturePalette.social,
+              size: 20,
+              boxSize: 38,
+              glow: 0.34,
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -514,26 +621,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                           ),
                                         ),
                                       ),
-                                    if (thread.isFriend) ...[
-                                      const SizedBox(width: 4),
-                                      IconButton(
-                                        key: Key(
-                                          'message-call-' + thread.userId,
-                                        ),
-                                        tooltip: 'Call',
-                                        onPressed: () => _startCall(
-                                          userId: thread.userId,
-                                          displayName: thread.displayName,
-                                        ),
-                                        icon: const ShiningIcon(
-                                          icon: Icons.call_rounded,
-                                          color: FeaturePalette.social,
-                                          size: 20,
-                                          boxSize: 38,
-                                          glow: 0.34,
-                                        ),
-                                      ),
-                                    ],
                                   ],
                                 ),
                               );
@@ -666,6 +753,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       itemBuilder: (_, index) {
                         final message = messages[index];
                         final mine = message.from == _myUserId;
+                        final verificationNotice = _isOfficial &&
+                            !mine &&
+                            message.text.startsWith('[CALL_VERIFY]');
+                        final displayText = verificationNotice
+                            ? message.text
+                                .replaceFirst('[CALL_VERIFY]', '')
+                                .trim()
+                            : message.text;
                         return Align(
                           alignment: mine
                               ? Alignment.centerRight
@@ -702,7 +797,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                   ? CrossAxisAlignment.end
                                   : CrossAxisAlignment.start,
                               children: [
-                                Text(message.text),
+                                Text(displayText),
+                                if (verificationNotice) ...[
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    key: Key(
+                                      'official-call-verify-' +
+                                          (message.id ?? index.toString()),
+                                    ),
+                                    onPressed: _openCallVerification,
+                                    icon: const Icon(
+                                      Icons.verified_user_rounded,
+                                    ),
+                                    label: const Text('Verify Call ID'),
+                                  ),
+                                ],
                                 const SizedBox(height: 3),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
