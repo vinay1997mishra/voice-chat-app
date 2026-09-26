@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import 'vip_screen.dart';
 import '../ui/royal_theme.dart';
-import '../calls/call_service.dart';
-import '../community/family_service.dart';
-import '../economy/economy.dart';
-import '../party/party_service.dart';
-import '../relationship/cp_service.dart';
-import '../sharing/share_service.dart';
+import 'call_screen.dart';
+import 'cp_disconnect_screen.dart';
+import 'cp_screen.dart';
+import 'family_home_screen.dart';
+import 'family_ranking_screen.dart';
+import 'recharge_screen.dart';
+import 'sharing_screen.dart';
+import 'store_screen.dart';
+import 'vip_screen.dart';
 
 class FeatureCenterScreen extends StatefulWidget {
   const FeatureCenterScreen({super.key, required this.state});
@@ -39,23 +41,17 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
     if (value.contains('store') || value.contains('inventory')) {
       return FeaturePalette.store;
     }
-    if (value.contains('ktv') || value.contains('music')) {
-      return FeaturePalette.music;
-    }
-    if (value.contains('rocket') || value.contains('lucky')) {
-      return FeaturePalette.rocket;
-    }
     if (value.contains('backpack') || value.contains('atlas')) {
       return FeaturePalette.backpack;
     }
     if (value.contains('dynamic') || value.contains('moment')) {
       return FeaturePalette.moments;
     }
-    if (value.contains('rank') || value.contains('hall')) {
-      return FeaturePalette.rank;
-    }
-    if (value.contains('custom')) return FeaturePalette.customGift;
     return FeaturePalette.social;
+  }
+
+  void _open(Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
   @override
@@ -65,107 +61,46 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
       _FeatureAction(
         'Wallet / Recharge',
         Icons.account_balance_wallet_rounded,
-        () async {
-          final products = await state.billing.products();
-          showText('Billing adapter ready: ' + products.length.toString() + ' products');
-        },
+        () => _open(RechargeScreen(state: state)),
       ),
       _FeatureAction(
         'Store / Inventory',
         Icons.storefront_rounded,
-        () {
-          const item = StoreItem(
-            id: 'vehicle-star',
-            name: 'Star Vehicle',
-            price: 5000,
-            type: 'vehicle',
-          );
-          final bought = state.inventory.purchase(item);
-          if (bought) state.identity.addVehicle(item.id);
-          showText(bought ? 'Star Vehicle purchased.' : 'Already owned.');
-        },
+        () => _open(StoreScreen(state: state)),
       ),
       _FeatureAction(
         'VIP / Noble',
         Icons.workspace_premium_rounded,
-        () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => VipScreen(state: state)),
-          );
-        },
+        () => _open(VipScreen(state: state)),
       ),
       _FeatureAction(
         'CP / Courting',
         Icons.favorite_rounded,
-        () {
-          if (state.cp.relationship == null &&
-              state.cp.state != CourtingState.pending) {
-            state.cp.request(from: '10000000', to: '20000000');
-            state.cp.respond(accept: true);
-            state.cp.addIntimacy(1250);
-            state.cp.selectRing('star-ring');
-            state.cp.addMemory('First Tinni Star memory');
-          }
-          state.cpFeatures.startHeartbeat();
-          state.cpFeatures.chooseHeartbeat('star');
-          state.cpFeatures.resolveHeartbeat(matched: true);
-          showText(
-            'CP level ' +
-                (state.cp.relationship?.level ?? 0).toString() +
-                ' • heartbeat matched',
-          );
-        },
+        () => _open(CpScreen(state: state)),
       ),
       _FeatureAction(
         'CP Disconnect Flow',
         Icons.heart_broken_rounded,
-        () {
-          state.cpFeatures.requestDisconnect('10000000');
-          state.cpFeatures.respondDisconnect(accept: false);
-          showText('Disconnect request refused safely.');
-        },
+        () => _open(CpDisconnectScreen(state: state)),
       ),
       _FeatureAction(
         'Family',
         Icons.groups_rounded,
-        () {
-          if (!state.family.exists) {
-            state.family.create(
-              familyName: 'Tinni Family',
-              familyTag: 'TS',
-              head: const FamilyMember(
-                userId: '10000000',
-                name: 'Tinni User',
-                role: FamilyRole.head,
-              ),
-            );
-            state.family.join(
-              const FamilyMember(
-                userId: '20000000',
-                name: 'Aisha',
-                role: FamilyRole.member,
-              ),
-            );
-            state.family.appoint('20000000', FamilyRole.assistant);
-          }
-          state.familyFeatures.signIn('10000000');
-          state.familyFeatures.recordGiftContribution(1200);
-          final reward = state.familyFeatures.draw(2);
-          showText((state.family.name ?? 'Family') + ' • lottery ' + reward.label);
-        },
+        () => _open(
+          state.family.exists
+              ? FamilyHomeScreen(state: state)
+              : FamilyRankingScreen(state: state),
+        ),
       ),
       _FeatureAction(
         'Gift Backpack / Atlas',
         Icons.backpack_rounded,
         () {
-          state.backpack.add('rose', 5);
-          state.backpack.consume('rose', 1);
-          state.giftAtlas.recordObtained('rose');
+          final quantity = state.backpack.items['rose']?.quantity ?? 0;
           showText(
-            'Rose backpack ' +
-                (state.backpack.items['rose']?.quantity ?? 0).toString() +
-                ' • atlas lit',
+            quantity > 0
+                ? 'Rose backpack: ' + quantity.toString()
+                : 'Your gift backpack is empty.',
           );
         },
       ),
@@ -173,98 +108,25 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         'Dynamic / Moments',
         Icons.auto_awesome_motion_rounded,
         () {
-          final post = state.dynamics.submit(
-            authorId: '10000000',
-            text: 'Hello from Tinni Star',
-            topic: 'Tinni',
-          );
-          state.dynamics.moderate(post.id, approve: true);
-          state.dynamics.like(post.id);
-          state.dynamics.comment(post.id, 'Welcome!');
-          showText('Dynamic published, liked and commented.');
-        },
-      ),
-      _FeatureAction(
-        'Custom Gift Creator',
-        Icons.draw_rounded,
-        () {
-          final id =
-              'gift-' + (state.customGifts.gifts.length + 1).toString();
-          state.customGifts.create(
-            id: id,
-            name: 'Custom Star',
-            assetType: 'video',
-            assetPath: 'local-demo.mp4',
-          );
-          state.customGifts.submit(id);
-          state.customGifts.approve(id);
-          state.customGifts.list(id);
-          showText('Custom gift approved/listed.');
-        },
-      ),
-      _FeatureAction(
-        'Ranks / Hall',
-        Icons.leaderboard_rounded,
-        () {
-          state.activities.addCharm('10000000', 2000);
-          state.activities.addGiftScore('10000000', 3000);
-          state.ranks.addCp('cp-1', 1500);
-          state.ranks.addFamily('tinni-family', 2200);
-          state.ranks.addRoom('1524843', 5000);
-          state.ranks.addSignIn('10000000', 30);
-          state.ranks.promoteHallOfFame('10000000');
-          showText(
-            'Room rank ' +
-                state.ranks.rank(state.ranks.room).first.score.toString(),
-          );
+          showText('Moments feed is available from the social home flow.');
         },
       ),
       _FeatureAction(
         'Birthday / Party',
         Icons.cake_rounded,
         () {
-          state.activities.join('birthday', '10000000');
-          final party = state.parties.parties['birthday-demo'] ??
-              state.parties.create(
-                id: 'birthday-demo',
-                type: PartyType.birthday,
-                ownerId: '10000000',
-                title: 'Tinni Birthday',
-              );
-          party.join('10000000');
-          party.start();
-          state.parties.setDressUp(party.id, 'birthday-premium');
-          showText('Birthday party active with premium dress-up.');
+          showText('Birthday and party events are opened from active events.');
         },
       ),
       _FeatureAction(
         'Calls',
         Icons.call_rounded,
-        () {
-          state.social.addFriend('20000000');
-          state.calls.initiate(
-            callerId: '10000000',
-            receiverId: '20000000',
-            media: CallMedia.voice,
-            isFriend: true,
-          );
-          state.calls.accept();
-          showText('Friend voice call connected.');
-        },
+        () => _open(CallScreen(state: state)),
       ),
       _FeatureAction(
         'Sharing',
         Icons.share_rounded,
-        () {
-          final value = state.sharing.prepare(
-            ShareTarget.whatsapp,
-            const SharePayload(
-              title: 'Join Tinni Star room',
-              link: 'https://tinni.star/room/1524843',
-            ),
-          );
-          showText(value);
-        },
+        () => _open(SharingScreen(state: state)),
       ),
     ];
 
@@ -306,6 +168,10 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
               ],
             ),
             child: InkWell(
+              key: Key(
+                'feature-' +
+                    item.title.toLowerCase().replaceAll(' ', '-').replaceAll('/', '-'),
+              ),
               borderRadius: BorderRadius.circular(18),
               onTap: item.action,
               child: Padding(

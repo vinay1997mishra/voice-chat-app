@@ -34,7 +34,7 @@ class SocialService {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -42,6 +42,7 @@ class SocialService {
 
   final Set<String> following = <String>{};
   final Set<String> friends = <String>{};
+  final List<SocialUser> friendProfiles = <SocialUser>[];
   final Set<String> blocked = <String>{};
   final List<ChatMessage> directMessages = <ChatMessage>[];
 
@@ -73,6 +74,48 @@ class SocialService {
             ? raw.map((value) => value.toString()).where((id) => id.isNotEmpty)
             : const <String>[],
       );
+  }
+
+  Future<void> syncFriends(String authToken) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(path: '/social/friends'),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load friends list',
+      );
+    }
+
+    final profiles = <SocialUser>[];
+    final raw = data['friends'];
+    if (raw is List) {
+      for (final item in raw.whereType<Map>()) {
+        final id = item['user_id']?.toString() ?? item['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        profiles.add(
+          SocialUser(
+            id: id,
+            name: item['display_name']?.toString() ??
+                item['name']?.toString() ??
+                id,
+            inRoomId: item['in_room_id']?.toString(),
+          ),
+        );
+      }
+    }
+    friendProfiles
+      ..clear()
+      ..addAll(profiles);
+    friends
+      ..clear()
+      ..addAll(profiles.map((friend) => friend.id));
   }
 
   Future<void> syncBlocked(String authToken) async {
@@ -173,13 +216,18 @@ class SocialService {
   }
 
   void addFriend(String userId) {
-    if (!blocked.contains(userId)) friends.add(userId);
+    if (blocked.contains(userId)) return;
+    friends.add(userId);
+    if (!friendProfiles.any((friend) => friend.id == userId)) {
+      friendProfiles.add(SocialUser(id: userId, name: userId));
+    }
   }
 
   void block(String userId) {
     blocked.add(userId);
     following.remove(userId);
     friends.remove(userId);
+    friendProfiles.removeWhere((friend) => friend.id == userId);
   }
 
   void unblock(String userId) => blocked.remove(userId);

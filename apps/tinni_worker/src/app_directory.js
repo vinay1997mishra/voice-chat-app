@@ -295,6 +295,21 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
         ON direct_messages(from_user_id, to_user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS app_calls (
+        id TEXT PRIMARY KEY,
+        caller_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        media TEXT NOT NULL,
+        state TEXT NOT NULL,
+        room_id TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_calls_receiver
+        ON app_calls(receiver_id, state, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_app_calls_caller
+        ON app_calls(caller_id, state, updated_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -867,6 +882,54 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row) => String(row.target_id));
   }
 
+  listFriends(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name
+         FROM app_follows mine
+         JOIN app_follows theirs
+           ON theirs.follower_id = mine.target_id
+          AND theirs.target_id = mine.follower_id
+         JOIN app_users u ON u.user_id = mine.target_id
+        WHERE mine.follower_id = ?
+          AND NOT EXISTS (
+            SELECT 1
+              FROM app_blocks b
+             WHERE (b.blocker_id = ? AND b.target_id = u.user_id)
+                OR (b.blocker_id = u.user_id AND b.target_id = ?)
+          )
+        ORDER BY mine.created_at DESC`,
+      userId,
+      userId,
+      userId,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      display_name: String(row.display_name || row.user_id),
+    }));
+  }
+
+  areFriends(firstUserIdValue, secondUserIdValue) {
+    const firstUserId = String(firstUserIdValue || "").trim();
+    const secondUserId = String(secondUserIdValue || "").trim();
+    if (!firstUserId || !secondUserId || firstUserId === secondUserId) {
+      return false;
+    }
+    const row = this.ctx.storage.sql.exec(
+      `SELECT 1 AS ok
+         FROM app_follows a
+         JOIN app_follows b
+           ON b.follower_id = a.target_id
+          AND b.target_id = a.follower_id
+        WHERE a.follower_id = ?
+          AND a.target_id = ?
+        LIMIT 1`,
+      firstUserId,
+      secondUserId,
+    ).toArray()[0];
+    return Boolean(row) && !this.isBlockedBetween(firstUserId, secondUserId);
+  }
+
   setFollowing(userIdValue, targetIdValue, followingValue) {
     const userId = String(userIdValue || "").trim();
     const targetId = String(targetIdValue || "").trim();
@@ -974,6 +1037,143 @@ export class AppDirectoryStore extends DurableObject {
       target_user_id: targetId,
       blocked: Boolean(blockedValue),
     };
+  }
+
+  createCall(callerIdValue, receiverIdValue, mediaValue = "voice") {
+    const callerId = String(callerIdValue || "").trim();
+    const receiverId = String(receiverIdValue || "").trim();
+    const media = String(mediaValue || "voice").toLowerCase();
+    if (!callerId || !receiverId) throw new Error("user IDs are required");
+    if (callerId === receiverId) throw new Error("You cannot call yourself");
+    if (!this.areFriends(callerId, receiverId)) {
+      throw new Error("Calls are limited to mutual friends");
+    }
+    if (media !== "voice") throw new Error("Only voice calls are supported");
+
+    this.ctx.storage.sql.exec(
+      `UPDATE app_calls
+          SET state = 'ended', updated_at = ?
+        WHERE (caller_id IN (?, ?) OR receiver_id IN (?, ?))
+          AND state IN ('ringing', 'accepted')`,
+      Date.now(),
+      callerId,
+      receiverId,
+      callerId,
+      receiverId,
+    );
+
+    const now = Date.now();
+    const id = "call-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const roomId = "call-" + id;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO app_calls
+        (id, caller_id, receiver_id, media, state, room_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?)`,
+      id,
+      callerId,
+      receiverId,
+      media,
+      roomId,
+      now,
+      now,
+    );
+    return this.getCall(id);
+  }
+
+  getCall(callIdValue) {
+    const callId = String(callIdValue || "").trim();
+    if (!callId) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT c.*, caller.display_name AS caller_name,
+                receiver.display_name AS receiver_name
+         FROM app_calls c
+         JOIN app_users caller ON caller.user_id = c.caller_id
+         JOIN app_users receiver ON receiver.user_id = c.receiver_id
+        WHERE c.id = ?
+        LIMIT 1`,
+      callId,
+    ).toArray()[0];
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      caller_id: String(row.caller_id),
+      caller_name: String(row.caller_name || row.caller_id),
+      receiver_id: String(row.receiver_id),
+      receiver_name: String(row.receiver_name || row.receiver_id),
+      media: String(row.media),
+      state: String(row.state),
+      room_id: String(row.room_id),
+      created_at: Number(row.created_at),
+      updated_at: Number(row.updated_at),
+    };
+  }
+
+  incomingCall(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT id
+         FROM app_calls
+        WHERE receiver_id = ?
+          AND state = 'ringing'
+          AND updated_at >= ?
+        ORDER BY updated_at DESC
+        LIMIT 1`,
+      userId,
+      Date.now() - 120000,
+    ).toArray()[0];
+    if (!row) return null;
+    return this.getCall(row.id);
+  }
+
+  respondCall(userIdValue, callIdValue, acceptValue) {
+    const userId = String(userIdValue || "").trim();
+    const call = this.getCall(callIdValue);
+    if (!call) throw new Error("Call not found");
+    if (call.receiver_id !== userId) throw new Error("Only the receiver can answer");
+    if (call.state !== "ringing") return call;
+    this.ctx.storage.sql.exec(
+      "UPDATE app_calls SET state = ?, updated_at = ? WHERE id = ?",
+      acceptValue ? "accepted" : "rejected",
+      Date.now(),
+      call.id,
+    );
+    return this.getCall(call.id);
+  }
+
+  endCall(userIdValue, callIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const call = this.getCall(callIdValue);
+    if (!call) throw new Error("Call not found");
+    if (call.caller_id !== userId && call.receiver_id !== userId) {
+      throw new Error("Not a call participant");
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE app_calls SET state = 'ended', updated_at = ? WHERE id = ?",
+      Date.now(),
+      call.id,
+    );
+    return this.getCall(call.id);
+  }
+
+  callRoomAccess(userIdValue, roomIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    if (!userId || !roomId.startsWith("call-")) return { allowed: false };
+    const row = this.ctx.storage.sql.exec(
+      `SELECT id, caller_id, receiver_id, state
+         FROM app_calls
+        WHERE room_id = ?
+          AND state IN ('ringing', 'accepted')
+          AND (caller_id = ? OR receiver_id = ?)
+        LIMIT 1`,
+      roomId,
+      userId,
+      userId,
+    ).toArray()[0];
+    return row
+      ? { allowed: true, call_id: String(row.id), state: String(row.state) }
+      : { allowed: false };
   }
 
   listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {

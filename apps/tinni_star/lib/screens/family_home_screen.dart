@@ -335,7 +335,6 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 18),
         const GoldSectionTitle('Top members of the family'),
         const SizedBox(height: 10),
         Row(
@@ -489,6 +488,181 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        const GoldSectionTitle('Family functions'),
+        const SizedBox(height: 8),
+        GridView.count(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          crossAxisCount: 2,
+          childAspectRatio: 1.35,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: [
+            RoyalPanel(
+              key: const Key('family-signin-action'),
+              onTap: widget.state.family.exists
+                  ? () {
+                      final userId =
+                          widget.state.auth.current?.userId ?? '10000000';
+                      final added = widget.state.familyFeatures.signIn(userId);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            added
+                                ? 'Family sign-in completed.'
+                                : 'Already signed in today.',
+                          ),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  : null,
+              gradient: FeaturePalette.glow(FeaturePalette.family),
+              accentColor: FeaturePalette.family,
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ShiningIcon(
+                    icon: Icons.check_circle_rounded,
+                    color: FeaturePalette.family,
+                    size: 22,
+                    boxSize: 40,
+                    glow: 0.32,
+                  ),
+                  Text('Daily Sign-in'),
+                ],
+              ),
+            ),
+            RoyalPanel(
+              key: const Key('family-gift-contribution-action'),
+              onTap: widget.state.family.exists
+                  ? () {
+                      widget.state.familyFeatures.recordGiftContribution(100);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('100 family contribution added.'),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  : null,
+              gradient: FeaturePalette.glow(FeaturePalette.gift),
+              accentColor: FeaturePalette.gift,
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ShiningIcon(
+                    icon: Icons.card_giftcard_rounded,
+                    color: FeaturePalette.gift,
+                    size: 22,
+                    boxSize: 40,
+                    glow: 0.32,
+                  ),
+                  Text('Gift Contribution'),
+                ],
+              ),
+            ),
+            RoyalPanel(
+              key: const Key('family-lottery-action'),
+              onTap: widget.state.family.exists
+                  ? () {
+                      final reward = widget.state.familyFeatures.draw(
+                        DateTime.now().millisecondsSinceEpoch,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            reward.label +
+                                ' +' +
+                                reward.coins.toString() +
+                                ' family coins',
+                          ),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  : null,
+              gradient: FeaturePalette.glow(FeaturePalette.rank),
+              accentColor: FeaturePalette.rank,
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ShiningIcon(
+                    icon: Icons.casino_rounded,
+                    color: FeaturePalette.rank,
+                    size: 22,
+                    boxSize: 40,
+                    glow: 0.32,
+                  ),
+                  Text('Family Lottery'),
+                ],
+              ),
+            ),
+            RoyalPanel(
+              key: const Key('family-wallet-card'),
+              gradient: FeaturePalette.glow(FeaturePalette.wallet),
+              accentColor: FeaturePalette.wallet,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const ShiningIcon(
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: FeaturePalette.wallet,
+                    size: 22,
+                    boxSize: 40,
+                    glow: 0.32,
+                  ),
+                  Text(
+                    'Wallet ' +
+                        widget.state.family.walletCoins.toString(),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        const GoldSectionTitle('Family tasks'),
+        const SizedBox(height: 8),
+        for (final task in widget.state.familyFeatures.tasks.values)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: RoyalPanel(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  LinearProgressIndicator(
+                    value: (task.progress / task.target).clamp(0.0, 1.0).toDouble(),
+                    color: FeaturePalette.family,
+                    backgroundColor: RoyalPalette.panel2,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    task.progress.toString() +
+                        '/' +
+                        task.target.toString(),
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 18),
+
       ],
     );
   }

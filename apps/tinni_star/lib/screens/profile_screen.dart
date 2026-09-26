@@ -8,6 +8,7 @@ import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
+import 'cp_screen.dart';
 import 'feature_center_screen.dart';
 import 'vip_screen.dart';
 
@@ -228,7 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FeatureCenterScreen(state: widget.state),
+                    builder: (_) => CpScreen(state: widget.state),
                   ),
                 ),
               ),
