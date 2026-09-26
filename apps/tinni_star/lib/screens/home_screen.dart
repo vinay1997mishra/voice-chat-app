@@ -10,6 +10,32 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
+
+Color _homeFeatureColor(String title) {
+  final value = title.toLowerCase();
+  if (value.contains('cp') || value.contains('heart')) {
+    return FeaturePalette.cp;
+  }
+  if (value.contains('vip') || value.contains('noble')) {
+    return FeaturePalette.vip;
+  }
+  if (value.contains('gift')) return FeaturePalette.gift;
+  if (value.contains('family')) return FeaturePalette.family;
+  if (value.contains('game')) return FeaturePalette.games;
+  if (value.contains('music') || value.contains('ktv')) {
+    return FeaturePalette.music;
+  }
+  if (value.contains('wallet') || value.contains('recharge')) {
+    return FeaturePalette.wallet;
+  }
+  if (value.contains('rank') || value.contains('royal')) {
+    return FeaturePalette.rank;
+  }
+  if (value.contains('event') || value.contains('party')) {
+    return FeaturePalette.fruitParty;
+  }
+  return FeaturePalette.social;
+}
 import 'cp_ranking_screen.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
@@ -617,16 +643,21 @@ class _HomeScreenState extends State<HomeScreen> {
             final item = entry.value;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: RoyalPanel(
-                key: Key('event-card-' + entry.key.toString()),
-                onTap: item.$4,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 27,
-                      backgroundColor: RoyalPalette.deepGold,
-                      child: Icon(item.$3, color: Colors.black),
-                    ),
+              child: Builder(
+                builder: (context) {
+                  final color = _homeFeatureColor(item.$1);
+                  return RoyalPanel(
+                    key: Key('event-card-' + entry.key.toString()),
+                    onTap: item.$4,
+                    gradient: FeaturePalette.glow(color),
+                    child: Row(
+                      children: [
+                        ShiningIcon(
+                          icon: item.$3,
+                          color: color,
+                          size: 28,
+                          boxSize: 54,
+                        ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -649,12 +680,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: RoyalPalette.gold,
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: color,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             );
           },
@@ -1086,15 +1119,19 @@ class _FeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = _homeFeatureColor(title);
     return RoyalPanel(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       onTap: onTap,
-      gradient: const LinearGradient(
-        colors: [Color(0xFF251B08), Color(0xFF0B0905)],
-      ),
+      gradient: FeaturePalette.glow(color),
       child: Column(
         children: [
-          Icon(icon, color: RoyalPalette.gold, size: 32),
+          ShiningIcon(
+            icon: icon,
+            color: color,
+            size: 28,
+            boxSize: 50,
+          ),
           const SizedBox(height: 7),
           Text(
             title,
