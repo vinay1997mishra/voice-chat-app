@@ -181,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.workspace_premium_rounded,
                 label: 'VIP',
+                color: FeaturePalette.vip,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -191,6 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.card_giftcard_rounded,
                 label: 'Gift',
+                color: FeaturePalette.gift,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -201,6 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.groups_rounded,
                 label: 'Family',
+                color: FeaturePalette.family,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -213,6 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.favorite_rounded,
                 label: 'CP',
+                color: FeaturePalette.cp,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -223,6 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _MineTile(
                 icon: Icons.grid_view_rounded,
                 label: 'More',
+                color: FeaturePalette.social,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -339,22 +344,42 @@ class _MineTile extends StatelessWidget {
   const _MineTile({
     required this.icon,
     required this.label,
+    required this.color,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return RoyalPanel(
       padding: const EdgeInsets.all(8),
+      gradient: FeaturePalette.glow(color),
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: RoyalPalette.gold, size: 31),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.15),
+              border: Border.all(
+                color: color.withValues(alpha: 0.75),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.32),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
+            child: Icon(icon, color: color, size: 29),
+          ),
           const SizedBox(height: 7),
           Text(
             label,
