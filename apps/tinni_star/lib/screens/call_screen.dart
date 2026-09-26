@@ -307,12 +307,20 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool connecting = true;
   bool muted = false;
   bool ending = false;
+  bool micPublished = false;
   String? errorText;
+  late CallState remoteState;
+  Timer? statusTimer;
 
   @override
   void initState() {
     super.initState();
+    remoteState = widget.call.state;
     _connect();
+    statusTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _pollStatus(),
+    );
   }
 
   Future<void> _connect() async {
@@ -327,7 +335,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         account.userId,
         authToken: account.authToken,
       );
-      await widget.state.realtime.setMic(true);
+      if (remoteState == CallState.connected) {
+        await widget.state.realtime.setMic(true);
+        micPublished = true;
+      } else {
+        await widget.state.realtime.setMic(false);
+        micPublished = false;
+      }
       if (!mounted) return;
       setState(() {
         connecting = false;
@@ -340,6 +354,47 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         connecting = false;
         errorText = error.toString().replaceFirst('Bad state: ', '');
       });
+    }
+  }
+
+  Future<void> _pollStatus() async {
+    if (ending) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final status = await widget.state.calls.statusRemote(
+        authToken: account.authToken,
+        callId: widget.call.id,
+      );
+      if (!mounted) return;
+
+      if (status.state == CallState.connected && !micPublished) {
+        await widget.state.realtime.setMic(true);
+        micPublished = true;
+        muted = false;
+      }
+
+      if (status.state == CallState.rejected ||
+          status.state == CallState.ended) {
+        statusTimer?.cancel();
+        await widget.state.realtime.exitRoom();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status.state == CallState.rejected
+                  ? 'Call rejected.'
+                  : 'Call ended.',
+            ),
+          ),
+        );
+        Navigator.pop(context);
+        return;
+      }
+
+      setState(() => remoteState = status.state);
+    } catch (_) {
+      // Keep the call UI alive through short status polling failures.
     }
   }
 
@@ -376,6 +431,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
   @override
   void dispose() {
+    statusTimer?.cancel();
     if (!ending) {
       widget.state.realtime.exitRoom();
     }
@@ -417,7 +473,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                 const SizedBox(height: 8),
                 Text(
                   errorText ??
-                      (connecting ? 'Connecting…' : 'Voice call connected'),
+                      (connecting
+                          ? 'Connecting…'
+                          : remoteState == CallState.ringing
+                              ? 'Calling…'
+                              : 'Voice call connected'),
                   style: TextStyle(
                     color: errorText == null
                         ? RoyalPalette.muted
@@ -429,8 +489,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton.filledTonal(
-                      onPressed:
-                          connecting || errorText != null ? null : _toggleMute,
+                      onPressed: connecting ||
+                              errorText != null ||
+                              remoteState != CallState.connected
+                          ? null
+                          : _toggleMute,
                       icon: Icon(
                         muted ? Icons.mic_off_rounded : Icons.mic_rounded,
                       ),
