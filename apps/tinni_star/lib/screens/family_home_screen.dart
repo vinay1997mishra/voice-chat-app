@@ -490,7 +490,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                   ),
                   const SizedBox(height: 5),
                   LinearProgressIndicator(
-                    value: (task.progress / task.target).clamp(0, 1),
+                    value: (task.progress / task.target).clamp(0.0, 1.0).toDouble(),
                     color: FeaturePalette.family,
                     backgroundColor: RoyalPalette.panel2,
                   ),
