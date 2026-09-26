@@ -540,6 +540,47 @@ export class AppDirectoryStore extends DurableObject {
       "INSERT OR IGNORE INTO owner_treasury (singleton_id, balance, updated_at) VALUES (1, 0, ?)",
       Date.now(),
     );
+
+    const defaultVipEntries = [
+      "Deer", "Fox", "Black Panther", "White Tiger", "Golden Lion",
+      "Giant Wolf", "Armored Lion", "Thunder Beast",
+      "Black Eagle + rider", "Phoenix + rider", "Dragon + rider",
+    ];
+    for (let index = 0; index < defaultVipEntries.length; index += 1) {
+      const level = index + 1;
+      this.ctx.storage.sql.exec(
+        `INSERT OR IGNORE INTO owner_catalog
+          (id, kind, name, data_json, enabled, created_at, updated_at)
+         VALUES (?, 'vip', ?, ?, 1, ?, ?)`,
+        "vip-" + level,
+        "VIP " + level,
+        JSON.stringify({
+          level,
+          price: 0,
+          entry: defaultVipEntries[index],
+          frame: "Editable",
+        }),
+        Date.now(),
+        Date.now(),
+      );
+    }
+
+    const defaultRoles = [
+      "Host", "Agency Owner", "BD", "Coin Seller", "Merchant",
+      "Admin", "Super Admin", "Manager",
+    ];
+    for (const roleName of defaultRoles) {
+      const roleId = "role-" + roleName.toLowerCase().replaceAll(" ", "-");
+      this.ctx.storage.sql.exec(
+        `INSERT OR IGNORE INTO owner_catalog
+          (id, kind, name, data_json, enabled, created_at, updated_at)
+         VALUES (?, 'role', ?, '{}', 1, ?, ?)`,
+        roleId,
+        roleName,
+        Date.now(),
+        Date.now(),
+      );
+    }
   }
 
   _nextUserId() {
