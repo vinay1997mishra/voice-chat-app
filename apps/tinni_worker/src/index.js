@@ -2118,12 +2118,66 @@ export default {
         (item) => String(item.id || item.room_id || "") === roomId,
       );
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      if (String(room.owner_id) !== String(appSession.user.user_id)) {
-        return json({ ok: false, error: "Only the room owner can manage admins" }, 403);
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      const canManageAdmins =
+        String(room.owner_id) === actorId || (actorIsManager && actorIsMember);
+      if (!canManageAdmins) {
+        return json({ ok: false, error: "Only room owner/admin can manage admins" }, 403);
+      }
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
+      }
+      const targetIsMember = await store.isMember(targetUserId);
+      if (!targetIsMember) {
+        return json({ ok: false, error: "Target user is not in the room" }, 400);
+      }
+      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
+    }
+
+    if (url.pathname === "/room-presence/chat-ban" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) {
+        return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner cannot be chat banned" }, 400);
       }
 
       const store = getRoomPresenceStore(env, roomId);
-      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
+      const actorId = String(appSession.user.user_id);
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      const canModerate =
+        String(room.owner_id) === actorId || (actorIsManager && actorIsMember);
+      if (!canModerate) {
+        return json({ ok: false, error: "Only room owner/admin can control room chat" }, 403);
+      }
+
+      try {
+        return json(await store.setChatBan({
+          target_user_id: targetUserId,
+          banned_by: actorId,
+          banned: body.banned === true,
+        }));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update chat ban"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/room-presence/seat-request" && request.method === "POST") {
