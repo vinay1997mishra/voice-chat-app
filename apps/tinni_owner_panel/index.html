@@ -22,10 +22,12 @@
         <button class="nav-item active" data-view="dashboard"><span>◈</span>Dashboard</button>
         <button class="nav-item" data-view="notifications"><span>●</span>Notifications</button>
         <button class="nav-item" data-view="users"><span>◎</span>Users</button>
+        <button class="nav-item" data-view="verification"><span>✓</span>Call Verification</button>
+        <button class="nav-item" data-view="messaging"><span>✉</span>Messages & Tags</button>
         <button class="nav-item" data-view="rooms"><span>▣</span>Rooms</button>
         <button class="nav-item" data-view="wallets"><span>◫</span>Wallets</button>
         <button class="nav-item" data-view="hierarchy"><span>⌘</span>BD / Agency / Host</button>
-        <button class="nav-item" data-view="roles"><span>✦</span>Tags / Roles / Posts</button>
+        <button class="nav-item" data-view="roles"><span>✦</span>Roles / Posts</button>
         <button class="nav-item" data-view="vip"><span>♛</span>VIP</button>
         <button class="nav-item" data-view="gifts"><span>◆</span>Gifts</button>
         <button class="nav-item" data-view="assets"><span>◉</span>Entries / Frames</button>
@@ -70,8 +72,8 @@
 
         <section class="view active" id="view-dashboard">
           <div class="stats-grid">
-            <article class="stat-card"><span>Online Users</span><strong id="statOnline">—</strong><small>Live sessions</small></article>
-            <article class="stat-card"><span>Active Rooms</span><strong id="statRooms">—</strong><small>Voice rooms</small></article>
+            <article class="stat-card"><span>Total Users</span><strong id="statOnline">—</strong><small>Registered IDs</small></article>
+            <article class="stat-card"><span>Total Rooms</span><strong id="statRooms">—</strong><small>Created rooms</small></article>
             <article class="stat-card"><span>Sending Today</span><strong id="statSending">—</strong><small>Coins received</small></article>
             <article class="stat-card"><span>Owner Treasury</span><strong id="statTreasury">0</strong><small>Tinni coins</small></article>
           </div>
@@ -151,39 +153,102 @@
             </article>
           </div>
 
-          <article class="panel" id="callVerificationPanel">
+        </section>
+
+        <section class="view" id="view-verification">
+          <article class="panel">
             <div class="panel-head">
               <div>
-                <h2>Paid Call Verification Reviews</h2>
-                <p>Owner-only final review. 3 live camera photos are shown here. A verified ID stays verified until you revoke it.</p>
+                <h2>Call Verification</h2>
+                <p>One section only. Touch a page name to open it.</p>
               </div>
               <button class="btn secondary" data-action="call-verification-refresh">Refresh</button>
             </div>
-            <div class="panel" style="margin:12px 0">
+            <div class="button-row">
+              <button class="btn primary verification-tab active" data-verification-page="verified">Verified</button>
+              <button class="btn secondary verification-tab" data-verification-page="requests">Verification Requests</button>
+              <button class="btn secondary verification-tab" data-verification-page="direct">Direct Verify</button>
+            </div>
+          </article>
+
+          <div id="verification-page-verified" class="verification-page">
+            <article class="panel">
+              <div class="panel-head">
+                <div><h2>Verified IDs</h2><p>All IDs currently carrying the Verified call tag.</p></div>
+              </div>
+              <label><span>Search verified ID / name</span><input id="verifiedSearchInput" placeholder="Search ID or name" /></label>
+              <div id="verifiedUsersList" class="empty-state">Loading verified IDs…</div>
+            </article>
+          </div>
+
+          <div id="verification-page-requests" class="verification-page" hidden>
+            <article class="panel">
+              <div class="panel-head">
+                <div><h2>Verification Requests</h2><p>3 live photos + system result. Owner makes the final decision.</p></div>
+              </div>
+              <div id="callVerificationList" class="empty-state">Loading verification requests…</div>
+            </article>
+          </div>
+
+          <div id="verification-page-direct" class="verification-page" hidden>
+            <article class="panel">
               <div class="panel-head">
                 <div>
-                  <h3>Owner Manual Verify</h3>
-                  <p>Verify any existing user ID directly without camera verification. This Owner override is audit logged.</p>
+                  <h2>Direct Verify</h2>
+                  <p>Search an existing ID, confirm the account shown, then attach Verified directly without camera verification.</p>
                 </div>
               </div>
-              <div class="grid two">
-                <label>
-                  <span>User ID</span>
-                  <input id="manualCallVerifyUserId" placeholder="Enter user ID" inputmode="numeric" />
-                </label>
-                <label>
-                  <span>Owner Note (optional)</span>
-                  <input id="manualCallVerifyNote" placeholder="Reason / note" />
-                </label>
+              <div class="form-grid three">
+                <label><span>User ID / name</span><input id="manualCallVerifySearch" placeholder="Enter ID or name" /></label>
+                <label><span>Owner Note</span><input id="manualCallVerifyNote" placeholder="Optional reason / note" /></label>
+                <div class="button-row" style="align-self:end">
+                  <button class="btn primary" type="button" data-call-verify-search>Search ID</button>
+                </div>
               </div>
-              <div class="button-row" style="margin-top:10px">
-                <button class="btn primary" type="button" data-call-verify-manual>
-                  Verify ID Without Camera
-                </button>
+              <div id="manualCallVerifyResults" class="empty-state">Search an ID to verify directly.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-messaging">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Messages & Tags</h2>
+                <p>Search IDs, select only the users you want, message selected IDs or all app users, and create any custom tag with a chosen color.</p>
               </div>
             </div>
-            <div id="callVerificationList" class="empty-state">Loading verification reviews…</div>
+            <div class="form-grid three">
+              <label><span>Search ID / name / email</span><input id="ownerUserSearchInput" placeholder="Search user" /></label>
+              <div class="button-row" style="align-self:end">
+                <button class="btn primary" data-owner-user-search>Search</button>
+                <button class="btn secondary" data-owner-user-clear>Clear Selected</button>
+              </div>
+              <div>
+                <span class="badge gold" id="ownerSelectedCount">0 selected</span>
+              </div>
+            </div>
+            <div id="ownerUserSearchResults" class="empty-state">Search users to select them.</div>
           </article>
+
+          <div class="grid two">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Send Official Message</h2><p>The message appears from Tinni Official in Inbox.</p></div></div>
+              <label><span>Message</span><textarea id="ownerBulkMessage" rows="6" maxlength="2000" placeholder="Write message…"></textarea></label>
+              <div class="button-row">
+                <button class="btn primary" data-owner-message-selected>Send to Selected</button>
+                <button class="btn secondary" data-owner-message-all>Send to All Users</button>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Custom User Tag</h2><p>Whatever name you type becomes the tag. Choose its color and apply it to selected IDs.</p></div></div>
+              <label><span>Tag name</span><input id="ownerTagName" maxlength="40" placeholder="e.g. Official Host" /></label>
+              <label><span>Tag color</span><input id="ownerTagColor" type="color" value="#FFD54F" /></label>
+              <div class="button-row">
+                <button class="btn primary" data-owner-tag-selected>Apply Tag to Selected</button>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="view" id="view-rooms">
@@ -237,7 +302,7 @@
         </section>
 
         <section class="view" id="view-roles">
-          <article class="panel"><div class="panel-head"><div><h2>Tags / Roles / Posts</h2><p>Multiple tags/posts can exist on the same ID.</p></div><button class="btn primary" data-action="role-new">+ New Tag / Post</button></div><div class="chips" id="roleChips"></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Roles / Posts</h2><p>Reusable role and post definitions. User-specific colored tags are managed only in Messages & Tags.</p></div><button class="btn primary" data-action="role-new">+ New Role / Post</button></div><div class="chips" id="roleChips"></div></article>
         </section>
 
         <section class="view" id="view-vip">
@@ -248,15 +313,15 @@
         </section>
 
         <section class="view" id="view-gifts">
-          <article class="panel"><div class="panel-head"><div><h2>Gift Catalog</h2><p>Add, edit, remove, enable/disable and schedule gifts.</p></div><button class="btn primary" data-action="gift-new">+ Add Gift</button></div><div class="empty-state">Gift asset upload, coin price, animation/video, category, order and status controls will be managed here.</div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Gift Catalog</h2><p>Add, edit, remove, enable/disable and schedule gifts.</p></div><button class="btn primary" data-action="gift-new">+ Add Gift</button></div><div id="giftCatalogList" class="empty-state">Loading gifts…</div></article>
         </section>
 
         <section class="view" id="view-assets">
-          <div class="grid two"><article class="panel"><h2>Vehicle / Animal / 3D Entries</h2><p class="muted">Add new entry assets, edit old entries, assign to VIP and remove/disable them.</p><button class="btn primary" data-action="entry-new">+ Add Entry</button></article><article class="panel"><h2>Frames</h2><p class="muted">Profile, seat and VIP frames with full add/edit/remove controls.</p><button class="btn primary" data-action="frame-new">+ Add Frame</button></article></div>
+          <div class="grid two"><article class="panel"><h2>Vehicle / Animal / 3D Entries</h2><p class="muted">Add new entry assets, edit old entries, assign to VIP and disable them.</p><button class="btn primary" data-action="entry-new">+ Add Entry</button><div id="entryCatalogList" class="empty-state">Loading entries…</div></article><article class="panel"><h2>Frames</h2><p class="muted">Profile, seat and VIP frames with add/edit/disable controls.</p><button class="btn primary" data-action="frame-new">+ Add Frame</button><div id="frameCatalogList" class="empty-state">Loading frames…</div></article></div>
         </section>
 
         <section class="view" id="view-banners">
-          <article class="panel"><div class="panel-head"><div><h2>Banner Scheduler</h2><p>Start date/time + automatic removal date/time + manual removal.</p></div><button class="btn primary" data-action="banner-new">+ New Banner</button></div><div class="empty-state">Active, scheduled, expired and manually removed banners will appear here.</div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Banner Scheduler</h2><p>Start date/time + automatic removal date/time + manual removal.</p></div><button class="btn primary" data-action="banner-new">+ New Banner</button></div><div id="bannerCatalogList" class="empty-state">Loading banners…</div></article>
         </section>
 
         <section class="view" id="view-games">
