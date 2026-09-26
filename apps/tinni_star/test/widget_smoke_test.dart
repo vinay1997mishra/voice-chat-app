@@ -44,6 +44,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-hall-button')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('room-power-button')));
     await tester.pumpAndSettle();
@@ -99,10 +100,15 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await expectToolOpens(
-      'room-tool-gift',
-      const Key('room-gift-panel'),
-    );
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Seat Controls'), findsNothing);
+    await tester.tap(find.byKey(const Key('room-tool-gift')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
+    expect(find.byKey(const Key('room-custom-gift-button')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     final removableSong = state.ktv.addLocalSong(
       fileName: 'Wrong Song.mp3',
       sourcePath: '/phone/Music/Wrong Song.mp3',
