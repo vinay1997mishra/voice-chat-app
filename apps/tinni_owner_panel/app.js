@@ -1233,6 +1233,8 @@ function renderRoomInvestigation(result) {
   const root = document.getElementById("roomSearchResult");
   if (!root) return;
   const room = result?.room;
+  const presence = result?.presence || {};
+  const members = Array.isArray(presence.members) ? presence.members : [];
   if (!room) {
     root.className = "empty-state";
     root.textContent = "Room not found.";
@@ -1246,10 +1248,20 @@ function renderRoomInvestigation(result) {
       <div class="rule"><strong>Name</strong><span>${escapeHtml(room.title)}</span></div>
       <div class="rule"><strong>Country</strong><span>${escapeHtml(room.country_name || "")}</span></div>
       <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count)}</span></div>
+      <div class="rule"><strong>Online now</strong><span>${fmt(members.length)}</span></div>
+      <div class="rule"><strong>Mic mode</strong><span>${escapeHtml(presence.mic_mode || "—")}</span></div>
       <div class="rule"><strong>Locked</strong><span>${room.locked ? "Yes" : "No"}</span></div>
-      <div class="rule"><strong>Theme</strong><span>${escapeHtml(room.theme_id || "royal-dark")}</span></div>
-      <div class="rule"><strong>Updated</strong><span>${escapeHtml(formatFullTimestamp(room.updated_at))}</span></div>
     </div>
+    <h3 style="margin-top:12px">Live Users / Seats</h3>
+    ${members.length ? members.map((member) => `
+      <div class="policy-row">
+        <div>
+          <strong>${escapeHtml(member.display_name || member.user_id)}</strong>
+          <small>ID ${escapeHtml(member.user_id)} • Seat ${member.seat_index === null || member.seat_index === undefined ? "Audience" : escapeHtml(member.seat_index)}</small>
+        </div>
+        <span class="badge">${member.seat_index === null || member.seat_index === undefined ? "Audience" : "On seat"}</span>
+      </div>
+    `).join("") : '<div class="empty-state">No live users in this room right now.</div>'}
   `;
 }
 
@@ -1410,6 +1422,15 @@ async function handleAction(action, data) {
   if (action === "game-stats") {
     await loadGameStats(String(data.user_id || "").trim());
     toast(data.user_id ? "User game stats loaded." : "Game stats loaded.");
+    return;
+  }
+
+  if (action === "room-live") {
+    const roomId = String(data.target_id || data.room_id || "").trim();
+    if (!roomId) throw new Error("Room ID is required.");
+    const result = await api("/api/owner/room-live?room_id=" + encodeURIComponent(roomId));
+    renderRoomInvestigation(result);
+    toast("Live room data loaded.");
     return;
   }
 
