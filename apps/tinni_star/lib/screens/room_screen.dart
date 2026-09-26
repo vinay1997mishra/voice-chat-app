@@ -4030,7 +4030,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             SizedBox(
               key: const Key('room-live-users'),
-              height: 108,
+              height: 126,
               child: session.liveMembers.isEmpty
                   ? const Center(
                       child: Text(
@@ -4136,11 +4136,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   fontSize: 7.5,
                                 ),
                               ),
-                              if (member.ownerTags.isNotEmpty ||
-                                  member.ownerMedals.isNotEmpty) ...[
+                              if (member.ownerTags.isNotEmpty) ...[
                                 const SizedBox(height: 3),
                                 SizedBox(
-                                  height: 16,
+                                  height: 15,
                                   width: 94,
                                   child: ListView(
                                     scrollDirection: Axis.horizontal,
@@ -4179,6 +4178,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             ),
                                           ),
                                         ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (member.ownerMedals.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                SizedBox(
+                                  height: 15,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
                                       for (final medal in member.ownerMedals)
                                         Container(
                                           key: Key(
@@ -4229,6 +4240,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     ],
                                   ),
                                 ),
+                              ],
                               ],
                             ],
                           ),
@@ -4335,12 +4347,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: MediaQuery.sizeOf(context).width * 0.28,
                       child: TextField(
                         controller: chat,
-                        decoration: const InputDecoration(
-                          hintText: 'Chat',
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : 'Chat',
                           isDense: true,
-                          contentPadding: EdgeInsets.fromLTRB(10, 10, 8, 10),
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
                         ),
                         onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
                           controller.sendMessage(chat.text);
                           chat.clear();
                         },
