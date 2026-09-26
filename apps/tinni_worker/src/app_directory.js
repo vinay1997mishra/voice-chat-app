@@ -407,6 +407,82 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS owner_settings (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS owner_catalog (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_catalog_kind
+        ON owner_catalog(kind, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS owner_user_controls (
+        user_id TEXT PRIMARY KEY,
+        banned INTEGER NOT NULL DEFAULT 0,
+        device_banned INTEGER NOT NULL DEFAULT 0,
+        invisible INTEGER NOT NULL DEFAULT 0,
+        locked_bypass INTEGER NOT NULL DEFAULT 0,
+        vip_level INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS owner_wallets (
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        balance INTEGER NOT NULL DEFAULT 0,
+        banned INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, wallet_type)
+      );
+
+      CREATE TABLE IF NOT EXISTS owner_hierarchy (
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        parent_user_id TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, role)
+      );
+
+      CREATE TABLE IF NOT EXISTS owner_room_controls (
+        room_id TEXT PRIMARY KEY,
+        banned INTEGER NOT NULL DEFAULT 0,
+        background_asset TEXT,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS owner_user_tags (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_user_tags_user
+        ON owner_user_tags(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS owner_treasury (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        balance INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS user_id_history (
+        old_user_id TEXT PRIMARY KEY,
+        new_user_id TEXT NOT NULL,
+        changed_at INTEGER NOT NULL
+      );
     `);
 
     for (const migration of [
@@ -457,6 +533,10 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at)
        SELECT user_id, 2000000, 17125, ? FROM app_users`,
+      Date.now(),
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO owner_treasury (singleton_id, balance, updated_at) VALUES (1, 0, ?)",
       Date.now(),
     );
   }
