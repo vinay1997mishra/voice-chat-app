@@ -1708,6 +1708,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final roomRecipients = recipients();
           final filteredGifts = visibleGifts();
           return SafeArea(
+            key: const Key('room-gift-panel'),
             child: SizedBox(
               height: 470,
               child: Column(
@@ -2001,51 +2002,144 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _snack('Please sign in to use room music.');
       return;
     }
-    final songs = widget.state.ktv.library;
-    if (songs.isEmpty) {
-      _snack('No music is available right now.');
-      return;
-    }
 
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: RoyalPalette.nearBlack,
-      builder: (sheetContext) => SafeArea(
-        child: ListView.separated(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-          itemCount: songs.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (_, index) {
-            final song = songs[index];
-            return ListTile(
-              leading: const ShiningIcon(
-                icon: Icons.music_note_rounded,
-                color: FeaturePalette.music,
-                size: 20,
-                boxSize: 38,
-                glow: 0.34,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final songs = widget.state.ktv.library;
+          final current = widget.state.ktv.current;
+          return SafeArea(
+            key: const Key('room-music-panel'),
+            child: SizedBox(
+              height: 470,
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Music',
+                        style: TextStyle(
+                          color: FeaturePalette.music,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      gradient: FeaturePalette.glow(FeaturePalette.music),
+                      border: Border.all(
+                        color: FeaturePalette.music.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const ShiningIcon(
+                          icon: Icons.graphic_eq_rounded,
+                          color: FeaturePalette.music,
+                          size: 22,
+                          boxSize: 40,
+                          glow: 0.34,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                current == null
+                                    ? 'Nothing playing'
+                                    : current.song.title,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                current == null
+                                    ? 'Tap a song below to add and play it.'
+                                    : current.song.singer +
+                                        ' • Queue ' +
+                                        widget.state.ktv.queue.length.toString(),
+                                style: const TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (current != null)
+                          IconButton(
+                            tooltip: 'Next',
+                            onPressed: () {
+                              widget.state.ktv.giveUp();
+                              setSheetState(() {});
+                            },
+                            icon: const Icon(Icons.skip_next_rounded),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: songs.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No music is available right now.',
+                              style: TextStyle(color: RoyalPalette.muted),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                            itemCount: songs.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, index) {
+                              final song = songs[index];
+                              return ListTile(
+                                leading: const ShiningIcon(
+                                  icon: Icons.music_note_rounded,
+                                  color: FeaturePalette.music,
+                                  size: 20,
+                                  boxSize: 38,
+                                  glow: 0.34,
+                                ),
+                                title: Text(song.title),
+                                subtitle: Text(song.singer),
+                                trailing:
+                                    const Icon(Icons.playlist_add_rounded),
+                                onTap: () {
+                                  widget.state.ktv
+                                      .addToQueue(song, account.userId);
+                                  if (widget.state.ktv.current == null) {
+                                    widget.state.ktv.startNext();
+                                  }
+                                  setSheetState(() {});
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-              title: Text(song.title),
-              subtitle: Text(song.singer),
-              trailing: const Icon(Icons.playlist_add_rounded),
-              onTap: () {
-                widget.state.ktv.addToQueue(song, account.userId);
-                if (widget.state.ktv.current == null) {
-                  widget.state.ktv.startNext();
-                }
-                Navigator.pop(sheetContext);
-                _snack('Music added: ' + song.title);
-              },
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  void _openRoomLuckyBag() {
+  void _showRoomLuckyBag() {
     final account = widget.state.auth.current;
     if (account == null) {
       _snack('Please sign in to use Lucky Bag.');
@@ -2053,94 +2147,269 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     final bagId = 'room-' + widget.room.id + '-lucky';
-    var bag = widget.state.rewards.luckyBags[bagId];
-    if (bag == null || bag.expired || bag.remaining <= 0) {
-      bag = widget.state.rewards.createLuckyBag(
-        id: bagId,
-        senderId: account.userId,
-        totalSlots: 10,
-        reward: const LuckyBagReward(
-          kind: LuckyBagRewardKind.coins,
-          label: 'Room Lucky Bag',
-          amount: 100,
-        ),
-      );
-    }
-
-    final reward = widget.state.rewards.grab(bagId, account.userId);
-    if (reward == null) {
-      _snack('You already grabbed this Lucky Bag.');
-      return;
-    }
-
-    if (reward.kind == LuckyBagRewardKind.coins) {
-      widget.state.wallet.creditCoins(reward.amount, reward.label);
-    }
-    widget.state.rewards.launchRocket(1000);
-    widget.state.rewards.addRebate(50);
-    _snack(
-      reward.label +
-          ': +' +
-          reward.amount.toString() +
-          ' • ' +
-          bag.remaining.toString() +
-          ' left',
-    );
-  }
-
-  void _showRoomModerationCenter() {
-    if (!_canModerateSeats) {
-      _snack('Only the room owner or room admin can use moderation.');
-      return;
-    }
-
-    final currentUserId = widget.state.auth.current?.userId;
-    final members = widget.state.roomSession.liveMembers
-        .where((member) => member.userId != currentUserId)
-        .toList(growable: false);
-    if (members.isEmpty) {
-      _snack('No other users are in the room.');
-      return;
-    }
 
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final bag = widget.state.rewards.luckyBags[bagId];
+          final active =
+              bag != null && !bag.expired && bag.remaining > 0;
+          final alreadyClaimed =
+              bag?.claimedBy.contains(account.userId) == true;
+
+          return SafeArea(
+            key: const Key('room-lucky-bag-panel'),
+            child: SizedBox(
+              height: 390,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Lucky Bag',
+                      style: TextStyle(
+                        color: FeaturePalette.rocket,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: FeaturePalette.glow(FeaturePalette.rocket),
+                        border: Border.all(
+                          color: FeaturePalette.rocket.withValues(alpha: 0.60),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const ShiningIcon(
+                            icon: Icons.redeem_rounded,
+                            color: FeaturePalette.rocket,
+                            size: 28,
+                            boxSize: 52,
+                            glow: 0.40,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  active
+                                      ? (bag.reward.label)
+                                      : 'No active Lucky Bag',
+                                  style: const TextStyle(
+                                    color: RoyalPalette.cream,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  active
+                                      ? bag.remaining.toString() +
+                                          ' of ' +
+                                          bag.totalSlots.toString() +
+                                          ' rewards left • ' +
+                                          bag.reward.amount.toString() +
+                                          ' coins'
+                                      : 'Owner/Admin can start a Lucky Bag for this room.',
+                                  style: const TextStyle(
+                                    color: RoyalPalette.muted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (active)
+                      FilledButton.icon(
+                        key: const Key('room-lucky-bag-grab'),
+                        onPressed: alreadyClaimed
+                            ? null
+                            : () {
+                                final reward = widget.state.rewards
+                                    .grab(bagId, account.userId);
+                                if (reward == null) {
+                                  setSheetState(() {});
+                                  return;
+                                }
+                                if (reward.kind ==
+                                    LuckyBagRewardKind.coins) {
+                                  widget.state.wallet.creditCoins(
+                                    reward.amount,
+                                    reward.label,
+                                  );
+                                }
+                                widget.state.rewards.launchRocket(1000);
+                                widget.state.rewards.addRebate(50);
+                                setSheetState(() {});
+                                _snack(
+                                  reward.label +
+                                      ': +' +
+                                      reward.amount.toString(),
+                                );
+                              },
+                        icon: const Icon(Icons.touch_app_rounded),
+                        label: Text(
+                          alreadyClaimed
+                              ? 'Already grabbed'
+                              : 'Grab Lucky Bag',
+                        ),
+                      ),
+                    if (_canModerateSeats) ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        key: const Key('room-lucky-bag-start'),
+                        onPressed: () {
+                          widget.state.rewards.createLuckyBag(
+                            id: bagId,
+                            senderId: account.userId,
+                            totalSlots: 10,
+                            reward: const LuckyBagReward(
+                              kind: LuckyBagRewardKind.coins,
+                              label: 'Room Lucky Bag',
+                              amount: 100,
+                            ),
+                          );
+                          setSheetState(() {});
+                        },
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        label: Text(
+                          active ? 'Restart Lucky Bag' : 'Start Lucky Bag',
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      'Rocket Lv.' +
+                          widget.state.rewards.rocket.level.toString() +
+                          ' • Rebate ' +
+                          widget.state.rewards.rebateCoins.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showRoomModerationCenter() {
+    final currentUserId = widget.state.auth.current?.userId;
+    final members = widget.state.roomSession.liveMembers
+        .where((member) => member.userId != currentUserId)
+        .toList(growable: false);
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => SafeArea(
-        child: ListView.separated(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-          itemCount: members.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (_, index) {
-            final member = members[index];
-            final seat = member.seatIndex;
-            return ListTile(
-              leading: const ShiningIcon(
-                icon: Icons.shield_rounded,
-                color: FeaturePalette.safety,
-                size: 20,
-                boxSize: 38,
-                glow: 0.34,
+        key: const Key('room-moderation-panel'),
+        child: SizedBox(
+          height: 470,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Moderation',
+                    style: TextStyle(
+                      color: FeaturePalette.safety,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
               ),
-              title: Text(member.displayName),
-              subtitle: Text(
-                seat == null
-                    ? 'Audience'
-                    : 'Seat ' + (seat + 1).toString(),
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                Future<void>.delayed(Duration.zero, () {
-                  if (mounted) {
-                    _showUserProfile(member, seatIndexHint: seat);
-                  }
-                });
-              },
-            );
-          },
+              if (!_canModerateSeats)
+                const Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Moderation controls are available to the room owner and room admins.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: RoyalPalette.muted),
+                      ),
+                    ),
+                  ),
+                )
+              else if (members.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'No other users are in the room.',
+                      style: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    itemCount: members.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final member = members[index];
+                      final seat = member.seatIndex;
+                      return ListTile(
+                        leading: const ShiningIcon(
+                          icon: Icons.shield_rounded,
+                          color: FeaturePalette.safety,
+                          size: 20,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                        title: Text(member.displayName),
+                        subtitle: Text(
+                          seat == null
+                              ? 'Audience • Tap for moderation actions'
+                              : 'Seat ' +
+                                  (seat + 1).toString() +
+                                  ' • Tap for moderation actions',
+                        ),
+                        trailing:
+                            const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          Future<void>.delayed(Duration.zero, () {
+                            if (mounted) {
+                              _showUserProfile(
+                                member,
+                                seatIndexHint: seat,
+                              );
+                            }
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -2202,7 +2471,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       (
         'Lucky Bag',
         Icons.rocket_launch_rounded,
-        _openRoomLuckyBag,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomLuckyBag();
+          });
+        },
       ),
       (
         'Moderation',
