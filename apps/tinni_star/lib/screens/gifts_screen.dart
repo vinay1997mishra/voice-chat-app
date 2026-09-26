@@ -16,6 +16,41 @@ class GiftsScreen extends StatefulWidget {
 class _GiftsScreenState extends State<GiftsScreen> {
   String category = 'Popular';
 
+  Color _giftColor(GiftDefinition gift, int index) {
+    final id = (gift.id + ' ' + gift.name).toLowerCase();
+    if (id.contains('heart') || id.contains('ring') || category == 'CP') {
+      return FeaturePalette.cp;
+    }
+    if (id.contains('dragon') || id.contains('crown')) {
+      return FeaturePalette.rank;
+    }
+    if (id.contains('castle')) return FeaturePalette.vip;
+    const colors = <Color>[
+      FeaturePalette.gift,
+      FeaturePalette.cp,
+      FeaturePalette.vip,
+      FeaturePalette.music,
+      FeaturePalette.rocket,
+      FeaturePalette.family,
+    ];
+    return colors[index % colors.length];
+  }
+
+  Color _categoryColor(String value) {
+    switch (value) {
+      case 'Luxury':
+        return FeaturePalette.vip;
+      case 'CP':
+        return FeaturePalette.cp;
+      case 'Backpack':
+        return FeaturePalette.backpack;
+      case 'Normal':
+        return FeaturePalette.social;
+      default:
+        return FeaturePalette.gift;
+    }
+  }
+
   List<GiftDefinition> get gifts => const [
         GiftDefinition(id: 'gold-dragon', name: 'Golden Dragon', price: 5000, effectKind: 'mp4'),
         GiftDefinition(id: 'royal-crown', name: 'Royal Crown', price: 2500, effectKind: 'pag'),
@@ -77,9 +112,22 @@ class _GiftsScreenState extends State<GiftsScreen> {
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 final value = categories[index];
+                final color = _categoryColor(value);
                 return ChoiceChip(
                   label: Text(value),
                   selected: category == value,
+                  selectedColor: color.withValues(alpha: 0.28),
+                  side: BorderSide(
+                    color: category == value
+                        ? color
+                        : RoyalPalette.bronze,
+                  ),
+                  labelStyle: TextStyle(
+                    color: category == value
+                        ? color
+                        : RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
                   onSelected: (_) => setState(() => category = value),
                 );
               },
@@ -97,8 +145,10 @@ class _GiftsScreenState extends State<GiftsScreen> {
               ),
               itemBuilder: (_, index) {
                 final gift = gifts[index];
+                final color = _giftColor(gift, index);
                 return RoyalPanel(
                   padding: const EdgeInsets.all(8),
+                  gradient: FeaturePalette.glow(color),
                   onTap: () => send(gift),
                   child: Column(
                     children: [
@@ -109,14 +159,25 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                RoyalPalette.gold.withValues(alpha: 0.32),
+                                color.withValues(alpha: 0.46),
                                 RoyalPalette.panel,
                               ],
                             ),
+                            border: Border.all(
+                              color: color.withValues(alpha: 0.72),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.26),
+                                blurRadius: 12,
+                              ),
+                            ],
                           ),
                           child: Icon(
-                            index.isEven ? Icons.auto_awesome_rounded : Icons.card_giftcard_rounded,
-                            color: RoyalPalette.gold,
+                            index.isEven
+                                ? Icons.auto_awesome_rounded
+                                : Icons.card_giftcard_rounded,
+                            color: color,
                             size: 36,
                           ),
                         ),
