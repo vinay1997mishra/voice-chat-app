@@ -5,6 +5,7 @@ on:
     branches: [ anamika-v13-local-self-upgrade ]
     paths:
       - 'app13/**'
+      - 'connector/anamika-mcp/**'
       - 'settings.gradle'
       - 'build.gradle'
       - 'gradle.properties'
@@ -32,6 +33,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
+
+      - name: Check V13 feature preservation
+        run: |
+          set -euo pipefail
+          bash tools/check-v13-feature-preservation.sh
+
+      - name: Check ChatGPT MCP connector syntax
+        run: |
+          set -euo pipefail
+          node --check connector/anamika-mcp/server.mjs
 
       - name: Install Android SDK 36
         run: |
