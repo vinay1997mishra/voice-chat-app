@@ -2258,12 +2258,9 @@ export default {
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
-      const actorIsManager = await store.isManager(actorId);
-      const actorIsMember = await store.isMember(actorId);
-      const canManageAdmins =
-        String(room.owner_id) === actorId || (actorIsManager && actorIsMember);
+      const canManageAdmins = String(room.owner_id) === actorId;
       if (!canManageAdmins) {
-        return json({ ok: false, error: "Only room owner/admin can manage admins" }, 403);
+        return json({ ok: false, error: "Only the room owner can manage admins" }, 403);
       }
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
@@ -2303,6 +2300,11 @@ export default {
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can control room chat" }, 403);
       }
+      const targetIsManager = await store.isManager(targetUserId);
+      if (actorId !== String(room.owner_id) && targetIsManager) {
+        return json({ ok: false, error: "Room admins cannot moderate another admin" }, 403);
+      }
+
 
       try {
         return json(await store.setChatBan({
@@ -2554,6 +2556,11 @@ export default {
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can mute users" }, 403);
       }
+      const targetIsManager = await store.isManager(targetUserId);
+      if (actorId !== String(room.owner_id) && targetIsManager) {
+        return json({ ok: false, error: "Room admins cannot moderate another admin" }, 403);
+      }
+
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner cannot be muted" }, 400);
       }
@@ -2598,6 +2605,11 @@ export default {
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can kick users" }, 403);
       }
+      const targetIsManager = await store.isManager(targetUserId);
+      if (actorId !== String(room.owner_id) && targetIsManager) {
+        return json({ ok: false, error: "Room admins cannot moderate another admin" }, 403);
+      }
+
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner cannot be kicked" }, 400);
       }
