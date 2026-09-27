@@ -378,12 +378,29 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    'Family Level ' + widget.state.family.level.toString(),
-                    style: const TextStyle(
-                      color: FeaturePalette.family,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
+                  InkWell(
+                    key: const Key('family-level-open'),
+                    onTap: widget.state.family.exists
+                        ? () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FamilyLevelScreen(
+                                  state: widget.state,
+                                  familyName: _name,
+                                  familyTag: _tag,
+                                ),
+                              ),
+                            );
+                          }
+                        : null,
+                    child: Text(
+                      'Family Level ' + widget.state.family.level.toString(),
+                      style: const TextStyle(
+                        color: FeaturePalette.family,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
@@ -809,6 +826,105 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
               ),
             ),
       ],
+    );
+  }
+}
+
+class FamilyLevelScreen extends StatelessWidget {
+  const FamilyLevelScreen({
+    super.key,
+    required this.state,
+    required this.familyName,
+    required this.familyTag,
+  });
+
+  final TinniState state;
+  final String familyName;
+  final String familyTag;
+
+  @override
+  Widget build(BuildContext context) {
+    final family = state.family;
+    final next = family.nextLevelRequiredExperience;
+    return Scaffold(
+      key: const Key('family-level-screen'),
+      appBar: AppBar(title: const Text('Family Level')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: const Key('family-level-dp'),
+              radius: 42,
+              backgroundColor: FeaturePalette.family,
+              child: Text(
+                familyName.trim().isEmpty
+                    ? '?'
+                    : familyName.trim()[0].toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: Text(
+              familyName,
+              key: const Key('family-level-name'),
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              familyTag + ' • L' + family.level.toString(),
+              style: const TextStyle(
+                color: FeaturePalette.family,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          LinearProgressIndicator(
+            key: const Key('family-level-progress'),
+            value: family.levelProgress,
+            minHeight: 14,
+            color: FeaturePalette.family,
+            backgroundColor: RoyalPalette.panel2,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            next == null
+                ? family.experience.toString() + ' EXP • MAX LEVEL'
+                : family.experience.toString() +
+                    ' / ' +
+                    next.toString() +
+                    ' EXP',
+            key: const Key('family-level-exp-text'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Monthly wallet bonus: ' +
+                family.monthlyWalletBonusPercent.toStringAsFixed(2) +
+                '%',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: RoyalPalette.muted),
+          ),
+        ],
+      ),
     );
   }
 }
