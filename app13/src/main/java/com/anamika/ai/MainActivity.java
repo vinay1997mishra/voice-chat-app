@@ -65,6 +65,7 @@ public final class MainActivity extends Activity implements VoiceController.List
     private View drawerScrim;
     private Button effortButton;
     private boolean startupSetupDialogVisible;
+    private boolean voiceConversationActive;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -540,6 +541,7 @@ public final class MainActivity extends Activity implements VoiceController.List
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
             return;
         }
+        voiceConversationActive=true;
         voice.listen();
     }
 
@@ -550,14 +552,17 @@ public final class MainActivity extends Activity implements VoiceController.List
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
-        if(requestCode==REQ_AUDIO&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)
+        if(requestCode==REQ_AUDIO&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){
+            voiceConversationActive=true;
             voice.listen();
+        }
     }
 
     private void runInput(){
         String text=input==null?"":input.getText().toString().trim();
         if(text.isEmpty())return;
         input.setText("");
+        voiceConversationActive=false;
         runCommand(text);
     }
 
@@ -654,7 +659,10 @@ public final class MainActivity extends Activity implements VoiceController.List
     private void finishReply(String reply,String connectorCommandId){
         append("Anamika",reply);
         MemoryStore.appendTurn(this,"anamika",reply);
-        voice.speak(reply);
+        if(voiceConversationActive&&(connectorCommandId==null||connectorCommandId.trim().isEmpty()))
+            voice.speakThenListen(reply);
+        else
+            voice.speak(reply);
         if(connectorCommandId!=null&&!connectorCommandId.trim().isEmpty())
             ChatGptConnectorClient.postResult(this,connectorCommandId,reply);
     }
@@ -684,6 +692,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         getIntent().removeExtra("connector_command_id");
         getIntent().removeExtra("connector_command");
         ChatGptConnectorService.clearPendingNotification(this);
+        voiceConversationActive=false;
         append("Anamika","ChatGPT Connector se command received.");
         runCommand(command.trim(),id.trim());
     }
@@ -694,9 +703,10 @@ public final class MainActivity extends Activity implements VoiceController.List
         if(getIntent()!=null)getIntent().removeExtra("wake_command");
         if(cmd==null)return;
         if(messages==null)showAssistant();
+        voiceConversationActive=true;
         if(cmd.trim().isEmpty()){
             append("Anamika","Ji, boliye.");
-            voice.speak("Ji, boliye.");
+            voice.speakThenListen("Ji, boliye.");
         }else runCommand(cmd.trim());
     }
 
@@ -730,11 +740,37 @@ public final class MainActivity extends Activity implements VoiceController.List
     }
 
     @Override public void onVoiceText(String text){
-        runOnUiThread(()->runCommand(text));
+        runOnUiThread(()->{
+            if(isVoiceStopPhrase(text)){
+                voiceConversationActive=false;
+                append("You",text);
+                MemoryStore.appendTurn(this,"owner",text);
+                append("Anamika","Theek hai. Wake listener active rahega; jab chaho phir bula lena.");
+                voice.speak("Theek hai.");
+                if(status!=null)status.setText("Owner verified • wake mode");
+                return;
+            }
+            voiceConversationActive=true;
+            runCommand(text);
+        });
+    }
+
+    private boolean isVoiceStopPhrase(String text){
+        String l=text==null?"":text.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("\\s+"," ").trim();
+        return l.equals("bas abhi chup hoja")||l.equals("bas abhi chup ho ja")||
+                l.equals("chup hoja")||l.equals("chup ho ja")||
+                l.equals("stop listening")||l.equals("stop conversation")||
+                l.equals("बस अभी चुप हो जा")||l.equals("चुप हो जा");
     }
 
     @Override public void onVoiceState(String state){
-        runOnUiThread(()->{if(status!=null)status.setText(state);});
+        runOnUiThread(()->{
+            if(state!=null&&(state.startsWith("Voice recognition stopped")||
+                    state.startsWith("Command clear nahi mili")))
+                voiceConversationActive=false;
+            if(status!=null)status.setText(state);
+        });
     }
 
     @Override public void onBackPressed(){
