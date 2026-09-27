@@ -1,6 +1,7 @@
 package com.anamika.ai.diagnostics;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 
 import java.io.File;
@@ -12,7 +13,7 @@ import java.io.File;
 public final class DiagnosticsController {
     private DiagnosticsController(){}
 
-    public static String runAndSave(Activity a){
+    public static String runAndSave(Context a){
         try{
             FullDiagnosticsEngine.Result r=FullDiagnosticsEngine.run(a);
             File f=DiagnosticsReportStore.save(a,r);
@@ -41,7 +42,7 @@ public final class DiagnosticsController {
         }
     }
 
-    public static String latest(Activity a){
+    public static String latest(Context a){
         return DiagnosticsReportStore.readLatest(a);
     }
 

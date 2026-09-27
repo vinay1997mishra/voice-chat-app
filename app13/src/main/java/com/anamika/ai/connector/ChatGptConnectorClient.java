@@ -58,6 +58,27 @@ public final class ChatGptConnectorClient {
         }finally{con.disconnect();}
     }
 
+    public static boolean ackRunning(Context c,String commandId){
+        if(commandId==null||commandId.trim().isEmpty())return false;
+        HttpURLConnection con=null;
+        try{
+            String base=ChatGptConnectorStore.serverUrl(c), token=ChatGptConnectorStore.token(c), id=ChatGptConnectorStore.deviceId(c);
+            if(base.isEmpty()||token.isEmpty()||id.isEmpty())return false;
+            con=(HttpURLConnection)new URL(base+"/device/commands/ack").openConnection();
+            con.setConnectTimeout(12000); con.setReadTimeout(15000);
+            con.setRequestMethod("POST"); con.setDoOutput(true);
+            con.setRequestProperty("Authorization","Bearer "+token);
+            con.setRequestProperty("X-Anamika-Device",id);
+            con.setRequestProperty("Content-Type","application/json; charset=utf-8");
+            JSONObject body=new JSONObject().put("command_id",commandId);
+            try(OutputStream out=con.getOutputStream()){out.write(body.toString().getBytes(StandardCharsets.UTF_8));}
+            int code=con.getResponseCode();
+            try{read(code>=400?con.getErrorStream():con.getInputStream());}catch(Exception ignored){}
+            return code>=200&&code<300;
+        }catch(Exception ignored){return false;}
+        finally{if(con!=null)con.disconnect();}
+    }
+
     public static void postResult(Context c,String commandId,String result){
         if(commandId==null||commandId.trim().isEmpty())return;
         final Context app=c.getApplicationContext();

@@ -74,7 +74,7 @@ function registerTools(server){
       device_name:d.device_name,
       last_seen_ms:d.last_seen_ms||0,
       online:(now()-(d.last_seen_ms||0))<15000,
-      pending:Object.values(state.commands).filter(c=>c.device_id===d.device_id&&["queued","delivered"].includes(c.status)).length
+      pending:Object.values(state.commands).filter(c=>c.device_id===d.device_id&&["queued","delivered","running"].includes(c.status)).length
     });
   });
 
@@ -91,7 +91,7 @@ function registerTools(server){
     const d=newestDevice(state,device_id);
     if(!d) return textResult({ok:false,error:"No paired Anamika device."},true);
     const id=randomId("cmd");
-    state.commands[id]={id,device_id:d.device_id,command,status:"queued",created_ms:now(),delivered_ms:0,completed_ms:0,result:""};
+    state.commands[id]={id,device_id:d.device_id,command,status:"queued",created_ms:now(),delivered_ms:0,started_ms:0,completed_ms:0,result:""};
     saveState(state);
     const deadline=now()+wait_seconds*1000;
     while(wait_seconds>0&&now()<deadline){
@@ -157,12 +157,30 @@ app.get("/device/commands/next",authDevice,(req,res)=>{
   const state=loadState();
   const id=req.anamikaDeviceId;
   const list=Object.values(state.commands)
-    .filter(c=>c.device_id===id&&(c.status==="queued"||(c.status==="delivered"&&now()-(c.delivered_ms||0)>60000)))
+    .filter(c=>c.device_id===id&&(
+      c.status==="queued"||
+      (c.status==="delivered"&&now()-(c.delivered_ms||0)>60000)||
+      // A running lease prevents duplicate long self-repair/build jobs. Only
+      // recover it after 90 minutes if the phone died without posting a result.
+      (c.status==="running"&&now()-(c.started_ms||0)>90*60*1000)
+    ))
     .sort((a,b)=>a.created_ms-b.created_ms);
   const c=list[0];
   if(!c) return res.json({ok:true,command:null});
   c.status="delivered"; c.delivered_ms=now(); saveState(state);
   res.json({ok:true,command:{id:c.id,text:c.command}});
+});
+
+app.post("/device/commands/ack",authDevice,(req,res)=>{
+  const id=String(req.body?.command_id||"");
+  const state=loadState();
+  const c=state.commands[id];
+  if(!c||c.device_id!==req.anamikaDeviceId) return res.status(404).json({error:"command not found"});
+  if(c.status==="completed") return res.json({ok:true,status:"completed"});
+  c.status="running";
+  c.started_ms=now();
+  saveState(state);
+  res.json({ok:true,status:"running"});
 });
 
 app.post("/device/results",authDevice,(req,res)=>{
