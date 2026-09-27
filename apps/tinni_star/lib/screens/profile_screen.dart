@@ -280,7 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ).then((_) => setState(() {})),
             child: const ListTile(
               leading: Icon(Icons.favorite_rounded, color: FeaturePalette.cp),
-              title: Text('CP Panel', style: TextStyle(fontWeight: FontWeight.w900)),
+              title: Text('CP', style: TextStyle(fontWeight: FontWeight.w900)),
               subtitle: Text('CP request, relationship, intimacy, memories and disconnect'),
               trailing: Icon(Icons.chevron_right_rounded),
             ),
