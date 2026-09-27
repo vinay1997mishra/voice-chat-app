@@ -23,12 +23,9 @@ class FamilyTask {
       );
 }
 
-class FamilyLotteryReward {
-  const FamilyLotteryReward(this.label, this.coins);
-  final String label;
-  final int coins;
-}
-
+/// Family features intentionally exclude the retired lottery and gift
+/// contribution systems. Daily sign-in remains because it contributes only
+/// to family experience.
 class FamilyFeatureService {
   FamilyFeatureService(this.family);
 
@@ -39,15 +36,9 @@ class FamilyFeatureService {
       title: 'Daily family sign-in',
       target: 5,
     ),
-    'gifts': const FamilyTask(
-      id: 'gifts',
-      title: 'Family gift contribution',
-      target: 1000,
-    ),
   };
 
   final Set<String> signedInToday = <String>{};
-  final List<String> lotteryHistory = <String>[];
 
   bool signIn(String userId) {
     if (!signedInToday.add(userId)) return false;
@@ -55,22 +46,6 @@ class FamilyFeatureService {
     if (task != null) tasks['signin'] = task.addProgress(1);
     family.addExperience(100);
     return true;
-  }
-
-  void recordGiftContribution(int value) {
-    if (value <= 0) return;
-    final task = tasks['gifts'];
-    if (task != null) tasks['gifts'] = task.addProgress(value);
-    family.addExperience(value);
-  }
-
-  FamilyLotteryReward draw(int ticketNumber) {
-    final reward = ticketNumber.isEven
-        ? const FamilyLotteryReward('Family Lucky Star', 500)
-        : const FamilyLotteryReward('Family Gift Box', 100);
-    lotteryHistory.insert(0, reward.label);
-    family.deposit(reward.coins);
-    return reward;
   }
 
   List<FamilyMember> rankByRole() {
