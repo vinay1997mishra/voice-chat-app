@@ -959,6 +959,49 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
     return widget.state.family.head?.userId == viewerId;
   }
 
+  String? get _viewerId => widget.state.auth.current?.userId;
+
+  bool get _viewerCanReviewRequests {
+    final viewerId = _viewerId;
+    return viewerId != null &&
+        widget.state.family.canReviewJoinRequests(viewerId);
+  }
+
+  bool _viewerCanRemove(FamilyMember member) {
+    final viewerId = _viewerId;
+    return viewerId != null &&
+        widget.state.family.canRemoveMember(
+          actorUserId: viewerId,
+          targetUserId: member.userId,
+        );
+  }
+
+  void _removeMember(FamilyMember member) {
+    final viewerId = _viewerId;
+    if (viewerId == null) return;
+    if (widget.state.family.removeMemberAs(
+      actorUserId: viewerId,
+      targetUserId: member.userId,
+    )) {
+      setState(() {});
+    }
+  }
+
+  void _reviewJoinRequest(FamilyJoinRequest request, bool approve) {
+    final viewerId = _viewerId;
+    if (viewerId == null) return;
+    final changed = approve
+        ? widget.state.family.approveJoinRequest(
+            actorUserId: viewerId,
+            userId: request.userId,
+          )
+        : widget.state.family.rejectJoinRequest(
+            actorUserId: viewerId,
+            userId: request.userId,
+          );
+    if (changed) setState(() {});
+  }
+
   Future<void> _appointDeputy() async {
     if (!widget.state.family.exists || !_viewerIsLeader) return;
     final controller = TextEditingController();
@@ -1222,6 +1265,16 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
                       if (mounted) setState(() {});
                     },
                   ),
+                  if (_viewerCanRemove(member))
+                    IconButton(
+                      key: Key('family-remove-member-' + member.userId),
+                      tooltip: 'Remove Member',
+                      onPressed: () => _removeMember(member),
+                      icon: const Icon(
+                        Icons.person_remove_rounded,
+                        color: FeaturePalette.family,
+                      ),
+                    ),
                   Text(
                     index < 5 ? 'Today' : 'Logged in 1 days ago',
                     style: const TextStyle(
@@ -1251,6 +1304,40 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
       key: const Key('family-admin-content'),
       padding: const EdgeInsets.all(14),
       children: [
+        if (_viewerCanReviewRequests &&
+            widget.state.family.pendingJoinRequests.isNotEmpty) ...[
+          const Text(
+            'Joining Requests',
+            style: TextStyle(
+              color: FeaturePalette.family,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final request in widget.state.family.pendingJoinRequests)
+            ListTile(
+              key: Key('family-join-request-' + request.userId),
+              title: Text(request.name),
+              subtitle: Text('ID ' + request.userId),
+              trailing: Wrap(
+                children: [
+                  IconButton(
+                    key: Key('family-join-accept-' + request.userId),
+                    tooltip: 'Accept',
+                    onPressed: () => _reviewJoinRequest(request, true),
+                    icon: const Icon(Icons.check_circle_rounded),
+                  ),
+                  IconButton(
+                    key: Key('family-join-reject-' + request.userId),
+                    tooltip: 'Reject',
+                    onPressed: () => _reviewJoinRequest(request, false),
+                    icon: const Icon(Icons.cancel_rounded),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(),
+        ],
         const SizedBox(height: 10),
         const Center(
           child: Text(
