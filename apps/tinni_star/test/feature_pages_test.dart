@@ -41,7 +41,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('CP'), findsOneWidget);
+    expect(find.text('CP Panel'), findsOneWidget);
   });
 
   testWidgets('More keeps CP actions out and routes remaining features to pages',
