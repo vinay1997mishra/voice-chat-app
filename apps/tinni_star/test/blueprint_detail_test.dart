@@ -57,6 +57,39 @@ void main() {
     expect(features.tasks.keys, isNot(contains('gifts')));
   });
 
+  test('family received coins award EXP, wallet share and count once', () {
+    final family = FamilyService()
+      ..create(
+        familyName: 'Tinni',
+        familyTag: 'TS',
+        head: const FamilyMember(
+          userId: '1',
+          name: 'Head',
+          role: FamilyRole.head,
+        ),
+      );
+    expect(
+      family.recordCoinsReceived(
+        transactionId: 'rx-5000000',
+        receiverUserId: '1',
+        coins: 5000000,
+      ),
+      true,
+    );
+    expect(family.experience, 5000000);
+    expect(family.walletCoins, 50000);
+    expect(
+      family.recordCoinsReceived(
+        transactionId: 'rx-5000000',
+        receiverUserId: '1',
+        coins: 5000000,
+      ),
+      false,
+    );
+    expect(family.experience, 5000000);
+    expect(family.walletCoins, 50000);
+  });
+
   test('cp disconnect and heartbeat states work', () {
     final cp = CpFeatureService()
       ..requestDisconnect('1')
