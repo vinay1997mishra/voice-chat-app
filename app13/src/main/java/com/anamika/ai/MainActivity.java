@@ -747,6 +747,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                 MemoryStore.appendTurn(this,"owner",text);
                 append("Anamika","Theek hai. Wake listener active rahega; jab chaho phir bula lena.");
                 voice.speak("Theek hai.");
+                WakeService.resume(this);
                 if(status!=null)status.setText("Owner verified • wake mode");
                 return;
             }
