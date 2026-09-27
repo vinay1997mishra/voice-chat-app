@@ -1,0 +1,66 @@
+name: Publish Anamika Function Pack
+
+on:
+  push:
+    branches:
+      - anamika-v13-local-self-upgrade
+    paths:
+      - "updates/functionpack-current/**"
+      - ".github/workflows/anamika-functionpack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build verified Function Pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/pack/payload
+          cp updates/functionpack-current/payload/functions.json dist/pack/payload/
+
+          FUNCTIONS_SHA="$(sha256sum dist/pack/payload/functions.json | awk '{print $1}')"
+          VERSION="2026.09.22.1"
+
+          cat > dist/pack/manifest.json <<EOF
+          {
+            "schema": "anamika13-component-pack-v1",
+            "type": "function-pack",
+            "version": "$VERSION",
+            "files": {
+              "payload/functions.json": "$FUNCTIONS_SHA"
+            }
+          }
+          EOF
+
+          (cd dist/pack && zip -q -r ../AnamikaAI-13-FunctionPack.zip manifest.json payload)
+          (cd dist && sha256sum AnamikaAI-13-FunctionPack.zip > AnamikaAI-13-FunctionPack.zip.sha256)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnamikaAI-13-FunctionPack
+          path: |
+            dist/AnamikaAI-13-FunctionPack.zip
+            dist/AnamikaAI-13-FunctionPack.zip.sha256
+          if-no-files-found: error
+
+      - name: Publish stable Function Pack release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="anamika-functionpack-current"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG"               dist/AnamikaAI-13-FunctionPack.zip               dist/AnamikaAI-13-FunctionPack.zip.sha256               --clobber
+            gh release edit "$TAG"               --title "Anamika AI 13 Function Pack • Current"               --notes "Hot-update declarative Function Pack. Installs compatible functions/workflows without replacing the APK."
+          else
+            gh release create "$TAG"               dist/AnamikaAI-13-FunctionPack.zip               dist/AnamikaAI-13-FunctionPack.zip.sha256               --target "$GITHUB_SHA"               --title "Anamika AI 13 Function Pack • Current"               --notes "Hot-update declarative Function Pack. Installs compatible functions/workflows without replacing the APK."               --prerelease
+          fi

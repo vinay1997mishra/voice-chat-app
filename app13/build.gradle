@@ -1,0 +1,91 @@
+plugins {
+    id 'com.android.application'
+}
+
+def anamikaReleaseStore = System.getenv("ANAMIKA_RELEASE_STORE_FILE")
+def anamikaReleasePass = System.getenv("ANAMIKA_RELEASE_STORE_PASSWORD")
+def anamikaReleaseAlias = System.getenv("ANAMIKA_RELEASE_KEY_ALIAS") ?: "anamika13-release"
+
+android {
+    namespace 'com.anamika.ai'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.anamika.ai13'
+        minSdk 21
+        targetSdk 36
+        versionCode Integer.parseInt(System.getenv("ANAMIKA13_VERSION_CODE") ?: "130000")
+        versionName System.getenv("ANAMIKA13_VERSION_NAME") ?: "13.0.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs {
+            // Android 10+ forbids execve from writable app storage. Keep
+            // embedded AAPT2/dependencies in the APK native-library area.
+            useLegacyPackaging = true
+        }
+    }
+
+    signingConfigs {
+        if (anamikaReleaseStore && anamikaReleasePass) {
+            release {
+                storeFile file(anamikaReleaseStore)
+                storePassword anamikaReleasePass
+                keyAlias anamikaReleaseAlias
+                keyPassword anamikaReleasePass
+                storeType "PKCS12"
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ''
+            versionNameSuffix '-dev'
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (anamikaReleaseStore && anamikaReleasePass) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+/*
+ * V13 bundles its own clean source snapshot. The runtime never edits this
+ * immutable copy. A self-upgrade starts by copying it to private app storage.
+ */
+def v13SelfSource = layout.buildDirectory.dir("generated/v13SelfSource")
+tasks.register("bundleV13SelfSource", Sync) {
+    into(v13SelfSource)
+    from("src/main/java") { into("self_source/app13/src/main/java") }
+    from("src/main/res") { into("self_source/app13/src/main/res") }
+    from("src/main/jniLibs") { into("self_source/app13/src/main/jniLibs") }
+    from("src/main/assets/components") { into("self_source/app13/src/main/assets/components") }
+    from("src/main/AndroidManifest.xml") { into("self_source/app13/src/main"); rename { "AndroidManifest.xml" } }
+    from("build.gradle") { into("self_source/app13"); rename { "build.gradle" } }
+    from(rootProject.file("build.gradle")) { into("self_source"); rename { "build.gradle" } }
+    from(rootProject.file("settings.gradle")) { into("self_source"); rename { "settings.gradle" } }
+    from(rootProject.file("gradle.properties")) { into("self_source"); rename { "gradle.properties" } }
+    if(rootProject.file("V13_ARCHITECTURE.md").exists()) {
+        from(rootProject.file("V13_ARCHITECTURE.md")) { into("self_source") }
+    }
+    doLast {
+        def root = v13SelfSource.get().asFile
+        def inventory = new File(root, "self_source/FILE_INVENTORY.txt")
+        inventory.parentFile.mkdirs()
+        def entries = fileTree(projectDir) {
+            include "src/main/java/**", "src/main/res/**", "src/main/jniLibs/**", "src/main/assets/components/**", "src/main/AndroidManifest.xml", "build.gradle"
+        }.files.collect { projectDir.toPath().relativize(it.toPath()).toString().replace('\\','/') }.sort()
+        inventory.text = entries.join("\n") + "\n"
+    }
+}
+android.sourceSets.main.assets.srcDir(v13SelfSource.get().asFile)
+tasks.named("preBuild").configure { dependsOn("bundleV13SelfSource") }

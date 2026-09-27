@@ -1,0 +1,48 @@
+#!/system/bin/sh
+set -eu
+
+SELF="$0"
+BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)"
+ROOT="$(CDPATH= cd -- "$BIN_DIR/.." && pwd)"
+CLI="$BIN_DIR/llama-cli"
+SCHEMA="$ROOT/edit-plan.schema.json"
+
+if [ "${1:-}" = "--self-test" ]; then
+  test -x "$CLI"
+  test -f "$SCHEMA"
+  "$CLI" --version >/dev/null 2>&1
+  exit $?
+fi
+
+MODEL=""
+WORKSPACE=""
+REQUEST=""
+OUTPUT=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --model) MODEL="${2:-}"; shift 2 ;;
+    --workspace) WORKSPACE="${2:-}"; shift 2 ;;
+    --request) REQUEST="${2:-}"; shift 2 ;;
+    --output) OUTPUT="${2:-}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+test -x "$CLI"
+test -f "$MODEL"
+test -d "$WORKSPACE"
+test -f "$REQUEST"
+test -f "$SCHEMA"
+test -n "$OUTPUT"
+
+export LD_LIBRARY_PATH="$ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+TMP="$OUTPUT.raw"
+ERR="$OUTPUT.stderr"
+rm -f "$TMP" "$ERR"
+
+"$CLI"   --offline   -m "$MODEL"   -f "$REQUEST"   -c 16384   -n 4096   --temp 0.15   -st   --simple-io   --no-display-prompt   --no-show-timings   --no-warmup   --log-colors off   --no-log-prefix   --no-log-timestamps   -lv 1   -jf "$SCHEMA"   >"$TMP" 2>"$ERR"
+
+cp "$TMP" "$OUTPUT"
+rm -f "$TMP"
+exit 0

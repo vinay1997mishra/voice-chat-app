@@ -1,0 +1,83 @@
+{
+  "schema": "anamika13-function-pack-v1",
+  "pack_id": "owner-utilities",
+  "name": "Owner Utilities",
+  "version": "2026.09.22.1",
+  "functions": [
+    {
+      "id": "full_status",
+      "name": "Full Anamika Status",
+      "description": "Shows components, self-upgrade, health, watchdog and signer status together.",
+      "aliases": ["full status", "anamika full status", "pura status", "sab status", "complete status"],
+      "prefix_aliases": [],
+      "reply": "Anamika ka consolidated status:",
+      "actions": [
+        {"action":"component_status","arg1":"","arg2":"","text":""},
+        {"action":"upgrade_status","arg1":"","arg2":"","text":""},
+        {"action":"health","arg1":"","arg2":"","text":""},
+        {"action":"watchdog","arg1":"","arg2":"","text":""},
+        {"action":"signer_status","arg1":"","arg2":"","text":""}
+      ]
+    },
+    {
+      "id": "offline_stack_status",
+      "name": "Offline Stack Status",
+      "description": "Checks offline brain, component packs and device information together.",
+      "aliases": ["offline stack status", "brain setup status", "offline setup status", "brain aur components status"],
+      "prefix_aliases": [],
+      "reply": "Offline stack check:",
+      "actions": [
+        {"action":"brain_status","arg1":"","arg2":"","text":""},
+        {"action":"component_status","arg1":"","arg2":"","text":""},
+        {"action":"device_info","arg1":"","arg2":"","text":""}
+      ]
+    },
+    {
+      "id": "diagnostic_snapshot",
+      "name": "Diagnostic Snapshot",
+      "description": "Runs self-test and returns the latest diagnostics report.",
+      "aliases": ["diagnostic snapshot", "full diagnostics", "pura diagnostics", "diagnostics check"],
+      "prefix_aliases": [],
+      "reply": "Diagnostic snapshot:",
+      "actions": [
+        {"action":"self_test","arg1":"","arg2":"","text":""},
+        {"action":"diagnostics_report","arg1":"","arg2":"","text":""}
+      ]
+    },
+    {
+      "id": "runtime_health",
+      "name": "Runtime Health Check",
+      "description": "Checks app health, watchdog state and the latest crash record.",
+      "aliases": ["runtime health", "app health check", "crash health check", "runtime check"],
+      "prefix_aliases": [],
+      "reply": "Runtime health:",
+      "actions": [
+        {"action":"health","arg1":"","arg2":"","text":""},
+        {"action":"watchdog","arg1":"","arg2":"","text":""},
+        {"action":"last_crash","arg1":"","arg2":"","text":""}
+      ]
+    },
+    {
+      "id": "deep_research",
+      "name": "Deep Research Shortcut",
+      "description": "Starts the existing research engine with whatever topic follows the trigger.",
+      "aliases": [],
+      "prefix_aliases": ["deep research", "research deeply", "detail research"],
+      "reply": "",
+      "actions": [
+        {"action":"research","arg1":"","arg2":"","text":"$input"}
+      ]
+    },
+    {
+      "id": "remember_note",
+      "name": "Quick Remember",
+      "description": "Stores the text after the trigger in Anamika memory.",
+      "aliases": [],
+      "prefix_aliases": ["quick remember", "note yaad rakh", "memory me save"],
+      "reply": "",
+      "actions": [
+        {"action":"remember","arg1":"","arg2":"","text":"$input"}
+      ]
+    }
+  ]
+}

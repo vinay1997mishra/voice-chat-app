@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'AnamikaAI_V7_8_1_AuditFixed'
-include ':app'
+rootProject.name = 'AnamikaAI13'
+include ':app13'
