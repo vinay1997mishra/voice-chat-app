@@ -303,7 +303,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ).then((_) => setState(() {})),
               ),
               _MineTile(
-                key: const Key('mine-cp-panel'),
                 icon: Icons.favorite_rounded,
                 label: 'CP',
                 color: FeaturePalette.cp,
