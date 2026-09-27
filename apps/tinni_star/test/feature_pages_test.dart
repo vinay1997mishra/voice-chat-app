@@ -34,14 +34,14 @@ TinniState makeState() {
 }
 
 void main() {
-  testWidgets('Mine keeps CP out of personal shortcuts', (tester) async {
+  testWidgets('Mine exposes CP as a separate personal panel', (tester) async {
     final state = makeState();
     await tester.pumpWidget(
       MaterialApp(home: ProfileScreen(state: state)),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('CP'), findsNothing);
+    expect(find.text('CP'), findsOneWidget);
   });
 
   testWidgets('More keeps CP actions out and routes remaining features to pages',
