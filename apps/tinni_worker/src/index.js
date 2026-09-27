@@ -1514,6 +1514,75 @@ export default {
       return json({ ok: true, user: appSession.user });
     }
 
+    if (url.pathname === "/family" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).familyState(
+          appSession.user.user_id,
+        )),
+      });
+    }
+
+    if (url.pathname === "/family/join-request" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyRequestJoin(
+          appSession.user.user_id,
+          body.family_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to request family join") }, 400);
+      }
+    }
+
+    if (url.pathname === "/family/join-request/resolve" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyResolveJoin(
+          appSession.user.user_id,
+          body.user_id,
+          body.approve === true,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to resolve family request") }, 400);
+      }
+    }
+
+    if (url.pathname === "/family/admin" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familySetAdmin(
+          appSession.user.user_id,
+          body.user_id,
+          body.admin === true,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to manage Family Admin") }, 400);
+      }
+    }
+
+    if (url.pathname === "/family/member/remove" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyRemoveMember(
+          appSession.user.user_id,
+          body.user_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to remove family member") }, 400);
+      }
+    }
+
     if (url.pathname === "/livekit/token" && request.method === "POST") {
       if (!env.LIVEKIT_URL || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
         return json({
