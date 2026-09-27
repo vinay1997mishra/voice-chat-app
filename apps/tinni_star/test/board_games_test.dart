@@ -50,7 +50,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: GamesScreen(state: state)),
+      MaterialApp(home: GamesScreen(state: state, roomId: 'test-room')),
     );
     await tester.pumpAndSettle();
 
