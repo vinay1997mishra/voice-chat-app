@@ -478,6 +478,40 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS families (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        tag TEXT NOT NULL,
+        leader_user_id TEXT NOT NULL,
+        experience INTEGER NOT NULL DEFAULT 0,
+        wallet_coins INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_families_leader
+        ON families(leader_user_id);
+
+      CREATE TABLE IF NOT EXISTS family_members (
+        family_id TEXT NOT NULL,
+        user_id TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'member',
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_members_family
+        ON family_members(family_id, role, joined_at);
+
+      CREATE TABLE IF NOT EXISTS family_join_requests (
+        family_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_join_requests_status
+        ON family_join_requests(family_id, status, created_at);
+
       CREATE TABLE IF NOT EXISTS user_id_history (
         old_user_id TEXT PRIMARY KEY,
         new_user_id TEXT NOT NULL,
@@ -3640,7 +3674,159 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-    async createRoom(ownerIdValue, input) {
+    _familyMembership(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    return this.ctx.storage.sql.exec(
+      `SELECT fm.family_id, fm.user_id, fm.role, f.name, f.tag,
+              f.leader_user_id, f.experience, f.wallet_coins
+         FROM family_members fm
+         JOIN families f ON f.id = fm.family_id
+        WHERE fm.user_id = ?
+        LIMIT 1`,
+      userId,
+    ).toArray()[0] || null;
+  }
+
+  _familyCanReview(actorUserIdValue, familyIdValue) {
+    const actor = this._familyMembership(actorUserIdValue);
+    return Boolean(
+      actor &&
+      String(actor.family_id) === String(familyIdValue) &&
+      (String(actor.role) === "leader" || String(actor.role) === "admin")
+    );
+  }
+
+  async familyState(userIdValue) {
+    const membership = this._familyMembership(userIdValue);
+    if (!membership) return { family: null, members: [], join_requests: [] };
+    const familyId = String(membership.family_id);
+    const members = this.ctx.storage.sql.exec(
+      `SELECT fm.user_id, fm.role, fm.joined_at, u.display_name, u.avatar_data_url
+         FROM family_members fm
+         JOIN app_users u ON u.user_id = fm.user_id
+        WHERE fm.family_id = ?
+        ORDER BY CASE fm.role WHEN 'leader' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                 fm.joined_at`,
+      familyId,
+    ).toArray();
+    const requests = this._familyCanReview(userIdValue, familyId)
+      ? this.ctx.storage.sql.exec(
+          `SELECT r.user_id, r.created_at, u.display_name, u.avatar_data_url
+             FROM family_join_requests r
+             JOIN app_users u ON u.user_id = r.user_id
+            WHERE r.family_id = ? AND r.status = 'pending'
+            ORDER BY r.created_at`,
+          familyId,
+        ).toArray()
+      : [];
+    return {
+      family: {
+        id: familyId,
+        name: String(membership.name),
+        tag: String(membership.tag),
+        leader_user_id: String(membership.leader_user_id),
+        experience: Number(membership.experience || 0),
+        wallet_coins: Number(membership.wallet_coins || 0),
+        my_role: String(membership.role),
+      },
+      members,
+      join_requests: requests,
+    };
+  }
+
+  async familyRequestJoin(userIdValue, familyIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const familyId = String(familyIdValue || "").trim();
+    if (this._familyMembership(userId)) throw new Error("Already in a family");
+    const family = this.ctx.storage.sql.exec(
+      "SELECT id FROM families WHERE id = ? LIMIT 1",
+      familyId,
+    ).toArray()[0];
+    if (!family) throw new Error("Family not found");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO family_join_requests
+        (family_id, user_id, status, created_at, updated_at)
+       VALUES (?, ?, 'pending', ?, ?)
+       ON CONFLICT(family_id, user_id) DO UPDATE SET
+         status = 'pending', updated_at = excluded.updated_at`,
+      familyId, userId, now, now,
+    );
+    return { ok: true };
+  }
+
+  async familyResolveJoin(actorUserIdValue, targetUserIdValue, approveValue) {
+    const actor = this._familyMembership(actorUserIdValue);
+    if (!actor || !this._familyCanReview(actorUserIdValue, actor.family_id)) {
+      throw new Error("Family admin permission required");
+    }
+    const targetUserId = String(targetUserIdValue || "").trim();
+    const request = this.ctx.storage.sql.exec(
+      `SELECT user_id FROM family_join_requests
+        WHERE family_id = ? AND user_id = ? AND status = 'pending' LIMIT 1`,
+      actor.family_id, targetUserId,
+    ).toArray()[0];
+    if (!request) throw new Error("Pending join request not found");
+    const now = Date.now();
+    if (Boolean(approveValue)) {
+      if (this._familyMembership(targetUserId)) {
+        throw new Error("User already belongs to a family");
+      }
+      this.ctx.storage.sql.exec(
+        "INSERT INTO family_members (family_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+        actor.family_id, targetUserId, now,
+      );
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE family_join_requests SET status = ?, updated_at = ? WHERE family_id = ? AND user_id = ?",
+      Boolean(approveValue) ? "approved" : "rejected",
+      now, actor.family_id, targetUserId,
+    );
+    return { ok: true, approved: Boolean(approveValue) };
+  }
+
+  async familySetAdmin(actorUserIdValue, targetUserIdValue, makeAdminValue) {
+    const actor = this._familyMembership(actorUserIdValue);
+    if (!actor || String(actor.role) !== "leader") {
+      throw new Error("Only Family Leader can manage Family Admins");
+    }
+    const target = this._familyMembership(targetUserIdValue);
+    if (!target || String(target.family_id) !== String(actor.family_id)) {
+      throw new Error("Target must be an existing member of the same family");
+    }
+    if (String(target.role) === "leader") {
+      throw new Error("Family Leader role cannot be changed here");
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE family_members SET role = ? WHERE family_id = ? AND user_id = ?",
+      Boolean(makeAdminValue) ? "admin" : "member",
+      actor.family_id, target.user_id,
+    );
+    return { ok: true, role: Boolean(makeAdminValue) ? "admin" : "member" };
+  }
+
+  async familyRemoveMember(actorUserIdValue, targetUserIdValue) {
+    const actor = this._familyMembership(actorUserIdValue);
+    const target = this._familyMembership(targetUserIdValue);
+    if (!actor || !target || String(actor.family_id) !== String(target.family_id)) {
+      throw new Error("Target must be in your family");
+    }
+    const actorRole = String(actor.role);
+    const targetRole = String(target.role);
+    const allowed = actorRole === "leader"
+      ? targetRole !== "leader"
+      : actorRole === "admin"
+        ? targetRole === "member"
+        : false;
+    if (!allowed) throw new Error("You cannot remove this family member");
+    this.ctx.storage.sql.exec(
+      "DELETE FROM family_members WHERE family_id = ? AND user_id = ?",
+      actor.family_id, target.user_id,
+    );
+    return { ok: true };
+  }
+
+  async createRoom(ownerIdValue, input) {
     const ownerId = String(ownerIdValue || "").trim();
     const owner = await this.getUserById(ownerId);
     if (!owner) throw new Error("Owner user does not exist");
