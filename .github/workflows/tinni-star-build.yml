@@ -94,7 +94,10 @@ jobs:
       - name: Verify built APK signing certificate
         working-directory: apps/tinni_star
         run: |
-          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-arm64-v8a-release.apk | grep -E 'SHA1:|SHA256:'
+          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs "$APK"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -F "8f6be8da2c2509bf2a248f72b81391e6b05e860e"
 
       - name: Upload Tinni Star ARM64 APK
         uses: actions/upload-artifact@v4
