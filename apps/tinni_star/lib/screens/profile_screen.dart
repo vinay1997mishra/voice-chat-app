@@ -268,6 +268,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          RoyalPanel(
+            key: const Key('mine-cp-panel'),
+            gradient: FeaturePalette.glow(FeaturePalette.cp),
+            accentColor: FeaturePalette.cp,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CpScreen(state: widget.state),
+              ),
+            ).then((_) => setState(() {})),
+            child: const ListTile(
+              leading: Icon(Icons.favorite_rounded, color: FeaturePalette.cp),
+              title: Text('CP Panel', style: TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Text('CP request, relationship, intimacy, memories and disconnect'),
+              trailing: Icon(Icons.chevron_right_rounded),
+            ),
+          ),
+          const SizedBox(height: 14),
           const GoldSectionTitle('Royal Center'),
           const SizedBox(height: 10),
           GridView.count(
@@ -299,17 +317,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => widget.state.family.exists
                         ? FamilyHomeScreen(state: widget.state)
                         : FamilyRankingScreen(state: widget.state),
-                  ),
-                ).then((_) => setState(() {})),
-              ),
-              _MineTile(
-                icon: Icons.favorite_rounded,
-                label: 'CP',
-                color: FeaturePalette.cp,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CpScreen(state: widget.state),
                   ),
                 ).then((_) => setState(() {})),
               ),
