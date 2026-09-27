@@ -977,9 +977,78 @@ async function writeAudit(env, session, action, targetType = null, targetId = nu
   });
 }
 
+
+function publicLegalPage(title, bodyHtml) {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title} - Tinni Star</title>
+  <style>
+    body{margin:0;background:#09051a;color:#f6f1ff;font-family:Arial,sans-serif;line-height:1.6}
+    main{max-width:820px;margin:auto;padding:32px 20px 56px}
+    h1,h2{color:#ffd85a} a{color:#d5a8ff} .card{background:#15102c;border:1px solid #3a2866;border-radius:18px;padding:24px}
+    .muted{color:#c4bbd8;font-size:14px}
+  </style>
+</head>
+<body><main><div class="card"><h1>${title}</h1>${bodyHtml}</div></main></body>
+</html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+
+    if (url.pathname === "/privacy" && request.method === "GET") {
+      return publicLegalPage("Privacy Policy", `
+        <p class="muted">Effective: 27 September 2026</p>
+        <p>Tinni Star is a social voice-room application. This policy explains how information is handled when you use Tinni Star, including when you sign in with Facebook.</p>
+        <h2>Information we may collect</h2>
+        <p>When you use Facebook Login, Tinni Star may receive your Facebook user ID, name/public profile information, and email address when Facebook makes it available. We may also process profile details you provide in Tinni Star, app activity needed to provide social and voice-room features, and limited device/network information needed for security, abuse prevention, and service reliability.</p>
+        <h2>How information is used</h2>
+        <p>Information is used to authenticate you, create and operate your account, provide Tinni Star features, protect users and the service, prevent fraud or abuse, moderate content where necessary, troubleshoot problems, and comply with applicable law.</p>
+        <h2>Sharing</h2>
+        <p>Tinni Star does not sell personal information. Information may be processed by service providers only where needed to operate the app, or disclosed when required by law or to protect users and the service.</p>
+        <h2>Retention and deletion</h2>
+        <p>Data is kept only for as long as reasonably necessary for the purposes above, subject to legal and security requirements. You may request deletion using the <a href="/data-deletion">Tinni Star data deletion instructions</a>.</p>
+        <h2>Children</h2>
+        <p>Tinni Star is not intended for children under 13, or a higher minimum age where local law requires it.</p>
+        <h2>Contact</h2>
+        <p>Privacy and data-deletion requests may be sent to <a href="mailto:vny.mishra1997@gmail.com">vny.mishra1997@gmail.com</a>.</p>
+      `);
+    }
+
+    if (url.pathname === "/data-deletion" && request.method === "GET") {
+      return publicLegalPage("User Data Deletion", `
+        <p>You can request deletion of personal data associated with your Tinni Star account.</p>
+        <h2>How to request deletion</h2>
+        <ol>
+          <li>Send an email to <a href="mailto:vny.mishra1997@gmail.com?subject=Tinni%20Star%20Data%20Deletion%20Request">vny.mishra1997@gmail.com</a> with the subject <strong>Tinni Star Data Deletion Request</strong>.</li>
+          <li>Include your Tinni Star user ID and the email address linked to your account so the account can be verified.</li>
+          <li>If you used Facebook Login, you may also remove Tinni Star from Facebook's Apps and Websites settings. Removing Facebook access does not by itself guarantee deletion of data already stored by Tinni Star, so send the deletion request above as well.</li>
+        </ol>
+        <p>After verification, data that is not required to be retained for legal, fraud-prevention, security, or dispute-resolution reasons will be deleted or anonymized. Requests are normally processed within 30 days.</p>
+      `);
+    }
+
+    if (url.pathname === "/terms" && request.method === "GET") {
+      return publicLegalPage("Terms of Service", `
+        <p class="muted">Effective: 27 September 2026</p>
+        <p>By using Tinni Star, you agree to use the service lawfully and respectfully. You must not use the service for fraud, harassment, illegal activity, impersonation, account theft, or abuse of other users.</p>
+        <p>Tinni Star may restrict or suspend accounts when reasonably necessary to protect users, enforce app rules, comply with law, or protect service integrity.</p>
+        <p>Features may change as the service develops. These terms do not remove rights that cannot legally be waived under applicable consumer or privacy law.</p>
+        <p>Questions may be sent to <a href="mailto:vny.mishra1997@gmail.com">vny.mishra1997@gmail.com</a>.</p>
+      `);
+    }
 
     if (url.pathname === "/health") {
       return json({
