@@ -39,7 +39,7 @@ void main() {
     expect(combo.count, 50);
   });
 
-  test('family detailed features support sign in and lottery', () {
+  test('family detailed features support daily sign in without retired features', () {
     final family = FamilyService()
       ..create(
         familyName: 'Tinni',
@@ -53,8 +53,8 @@ void main() {
     final features = FamilyFeatureService(family);
     expect(features.signIn('1'), true);
     expect(features.signIn('1'), false);
-    final reward = features.draw(2);
-    expect(reward.coins, 500);
+    expect(features.tasks.keys, contains('signin'));
+    expect(features.tasks.keys, isNot(contains('gifts')));
   });
 
   test('cp disconnect and heartbeat states work', () {
