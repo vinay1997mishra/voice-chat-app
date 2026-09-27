@@ -8,6 +8,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 
 import com.anamika.ai.language.AdaptiveLanguageLearner;
 import com.anamika.ai.language.LanguageCommandInterpreter;
@@ -29,6 +30,8 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
     private boolean ttsReady;
+    private volatile boolean listenAfterSpeech;
+    private volatile boolean closed;
 
     public VoiceController(Activity activity,Listener listener){
         this.activity=activity;
@@ -37,7 +40,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     }
 
     public void listen(){
-        WakeService.pauseFor(activity,30000L);
+        WakeService.pauseFor(activity,120000L);
         if(!SpeechRecognizer.isRecognitionAvailable(activity)){
             listener.onVoiceState("Speech recognition is unavailable on this phone.");
             return;
@@ -62,17 +65,55 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     }
 
     public void speak(String text){
-        if(!ttsReady||text==null||text.trim().isEmpty())return;
+        speakInternal(text,false);
+    }
+
+    /** Speak the acknowledgement/reply and reopen foreground listening afterwards. */
+    public void speakThenListen(String text){
+        speakInternal(text,true);
+    }
+
+    private void speakInternal(String text,boolean continueListening){
+        listenAfterSpeech=continueListening;
+        if(text==null||text.trim().isEmpty()){
+            if(continueListening)continueListeningAfterSpeech();
+            return;
+        }
+        if(!ttsReady||tts==null){
+            // TTS can still be initializing immediately after Activity launch.
+            // Do not lose the hands-free follow-up merely because voice output is late.
+            if(continueListening)
+                activity.getWindow().getDecorView().postDelayed(this::continueListeningAfterSpeech,650);
+            return;
+        }
         try{
             if(containsDevanagari(text))tts.setLanguage(new Locale("hi","IN"));
             else tts.setLanguage(new Locale("en","IN"));
         }catch(Throwable ignored){}
         try{
-            if(tts!=null)tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"anamika13_reply");
-        }catch(Throwable ignored){}
+            tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"anamika13_reply");
+        }catch(Throwable ignored){
+            if(continueListening)continueListeningAfterSpeech();
+        }
+    }
+
+    private void continueListeningAfterSpeech(){
+        if(!listenAfterSpeech)return;
+        listenAfterSpeech=false;
+        activity.runOnUiThread(()->{
+            if(closed||activity.isFinishing()||
+                    (Build.VERSION.SDK_INT>=17&&activity.isDestroyed())||
+                    !activity.hasWindowFocus()){
+                WakeService.resume(activity);
+                return;
+            }
+            listen();
+        });
     }
 
     public void close(){
+        closed=true;
+        listenAfterSpeech=false;
         stopRecognizer();
         WakeService.resume(activity);
         if(tts!=null){tts.stop();tts.shutdown();tts=null;}
@@ -156,8 +197,19 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
 
     @Override public void onInit(int status){
         ttsReady=status==TextToSpeech.SUCCESS;
-        if(ttsReady){
+        if(ttsReady&&tts!=null){
             try{tts.setLanguage(new Locale("en","IN"));}catch(Throwable ignored){}
+            try{
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){
+                    @Override public void onStart(String utteranceId){}
+                    @Override public void onDone(String utteranceId){
+                        if("anamika13_reply".equals(utteranceId))continueListeningAfterSpeech();
+                    }
+                    @Override public void onError(String utteranceId){
+                        if("anamika13_reply".equals(utteranceId))continueListeningAfterSpeech();
+                    }
+                });
+            }catch(Throwable ignored){}
         }
     }
     @Override public void onReadyForSpeech(Bundle params){listener.onVoiceState("Listening…");}
@@ -174,9 +226,15 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         String text=bestResult(list);
         stopRecognizer();
-        WakeService.resume(activity);
-        if(!text.isEmpty())listener.onVoiceText(text);
-        else listener.onVoiceState("Command clear nahi mili.");
+        if(!text.isEmpty()){
+            // Keep background wake paused while the foreground voice turn is being
+            // planned/executed. The reply will either reopen foreground listening
+            // or explicitly hand the microphone back to WakeService.
+            listener.onVoiceText(text);
+        }else{
+            WakeService.resume(activity);
+            listener.onVoiceState("Command clear nahi mili.");
+        }
     }
     @Override public void onPartialResults(Bundle partialResults){}
     @Override public void onEvent(int eventType,Bundle params){}
