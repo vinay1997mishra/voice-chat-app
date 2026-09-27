@@ -119,6 +119,28 @@ class FamilyService {
     level = 1 + experience ~/ 5000;
   }
 
+  /// Applies a received-coin event for a current family member.
+  ///
+  /// Receiving coins grants Family EXP at 1 EXP per coin. Sending coins does
+  /// not call this method and therefore grants no Family EXP. A unique
+  /// transaction id is counted only once.
+  final Set<String> _countedReceivedTransactions = <String>{};
+
+  bool recordCoinsReceived({
+    required String transactionId,
+    required String receiverUserId,
+    required int coins,
+  }) {
+    if (transactionId.trim().isEmpty || coins <= 0) return false;
+    if (!isMember(receiverUserId)) return false;
+    if (!_countedReceivedTransactions.add(transactionId)) return false;
+    addExperience(coins);
+    records.add(
+      receiverUserId + ' received ' + coins.toString() + ' coins',
+    );
+    return true;
+  }
+
   void deposit(int coins) {
     if (coins <= 0) return;
     walletCoins += coins;
