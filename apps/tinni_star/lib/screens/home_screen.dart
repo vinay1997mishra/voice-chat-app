@@ -12,6 +12,7 @@ import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
 
 import 'cp_ranking_screen.dart';
+import 'cp_screen.dart';
 import 'discover_screen.dart';
 import 'feature_center_screen.dart';
 import 'family_ranking_screen.dart';
@@ -216,6 +217,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted || room == null) return;
     openRoom(room);
+  }
+
+  void openCpPanel() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CpScreen(state: widget.state),
+      ),
+    );
   }
 
   void openCpRanking() {
@@ -530,9 +540,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _FeatureCard(
                 key: const Key('party-cp-button'),
-                title: 'CP Ranking',
+                title: 'CP Panel',
                 icon: Icons.favorite_rounded,
-                onTap: openCpRanking,
+                onTap: openCpPanel,
               ),
             ),
             const SizedBox(width: 8),
