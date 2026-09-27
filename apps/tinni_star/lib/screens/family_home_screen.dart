@@ -6,6 +6,152 @@ import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import 'room_screen.dart';
 
+class FamilyWalletScreen extends StatefulWidget {
+  const FamilyWalletScreen({
+    super.key,
+    required this.state,
+    required this.familyName,
+  });
+
+  final TinniState state;
+  final String familyName;
+
+  @override
+  State<FamilyWalletScreen> createState() => _FamilyWalletScreenState();
+}
+
+class _FamilyWalletScreenState extends State<FamilyWalletScreen> {
+  Future<void> _sendCoins(FamilyMember member) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Send coins to ' + member.name),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Coins'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              Navigator.pop(context, value);
+            },
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null || amount <= 0 || !mounted) return;
+    final sent = widget.state.wallet.spendCoins(
+      amount,
+      'Family transfer to ' + member.userId,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          sent
+              ? amount.toString() + ' coins sent to ' + member.name
+              : 'Not enough coins.',
+        ),
+      ),
+    );
+    if (sent) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final members = widget.state.family.members;
+    return Scaffold(
+      key: const Key('family-wallet-screen'),
+      appBar: AppBar(title: const Text('Family Wallet')),
+      body: ListView(
+        padding: const EdgeInsets.all(14),
+        children: [
+          RoyalPanel(
+            key: const Key('family-wallet-balance'),
+            gradient: FeaturePalette.glow(FeaturePalette.wallet),
+            accentColor: FeaturePalette.wallet,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.familyName,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Family Wallet: ' +
+                      widget.state.family.walletCoins.toString() +
+                      ' coins',
+                  style: const TextStyle(color: RoyalPalette.muted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final member in members)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: RoyalPanel(
+                key: Key('family-wallet-member-' + member.userId),
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      child: Text(
+                        member.name.trim().isEmpty
+                            ? '?'
+                            : member.name.trim()[0].toUpperCase(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            member.name,
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'ID: ' + member.userId,
+                            style: const TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      key: Key('family-wallet-send-' + member.userId),
+                      onPressed: () => _sendCoins(member),
+                      child: const Text('Send Coins'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class FamilyHomeScreen extends StatefulWidget {
   const FamilyHomeScreen({
     super.key,
@@ -536,6 +682,21 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
             ),
             RoyalPanel(
               key: const Key('family-wallet-card'),
+              onTap: widget.state.family.exists
+                  ? () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FamilyWalletScreen(
+                            state: widget.state,
+                            familyName: _name,
+                          ),
+                        ),
+                      ).then((_) {
+                        if (mounted) setState(() {});
+                      });
+                    }
+                  : null,
               gradient: FeaturePalette.glow(FeaturePalette.wallet),
               accentColor: FeaturePalette.wallet,
               child: Column(
