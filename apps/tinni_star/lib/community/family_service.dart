@@ -20,6 +20,16 @@ class FamilyMember {
       );
 }
 
+class FamilyJoinRequest {
+  const FamilyJoinRequest({
+    required this.userId,
+    required this.name,
+  });
+
+  final String userId;
+  final String name;
+}
+
 class FamilyService {
   String? name;
   String? tag;
@@ -28,6 +38,7 @@ class FamilyService {
   int experience = 0;
   int walletCoins = 0;
   final List<FamilyMember> members = <FamilyMember>[];
+  final List<FamilyJoinRequest> pendingJoinRequests = <FamilyJoinRequest>[];
   final List<String> records = <String>[];
 
   bool get exists => name != null;
@@ -91,6 +102,97 @@ class FamilyService {
   void updateNotice(String value) {
     notice = value.trim();
     records.add('Family announcement updated');
+  }
+
+  FamilyMember? memberById(String userId) {
+    for (final member in members) {
+      if (member.userId == userId) return member;
+    }
+    return null;
+  }
+
+  bool isLeader(String userId) => memberById(userId)?.role == FamilyRole.head;
+
+  bool isAdmin(String userId) =>
+      memberById(userId)?.role == FamilyRole.deputyHead;
+
+  bool canReviewJoinRequests(String actorUserId) =>
+      isLeader(actorUserId) || isAdmin(actorUserId);
+
+  bool canRemoveMember({
+    required String actorUserId,
+    required String targetUserId,
+  }) {
+    if (actorUserId == targetUserId) return false;
+    final actor = memberById(actorUserId);
+    final target = memberById(targetUserId);
+    if (actor == null || target == null) return false;
+    if (actor.role == FamilyRole.head) {
+      return target.role != FamilyRole.head;
+    }
+    if (actor.role == FamilyRole.deputyHead) {
+      return target.role == FamilyRole.member ||
+          target.role == FamilyRole.assistant;
+    }
+    return false;
+  }
+
+  bool requestToJoin(FamilyJoinRequest request) {
+    if (!exists || request.userId.trim().isEmpty || request.name.trim().isEmpty) {
+      return false;
+    }
+    if (isMember(request.userId)) return false;
+    if (pendingJoinRequests.any((item) => item.userId == request.userId)) {
+      return false;
+    }
+    pendingJoinRequests.add(request);
+    records.add(request.name + ' requested to join');
+    return true;
+  }
+
+  bool approveJoinRequest({
+    required String actorUserId,
+    required String userId,
+  }) {
+    if (!canReviewJoinRequests(actorUserId)) return false;
+    final index =
+        pendingJoinRequests.indexWhere((request) => request.userId == userId);
+    if (index < 0) return false;
+    final request = pendingJoinRequests.removeAt(index);
+    join(FamilyMember(
+      userId: request.userId,
+      name: request.name,
+      role: FamilyRole.member,
+    ));
+    records.add(request.name + ' join request approved');
+    return true;
+  }
+
+  bool rejectJoinRequest({
+    required String actorUserId,
+    required String userId,
+  }) {
+    if (!canReviewJoinRequests(actorUserId)) return false;
+    final index =
+        pendingJoinRequests.indexWhere((request) => request.userId == userId);
+    if (index < 0) return false;
+    final request = pendingJoinRequests.removeAt(index);
+    records.add(request.name + ' join request rejected');
+    return true;
+  }
+
+  bool removeMemberAs({
+    required String actorUserId,
+    required String targetUserId,
+  }) {
+    if (!canRemoveMember(
+      actorUserId: actorUserId,
+      targetUserId: targetUserId,
+    )) {
+      return false;
+    }
+    removeMember(targetUserId);
+    return true;
   }
 
   void removeMember(String userId) {
