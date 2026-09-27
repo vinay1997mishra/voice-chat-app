@@ -49,6 +49,9 @@ public final class WakeService extends Service implements RecognitionListener {
     private AudioManager audioManager;
     private AudioManager.AudioPlaybackCallback playbackCallback;
     private AudioManager.AudioRecordingCallback recordingCallback;
+    private boolean listening;
+    private int consecutiveErrors;
+    private long recognitionStartedMs;
     private static volatile boolean running;
 
     public static boolean isEnabled(Context c){
@@ -135,6 +138,10 @@ public final class WakeService extends Service implements RecognitionListener {
 
     private void startListening(){
         if(stopping||!isEnabled(this))return;
+        // onCreate + onStartCommand + audio callbacks can all request a restart.
+        // Never tear down a healthy recognizer merely because a duplicate start
+        // request arrived.
+        if(listening&&recognizer!=null)return;
 
         long pauseUntil=getSharedPreferences(PREF,MODE_PRIVATE).getLong(KEY_PAUSE_UNTIL,0L);
         long now=System.currentTimeMillis();
@@ -168,6 +175,8 @@ public final class WakeService extends Service implements RecognitionListener {
             configureRecognitionLanguages(i);
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,false);
             i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
+            listening=true;
+            recognitionStartedMs=System.currentTimeMillis();
             recognizer.startListening(i);
             update("Say “Hello Anamika” or “Hello Mika”");
         }catch(Throwable t){
@@ -284,7 +293,27 @@ public final class WakeService extends Service implements RecognitionListener {
     }
 
     private boolean hasCompetingRecording(List<AudioRecordingConfiguration> configs){
-        if(Build.VERSION.SDK_INT<29||configs==null)return false;
+        if(Build.VERSION.SDK_INT<29||configs==null||configs.isEmpty())return false;
+
+        // Some vendor speech recognizers expose Anamika's own capture as MIC or
+        // DEFAULT instead of VOICE_RECOGNITION. Treat one fresh recording as our
+        // own while this recognizer is actively listening. Previously that event
+        // could make the service destroy its own recognizer in a tight loop.
+        if(listening&&recognizer!=null&&configs.size()==1){
+            AudioRecordingConfiguration only=configs.get(0);
+            if(only!=null){
+                try{
+                    int source=only.getClientAudioSource();
+                    if(source==MediaRecorder.AudioSource.VOICE_RECOGNITION||
+                            source==MediaRecorder.AudioSource.MIC||
+                            source==MediaRecorder.AudioSource.DEFAULT){
+                        long age=System.currentTimeMillis()-recognitionStartedMs;
+                        if(age>=0&&age<120000L)return false;
+                    }
+                }catch(Throwable ignored){}
+            }
+        }
+
         for(AudioRecordingConfiguration x:configs){
             if(x==null)continue;
             try{
@@ -345,6 +374,8 @@ public final class WakeService extends Service implements RecognitionListener {
     }
 
     private void destroyRecognizer(){
+        listening=false;
+        recognitionStartedMs=0L;
         if(recognizer!=null){
             try{recognizer.cancel();}catch(Throwable ignored){}
             try{recognizer.destroy();}catch(Throwable ignored){}
@@ -367,12 +398,37 @@ public final class WakeService extends Service implements RecognitionListener {
     @Override public void onRmsChanged(float rmsdB){}
     @Override public void onBufferReceived(byte[] buffer){}
     @Override public void onEndOfSpeech(){}
-    @Override public void onError(int error){destroyRecognizer();schedule(error==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS?5000:1200);}
+    @Override public void onError(int error){
+        destroyRecognizer();
+
+        if(error==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS){
+            update("Wake on • microphone permission required");
+            // Keep the owner preference enabled, but stop the service instead of
+            // burning CPU in an impossible retry loop. MainActivity restarts it
+            // after permission is available.
+            stopSelf();
+            return;
+        }
+
+        if(error==SpeechRecognizer.ERROR_NO_MATCH||error==SpeechRecognizer.ERROR_SPEECH_TIMEOUT){
+            consecutiveErrors=0;
+            schedule(900);
+            return;
+        }
+
+        consecutiveErrors=Math.min(consecutiveErrors+1,5);
+        long delay=1000L*(1L<<Math.min(consecutiveErrors,4));
+        if(error==SpeechRecognizer.ERROR_RECOGNIZER_BUSY)delay=Math.max(delay,3000L);
+        delay=Math.min(delay,16000L);
+        update("Wake on • recognizer retry in "+Math.max(1L,delay/1000L)+"s");
+        schedule(delay);
+    }
     @Override public void onResults(Bundle results){
+        consecutiveErrors=0;
         ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if(list!=null&&!list.isEmpty())handleText(list.get(0));
         destroyRecognizer();
-        schedule(600);
+        schedule(700);
     }
     @Override public void onPartialResults(Bundle partialResults){}
     @Override public void onEvent(int eventType,Bundle params){}

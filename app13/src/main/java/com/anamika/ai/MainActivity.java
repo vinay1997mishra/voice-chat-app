@@ -137,6 +137,7 @@ public final class MainActivity extends Activity implements VoiceController.List
                     Toast.makeText(this,"Owner verified",Toast.LENGTH_SHORT).show();
                     showAssistant();
                     maybeOfferStartupSetup();
+                    handleWakeCommand();
                     handleConnectorCommand();
                 }else Toast.makeText(this,"Wrong Owner PIN",Toast.LENGTH_LONG).show();
             }catch(Exception e){
@@ -682,6 +683,7 @@ public final class MainActivity extends Activity implements VoiceController.List
         if(id==null||id.trim().isEmpty()||command==null||command.trim().isEmpty())return;
         getIntent().removeExtra("connector_command_id");
         getIntent().removeExtra("connector_command");
+        ChatGptConnectorService.clearPendingNotification(this);
         append("Anamika","ChatGPT Connector se command received.");
         runCommand(command.trim(),id.trim());
     }

@@ -18,6 +18,7 @@ import org.json.JSONObject;
 public final class ChatGptConnectorService extends Service {
     private static final String CHANNEL="anamika13_chatgpt_connector";
     private static final int NOTIFICATION_ID=1314;
+    private static final int PENDING_NOTIFICATION_ID=1315;
     public static final String ACTION_STOP="com.anamika.ai.v13.CONNECTOR_STOP";
     private volatile boolean stopping;
     private Thread worker;
@@ -68,11 +69,17 @@ public final class ChatGptConnectorService extends Service {
                     String text=cmd.optString("text","");
                     if(!id.isEmpty()&&!text.trim().isEmpty()){
                         update("ChatGPT command received");
+                        // Android may block activity launches initiated from a background
+                        // foreground-service process. Keep a durable owner-visible fallback
+                        // notification carrying the exact queued command before trying the
+                        // direct launch. MainActivity clears it only after consuming extras.
+                        showPendingCommandNotification(id,text);
                         Intent open=new Intent(this,MainActivity.class)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP)
                                 .putExtra("connector_command_id",id)
                                 .putExtra("connector_command",text);
-                        startActivity(open);
+                        try{ startActivity(open); }
+                        catch(Throwable ignored){ update("ChatGPT command waiting • tap notification"); }
                     }
                 }else update("ChatGPT connector online");
                 Thread.sleep(2500L);
@@ -105,6 +112,34 @@ public final class ChatGptConnectorService extends Service {
     private void update(String text){
         NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         if(nm!=null)nm.notify(NOTIFICATION_ID,notification(text));
+    }
+
+    private void showPendingCommandNotification(String commandId,String command){
+        Intent open=new Intent(this,MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("connector_command_id",commandId)
+                .putExtra("connector_command",command);
+        int requestCode=15000+(Math.abs(commandId.hashCode())%10000);
+        PendingIntent pi=PendingIntent.getActivity(
+                this,requestCode,open,
+                AndroidCompat.immutablePendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT));
+        Notification.Builder b=Build.VERSION.SDK_INT>=26
+                ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
+        Notification n=b.setContentTitle("Anamika • ChatGPT command")
+                .setContentText("Command received • tap only if Anamika did not open automatically")
+                .setStyle(new Notification.BigTextStyle().bigText(
+                        "ChatGPT command received. Android ne background app-open block kiya ho to yahan tap karke command continue karein."))
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build();
+        NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+        if(nm!=null)nm.notify(PENDING_NOTIFICATION_ID,n);
+    }
+
+    public static void clearPendingNotification(Context c){
+        NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if(nm!=null)nm.cancel(PENDING_NOTIFICATION_ID);
     }
 
     @Override public void onDestroy(){
