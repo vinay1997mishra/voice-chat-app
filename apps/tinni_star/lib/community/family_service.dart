@@ -133,6 +133,17 @@ class FamilyService {
   int? get nextLevelRequiredExperience =>
       level >= 11 ? null : levelExperienceThresholds[level];
 
+  /// Monthly Family Wallet bonus by level: L1 1.00%, +0.25% each level,
+  /// capped at L11 3.50%.
+  int get monthlyWalletBonusBasisPoints => 100 + ((level - 1).clamp(0, 10) * 25);
+
+  double get monthlyWalletBonusPercent => monthlyWalletBonusBasisPoints / 100.0;
+
+  int monthlyWalletBonusFor(int baseCoins) {
+    if (baseCoins <= 0) return 0;
+    return (baseCoins * monthlyWalletBonusBasisPoints) ~/ 10000;
+  }
+
   double get levelProgress {
     final next = nextLevelRequiredExperience;
     if (next == null) return 1.0;
