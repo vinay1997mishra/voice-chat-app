@@ -1029,6 +1029,41 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
     setState(() {});
   }
 
+  Future<void> _manageAdmin(FamilyMember admin) async {
+    if (!_viewerIsLeader || admin.role != FamilyRole.deputyHead) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: Key('family-admin-manage-' + admin.userId),
+        title: Text(admin.name),
+        content: Text('ID ' + admin.userId),
+        actions: [
+          TextButton(
+            key: const Key('family-remove-admin-role'),
+            onPressed: () => Navigator.pop(context, 'demote'),
+            child: const Text('Remove Admin'),
+          ),
+          TextButton(
+            key: const Key('family-remove-admin-family'),
+            onPressed: () => Navigator.pop(context, 'remove'),
+            child: const Text('Remove from Family'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'demote') {
+      widget.state.family.appoint(admin.userId, FamilyRole.member);
+    } else if (action == 'remove') {
+      widget.state.family.removeMember(admin.userId);
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1254,9 +1289,16 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
           children: [
             for (var i = 0; i < 6; i++)
               if (i < deputies.length)
-                _RoleAvatar(
-                  member: deputies[i],
-                  label: deputies[i].name,
+                InkWell(
+                  key: Key('family-admin-entry-' + deputies[i].userId),
+                  onTap: _viewerIsLeader
+                      ? () => _manageAdmin(deputies[i])
+                      : null,
+                  borderRadius: BorderRadius.circular(50),
+                  child: _RoleAvatar(
+                    member: deputies[i],
+                    label: deputies[i].name,
+                  ),
                 )
               else if (i < 3)
                 InkWell(
