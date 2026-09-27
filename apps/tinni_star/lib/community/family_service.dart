@@ -113,10 +113,47 @@ class FamilyService {
     records.add(members[index].name + ' role changed');
   }
 
+  static const List<int> levelExperienceThresholds = <int>[
+    0,
+    50000000,
+    240000000,
+    580000000,
+    970000000,
+    1300000000,
+    1800000000,
+    2500000000,
+    3500000000,
+    6000000000,
+    15000000000,
+  ];
+
+  int get levelRequiredExperience =>
+      levelExperienceThresholds[(level - 1).clamp(0, 10)];
+
+  int? get nextLevelRequiredExperience =>
+      level >= 11 ? null : levelExperienceThresholds[level];
+
+  double get levelProgress {
+    final next = nextLevelRequiredExperience;
+    if (next == null) return 1.0;
+    final current = levelRequiredExperience;
+    final span = next - current;
+    if (span <= 0) return 1.0;
+    return ((experience - current) / span).clamp(0.0, 1.0);
+  }
+
   void addExperience(int value) {
     if (value <= 0) return;
     experience += value;
-    level = 1 + experience ~/ 5000;
+    var resolvedLevel = 1;
+    for (var i = 1; i < levelExperienceThresholds.length; i++) {
+      if (experience >= levelExperienceThresholds[i]) {
+        resolvedLevel = i + 1;
+      } else {
+        break;
+      }
+    }
+    level = resolvedLevel;
   }
 
   /// Applies a received-coin event for a current family member.
