@@ -40,7 +40,7 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
     }
 
     public void listen(){
-        WakeService.pauseFor(activity,30000L);
+        WakeService.pauseFor(activity,120000L);
         if(!SpeechRecognizer.isRecognitionAvailable(activity)){
             listener.onVoiceState("Speech recognition is unavailable on this phone.");
             return;
@@ -226,9 +226,15 @@ public final class VoiceController implements RecognitionListener, TextToSpeech.
         ArrayList<String> list=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         String text=bestResult(list);
         stopRecognizer();
-        WakeService.resume(activity);
-        if(!text.isEmpty())listener.onVoiceText(text);
-        else listener.onVoiceState("Command clear nahi mili.");
+        if(!text.isEmpty()){
+            // Keep background wake paused while the foreground voice turn is being
+            // planned/executed. The reply will either reopen foreground listening
+            // or explicitly hand the microphone back to WakeService.
+            listener.onVoiceText(text);
+        }else{
+            WakeService.resume(activity);
+            listener.onVoiceState("Command clear nahi mili.");
+        }
     }
     @Override public void onPartialResults(Bundle partialResults){}
     @Override public void onEvent(int eventType,Bundle params){}
