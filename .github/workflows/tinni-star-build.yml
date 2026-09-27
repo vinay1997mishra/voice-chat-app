@@ -50,6 +50,25 @@ jobs:
           cp tool/TinniRoomForegroundService.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/TinniRoomForegroundService.kt
           mkdir -p "$HOME/.android"
           cp tool/tinni-dev-debug.keystore "$HOME/.android/debug.keystore"
+          cp tool/tinni-dev-debug.keystore android/app/tinni-release.keystore
+          cat >> android/key.properties <<'EOF'
+          storePassword=android
+          keyPassword=android
+          keyAlias=androiddebugkey
+          storeFile=tinni-release.keystore
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace('plugins {', 'import java.util.Properties\nimport java.io.FileInputStream\n\nplugins {', 1)
+          marker = 'android {'
+          setup = '''val keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nkeystoreProperties.load(FileInputStream(keystorePropertiesFile))\n\n'''
+          s = s.replace(marker, setup + marker, 1)
+          s = s.replace('buildTypes {\n        release {', '''signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }\n    buildTypes {\n        release {''', 1)
+          s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          p.write_text(s)
+          PY
 
       - name: Verify Android signing fingerprint
         working-directory: apps/tinni_star
@@ -71,6 +90,11 @@ jobs:
       - name: Build installable APK
         working-directory: apps/tinni_star
         run: flutter build apk --release --split-per-abi
+
+      - name: Verify built APK signing certificate
+        working-directory: apps/tinni_star
+        run: |
+          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-arm64-v8a-release.apk | grep -E 'SHA1:|SHA256:'
 
       - name: Upload Tinni Star ARM64 APK
         uses: actions/upload-artifact@v4
