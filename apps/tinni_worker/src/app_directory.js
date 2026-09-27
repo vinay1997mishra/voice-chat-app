@@ -3608,8 +3608,8 @@ export class AppDirectoryStore extends DurableObject {
     const nextGeneration = Number(oldLock?.generation || 0) + 1;
 
     if (locked) {
-      if (password.length < 4 || password.length > 32) {
-        throw new Error("Room password must be 4 to 32 characters");
+      if (!/^\\d{5,7}$/.test(password)) {
+        throw new Error("Room password must be 5 to 7 digits");
       }
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const hash = await deriveSecret(password, salt, 120000);
