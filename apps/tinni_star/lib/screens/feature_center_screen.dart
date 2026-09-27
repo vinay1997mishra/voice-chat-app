@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
-import 'cp_disconnect_screen.dart';
-import 'cp_screen.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'recharge_screen.dart';
@@ -71,16 +69,6 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         'VIP / Noble',
         Icons.workspace_premium_rounded,
         () => _open(VipScreen(state: state)),
-      ),
-      _FeatureAction(
-        'CP / Courting',
-        Icons.favorite_rounded,
-        () => _open(CpScreen(state: state)),
-      ),
-      _FeatureAction(
-        'CP Disconnect Flow',
-        Icons.heart_broken_rounded,
-        () => _open(CpDisconnectScreen(state: state)),
       ),
       _FeatureAction(
         'Family',
