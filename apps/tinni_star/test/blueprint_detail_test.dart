@@ -90,6 +90,90 @@ void main() {
     expect(family.walletCoins, 50000);
   });
 
+  test('family admin permissions stay scoped to own family roles', () {
+    final family = FamilyService()
+      ..create(
+        familyName: 'Tinni',
+        familyTag: 'TS',
+        head: const FamilyMember(
+          userId: 'leader',
+          name: 'Leader',
+          role: FamilyRole.head,
+        ),
+      )
+      ..join(const FamilyMember(
+        userId: 'admin',
+        name: 'Admin',
+        role: FamilyRole.member,
+      ))
+      ..join(const FamilyMember(
+        userId: 'member',
+        name: 'Member',
+        role: FamilyRole.member,
+      ))
+      ..join(const FamilyMember(
+        userId: 'admin2',
+        name: 'Admin Two',
+        role: FamilyRole.member,
+      ));
+    family.appoint('admin', FamilyRole.deputyHead);
+    family.appoint('admin2', FamilyRole.deputyHead);
+
+    expect(
+      family.requestToJoin(
+        const FamilyJoinRequest(userId: 'new', name: 'New Member'),
+      ),
+      true,
+    );
+    expect(
+      family.approveJoinRequest(actorUserId: 'admin', userId: 'new'),
+      true,
+    );
+    expect(family.isMember('new'), true);
+
+    expect(
+      family.requestToJoin(
+        const FamilyJoinRequest(userId: 'reject', name: 'Rejected Member'),
+      ),
+      true,
+    );
+    expect(
+      family.rejectJoinRequest(actorUserId: 'admin', userId: 'reject'),
+      true,
+    );
+    expect(family.isMember('reject'), false);
+
+    expect(
+      family.canRemoveMember(
+        actorUserId: 'admin',
+        targetUserId: 'leader',
+      ),
+      false,
+    );
+    expect(
+      family.canRemoveMember(
+        actorUserId: 'admin',
+        targetUserId: 'admin2',
+      ),
+      false,
+    );
+    expect(
+      family.removeMemberAs(
+        actorUserId: 'admin',
+        targetUserId: 'member',
+      ),
+      true,
+    );
+    expect(family.isMember('member'), false);
+    expect(
+      family.removeMemberAs(
+        actorUserId: 'outside-family',
+        targetUserId: 'new',
+      ),
+      false,
+    );
+  });
+
   test('cp disconnect and heartbeat states work', () {
     final cp = CpFeatureService()
       ..requestDisconnect('1')
