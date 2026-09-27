@@ -11,6 +11,7 @@ import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
+import 'cp_screen.dart';
 import 'vip_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -298,6 +299,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => widget.state.family.exists
                         ? FamilyHomeScreen(state: widget.state)
                         : FamilyRankingScreen(state: widget.state),
+                  ),
+                ).then((_) => setState(() {})),
+              ),
+              _MineTile(
+                key: const Key('mine-cp-panel'),
+                icon: Icons.favorite_rounded,
+                label: 'CP',
+                color: FeaturePalette.cp,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CpScreen(state: widget.state),
                   ),
                 ).then((_) => setState(() {})),
               ),
