@@ -953,14 +953,78 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
       ? widget.state.family.members
       : widget.members;
 
+  bool get _viewerIsLeader {
+    final viewerId = widget.state.auth.current?.userId;
+    if (viewerId == null) return false;
+    return widget.state.family.head?.userId == viewerId;
+  }
+
   Future<void> _appointDeputy() async {
-    if (!widget.state.family.exists) return;
-    final candidate = widget.state.family.members.where(
-      (member) =>
-          member.role != FamilyRole.head &&
-          member.role != FamilyRole.deputyHead,
-    ).firstOrNull;
-    if (candidate == null) return;
+    if (!widget.state.family.exists || !_viewerIsLeader) return;
+    final controller = TextEditingController();
+    final searchedId = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('family-admin-id-search-card'),
+        title: const Text('Add Family Admin'),
+        content: TextField(
+          key: const Key('family-admin-id-search-input'),
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'ID Number',
+            hintText: 'Search existing family member',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (searchedId == null || searchedId.isEmpty || !mounted) return;
+    final candidate = widget.state.family.members
+        .where(
+          (member) =>
+              member.userId == searchedId &&
+              member.role != FamilyRole.head &&
+              member.role != FamilyRole.deputyHead,
+        )
+        .firstOrNull;
+    if (candidate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ID must belong to an existing family member.'),
+        ),
+      );
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(candidate.name),
+        content: Text('ID ' + candidate.userId + '\nMake Family Admin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('family-admin-confirm-add'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Make Admin'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     widget.state.family.appoint(candidate.userId, FamilyRole.deputyHead);
     setState(() {});
   }
@@ -1197,7 +1261,7 @@ class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
               else if (i < 3)
                 InkWell(
                   key: Key('family-add-deputy-' + i.toString()),
-                  onTap: _appointDeputy,
+                  onTap: _viewerIsLeader ? _appointDeputy : null,
                   borderRadius: BorderRadius.circular(50),
                   child: const _EmptyRoleSlot(locked: false),
                 )
