@@ -797,7 +797,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                   ? CrossAxisAlignment.end
                                   : CrossAxisAlignment.start,
                               children: [
-                                Text(displayText),
+                                SelectableText(
+                                  displayText,
+                                  key: Key(
+                                    'message-selectable-' +
+                                        (message.id ?? index.toString()),
+                                  ),
+                                ),
                                 if (verificationNotice) ...[
                                   const SizedBox(height: 8),
                                   FilledButton.icon(
