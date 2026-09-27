@@ -135,8 +135,18 @@ class FamilyService {
     if (!isMember(receiverUserId)) return false;
     if (!_countedReceivedTransactions.add(transactionId)) return false;
     addExperience(coins);
+    final walletShare = coins ~/ 100;
+    if (walletShare > 0) {
+      deposit(walletShare);
+    }
     records.add(
-      receiverUserId + ' received ' + coins.toString() + ' coins',
+      receiverUserId +
+          ' received ' +
+          coins.toString() +
+          ' coins; Family EXP +' +
+          coins.toString() +
+          '; wallet 1% +' +
+          walletShare.toString(),
     );
     return true;
   }
