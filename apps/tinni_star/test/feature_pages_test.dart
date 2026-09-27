@@ -34,28 +34,26 @@ TinniState makeState() {
 }
 
 void main() {
-  testWidgets('Mine CP opens the CP page', (tester) async {
+  testWidgets('Mine keeps CP out of personal shortcuts', (tester) async {
     final state = makeState();
     await tester.pumpWidget(
       MaterialApp(home: ProfileScreen(state: state)),
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('CP'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('CP'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('cp-screen')), findsOneWidget);
+    expect(find.text('CP'), findsNothing);
   });
 
-  testWidgets('More routes store CP disconnect family and sharing to pages',
+  testWidgets('More keeps CP actions out and routes remaining features to pages',
       (tester) async {
     final state = makeState();
     await tester.pumpWidget(
       MaterialApp(home: FeatureCenterScreen(state: state)),
     );
     await tester.pumpAndSettle();
+
+    expect(find.text('CP / Courting'), findsNothing);
+    expect(find.text('CP Disconnect Flow'), findsNothing);
 
     Future<void> openFeature(String label, Key destinationKey) async {
       final finder = find.text(label);
@@ -70,38 +68,13 @@ void main() {
       expect(find.byKey(destinationKey), findsOneWidget);
     }
 
-    await openFeature(
-      'Store / Inventory',
-      const Key('store-screen'),
-    );
+    await openFeature('Store / Inventory', const Key('store-screen'));
     await tester.pageBack();
     await tester.pumpAndSettle();
-
-    await openFeature(
-      'CP / Courting',
-      const Key('cp-screen'),
-    );
+    await openFeature('Family', const Key('family-home-screen'));
     await tester.pageBack();
     await tester.pumpAndSettle();
-
-    await openFeature(
-      'CP Disconnect Flow',
-      const Key('cp-disconnect-screen'),
-    );
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await openFeature(
-      'Family',
-      const Key('family-home-screen'),
-    );
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await openFeature(
-      'Sharing',
-      const Key('sharing-screen'),
-    );
+    await openFeature('Sharing', const Key('sharing-screen'));
   });
 
   testWidgets('VIP monthly top-up opens Recharge page', (tester) async {
