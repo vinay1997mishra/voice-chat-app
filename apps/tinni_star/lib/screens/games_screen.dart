@@ -11,7 +11,7 @@ class GamesScreen extends StatelessWidget {
   const GamesScreen({
     super.key,
     required this.state,
-    required this.roomId,
+    this.roomId = 'active-room',
     this.onFruitJackpot,
     this.onFruitParty,
   });
