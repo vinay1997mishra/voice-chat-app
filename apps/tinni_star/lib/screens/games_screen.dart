@@ -11,11 +11,13 @@ class GamesScreen extends StatelessWidget {
   const GamesScreen({
     super.key,
     required this.state,
+    required this.roomId,
     this.onFruitJackpot,
     this.onFruitParty,
   });
 
   final TinniState state;
+  final String roomId;
   final VoidCallback? onFruitJackpot;
   final VoidCallback? onFruitParty;
 
@@ -83,7 +85,8 @@ class GamesScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Game Center')),
+      key: Key('room-game-center-' + roomId),
+      appBar: AppBar(title: const Text('Room Game Panel')),
       body: GridView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: games.length,
