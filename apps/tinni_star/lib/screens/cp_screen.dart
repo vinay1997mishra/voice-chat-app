@@ -60,7 +60,7 @@ class _CpScreenState extends State<CpScreen> {
       if (mounted) setState(() {});
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(
           content: Text(error.toString().replaceFirst('Bad state: ', '')),
         ),
@@ -77,7 +77,7 @@ class _CpScreenState extends State<CpScreen> {
       if (mounted) setState(() {});
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
       );
     }
@@ -119,7 +119,7 @@ class _CpScreenState extends State<CpScreen> {
       if (mounted) setState(() {});
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+      ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
     }
   }
 
@@ -193,7 +193,7 @@ class _CpScreenState extends State<CpScreen> {
                           if (mounted) setState(() {});
                         } catch (error) {
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                          ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                         }
                       },
                       icon: const Icon(Icons.favorite_border_rounded),
@@ -235,7 +235,7 @@ class _CpScreenState extends State<CpScreen> {
                     if (mounted) setState(() {});
                   } catch (error) {
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                    ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                   }
                 },
                 icon: const Icon(Icons.diamond_rounded),
