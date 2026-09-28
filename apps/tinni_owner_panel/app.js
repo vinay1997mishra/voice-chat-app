@@ -315,11 +315,21 @@ const actionPermission = {
   "policy-new": "policies.create",
   "policy-set": "policies.edit",
   "feature-set": "policies.edit",
+  // Catalog permissions are resolved from the item's kind at click time.
   "catalog-toggle": "roles.manage",
   "catalog-edit": "roles.manage",
   "catalog-remove": "roles.manage",
   "audit-export": "audit.export",
 };
+
+function catalogPermission(item, operation) {
+  const kind = String(item?.kind || "");
+  if (kind === "vip") return operation === "toggle" ? "vip.toggle" : "vip.edit";
+  if (kind === "gift") return operation === "remove" ? "gifts.remove" : (operation === "edit" ? "gifts.edit" : "gifts.remove");
+  if (kind === "entry" || kind === "frame") return kind === "entry" ? "assets.entries" : "assets.frames";
+  if (kind === "banner") return operation === "remove" ? "banners.remove" : "banners.create";
+  return "roles.manage";
+}
 
 function hasPermission(allowed, permission) {
   if (!permission) return false;
@@ -1919,6 +1929,7 @@ document.body.addEventListener("click", async e => {
   if (catalogRemove) {
     const item = state.catalog.find((entry) => entry.id === catalogRemove);
     if (!item) { toast("Catalog item not found."); return; }
+    if (currentSession?.role !== "owner" && !hasPermission(new Set(currentSession?.permissions || []), catalogPermission(item, "remove"))) { toast("Assigned permission required."); return; }
     if (!confirm("Permanently remove " + item.name + "?")) return;
     try {
       await runOwnerAction("catalog-remove", { id: catalogRemove });
@@ -1931,6 +1942,7 @@ document.body.addEventListener("click", async e => {
   if (catalogEdit) {
     const item = state.catalog.find((entry) => entry.id === catalogEdit);
     if (!item) { toast("Catalog item not found."); return; }
+    if (currentSession?.role !== "owner" && !hasPermission(new Set(currentSession?.permissions || []), catalogPermission(item, "edit"))) { toast("Assigned permission required."); return; }
     const name = prompt("Name", item.name);
     if (name === null || !name.trim()) return;
     const data = { ...(item.data || {}) };
