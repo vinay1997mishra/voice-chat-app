@@ -37,7 +37,7 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
     }
     return AnimatedBuilder(
       animation: _controller,
-      builder: (_, __) => SizedBox(
+      builder: (context, child) => SizedBox(
         width: widget.size,
         height: widget.size,
         child: Stack(
