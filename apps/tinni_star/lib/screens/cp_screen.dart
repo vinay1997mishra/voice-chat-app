@@ -193,8 +193,8 @@ class _CpScreenState extends State<CpScreen> {
                           widget.state.cp.applyRemote(remote, currentUserId: account.userId);
                           if (mounted) setState(() {});
                         } catch (error) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                          if (!stateContext.mounted) return;
+                          ScaffoldMessenger.of(stateContext).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                         }
                       },
                       icon: const Icon(Icons.favorite_border_rounded),
@@ -236,8 +236,8 @@ class _CpScreenState extends State<CpScreen> {
                     widget.state.cp.applyRemote(remote, currentUserId: account.userId);
                     if (mounted) setState(() {});
                   } catch (error) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                    if (!stateContext.mounted) return;
+                    ScaffoldMessenger.of(stateContext).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                   }
                 },
                 icon: const Icon(Icons.diamond_rounded),
