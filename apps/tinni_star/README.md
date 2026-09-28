@@ -97,3 +97,5 @@ Real production connectivity requires provider-side material such as:
 These are provider/backend dependencies, not missing UI architecture.
 
 See `docs/BLUEPRINT_STATUS.md` for the module-by-module map.
+
+<!-- CI refresh: e8c0b307 -->
