@@ -313,6 +313,11 @@ const actionPermission = {
   "game-limits": "games.limits",
   "game-stats": "games.investigate",
   "policy-new": "policies.create",
+  "policy-set": "policies.edit",
+  "feature-set": "policies.edit",
+  "catalog-toggle": "roles.manage",
+  "catalog-edit": "roles.manage",
+  "catalog-remove": "roles.manage",
   "audit-export": "audit.export",
 };
 
