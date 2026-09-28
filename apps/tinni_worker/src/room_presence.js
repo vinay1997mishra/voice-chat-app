@@ -137,6 +137,30 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
+  kickList(now = Date.now()) {
+    this._prune(now);
+    return this.ctx.storage.sql.exec(
+      `SELECT user_id, expires_at, kicked_by, created_at
+         FROM room_kicks
+        ORDER BY created_at DESC`,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      expires_at: row.expires_at === null || row.expires_at === undefined
+        ? null
+        : Number(row.expires_at),
+      permanent: row.expires_at === null || row.expires_at === undefined,
+      kicked_by: String(row.kicked_by),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  unkick(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("target_user_id is required");
+    this.ctx.storage.sql.exec("DELETE FROM room_kicks WHERE user_id = ?", userId);
+    return { ok: true, target_user_id: userId, kicks: this.kickList() };
+  }
+
   micMode() {
     const row = this.ctx.storage.sql.exec(
       "SELECT mic_mode FROM room_runtime_settings WHERE id = 1 LIMIT 1",
