@@ -1547,6 +1547,17 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/search" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("id") || "").trim();
+      if (!roomId) return json({ ok: true, room: null });
+      return json({
+        ok: true,
+        room: await getAppDirectoryStore(env).findRoomByExactId(roomId),
+      });
+    }
+
     if (url.pathname === "/users/search" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
