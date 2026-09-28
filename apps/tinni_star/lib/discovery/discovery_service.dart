@@ -308,6 +308,37 @@ class DiscoveryService {
     if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to update room invite');
   }
 
+  Future<RoomSummary> setRoomSeatCount({
+    required String authToken,
+    required String roomId,
+    required int seatCount,
+  }) async {
+    if (authToken.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.patchUrl(
+      apiBase.replace(path: '/rooms/seat-count'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{
+      'room_id': roomId,
+      'seat_count': seatCount,
+    }));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to change room seats');
+    }
+    final room = _roomFromServer(_asMap(data['room']));
+    if (room == null) throw StateError('Server returned invalid room');
+    final index = rooms.indexWhere((item) => item.id == room.id);
+    if (index >= 0) {
+      rooms[index] = room;
+    } else {
+      rooms.insert(0, room);
+    }
+    return room;
+  }
+
   Future<RoomSummary> setRoomLock({
     required String authToken,
     required String roomId,
