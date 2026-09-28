@@ -2057,6 +2057,31 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true };
   }
 
+  listFollowedOnlineRooms(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    const cutoff = Date.now() - 90000;
+    return this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji,
+              COALESCE(pc.member_count, 0) AS member_count
+         FROM app_follows f
+         JOIN app_rooms r ON r.owner_id = f.target_id
+         JOIN app_users u ON u.user_id = r.owner_id
+         JOIN app_user_presence p ON p.user_id = r.owner_id
+         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+        WHERE f.follower_id = ?
+          AND p.room_id = r.id
+          AND p.last_seen >= ?
+          AND COALESCE(r.closed, 0) = 0
+        ORDER BY p.last_seen DESC
+        LIMIT 100`,
+      userId,
+      cutoff,
+    ).toArray().map(rowToRoom);
+  }
+
   listRecentRooms(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return [];
