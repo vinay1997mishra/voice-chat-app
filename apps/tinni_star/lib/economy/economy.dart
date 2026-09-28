@@ -152,6 +152,20 @@ class InventoryService {
 
   final WalletService wallet;
   final Set<String> owned = <String>{};
+  String? equippedFrameId;
+
+  bool get hasEquippedFrame =>
+      equippedFrameId != null && owned.contains(equippedFrameId);
+
+  bool equipFrame(String frameId) {
+    if (!owned.contains(frameId)) return false;
+    equippedFrameId = frameId;
+    return true;
+  }
+
+  void removeFrame() {
+    equippedFrameId = null;
+  }
 
   bool purchase(StoreItem item) {
     if (owned.contains(item.id)) return false;
