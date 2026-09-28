@@ -19,9 +19,20 @@ class _CpScreenState extends State<CpScreen> {
   @override
   void initState() {
     super.initState();
+    _syncCp();
     if (widget.state.social.friendProfiles.isEmpty) {
       _syncFriends();
     }
+  }
+
+  Future<void> _syncCp() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final remote = await widget.state.backend.cpState(account.authToken);
+      widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   Future<void> _syncFriends() async {
@@ -40,8 +51,9 @@ class _CpScreenState extends State<CpScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
-      widget.state.cp.request(from: account.userId, to: friendId);
-      setState(() {});
+      final remote = await widget.state.backend.cpRequest(account.authToken, friendId);
+      widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+      if (mounted) setState(() {});
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -51,9 +63,19 @@ class _CpScreenState extends State<CpScreen> {
     }
   }
 
-  void _respond(bool accept) {
-    widget.state.cp.respond(accept: accept);
-    setState(() {});
+  Future<void> _respond(bool accept) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final remote = await widget.state.backend.cpRespond(account.authToken, accept);
+      widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
   Future<void> _addMemory() async {
@@ -103,7 +125,7 @@ class _CpScreenState extends State<CpScreen> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: _syncFriends,
+        onRefresh: () async { await _syncCp(); await _syncFriends(); },
         child: ListView(
           padding: const EdgeInsets.all(14),
           children: [
