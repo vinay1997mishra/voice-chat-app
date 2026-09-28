@@ -1158,11 +1158,13 @@ function openAction(action, preset = {}) {
     "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
     "role-new": ["Create Role / Post", field("name","Name") + selectField("type","Type",[["role","Role"],["post","Post"]])],
     "vip-new": ["Create New VIP",
-      field("name","VIP name","text","VIP 12") +
-      field("level","VIP level","number","12") +
-      field("price","Price / requirement","number","0") +
-      field("entry","Entry effect","text","") +
-      field("frame","Frame","text","")
+      field("name","VIP name","text","VIP 12") + field("level","VIP level","number","12") +
+      field("order","Display order","number","12") + field("price","Price / requirement","number","0") +
+      field("duration_days","Validity days (0 = permanent)","number","0") + field("badge","Badge asset / label","text","") +
+      field("profile_frame","Profile frame","text","") + field("seat_frame","Seat frame","text","") +
+      field("entry","Vehicle / animal / 3D entry","text","") + field("entry_asset","Entry animation asset","text","") +
+      field("entry_audio","Entry audio asset","text","") + field("requirements","Requirements","text","") +
+      field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)
     ],
     "vip-edit": ["Edit VIP",
       field("catalog_id","Catalog ID","hidden","") +
