@@ -1,3 +1,5 @@
+import '../infra/app_backend_service.dart';
+
 enum CourtingState { none, pending, accepted, refused, timedOut }
 
 class CpRelationship {
@@ -45,6 +47,33 @@ class CpService {
   String? receiver;
   CpRelationship? relationship;
   final List<String> memories = <String>[];
+
+  void applyRemote(RemoteCp? remote, {required String currentUserId}) {
+    if (remote == null) {
+      state = CourtingState.none;
+      sender = null;
+      receiver = null;
+      relationship = null;
+      return;
+    }
+    sender = remote.requestedBy;
+    receiver = remote.requestedBy == remote.userA ? remote.userB : remote.userA;
+    state = switch (remote.state) {
+      'accepted' => CourtingState.accepted,
+      'refused' => CourtingState.refused,
+      _ => CourtingState.pending,
+    };
+    relationship = state == CourtingState.accepted
+        ? CpRelationship(
+            userA: remote.userA,
+            userB: remote.userB,
+            startedAt: DateTime.fromMillisecondsSinceEpoch(remote.createdAt),
+            intimacy: remote.intimacy,
+            level: remote.level,
+            ringId: remote.ringId,
+          )
+        : null;
+  }
 
   void request({required String from, required String to}) {
     if (relationship != null || state == CourtingState.pending) {
