@@ -2724,13 +2724,21 @@ export default {
             : Number(body.seat_index),
       };
       try {
+        const directory = getAppDirectoryStore(env);
         if (url.pathname.endsWith("/join")) {
-          return json(await store.join(presenceBody), 201);
+          const result = await store.join(presenceBody);
+          await directory.touchPresence(user.user_id, roomId, result.members?.length || 0);
+          await directory.markRecentRoom(user.user_id, roomId);
+          return json(result, 201);
         }
         if (url.pathname.endsWith("/heartbeat")) {
-          return json(await store.heartbeat(presenceBody));
+          const result = await store.heartbeat(presenceBody);
+          await directory.touchPresence(user.user_id, roomId, result.members?.length || 0);
+          return json(result);
         }
-        return json(await store.leave(presenceBody));
+        const result = await store.leave(presenceBody);
+        await directory.clearPresence(user.user_id, roomId, result.members?.length || 0);
+        return json(result);
       } catch (error) {
         const message = String(error?.message || "Room presence failed");
         if (message.startsWith("KICKED_FROM_ROOM:")) {
