@@ -1731,6 +1731,25 @@ export default {
       });
     }
 
+    if (url.pathname === "/gifts/send" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).sendGift(appSession.user.user_id, body), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send gift") }, 400);
+      }
+    }
+
+    if (url.pathname === "/gifts/room" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      return json({ ok: true, gifts: await getAppDirectoryStore(env).listRoomGifts(roomId) });
+    }
+
     if (url.pathname === "/rooms" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
