@@ -18,6 +18,7 @@ import '../room/room_models.dart';
 import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
+import '../ui/animated_avatar_frame.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
@@ -4149,7 +4150,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               presenceMember!,
                               seatIndexHint: index,
                             ),
-                    child: Container(
+                    child: AnimatedAvatarFrame(
+                      size: seatDiameter,
+                      frameId: presenceMember?.equippedFrameId,
+                      child: Container(
                     width: seatDiameter,
                     height: seatDiameter,
                     decoration: BoxDecoration(
@@ -4203,6 +4207,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         size: seatDiameter * 0.42,
                                       ),
                           ),
+                    ),
                     ),
                   ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
