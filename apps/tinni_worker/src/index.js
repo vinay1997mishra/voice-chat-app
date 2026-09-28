@@ -212,14 +212,19 @@ function bearerToken(request) {
   return authorization.slice(7).trim();
 }
 
+async function sessionTokenHash(token) {
+  const bytes = new TextEncoder().encode(String(token || ""));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return toBase64Url(new Uint8Array(digest));
+}
+
 async function verifyAppSession(request, env) {
-  const payload = await parseSignedSession(
-    bearerToken(request),
-    env.SESSION_SECRET,
-  );
+  const token = bearerToken(request);
+  const payload = await parseSignedSession(token, env.SESSION_SECRET);
   if (!payload || payload.role !== "user" || !payload.userId) return null;
 
   const store = getAppDirectoryStore(env);
+  if (await store.isSessionRevoked(await sessionTokenHash(token))) return null;
   const user = await store.getUserById(payload.userId);
   if (!user) return null;
   if (user.controls?.banned || user.controls?.device_banned) return null;
@@ -1506,6 +1511,19 @@ export default {
         token,
         user: { ...verified.user, auth_provider: "email" },
       });
+    }
+
+    if (url.pathname === "/app/logout" && request.method === "POST") {
+      const token = bearerToken(request);
+      const payload = await parseSignedSession(token, env.SESSION_SECRET);
+      if (!payload || payload.role !== "user" || !payload.userId) {
+        return json({ ok: false, error: "Unauthorized" }, 401);
+      }
+      await getAppDirectoryStore(env).revokeSession(
+        await sessionTokenHash(token),
+        Number(payload.exp),
+      );
+      return json({ ok: true });
     }
 
     if (url.pathname === "/app/me" && request.method === "GET") {
