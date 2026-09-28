@@ -569,9 +569,9 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_calls ADD COLUMN receiver_diamonds_per_minute INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_calls ADD COLUMN stats_recorded INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_wallets ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_rooms ADD COLUMN announcement TEXT NOT NULL DEFAULT '',",
-      "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT '',",
-      "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public',",
+      "ALTER TABLE app_rooms ADD COLUMN announcement TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public'",
       "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
