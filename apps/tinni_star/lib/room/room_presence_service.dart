@@ -428,6 +428,29 @@ class RoomPresenceService extends ChangeNotifier {
     return data;
   }
 
+  Future<Map<String, dynamic>> sendGift({
+    required String roomId,
+    required String authToken,
+    required String giftId,
+    required String giftName,
+    required int quantity,
+    required int unitPrice,
+    required List<String> receiverIds,
+  }) =>
+      _commandPost(
+        '/gifts/send',
+        authToken,
+        <String, Object>{
+          'room_id': roomId,
+          'gift_id': giftId,
+          'gift_name': giftName,
+          'quantity': quantity,
+          'unit_price': unitPrice,
+          'receiver_ids': receiverIds,
+        },
+        applyResponse: false,
+      );
+
   Future<void> refresh({
     required String roomId,
     required String authToken,
