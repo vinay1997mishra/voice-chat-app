@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'recharge_screen.dart';
 
@@ -14,6 +15,48 @@ class VipScreen extends StatefulWidget {
 
 class _VipScreenState extends State<VipScreen> {
   int selectedLevel = 1;
+  bool loadingCatalog = true;
+  String? catalogError;
+  List<VipCatalogItem> catalog = const <VipCatalogItem>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      if (mounted) setState(() => loadingCatalog = false);
+      return;
+    }
+    try {
+      final values = await widget.state.backend.vipCatalog(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        catalog = values;
+        loadingCatalog = false;
+        catalogError = null;
+        if (values.isNotEmpty && !values.any((item) => item.level == selectedLevel)) {
+          selectedLevel = values.first.level;
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        loadingCatalog = false;
+        catalogError = error.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  VipCatalogItem? get selectedItem {
+    for (final item in catalog) {
+      if (item.level == selectedLevel) return item;
+    }
+    return null;
+  }
 
   Color _vipColor(int level) {
     const colors = <Color>[
@@ -37,7 +80,7 @@ class _VipScreenState extends State<VipScreen> {
   Widget build(BuildContext context) {
     final current = widget.state.identity.vip.level;
     final progress = (widget.state.identity.vip.experience % 1000) / 1000;
-    final privileges = [
+    final fallbackPrivileges = [
       ('Mysterious invisibility', Icons.visibility_off_rounded),
       ('Refuse contact', Icons.shield_rounded),
       ('Room priority display', Icons.upgrade_rounded),
@@ -58,10 +101,10 @@ class _VipScreenState extends State<VipScreen> {
             height: 46,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: 11,
+              itemCount: catalog.isEmpty ? 11 : catalog.length,
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
-                final level = index + 1;
+                final level = catalog.isEmpty ? index + 1 : catalog[index].level;
                 final color = _vipColor(level);
                 return ChoiceChip(
                   label: Text('VIP' + level.toString()),
@@ -100,7 +143,7 @@ class _VipScreenState extends State<VipScreen> {
                       glow: 0.48,
                     ),
                     Text(
-                      'VIP ' + selectedLevel.toString(),
+                      selectedItem?.name ?? ('VIP ' + selectedLevel.toString()),
                       style: TextStyle(
                         color: color,
                         fontSize: 31,
@@ -127,6 +170,15 @@ class _VipScreenState extends State<VipScreen> {
               );
             },
           ),
+          if (loadingCatalog) const LinearProgressIndicator(),
+          if (catalogError != null) Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(catalogError!, style: const TextStyle(color: Colors.redAccent)),
+          ),
+          if (selectedItem != null && selectedItem!.entry.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Entry: ' + selectedItem!.entry, style: const TextStyle(color: RoyalPalette.muted)),
+          ),
           const SizedBox(height: 14),
           FilledButton.icon(
             key: const Key('vip-monthly-topup-button'),
@@ -146,7 +198,12 @@ class _VipScreenState extends State<VipScreen> {
           const SizedBox(height: 18),
           GoldSectionTitle('Privileges ' + selectedLevel.toString() + '/9'),
           const SizedBox(height: 10),
-          GridView.builder(
+          Builder(builder: (context) {
+            final remotePrivileges = selectedItem?.privileges ?? const <String>[];
+            final privileges = remotePrivileges.isEmpty
+                ? fallbackPrivileges
+                : remotePrivileges.map((name) => (name, Icons.workspace_premium_rounded)).toList();
+            return GridView.builder(
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
             itemCount: privileges.length,
@@ -185,7 +242,8 @@ class _VipScreenState extends State<VipScreen> {
                 ),
               );
             },
-          ),
+          );
+          }),
           const SizedBox(height: 16),
         ],
       ),
