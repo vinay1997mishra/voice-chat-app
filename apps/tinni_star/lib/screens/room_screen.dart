@@ -2921,6 +2921,54 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return FeaturePalette.social;
   }
 
+  void _showGamePanel() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Row(
+                children: [
+                  ShiningIcon(
+                    icon: Icons.sports_esports_rounded,
+                    color: Colors.white,
+                    size: 28,
+                    boxSize: 48,
+                    glow: 0.45,
+                  ),
+                  SizedBox(width: 10),
+                  Text('Game Panel', style: TextStyle(color: RoyalPalette.gold, fontSize: 20, fontWeight: FontWeight.w900)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ListTile(
+                leading: const Icon(Icons.casino_rounded, color: FeaturePalette.fruitJackpot),
+                title: const Text('Fruit Jackpot'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  setState(() { _fruitJackpotOpen = true; _fruitPartyOpen = false; });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.local_activity_rounded, color: FeaturePalette.fruitParty),
+                title: const Text('Fruit Party'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  setState(() { _fruitPartyOpen = true; _fruitJackpotOpen = false; });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
@@ -2948,6 +2996,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         () {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomLuckyBag();
+          });
+        },
+      ),
+      (
+        'Game',
+        Icons.sports_esports_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showGamePanel();
           });
         },
       ),
