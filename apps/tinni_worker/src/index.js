@@ -1859,6 +1859,61 @@ export default {
       }
     }
 
+    if (url.pathname === "/gifts/ranking" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      const period = String(url.searchParams.get("period") || "day").trim();
+      try { return json(await getAppDirectoryStore(env).roomGiftRanking(roomId, period)); }
+      catch (error) { return json({ ok:false,error:String(error?.message||"Unable to load sending ranking") },400); }
+    }
+
+    if (url.pathname === "/rooms/membership" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const roomId=String(url.searchParams.get("room_id")||"").trim();
+      try { return json({ok:true,...await getAppDirectoryStore(env).roomMembershipState(roomId,appSession.user.user_id)}); }
+      catch(error){ return json({ok:false,error:String(error?.message||"Unable to load membership")},400); }
+    }
+
+    if (url.pathname === "/rooms/membership" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body=await request.json().catch(()=>({}));
+      try { return json(await getAppDirectoryStore(env).setRoomMembership(appSession.user.user_id,body.room_id,body.member===true)); }
+      catch(error){ return json({ok:false,error:String(error?.message||"Unable to update membership")},400); }
+    }
+
+    if (url.pathname === "/lucky-pouch" && request.method === "GET") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const roomId=String(url.searchParams.get("room_id")||"").trim();
+      return json({ok:true,pouch:await getAppDirectoryStore(env).luckyPouchState(roomId,appSession.user.user_id)});
+    }
+
+    if (url.pathname === "/lucky-pouch/open" && request.method === "POST") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const body=await request.json().catch(()=>({}));
+      try{return json(await getAppDirectoryStore(env).createLuckyPouch(appSession.user.user_id,body),201);}
+      catch(error){return json({ok:false,error:String(error?.message||"Unable to open Lucky Pouch")},400);}
+    }
+
+    if (url.pathname === "/lucky-pouch/claim" && request.method === "POST") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const body=await request.json().catch(()=>({}));
+      try{return json(await getAppDirectoryStore(env).claimLuckyPouch(appSession.user.user_id,body.room_id));}
+      catch(error){return json({ok:false,error:String(error?.message||"Unable to claim Lucky Pouch")},400);}
+    }
+
+    if (url.pathname === "/ribbons" && request.method === "GET") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const country=String(appSession.user.country_code||"").toUpperCase();
+      return json({ok:true,country_code:country,ribbons:await getAppDirectoryStore(env).countryRibbons(country)});
+    }
+
     if (url.pathname === "/gifts/room" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2538,9 +2593,9 @@ export default {
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
       }
-      const targetIsMember = await store.isMember(targetUserId);
+      const targetIsMember = await getAppDirectoryStore(env).isRoomMember(roomId, targetUserId);
       if (!targetIsMember) {
-        return json({ ok: false, error: "Target user is not in the room" }, 400);
+        return json({ ok: false, error: "Only a room member can become Room Admin" }, 400);
       }
       return json(await store.setManager(targetUserId, Boolean(body.enabled)));
     }
