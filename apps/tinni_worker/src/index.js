@@ -3483,9 +3483,22 @@ export default {
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create",
         "entry-new":"assets.entries","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
         "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
-        "feature-set":"policies.edit","catalog-toggle":"roles.manage","catalog-edit":"roles.manage","catalog-remove":"roles.manage",
+        "feature-set":"policies.edit",
       };
-      const requiredPermission = actionPermissions[String(body.action || "")];
+      const catalogAction = ["catalog-toggle","catalog-edit","catalog-remove"].includes(String(body.action || ""));
+      let requiredPermission = actionPermissions[String(body.action || "")];
+      if (catalogAction && !ownerOnly(session)) {
+        const item = (await getAppDirectoryStore(env).ownerCatalog()).find((entry) => String(entry.id) === String(body.data?.id || ""));
+        if (!item) return json({ ok: false, error: "Catalog item not found" }, 404);
+        const operation = String(body.action).replace("catalog-", "");
+        const kind = String(item.kind || "");
+        if (kind === "vip") requiredPermission = operation === "toggle" ? "vip.toggle" : "vip.edit";
+        else if (kind === "gift") requiredPermission = operation === "edit" ? "gifts.edit" : "gifts.remove";
+        else if (kind === "entry") requiredPermission = "assets.entries";
+        else if (kind === "frame") requiredPermission = "assets.frames";
+        else if (kind === "banner") requiredPermission = operation === "remove" ? "banners.remove" : "banners.create";
+        else requiredPermission = "roles.manage";
+      }
       if (!ownerOnly(session) && (!requiredPermission || !sessionHasPermission(session, requiredPermission))) {
         return json({ ok: false, error: "Owner or assigned staff permission required" }, 403);
       }
