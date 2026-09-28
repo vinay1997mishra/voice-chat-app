@@ -2581,6 +2581,13 @@ export default {
       if (!canModerate) {
         return json({ ok: false, error: "Only room owner/admin can move users from seats" }, 403);
       }
+      if (String(room.owner_id) === targetUserId) {
+        return json({ ok: false, error: "Room owner cannot be moved to audience" }, 400);
+      }
+      const targetIsManager = await store.isManager(targetUserId);
+      if (actorId !== String(room.owner_id) && targetIsManager) {
+        return json({ ok: false, error: "Room admins cannot move another admin to audience" }, 403);
+      }
 
       try {
         return json(await store.removeFromSeat({
