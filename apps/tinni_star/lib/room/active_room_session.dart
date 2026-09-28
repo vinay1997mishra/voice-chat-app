@@ -131,8 +131,23 @@ class ActiveRoomSession extends ChangeNotifier {
       roomController.forceMicMuted();
     }
     await realtime.setMic(
-      !presence.selfMicMuted && roomController.micState == MicState.live,
+      !presence.selfMicMuted &&
+          !roomController.selfMuted &&
+          roomController.micState == MicState.live,
     );
+  }
+
+  Future<void> setSelfMute(bool muted) async {
+    final roomController = controller;
+    if (roomController == null || roomController.mySeat == null) {
+      throw StateError('You must be on a seat to use self mute.');
+    }
+    roomController.setSelfMuted(muted);
+    if (connected) {
+      await realtime.setMic(
+        !muted && !presence.selfMicMuted && roomController.micState == MicState.live,
+      );
+    }
   }
 
   Future<void> kickUser(
