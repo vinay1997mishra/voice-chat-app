@@ -201,12 +201,12 @@ class _VipScreenState extends State<VipScreen> {
                   }
                   final wallet = await widget.state.backend.wallet(account.authToken);
                   widget.state.wallet.applyRemote(wallet);
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(item.name + ' activated.')));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(item.name + ' activated.')));
                   setState(() {});
                 } catch (error) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                 }
               },
               icon: const Icon(Icons.workspace_premium_rounded),
