@@ -2118,6 +2118,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               );
                               return;
                             }
+                            if (!mounted) return;
                             Navigator.pop(context);
                             if (widget.state.roomControls.effectsEnabled) {
                               widget.state.effects.enqueue(
