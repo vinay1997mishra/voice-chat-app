@@ -288,6 +288,22 @@ class DiscoveryService {
     return room;
   }
 
+  Future<void> setRoomInvite({
+    required String authToken,
+    required String roomId,
+    required String targetUserId,
+    required bool invited,
+  }) async {
+    if (authToken.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/invite'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'target_user_id': targetUserId, 'invited': invited}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to update room invite');
+  }
+
   Future<RoomSummary> setRoomLock({
     required String authToken,
     required String roomId,
