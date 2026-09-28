@@ -166,10 +166,10 @@ Contains:
 - Diamonds
 - VIP
 - Gifts
-- Games
 - Family
-- CP
 - More/settings
+
+Games and CP are intentionally not placed in Mine. Games open only from the Room Game Panel, and CP opens from its dedicated CP entry/panel.
 
 ## 9. Games
 
