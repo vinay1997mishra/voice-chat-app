@@ -398,6 +398,15 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+
+      CREATE TABLE IF NOT EXISTS app_session_revocations (
+        token_hash TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL,
+        revoked_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_session_revocations_expiry
+        ON app_session_revocations(expires_at);
+
       CREATE TABLE IF NOT EXISTS app_user_identities (
         provider TEXT NOT NULL,
         subject TEXT NOT NULL,
@@ -1939,6 +1948,31 @@ export class AppDirectoryStore extends DurableObject {
       avatarDataUrl, Date.now(), userId,
     );
     return this.getUserById(userId);
+  }
+
+  revokeSession(tokenHashValue, expiresAtValue) {
+    const tokenHash = String(tokenHashValue || "").trim();
+    const expiresAt = Number(expiresAtValue || 0);
+    if (!tokenHash || !Number.isFinite(expiresAt)) throw new Error("Valid session is required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec("DELETE FROM app_session_revocations WHERE expires_at <= ?", now);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO app_session_revocations (token_hash, expires_at, revoked_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(token_hash) DO UPDATE SET expires_at = excluded.expires_at, revoked_at = excluded.revoked_at`,
+      tokenHash, expiresAt, now,
+    );
+    return { ok: true };
+  }
+
+  isSessionRevoked(tokenHashValue) {
+    const tokenHash = String(tokenHashValue || "").trim();
+    if (!tokenHash) return false;
+    const now = Date.now();
+    this.ctx.storage.sql.exec("DELETE FROM app_session_revocations WHERE expires_at <= ?", now);
+    return Boolean(this.ctx.storage.sql.exec(
+      "SELECT token_hash FROM app_session_revocations WHERE token_hash = ? LIMIT 1", tokenHash,
+    ).toArray()[0]);
   }
 
   searchUsers(queryValue, limitValue = 30) {
