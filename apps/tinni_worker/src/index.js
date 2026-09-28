@@ -3101,6 +3101,7 @@ export default {
         family_tag: body.family_tag,
         host_tag: body.host_tag,
         agency_name: body.agency_name,
+        equipped_frame_id: body.equipped_frame_id,
         owner_tags: Array.isArray(user.tags) ? user.tags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
