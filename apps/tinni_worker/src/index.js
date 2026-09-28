@@ -1741,6 +1741,26 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/invite" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      const directory = getAppDirectoryStore(env);
+      const rooms = await directory.listRooms();
+      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const actorId = String(appSession.user.user_id);
+      const store = getRoomPresenceStore(env, roomId);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
+      if (String(room.owner_id) !== actorId && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can manage invites" }, 403);
+      try { return json(await directory.setRoomInvite(roomId, targetUserId, actorId, body.invited !== false)); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to update room invite") }, 400); }
+    }
+
     if (url.pathname === "/rooms/lock" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
