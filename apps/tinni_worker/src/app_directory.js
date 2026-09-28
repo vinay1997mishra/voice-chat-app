@@ -401,6 +401,55 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_gift_transactions_room_time
         ON gift_transactions(room_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS room_memberships (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_memberships_room
+        ON room_memberships(room_id, joined_at ASC);
+
+      CREATE TABLE IF NOT EXISTS lucky_pouches (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        creator_id TEXT NOT NULL,
+        country_code TEXT NOT NULL,
+        total_coins INTEGER NOT NULL,
+        total_slots INTEGER NOT NULL,
+        remaining_coins INTEGER NOT NULL,
+        remaining_slots INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_lucky_pouches_room
+        ON lucky_pouches(room_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS lucky_pouch_claims (
+        pouch_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        coins INTEGER NOT NULL,
+        claimed_at INTEGER NOT NULL,
+        PRIMARY KEY(pouch_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS country_ribbons (
+        id TEXT PRIMARY KEY,
+        country_code TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        priority INTEGER NOT NULL,
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL,
+        avatar_data_url TEXT,
+        amount INTEGER NOT NULL,
+        game_key TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_country_ribbons_country_queue
+        ON country_ribbons(country_code, priority DESC, created_at ASC);
+
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 2000000,
@@ -2453,6 +2502,213 @@ export class AppDirectoryStore extends DurableObject {
       target_user_id: targetId,
       blocked: Boolean(blockedValue),
     };
+  }
+
+  roomMembershipState(roomIdValue, userIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    const userId = String(userIdValue || "").trim();
+    const room = this._roomRow(roomId);
+    if (!room) throw new Error("Room not found");
+    const levelSetting = this.ctx.storage.sql.exec(
+      "SELECT value_json FROM owner_settings WHERE key = 'room_member_limits' LIMIT 1"
+    ).toArray()[0];
+    let limits = { "1": 10 };
+    try { limits = { ...limits, ...JSON.parse(String(levelSetting?.value_json || "{}")) }; } catch {}
+    const level = Math.max(1, Number(room.room_level || 1));
+    const configuredLimit = Number(limits[String(level)]);
+    const memberLimit = Number.isInteger(configuredLimit) && configuredLimit > 0
+      ? configuredLimit
+      : (level === 1 ? 10 : null);
+    const countRow = this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM room_memberships WHERE room_id = ?", roomId,
+    ).toArray()[0];
+    const membership = userId ? this.ctx.storage.sql.exec(
+      "SELECT 1 AS yes FROM room_memberships WHERE room_id = ? AND user_id = ? LIMIT 1", roomId, userId,
+    ).toArray()[0] : null;
+    return {
+      room_id: roomId,
+      room_level: level,
+      member_count: Number(countRow?.count || 0),
+      member_limit: memberLimit,
+      is_member: Boolean(membership),
+    };
+  }
+
+  setRoomMembership(userIdValue, roomIdValue, enabledValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    if (!userId || !roomId) throw new Error("room_id and user are required");
+    if (!this.getUserById(userId)) throw new Error("User not found");
+    const state = this.roomMembershipState(roomId, userId);
+    if (enabledValue) {
+      if (!state.is_member && state.member_limit != null && state.member_count >= state.member_limit) {
+        throw new Error("Room member limit reached");
+      }
+      this.ctx.storage.sql.exec(
+        "INSERT INTO room_memberships (room_id,user_id,joined_at) VALUES (?,?,?) ON CONFLICT(room_id,user_id) DO NOTHING",
+        roomId, userId, Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_memberships WHERE room_id = ? AND user_id = ?", roomId, userId,
+      );
+    }
+    return { ok: true, ...this.roomMembershipState(roomId, userId) };
+  }
+
+  isRoomMember(roomIdValue, userIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    const userId = String(userIdValue || "").trim();
+    if (!roomId || !userId) return false;
+    return Boolean(this.ctx.storage.sql.exec(
+      "SELECT 1 AS yes FROM room_memberships WHERE room_id = ? AND user_id = ? LIMIT 1", roomId, userId,
+    ).toArray()[0]);
+  }
+
+  roomGiftRanking(roomIdValue, periodValue = "day") {
+    const roomId = String(roomIdValue || "").trim();
+    const period = ["day","week","month"].includes(String(periodValue)) ? String(periodValue) : "day";
+    if (!roomId) throw new Error("room_id is required");
+    const now = new Date();
+    let start;
+    if (period === "day") start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    else if (period === "week") {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const delta = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - delta); start = d.getTime();
+    } else start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT g.sender_id, SUM(g.total_cost) AS sending, u.display_name, u.avatar_data_url
+         FROM gift_transactions g
+         LEFT JOIN app_users u ON u.user_id = g.sender_id
+         WHERE g.room_id = ? AND g.created_at >= ?
+         GROUP BY g.sender_id, u.display_name, u.avatar_data_url
+         ORDER BY sending DESC, g.sender_id ASC LIMIT 100`, roomId, start,
+    ).toArray();
+    return {
+      ok: true, room_id: roomId, period,
+      ranking: rows.map((row, index) => ({
+        rank: index + 1, user_id: String(row.sender_id),
+        name: String(row.display_name || row.sender_id),
+        avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+        sending: Number(row.sending || 0),
+      })),
+    };
+  }
+
+  createLuckyPouch(userIdValue, input = {}) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(input.room_id || "").trim();
+    const slots = Number(input.users);
+    const totalCoins = Number(input.coins);
+    const allowed = {
+      5: [100000,500000,1000000,2000000,5000000,8000000,10000000],
+      20:[100000,500000,1000000,2000000,5000000,8000000,10000000],
+      50:[500000,1000000,2000000,5000000,8000000,10000000],
+      100:[1000000,2000000,5000000,8000000,10000000],
+      200:[1000000,2000000,5000000,8000000,10000000],
+      500:[2000000,5000000,8000000,10000000],
+    };
+    if (!allowed[slots]?.includes(totalCoins)) throw new Error("Invalid Lucky Pouch users/coins combination");
+    const room = this._roomRow(roomId);
+    if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
+    const wallet = this.getWallet(userId);
+    if (wallet.banned || wallet.coins < totalCoins) throw new Error("Not enough coins");
+    const now = Date.now();
+    const id = "lp-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCoins, now, userId);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      "wallet-" + crypto.randomUUID(), userId, "lucky_pouch_open", -totalCoins, 0, id, "Lucky Pouch", now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO lucky_pouches (id,room_id,creator_id,country_code,total_coins,total_slots,remaining_coins,remaining_slots,created_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,NULL)",
+      id, roomId, userId, String(room.country_code || ""), totalCoins, slots, totalCoins, slots, now,
+    );
+    if (totalCoins >= 500000) {
+      const user = this.getUserById(userId);
+      this.ctx.storage.sql.exec(
+        "INSERT INTO country_ribbons (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "ribbon-" + crypto.randomUUID(), String(room.country_code || ""), "lp", 2, roomId, userId,
+        String(user?.display_name || userId), user?.avatar_data_url || null, totalCoins, null, now, now + 120000,
+      );
+    }
+    return { ok: true, pouch: this.luckyPouchState(roomId, userId), wallet: this.getWallet(userId) };
+  }
+
+  luckyPouchState(roomIdValue, userIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    const userId = String(userIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM lucky_pouches WHERE room_id = ? AND completed_at IS NULL AND remaining_slots > 0 AND remaining_coins > 0 ORDER BY created_at DESC LIMIT 1", roomId,
+    ).toArray()[0];
+    if (!row) return null;
+    const claimed = userId ? Boolean(this.ctx.storage.sql.exec(
+      "SELECT 1 AS yes FROM lucky_pouch_claims WHERE pouch_id = ? AND user_id = ? LIMIT 1", row.id, userId,
+    ).toArray()[0]) : false;
+    return { ...row, total_coins:Number(row.total_coins), total_slots:Number(row.total_slots), remaining_coins:Number(row.remaining_coins), remaining_slots:Number(row.remaining_slots), created_at:Number(row.created_at), claimed };
+  }
+
+  claimLuckyPouch(userIdValue, roomIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const pouch = this.luckyPouchState(roomId, userId);
+    if (!pouch) return { ok:false, finished:true, message:"Next Time" };
+    if (pouch.claimed) throw new Error("Lucky Pouch already claimed");
+    const remainingCoins = Number(pouch.remaining_coins);
+    const remainingSlots = Number(pouch.remaining_slots);
+    let coins = remainingCoins;
+    if (remainingSlots > 1) {
+      const max = Math.max(1, remainingCoins - (remainingSlots - 1));
+      const random = crypto.getRandomValues(new Uint32Array(1))[0];
+      coins = 1 + (random % max);
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO lucky_pouch_claims (pouch_id,user_id,coins,claimed_at) VALUES (?,?,?,?)",
+      pouch.id, userId, coins, now,
+    );
+    const nextCoins = remainingCoins - coins;
+    const nextSlots = remainingSlots - 1;
+    const complete = nextSlots <= 0 || nextCoins <= 0;
+    this.ctx.storage.sql.exec(
+      "UPDATE lucky_pouches SET remaining_coins=?, remaining_slots=?, completed_at=? WHERE id=?",
+      nextCoins, nextSlots, complete ? now : null, pouch.id,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO app_wallets (user_id,coins,diamonds,updated_at) VALUES (?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET coins=app_wallets.coins+excluded.coins,updated_at=excluded.updated_at",
+      userId, coins, now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      "wallet-" + crypto.randomUUID(), userId, "lucky_pouch_claim", coins, 0, String(pouch.id)+":"+userId, "Lucky Pouch claim", now,
+    );
+    return { ok:true, coins, finished:complete, remaining_slots:nextSlots, wallet:this.getWallet(userId) };
+  }
+
+  countryRibbons(countryCodeValue) {
+    const countryCode = String(countryCodeValue || "").trim().toUpperCase();
+    if (!countryCode) return [];
+    const now = Date.now();
+    this.ctx.storage.sql.exec("DELETE FROM country_ribbons WHERE expires_at <= ?", now);
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM country_ribbons WHERE country_code = ? AND expires_at > ? ORDER BY priority DESC, created_at ASC LIMIT 50",
+      countryCode, now,
+    ).toArray().map((row)=>({ ...row, priority:Number(row.priority), amount:Number(row.amount), created_at:Number(row.created_at), expires_at:Number(row.expires_at) }));
+  }
+
+  recordGameWinning(userIdValue, roomIdValue, gameKeyValue, amountValue) {
+    const userId=String(userIdValue||"").trim(), roomId=String(roomIdValue||"").trim();
+    const gameKey=cleanText(gameKeyValue,80), amount=Number(amountValue);
+    if (!userId || !roomId || !gameKey || !Number.isSafeInteger(amount) || amount < 1000000) return null;
+    const room=this._roomRow(roomId); if(!room) return null;
+    const user=this.getUserById(userId); const now=Date.now();
+    const id="ribbon-"+crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO country_ribbons (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+      id,String(room.country_code||""),"game",1,roomId,userId,String(user?.display_name||userId),user?.avatar_data_url||null,amount,gameKey,now,now+120000,
+    );
+    return { id, kind:"game", room_id:roomId, amount, game_key:gameKey };
   }
 
   sendGift(senderIdValue, input) {
