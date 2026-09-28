@@ -4390,6 +4390,41 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, room: rowToRoom(updated) };
   }
 
+  async updateRoomSeatCount(actorIdValue, roomIdValue, seatCountValue, isAdminValue = false) {
+    const actorId = String(actorIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const seatCount = Number(seatCountValue);
+    const room = this._roomRow(roomId);
+    if (!room) throw new Error("Room not found");
+    const allowed = [8,9,10,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42];
+    if (!Number.isInteger(seatCount) || !allowed.includes(seatCount)) {
+      throw new Error("Room seat count must be 8-10 or 12-42");
+    }
+
+    const isOwner = String(room.owner_id) === actorId;
+    const isAdmin = isAdminValue === true;
+    if (!isOwner && !isAdmin) throw new Error("Only room owner/admin can change seat count");
+
+    const current = Number(room.seat_count);
+    if (!isOwner && seatCount < current) {
+      throw new Error("Room admin can increase seat count but cannot decrease it");
+    }
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE app_rooms SET seat_count = ?, updated_at = ? WHERE id = ?",
+      seatCount, now, roomId,
+    );
+    const updated = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name, u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r JOIN app_users u ON u.user_id = r.owner_id
+        WHERE r.id = ? LIMIT 1`,
+      roomId,
+    ).toArray()[0];
+    return { ok: true, room: rowToRoom(updated) };
+  }
+
   async setRoomLock(ownerIdValue, roomIdValue, input) {
     const ownerId = String(ownerIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
