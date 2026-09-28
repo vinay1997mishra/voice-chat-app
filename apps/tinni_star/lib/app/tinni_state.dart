@@ -28,6 +28,7 @@ import '../games/fruit_jackpot_remote.dart';
 import '../games/fruit_party_remote.dart';
 import '../identity/identity.dart';
 import '../infra/realtime.dart';
+import '../infra/app_backend_service.dart';
 import '../infra/livekit_rtc.dart';
 import '../infra/platform_services.dart';
 import '../media/ktv_features.dart';
@@ -83,6 +84,7 @@ class TinniState {
         analytics = LocalAnalyticsAdapter(),
         crashReporter = LocalCrashReporter(),
         remoteConfig = LocalRemoteConfigAdapter(),
+        backend = AppBackendService(),
         realtime = RealtimeCoordinator(
           rtc: LiveKitRtcAdapter(),
           im: LocalImAdapter(),
@@ -187,6 +189,7 @@ class TinniState {
   final AnalyticsAdapter analytics;
   final CrashReporter crashReporter;
   final RemoteConfigAdapter remoteConfig;
+  final AppBackendService backend;
   final RealtimeCoordinator realtime;
   final RoomPresenceService roomPresence;
 }
