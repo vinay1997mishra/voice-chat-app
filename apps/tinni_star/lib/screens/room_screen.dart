@@ -3030,10 +3030,89 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  static const List<int> _validRoomSeatCounts = <int>[
+    8, 9, 10,
+    12, 13, 14, 15, 16, 17, 18,
+    19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    29, 30, 31, 32, 33, 34, 35,
+    36, 37, 38, 39, 40, 41, 42,
+  ];
+
+  Future<void> _showSeatCountSelector() async {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can change seat count.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final current = controller.seats.length;
+    final options = _isRoomOwner
+        ? _validRoomSeatCounts
+        : _validRoomSeatCounts.where((count) => count > current).toList();
+    if (options.isEmpty) {
+      _snack('No higher seat count is available.');
+      return;
+    }
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+          children: [
+            ListTile(
+              title: Text(
+                _isRoomOwner ? 'Room Seats' : 'Increase Room Seats',
+                style: const TextStyle(
+                  color: FeaturePalette.discover,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              subtitle: Text(
+                _isRoomOwner
+                    ? 'Owner can increase or decrease seats.'
+                    : 'Admin can only see seat counts higher than $current.',
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final count in options)
+                  ChoiceChip(
+                    label: Text(count.toString()),
+                    selected: count == current,
+                    onSelected: count == current
+                        ? null
+                        : (_) => Navigator.pop(sheetContext, count),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == current) return;
+    try {
+      final updated = await widget.state.discovery.setRoomSeatCount(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        seatCount: selected,
+      );
+      controller.setSeatCount(updated.seatCount);
+      if (mounted) setState(() {});
+      _snack('Room seats changed to ' + updated.seatCount.toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
   void _showRoomSettings() {
     final controls = widget.state.roomControls;
     if (!_isRoomOwner) {
-      _snack('Only the room owner can change room settings.');
+      _showSeatCountSelector();
       return;
     }
 
@@ -3076,6 +3155,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       setSheetState(() {});
                     }
                   },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.event_seat_rounded),
+                  title: const Text('Room Seats'),
+                  subtitle: Text(controller.seats.length.toString() + ' seats'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _showSeatCountSelector,
                 ),
                 SwitchListTile(
                   title: const Text('Free mic'),
@@ -3459,7 +3545,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final range = spec.rangeForRow(row);
     return Row(
       key: Key('seat-row-' + row.toString()),
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         for (var index = range.$1; index < range.$2; index++)
