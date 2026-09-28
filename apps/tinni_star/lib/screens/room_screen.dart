@@ -2063,10 +2063,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         final gift = filteredGifts[index];
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
-                          onTap: () {
+                          onTap: () async {
                             if (_selectedGiftRecipients.isEmpty) {
                               _snack('Select at least one recipient.');
                               return;
+                            }
+                            if (giftCategory != 'Backpack') {
+                              try {
+                                await widget.state.roomSession.sendGift(
+                                  roomId: widget.room.id,
+                                  authToken: widget.state.auth.current!.authToken,
+                                  giftId: gift.id,
+                                  giftName: gift.name,
+                                  quantity: 1,
+                                  unitPrice: gift.price,
+                                  receiverIds: _selectedGiftRecipients.toList(growable: false),
+                                );
+                              } catch (error) {
+                                _snack(error.toString().replaceFirst('Bad state: ', ''));
+                                return;
+                              }
                             }
                             GiftTransaction? tx;
                             if (giftCategory == 'Backpack') {
