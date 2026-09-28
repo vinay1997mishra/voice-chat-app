@@ -2779,9 +2779,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Effects',
-        Icons.auto_awesome_rounded,
-        _showEffectsPanel,
+        controls.effectsEnabled ? 'Block Effects' : 'Allow Effects',
+        Icons.hide_image_rounded,
+        () {
+          final enabled = controls.toggleEffects();
+          _snack(enabled ? 'Gift effects enabled.' : 'Gift effects blocked.');
+        },
       ),
       (
         controls.noticesVisible ? 'Hide Notice' : 'Show Notice',
@@ -2943,30 +2946,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ),
                 ),
               );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEffectsPanel() {
-    final controls = widget.state.roomControls;
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          key: const Key('room-effects-panel'),
-          child: SwitchListTile(
-            title: const Text('Effects'),
-            subtitle: const Text('Gift and room visual effects'),
-            value: controls.effectsEnabled,
-            onChanged: (value) {
-              if (controls.effectsEnabled != value) controls.toggleEffects();
-              setSheetState(() {});
-              if (mounted) setState(() {});
             },
           ),
         ),
@@ -3572,42 +3551,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         style: TextStyle(
                           fontSize: seatDiameter * 0.82,
                           height: 1,
-                        ),
-                      ),
-                    ),
-                  if (seat.roomMuted)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-muted-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFD32F2F),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.mic_off_rounded,
-                          color: Colors.white,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
-                  if (seat.locked)
-                    Positioned(
-                      left: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-locked-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF111820),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          color: FeaturePalette.safety,
-                          size: compact ? 10 : 13,
                         ),
                       ),
                     ),
@@ -4294,9 +4237,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : controller.micState == MicState.live
-                              ? 'Self mute'
-                              : 'Unmute microphone',
+                          : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
@@ -4314,31 +4255,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         size: 22,
                         boxSize: 38,
                         glow: controller.mySeat == null ? 0.08 : 0.34,
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('room-inbox-button'),
-                      tooltip: 'Inbox',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(
-                        minWidth: 46,
-                        minHeight: 46,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MessagesScreen(state: widget.state),
-                          ),
-                        );
-                      },
-                      icon: const ShiningIcon(
-                        icon: Icons.mail_rounded,
-                        color: FeaturePalette.message,
-                        size: 22,
-                        boxSize: 38,
-                        glow: 0.34,
                       ),
                     ),
                     IconButton(
@@ -8104,42 +8020,6 @@ class _ProfileAction extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (seat.roomMuted)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-muted-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFD32F2F),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.mic_off_rounded,
-                          color: Colors.white,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
-                  if (seat.locked)
-                    Positioned(
-                      left: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-locked-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF111820),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          color: FeaturePalette.safety,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -8823,9 +8703,7 @@ class _ProfileAction extends StatelessWidget {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : controller.micState == MicState.live
-                              ? 'Self mute'
-                              : 'Unmute microphone',
+                          : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
@@ -8843,31 +8721,6 @@ class _ProfileAction extends StatelessWidget {
                         size: 22,
                         boxSize: 38,
                         glow: controller.mySeat == null ? 0.08 : 0.34,
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('room-inbox-button'),
-                      tooltip: 'Inbox',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(
-                        minWidth: 46,
-                        minHeight: 46,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MessagesScreen(state: widget.state),
-                          ),
-                        );
-                      },
-                      icon: const ShiningIcon(
-                        icon: Icons.mail_rounded,
-                        color: FeaturePalette.message,
-                        size: 22,
-                        boxSize: 38,
-                        glow: 0.34,
                       ),
                     ),
                     IconButton(
@@ -12607,42 +12460,6 @@ class _ProfileAction extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (seat.roomMuted)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-muted-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFD32F2F),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.mic_off_rounded,
-                          color: Colors.white,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
-                  if (seat.locked)
-                    Positioned(
-                      left: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-locked-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF111820),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          color: FeaturePalette.safety,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -13326,9 +13143,7 @@ class _ProfileAction extends StatelessWidget {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : controller.micState == MicState.live
-                              ? 'Self mute'
-                              : 'Unmute microphone',
+                          : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
@@ -13346,31 +13161,6 @@ class _ProfileAction extends StatelessWidget {
                         size: 22,
                         boxSize: 38,
                         glow: controller.mySeat == null ? 0.08 : 0.34,
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('room-inbox-button'),
-                      tooltip: 'Inbox',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(
-                        minWidth: 46,
-                        minHeight: 46,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MessagesScreen(state: widget.state),
-                          ),
-                        );
-                      },
-                      icon: const ShiningIcon(
-                        icon: Icons.mail_rounded,
-                        color: FeaturePalette.message,
-                        size: 22,
-                        boxSize: 38,
-                        glow: 0.34,
                       ),
                     ),
                     IconButton(
@@ -17136,42 +16926,6 @@ class _ProfileAction extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (seat.roomMuted)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-muted-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFD32F2F),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.mic_off_rounded,
-                          color: Colors.white,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
-                  if (seat.locked)
-                    Positioned(
-                      left: 0,
-                      bottom: 0,
-                      child: Container(
-                        key: Key('seat-locked-indicator-' + index.toString()),
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF111820),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          color: FeaturePalette.safety,
-                          size: compact ? 10 : 13,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -17855,9 +17609,7 @@ class _ProfileAction extends StatelessWidget {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : controller.micState == MicState.live
-                              ? 'Self mute'
-                              : 'Unmute microphone',
+                          : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
@@ -17875,31 +17627,6 @@ class _ProfileAction extends StatelessWidget {
                         size: 22,
                         boxSize: 38,
                         glow: controller.mySeat == null ? 0.08 : 0.34,
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('room-inbox-button'),
-                      tooltip: 'Inbox',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(
-                        minWidth: 46,
-                        minHeight: 46,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MessagesScreen(state: widget.state),
-                          ),
-                        );
-                      },
-                      icon: const ShiningIcon(
-                        icon: Icons.mail_rounded,
-                        color: FeaturePalette.message,
-                        size: 22,
-                        boxSize: 38,
-                        glow: 0.34,
                       ),
                     ),
                     IconButton(
