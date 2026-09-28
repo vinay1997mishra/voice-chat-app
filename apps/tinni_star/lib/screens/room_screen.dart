@@ -2619,7 +2619,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             roomId: widget.room.id,
           );
           return SafeArea(
-            key: const Key('room-lp-panel'),
+            key: const Key('room-lucky-bag-panel'),
             child: SizedBox(
               height: MediaQuery.sizeOf(sheetContext).height * 0.72,
               child: FutureBuilder<Map<String, dynamic>>(
@@ -2991,7 +2991,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'LP',
+        'Lucky Bag',
         Icons.shopping_bag_rounded,
         () {
           Future<void>.delayed(Duration.zero, () {
@@ -3172,7 +3172,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             itemBuilder: (_, index) {
               final tool = tools[index];
               final color = _roomToolColor(tool.$1);
-              final isLp = tool.$1 == 'LP';
+              final isLp = tool.$1 == 'Lucky Bag';
               final isGame = tool.$1 == 'Game';
               final iconColor = isGame ? Colors.white : color;
               return InkWell(
