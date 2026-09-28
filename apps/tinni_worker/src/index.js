@@ -1728,6 +1728,19 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/settings" && request.method === "PATCH") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      try {
+        return json(await getAppDirectoryStore(env).updateRoom(appSession.user.user_id, roomId, body));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update room") }, 400);
+      }
+    }
+
     if (url.pathname === "/rooms/lock" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
