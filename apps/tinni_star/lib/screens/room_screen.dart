@@ -4181,8 +4181,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         body: Stack(
           children: [
-            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
-              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             Positioned.fill(
               child: Container(
           decoration: BoxDecoration(
@@ -4766,6 +4764,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
       ),
             ),
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             if (_fruitJackpotOpen)
               Positioned(
                 left: 4,
