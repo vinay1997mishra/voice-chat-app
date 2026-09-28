@@ -91,6 +91,19 @@ void main() {
     },
   );
 
+  testWidgets('bottom Mine keeps CP out of personal account surface', (tester) async {
+    final state = makeState();
+    await tester.pumpWidget(TinniStarApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mine').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mine-cp-panel')), findsNothing);
+    expect(find.text('Coins'), findsOneWidget);
+    expect(find.text('Diamonds'), findsOneWidget);
+  });
+
   testWidgets('party ranking controls open destinations', (tester) async {
     final state = makeState();
     await tester.pumpWidget(TinniStarApp(state: state));
