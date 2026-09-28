@@ -1550,6 +1550,15 @@ export default {
       });
     }
 
+    if (url.pathname === "/rooms/followed" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        rooms: await getAppDirectoryStore(env).listFollowedOnlineRooms(appSession.user.user_id),
+      });
+    }
+
     if (url.pathname === "/rooms/recent" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
