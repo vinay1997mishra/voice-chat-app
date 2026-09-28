@@ -1827,6 +1827,50 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to apply recharge") }, 400); }
     }
 
+    if (url.pathname === "/frames/catalog" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        frames: await getAppDirectoryStore(env).frameCatalog(appSession.user.country_code),
+      });
+    }
+
+    if (url.pathname === "/inventory" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        inventory: await getAppDirectoryStore(env).inventoryState(appSession.user.user_id),
+      });
+    }
+
+    if (url.pathname === "/frames/purchase" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).purchaseFrame(
+          appSession.user.user_id, body.frame_id, appSession.user.country_code,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to purchase frame") }, 400);
+      }
+    }
+
+    if (url.pathname === "/frames/equip" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).equipFrame(
+          appSession.user.user_id, body.frame_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to equip frame") }, 400);
+      }
+    }
+
     if (url.pathname === "/vip/me" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
