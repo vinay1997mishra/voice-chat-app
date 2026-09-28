@@ -1466,6 +1466,10 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
+  if (["gift-new","entry-new","frame-new","banner-new"].includes(action)) {
+    payload.order = Number(data.order || 0);
+    payload.countries = String(data.countries || "").split(",").map(v => v.trim().toUpperCase()).filter(Boolean);
+  }
   if (action === "game-switch") payload.enabled = String(data.enabled) === "true";
   if (action === "game-limits") {
     payload.min_bet = Number(data.min_bet || 0);
