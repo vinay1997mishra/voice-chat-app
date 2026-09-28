@@ -3172,6 +3172,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             itemBuilder: (_, index) {
               final tool = tools[index];
               final color = _roomToolColor(tool.$1);
+              final isLp = tool.$1 == 'LP';
+              final isGame = tool.$1 == 'Game';
+              final iconColor = isGame ? Colors.white : color;
               return InkWell(
                 key: Key(
                   'room-tool-' +
@@ -3186,15 +3189,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    gradient: FeaturePalette.glow(color),
-                    border: Border.all(
-                      color: color.withValues(alpha: 0.55),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isLp
+                          ? const <Color>[Color(0xFF5B0710), Color(0xFF220204)]
+                          : const <Color>[Color(0xFF17130A), Color(0xFF050505)],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.18),
-                        blurRadius: 10,
-                      ),
+                    border: Border.all(color: RoyalPalette.deepGold.withValues(alpha: 0.78)),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x33FFD45A), blurRadius: 10),
                     ],
                   ),
                   child: Column(
@@ -3202,7 +3206,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     children: [
                       ShiningIcon(
                         icon: tool.$2,
-                        color: color,
+                        color: iconColor,
                         size: 21,
                         boxSize: 39,
                         glow: 0.34,
@@ -3213,7 +3217,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 9,
-                          color: color,
+                          color: RoyalPalette.cream,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
