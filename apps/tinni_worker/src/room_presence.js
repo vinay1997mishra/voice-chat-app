@@ -968,6 +968,36 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
+  takeSeat(input) {
+    const userId = String(input?.user_id || "").trim();
+    const seatIndex = Number(input?.seat_index);
+    const privileged = input?.privileged === true;
+    if (!userId) throw new Error("user_id is required");
+    if (!Number.isInteger(seatIndex) || seatIndex < 0) throw new Error("seat_index is required");
+    if (!this.isMember(userId)) throw new Error("User is not in the room");
+    this._assertSeatAvailable(seatIndex, userId);
+
+    if (!privileged && this.micMode() !== "free") {
+      throw new Error("Apply for mic and wait for owner/admin approval");
+    }
+    const current = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    if (current?.seat_index !== null && current?.seat_index !== undefined) {
+      throw new Error("Leave your current seat first");
+    }
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_seat_forces (user_id, seat_index, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET seat_index = excluded.seat_index, created_at = excluded.created_at`,
+      userId, seatIndex, now,
+    );
+    this.ctx.storage.sql.exec("DELETE FROM room_seat_requests WHERE user_id = ?", userId);
+    return { ok: true, seat_index: seatIndex, mic_mode: this.micMode(), members: this._members(now) };
+  }
+
   async join(input) {
     return this._upsert(input);
   }
