@@ -24,6 +24,10 @@ class IdentityService {
   final Set<String> vehicles = <String>{};
   String? goodNumber;
 
+  void setVipLevel(int level, {int? experience}) {
+    vip = VipState(level: level.clamp(0, 999), experience: experience ?? vip.experience);
+  }
+
   void gainVipExperience(int value) {
     if (value > 0) vip = vip.addExperience(value);
   }
