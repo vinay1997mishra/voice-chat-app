@@ -41,6 +41,7 @@ class RoomPresenceMember {
     this.familyTag,
     this.hostTag,
     this.agencyName,
+    this.equippedFrameId,
     this.ownerTags = const <OwnerTag>[],
     this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
@@ -59,6 +60,7 @@ class RoomPresenceMember {
   final String? familyTag;
   final String? hostTag;
   final String? agencyName;
+  final String? equippedFrameId;
   final List<OwnerTag> ownerTags;
   final List<OwnerTag> ownerMedals;
   final int? seatIndex;
@@ -102,6 +104,7 @@ class RoomPresenceService extends ChangeNotifier {
     String? familyTag,
     String? hostTag,
     String? agencyName,
+    String? equippedFrameId,
   }) =>
       _post(
         '/room-presence/join',
@@ -111,6 +114,7 @@ class RoomPresenceService extends ChangeNotifier {
         familyTag: familyTag,
         hostTag: hostTag,
         agencyName: agencyName,
+        equippedFrameId: equippedFrameId,
       );
 
   Future<void> heartbeat({
@@ -120,6 +124,7 @@ class RoomPresenceService extends ChangeNotifier {
     String? familyTag,
     String? hostTag,
     String? agencyName,
+    String? equippedFrameId,
   }) =>
       _post(
         '/room-presence/heartbeat',
@@ -129,6 +134,7 @@ class RoomPresenceService extends ChangeNotifier {
         familyTag: familyTag,
         hostTag: hostTag,
         agencyName: agencyName,
+        equippedFrameId: equippedFrameId,
       );
 
   Future<void> leave({
@@ -491,6 +497,7 @@ class RoomPresenceService extends ChangeNotifier {
     String? familyTag,
     String? hostTag,
     String? agencyName,
+    String? equippedFrameId,
   }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
@@ -506,6 +513,7 @@ class RoomPresenceService extends ChangeNotifier {
           'family_tag': familyTag,
           'host_tag': hostTag,
           'agency_name': agencyName,
+          'equipped_frame_id': equippedFrameId,
         }),
       );
       final response = await request.close();
@@ -606,6 +614,7 @@ class RoomPresenceService extends ChangeNotifier {
                 familyTag: row['family_tag']?.toString(),
                 hostTag: row['host_tag']?.toString(),
                 agencyName: row['agency_name']?.toString(),
+                equippedFrameId: row['equipped_frame_id']?.toString(),
                 ownerTags: row['owner_tags'] is List
                     ? (row['owner_tags'] as List)
                         .whereType<Map>()
