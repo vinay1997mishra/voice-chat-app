@@ -211,6 +211,37 @@ class _CpScreenState extends State<CpScreen> {
                 ],
               ),
               const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final account = widget.state.auth.current;
+                  if (account == null) return;
+                  final controller = TextEditingController(text: cp.ringId ?? '');
+                  final ringId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('CP Ring'),
+                      content: TextField(controller: controller, maxLength: 80, decoration: const InputDecoration(hintText: 'Ring ID')),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+                      ],
+                    ),
+                  );
+                  controller.dispose();
+                  if (ringId == null || ringId.isEmpty) return;
+                  try {
+                    final remote = await widget.state.backend.cpUpdate(account.authToken, 'ring', {'ring_id': ringId});
+                    widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                  }
+                },
+                icon: const Icon(Icons.diamond_rounded),
+                label: Text(cp.ringId == null ? 'Select Ring' : 'Ring ' + cp.ringId!),
+              ),
+              const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: () async {
                   await Navigator.push<bool>(
