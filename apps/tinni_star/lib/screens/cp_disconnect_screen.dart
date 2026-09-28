@@ -25,11 +25,21 @@ class _CpDisconnectScreenState extends State<CpDisconnectScreen> {
     setState(() {});
   }
 
-  void _confirm() {
-    widget.state.cpFeatures.respondDisconnect(accept: true);
-    widget.state.cp.disconnect();
-    if (!mounted) return;
-    Navigator.pop(context, true);
+  Future<void> _confirm() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.cpDisconnect(account.authToken);
+      widget.state.cpFeatures.respondDisconnect(accept: true);
+      widget.state.cp.disconnect();
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
   @override
