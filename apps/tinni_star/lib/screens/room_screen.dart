@@ -3137,6 +3137,108 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _showRoomIdentityCard() {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    var refreshKey = 0;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => FutureBuilder<List<Map<String, dynamic>>>(
+          key: ValueKey<int>(refreshKey),
+          future: Future.wait(<Future<Map<String, dynamic>>>[
+            widget.state.discovery.roomFollow(authToken: account.authToken, roomId: widget.room.id),
+            widget.state.discovery.roomMembership(authToken: account.authToken, roomId: widget.room.id),
+          ]),
+          builder: (context, snapshot) {
+            final follow = snapshot.data?.elementAtOrNull(0) ?? const <String, dynamic>{};
+            final membership = snapshot.data?.elementAtOrNull(1) ?? const <String, dynamic>{};
+            final following = follow['following'] == true;
+            final member = membership['is_member'] == true;
+            final present = (follow['present_follower_count'] as num? ?? 0).toInt();
+            final followers = (follow['follower_count'] as num? ?? 0).toInt();
+            final memberCount = (membership['member_count'] as num? ?? 0).toInt();
+            final memberLimit = membership['member_limit'];
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 28,
+                        backgroundColor: RoyalPalette.panel2,
+                        child: const Icon(Icons.meeting_room_rounded, color: RoyalPalette.gold),
+                      ),
+                      title: Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
+                      subtitle: Text(
+                        'Room ID: ' + widget.room.id + '  •  ' + present.toString() + '/' + followers.toString() + ' followers present',
+                        style: const TextStyle(color: RoyalPalette.muted),
+                      ),
+                    ),
+                    Text(
+                      'Members ' + memberCount.toString() + (memberLimit == null ? '' : '/' + memberLimit.toString()) +
+                          ' • Room Lv.' + (membership['room_level']?.toString() ?? '1'),
+                      style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              try {
+                                await widget.state.discovery.setRoomFollow(
+                                  authToken: account.authToken,
+                                  roomId: widget.room.id,
+                                  following: !following,
+                                );
+                                setSheetState(() => refreshKey++);
+                              } catch (error) {
+                                _snack(error.toString().replaceFirst('Bad state: ', ''));
+                              }
+                            },
+                            icon: Icon(following ? Icons.favorite_rounded : Icons.favorite_border_rounded),
+                            label: Text(following ? 'Unfollow' : 'Follow'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: (!following && !member)
+                                ? null
+                                : () async {
+                                    try {
+                                      await widget.state.discovery.setRoomMembership(
+                                        authToken: account.authToken,
+                                        roomId: widget.room.id,
+                                        member: !member,
+                                      );
+                                      setSheetState(() => refreshKey++);
+                                    } catch (error) {
+                                      _snack(error.toString().replaceFirst('Bad state: ', ''));
+                                    }
+                                  },
+                            icon: Icon(member ? Icons.person_remove_rounded : Icons.person_add_rounded),
+                            label: Text(member ? 'Leave Member' : 'Become Member'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showRoomSettings() {
     final controls = widget.state.roomControls;
     if (!_isRoomOwner) {
@@ -3907,21 +4009,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         backgroundColor: _roomBackgroundColor,
         appBar: AppBar(
           backgroundColor: _roomBackgroundColor,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
-              Text(
-                'ID ' +
-                    widget.room.id +
-                    ' • ' +
-                    (widget.state.roomControls.roomMode == 'event'
-                        ? 'Event hosting mode'
-                        : 'Friends-making Party') +
-                    (session.connected ? ' • Connected' : ' • Connecting'),
-                style: const TextStyle(fontSize: 10, color: RoyalPalette.muted),
-              ),
-            ],
+          title: InkWell(
+            onTap: _showRoomIdentityCard,
+            borderRadius: BorderRadius.circular(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
+                Text(
+                  'ID ' +
+                      widget.room.id +
+                      ' • ' +
+                      (widget.state.roomControls.roomMode == 'event'
+                          ? 'Event hosting mode'
+                          : 'Friends-making Party') +
+                      (session.connected ? ' • Connected' : ' • Connecting'),
+                  style: const TextStyle(fontSize: 10, color: RoyalPalette.muted),
+                ),
+              ],
+            ),
           ),
           actions: [
             IconButton(
