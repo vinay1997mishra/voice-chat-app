@@ -25,6 +25,11 @@ class _RechargeScreenState extends State<RechargeScreen> {
 
   Future<void> _load() async {
     try {
+      final account = widget.state.auth.current;
+      if (account != null) {
+        final remoteWallet = await widget.state.backend.wallet(account.authToken);
+        widget.state.wallet.applyRemote(remoteWallet);
+      }
       final values = await widget.state.billing.products();
       if (!mounted) return;
       setState(() {
@@ -56,6 +61,11 @@ class _RechargeScreenState extends State<RechargeScreen> {
           ),
         ),
       );
+      final account = widget.state.auth.current;
+      if (account != null) {
+        final remoteWallet = await widget.state.backend.wallet(account.authToken);
+        widget.state.wallet.applyRemote(remoteWallet);
+      }
       setState(() {});
     } catch (error) {
       if (!mounted) return;
