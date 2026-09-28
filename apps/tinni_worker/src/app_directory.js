@@ -386,6 +386,21 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS cp_relationships (
+        user_a TEXT NOT NULL,
+        user_b TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending',
+        intimacy INTEGER NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 1,
+        ring_id TEXT,
+        requested_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_a, user_b)
+      );
+      CREATE INDEX IF NOT EXISTS idx_cp_relationships_users ON cp_relationships(user_a, user_b, state);
+
+
       CREATE TABLE IF NOT EXISTS call_verification_submissions (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -2370,6 +2385,44 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       "SELECT * FROM gift_transactions WHERE room_id = ? ORDER BY created_at DESC LIMIT ?", roomId, limit,
     ).toArray().map((row) => ({ ...row, quantity: Number(row.quantity), unit_price: Number(row.unit_price), total_cost: Number(row.total_cost), created_at: Number(row.created_at) }));
+  }
+
+  cpState(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user ID is required");
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM cp_relationships WHERE user_a = ? OR user_b = ? ORDER BY updated_at DESC LIMIT 1", userId, userId,
+    ).toArray()[0];
+    if (!row) return null;
+    return { ...row, intimacy: Number(row.intimacy || 0), level: Number(row.level || 1), created_at: Number(row.created_at), updated_at: Number(row.updated_at) };
+  }
+
+  cpRequest(userIdValue, targetIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const targetId = String(targetIdValue || "").trim();
+    if (!userId || !targetId || userId === targetId) throw new Error("Choose another user for CP");
+    if (!this.getUserById(targetId)) throw new Error("User not found");
+    if (this.cpState(userId) || this.cpState(targetId)) throw new Error("A CP flow is already active");
+    const pair = [userId, targetId].sort(); const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,?)",
+      pair[0], pair[1], userId, now, now,
+    );
+    return this.cpState(userId);
+  }
+
+  cpRespond(userIdValue, acceptValue) {
+    const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
+    if (!row || row.state !== "pending" || row.requested_by === userId) throw new Error("No CP request is awaiting your response");
+    this.ctx.storage.sql.exec("UPDATE cp_relationships SET state = ?, updated_at = ? WHERE user_a = ? AND user_b = ?", acceptValue === true ? "accepted" : "refused", Date.now(), row.user_a, row.user_b);
+    return this.cpState(userId);
+  }
+
+  cpDisconnect(userIdValue) {
+    const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
+    if (!row) return { ok: true, cp: null };
+    this.ctx.storage.sql.exec("DELETE FROM cp_relationships WHERE user_a = ? AND user_b = ?", row.user_a, row.user_b);
+    return { ok: true, cp: null };
   }
 
   getWallet(userIdValue) {
