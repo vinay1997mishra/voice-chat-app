@@ -4592,8 +4592,8 @@ export class AppDirectoryStore extends DurableObject {
       : null;
 
     if (!title) throw new Error("Room name is required");
-    if (!Number.isInteger(seatCount) || seatCount < 1 || seatCount > 30) {
-      throw new Error("Invalid seat count");
+    if (!Number.isInteger(seatCount) || ![8,9,10,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42].includes(seatCount)) {
+      throw new Error("Room seat count must be 8-10 or 12-42");
     }
     if (photoDataUrl && photoDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
       throw new Error("Room photo is too large");
