@@ -1412,13 +1412,31 @@ export class AppDirectoryStore extends DurableObject {
       );
       case "vip-new": return this.ownerCatalogCreate("vip", data.name || "VIP", {
         level: Number(data.level || data.vip_level || 1),
-        price: Number(data.price || 0), entry: data.entry || "", frame: data.frame || "",
+        order: Number(data.order || data.level || data.vip_level || 1),
+        price: Number(data.price || 0),
+        requirements: data.requirements || "",
+        duration_days: Number(data.duration_days || 0),
+        badge: data.badge || "", profile_frame: data.profile_frame || data.frame || "",
+        seat_frame: data.seat_frame || "", entry: data.entry || "",
+        entry_asset: data.entry_asset || "", entry_audio: data.entry_audio || "",
+        privileges: Array.isArray(data.privileges) ? data.privileges : [],
+        permissions: Array.isArray(data.permissions) ? data.permissions : [],
+        special_effects: Array.isArray(data.special_effects) ? data.special_effects : [],
+        countries: Array.isArray(data.countries) ? data.countries : [],
+        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
       case "gift-new": return this.ownerCatalogCreate("gift", data.name, {
         coin_price: Number(data.coin_price || 0), asset_url: String(data.asset_url || ""),
+        order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
+        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
       case "entry-new": return this.ownerCatalogCreate("entry", data.name, {
         asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
+        order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
+        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
       case "frame-new": return this.ownerCatalogCreate("frame", data.name, {
         asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
