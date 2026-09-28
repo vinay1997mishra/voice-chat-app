@@ -1731,6 +1731,16 @@ export default {
       });
     }
 
+    if (url.pathname === "/room-games/action" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const ownerState = await getAppDirectoryStore(env).ownerState();
+      if (ownerState.features?.games === false || ownerState.game_config?.enabled === false) return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      try { return json(await getAppDirectoryStore(env).playRoomQuickGame(appSession.user.user_id, body), 201); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to play room game") }, 400); }
+    }
+
     if (url.pathname === "/cp" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
