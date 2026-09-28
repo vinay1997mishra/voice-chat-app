@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../economy/economy.dart';
+import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 
 class StoreScreen extends StatefulWidget {
@@ -103,6 +104,7 @@ class _StoreScreenState extends State<StoreScreen> {
     } else {
       equipped = widget.state.inventory.equipFrame(item.id);
     }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -129,6 +131,7 @@ class _StoreScreenState extends State<StoreScreen> {
     } else {
       widget.state.inventory.removeFrame();
     }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Avatar frame removed.')),
     );
@@ -159,6 +162,7 @@ class _StoreScreenState extends State<StoreScreen> {
     if (bought && item.type == 'Vehicle') {
       widget.state.identity.addVehicle(item.id);
     }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
