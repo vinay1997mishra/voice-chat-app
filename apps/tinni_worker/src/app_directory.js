@@ -2,8 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
-const ROOM_THEME_USER_PRICE_COINS = 10000000;
-const ROOM_THEME_USER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const ROOM_THEME_DURATION_DAYS = new Set([7, 10, 15, 30]);
 const UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 200000;
 const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
@@ -3840,37 +3839,58 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Confirm the no-sexual/no-political theme policy");
     }
 
-    const { name, asset } = validateRoomThemePolicy(
-      input?.name,
-      input?.asset,
-    );
+    const { name, asset } = validateRoomThemePolicy(input?.name, input?.asset);
+    const permanent = input?.permanent === true;
+    const durationDays = permanent ? null : Number(input?.duration_days);
+    if (!permanent && (!Number.isInteger(durationDays) || !ROOM_THEME_DURATION_DAYS.has(durationDays))) {
+      throw new Error("Custom background duration must be 7, 10, 15 or 30 days, or Permanent");
+    }
+
+    // Price is controlled by server/Owner settings, never by the APK.
+    const policy = this._getSetting("room_theme_user_policy", {
+      prices: { "7": 10000000, "10": 14000000, "15": 20000000, "30": 35000000, permanent: 100000000 },
+    });
+    const priceKey = permanent ? "permanent" : String(durationDays);
+    const priceCoins = Number(policy?.prices?.[priceKey]);
+    if (!Number.isSafeInteger(priceCoins) || priceCoins < 0) {
+      throw new Error("Custom background price is not configured");
+    }
+
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is unavailable");
+    if (wallet.coins < priceCoins) throw new Error("Insufficient coins");
+
     const now = Date.now();
-    const id =
-      "theme-user-" + roomId + "-" + now.toString(36) + "-" +
-      crypto.randomUUID().slice(0, 8);
-    const expiresAt = now + ROOM_THEME_USER_DURATION_MS;
+    const id = "theme-user-" + roomId + "-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const expiresAt = permanent ? null : now + durationDays * 24 * 60 * 60 * 1000;
+
+    if (priceCoins > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
+        priceCoins, now, userId,
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO wallet_transactions
+          (id, user_id, kind, amount_coins, reference, created_at)
+         VALUES (?, ?, 'room_theme_purchase', ?, ?, ?)`,
+        "wallet-theme-" + crypto.randomUUID(),
+        userId,
+        -priceCoins,
+        id,
+        now,
+      );
+    }
 
     this.ctx.storage.sql.exec(
       `INSERT INTO room_themes
         (id, name, asset, source, room_id, creator_user_id, price_coins,
          created_at, starts_at, expires_at, enabled)
        VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, 1)`,
-      id,
-      name,
-      asset,
-      roomId,
-      userId,
-      ROOM_THEME_USER_PRICE_COINS,
-      now,
-      now,
-      expiresAt,
+      id, name, asset, roomId, userId, priceCoins, now, now, expiresAt,
     );
 
     return rowToRoomTheme(
-      this.ctx.storage.sql.exec(
-        "SELECT * FROM room_themes WHERE id = ? LIMIT 1",
-        id,
-      ).toArray()[0],
+      this.ctx.storage.sql.exec("SELECT * FROM room_themes WHERE id = ? LIMIT 1", id).toArray()[0],
     );
   }
 
