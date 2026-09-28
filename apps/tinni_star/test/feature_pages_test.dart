@@ -34,14 +34,14 @@ TinniState makeState() {
 }
 
 void main() {
-  testWidgets('Mine exposes CP as a separate personal panel', (tester) async {
+  testWidgets('Mine keeps CP out of the personal account surface', (tester) async {
     final state = makeState();
     await tester.pumpWidget(
       MaterialApp(home: ProfileScreen(state: state)),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('CP'), findsOneWidget);
+    expect(find.text('CP'), findsNothing);
   });
 
   testWidgets('More keeps CP actions out and routes remaining features to pages',
