@@ -411,6 +411,42 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_cp_relationships_users ON cp_relationships(user_a, user_b, state);
 
+      CREATE TABLE IF NOT EXISTS cp_memories (
+        id TEXT PRIMARY KEY,
+        user_a TEXT NOT NULL,
+        user_b TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_cp_memories_pair_time
+        ON cp_memories(user_a, user_b, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        coins_delta INTEGER NOT NULL DEFAULT 0,
+        diamonds_delta INTEGER NOT NULL DEFAULT 0,
+        reference_id TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_reference
+        ON wallet_transactions(user_id, reference_id)
+        WHERE reference_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_time
+        ON wallet_transactions(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS vip_entitlements (
+        user_id TEXT PRIMARY KEY,
+        vip_id TEXT NOT NULL,
+        vip_level INTEGER NOT NULL,
+        starts_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
 
       CREATE TABLE IF NOT EXISTS call_verification_submissions (
         id TEXT PRIMARY KEY,
@@ -2510,6 +2546,146 @@ export class AppDirectoryStore extends DurableObject {
     if (!row) return { ok: true, cp: null };
     this.ctx.storage.sql.exec("DELETE FROM cp_relationships WHERE user_a = ? AND user_b = ?", row.user_a, row.user_b);
     return { ok: true, cp: null };
+  }
+
+  cpUpdate(userIdValue, input = {}) {
+    const userId = String(userIdValue || "").trim();
+    const row = this.cpState(userId);
+    if (!row || row.state !== "accepted") throw new Error("Active CP relationship is required");
+    const action = String(input.action || "").trim();
+    if (action === "intimacy") {
+      const delta = Math.max(1, Math.min(10000, Number(input.delta || 0)));
+      const intimacy = Number(row.intimacy || 0) + delta;
+      const level = Math.max(1, Math.floor(intimacy / 1000) + 1);
+      this.ctx.storage.sql.exec(
+        "UPDATE cp_relationships SET intimacy = ?, level = ?, updated_at = ? WHERE user_a = ? AND user_b = ?",
+        intimacy, level, Date.now(), row.user_a, row.user_b,
+      );
+    } else if (action === "ring") {
+      const ringId = cleanText(input.ring_id, 80);
+      if (!ringId) throw new Error("ring_id is required");
+      this.ctx.storage.sql.exec(
+        "UPDATE cp_relationships SET ring_id = ?, updated_at = ? WHERE user_a = ? AND user_b = ?",
+        ringId, Date.now(), row.user_a, row.user_b,
+      );
+    } else {
+      throw new Error("Unsupported CP update");
+    }
+    return this.cpState(userId);
+  }
+
+  cpMemories(userIdValue) {
+    const row = this.cpState(userIdValue);
+    if (!row || row.state !== "accepted") return [];
+    return this.ctx.storage.sql.exec(
+      "SELECT id, author_id, text, created_at FROM cp_memories WHERE user_a = ? AND user_b = ? ORDER BY created_at DESC LIMIT 200",
+      row.user_a, row.user_b,
+    ).toArray().map((item) => ({
+      id: String(item.id), author_id: String(item.author_id),
+      text: String(item.text), created_at: Number(item.created_at),
+    }));
+  }
+
+  cpAddMemory(userIdValue, textValue) {
+    const userId = String(userIdValue || "").trim();
+    const row = this.cpState(userId);
+    if (!row || row.state !== "accepted") throw new Error("Active CP relationship is required");
+    const text = cleanText(textValue, 120);
+    if (!text) throw new Error("Memory text is required");
+    const memory = { id: crypto.randomUUID(), author_id: userId, text, created_at: Date.now() };
+    this.ctx.storage.sql.exec(
+      "INSERT INTO cp_memories (id,user_a,user_b,author_id,text,created_at) VALUES (?,?,?,?,?,?)",
+      memory.id, row.user_a, row.user_b, userId, text, memory.created_at,
+    );
+    return memory;
+  }
+
+  walletTransactions(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT id,kind,coins_delta,diamonds_delta,reference_id,note,created_at FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 200",
+      userId,
+    ).toArray().map((row) => ({
+      id: String(row.id), kind: String(row.kind),
+      coins_delta: Number(row.coins_delta || 0), diamonds_delta: Number(row.diamonds_delta || 0),
+      reference_id: row.reference_id ? String(row.reference_id) : null,
+      note: String(row.note || ""), created_at: Number(row.created_at),
+    }));
+  }
+
+  applyRecharge(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const productId = String(input.product_id || "").trim();
+    const purchaseToken = String(input.purchase_token || "").trim();
+    const verified = input.verified === true;
+    const products = { coins_small: 50000, coins_large: 500000 };
+    const coins = products[productId];
+    if (!coins) throw new Error("Unknown recharge product");
+    if (!purchaseToken) throw new Error("Purchase token is required");
+    if (!verified) throw new Error("Billing receipt is not verified");
+    this.getWallet(userId);
+    const reference = "recharge:" + purchaseToken;
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT id FROM wallet_transactions WHERE user_id = ? AND reference_id = ? LIMIT 1",
+      userId, reference,
+    ).toArray()[0];
+    if (!existing) {
+      const now = Date.now();
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?", coins, now, userId);
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'recharge',?,0,?,?,?)",
+        crypto.randomUUID(), userId, coins, reference, productId, now,
+      );
+    }
+    return { ok: true, wallet: this.getWallet(userId), duplicate: Boolean(existing) };
+  }
+
+  vipState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id,vip_id,vip_level,starts_at,expires_at,updated_at FROM vip_entitlements WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row) return null;
+    const expiresAt = row.expires_at == null ? null : Number(row.expires_at);
+    if (expiresAt != null && expiresAt <= Date.now()) {
+      this.ctx.storage.sql.exec("DELETE FROM vip_entitlements WHERE user_id = ?", userId);
+      return null;
+    }
+    return { user_id: userId, vip_id: String(row.vip_id), vip_level: Number(row.vip_level),
+      starts_at: Number(row.starts_at), expires_at: expiresAt, updated_at: Number(row.updated_at) };
+  }
+
+  vipPurchase(userIdValue, vipIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const vipId = String(vipIdValue || "").trim();
+    const item = this.ownerCatalog("vip").find((value) => value.id === vipId && value.enabled !== false);
+    if (!item) throw new Error("VIP level is unavailable");
+    const level = Math.max(1, Number(item.data?.level || 0));
+    const price = Math.max(0, Number(item.data?.price || 0));
+    const durationDays = Math.max(0, Number(item.data?.duration_days || item.data?.duration || 30));
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    const current = this.vipState(userId);
+    const base = current?.expires_at && current.expires_at > now ? current.expires_at : now;
+    const expiresAt = durationDays === 0 ? null : base + durationDays * 86400000;
+    if (price > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'vip_purchase',?,0,?,?,?)",
+        crypto.randomUUID(), userId, -price, "vip:" + vipId + ":" + now, item.name, now,
+      );
+    }
+    this.ctx.storage.sql.exec(
+      `INSERT INTO vip_entitlements (user_id,vip_id,vip_level,starts_at,expires_at,updated_at)
+       VALUES (?,?,?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET vip_id=excluded.vip_id,vip_level=excluded.vip_level,
+         starts_at=excluded.starts_at,expires_at=excluded.expires_at,updated_at=excluded.updated_at`,
+      userId, vipId, level, now, expiresAt, now,
+    );
+    return { ok: true, vip: this.vipState(userId), wallet: this.getWallet(userId) };
   }
 
   getWallet(userIdValue) {
