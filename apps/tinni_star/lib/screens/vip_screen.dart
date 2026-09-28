@@ -33,6 +33,12 @@ class _VipScreenState extends State<VipScreen> {
     }
     try {
       final values = await widget.state.backend.vipCatalog(account.authToken);
+      final entitlement = await widget.state.backend.vipMe(account.authToken);
+      if (entitlement != null) {
+        widget.state.identity.setVipLevel(int.tryParse(entitlement['vip_level']?.toString() ?? '') ?? 0);
+      } else {
+        widget.state.identity.setVipLevel(0);
+      }
       if (!mounted) return;
       setState(() {
         catalog = values;
@@ -180,6 +186,33 @@ class _VipScreenState extends State<VipScreen> {
             child: Text('Entry: ' + selectedItem!.entry, style: const TextStyle(color: RoyalPalette.muted)),
           ),
           const SizedBox(height: 14),
+          if (selectedItem != null)
+            FilledButton.icon(
+              key: const Key('vip-purchase-button'),
+              onPressed: () async {
+                final account = widget.state.auth.current;
+                final item = selectedItem;
+                if (account == null || item == null) return;
+                try {
+                  final result = await widget.state.backend.vipPurchase(account.authToken, item.id);
+                  final vip = result['vip'];
+                  if (vip is Map) {
+                    widget.state.identity.setVipLevel(int.tryParse(vip['vip_level']?.toString() ?? '') ?? item.level);
+                  }
+                  final wallet = await widget.state.backend.wallet(account.authToken);
+                  widget.state.wallet.applyRemote(wallet);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(item.name + ' activated.')));
+                  setState(() {});
+                } catch (error) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                }
+              },
+              icon: const Icon(Icons.workspace_premium_rounded),
+              label: Text('Activate ' + selectedItem!.name + (selectedItem!.price > 0 ? ' • ' + selectedItem!.price.toString() + ' coins' : '')),
+            ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             key: const Key('vip-monthly-topup-button'),
             onPressed: () {
