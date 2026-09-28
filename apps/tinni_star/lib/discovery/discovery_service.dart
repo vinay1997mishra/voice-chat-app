@@ -568,9 +568,10 @@ class DiscoveryService {
   }
 
   List<RoomSummary> recommend({String? country}) {
+    final visibleRooms = rooms.where((room) => !room.locked).toList();
     final filtered = country == null
-        ? rooms
-        : rooms.where((room) => room.country == country).toList();
+        ? visibleRooms
+        : visibleRooms.where((room) => room.country == country).toList();
     final sorted = List<RoomSummary>.from(filtered)
       ..sort((a, b) {
         final onlineOrder = b.online.compareTo(a.online);
@@ -587,7 +588,7 @@ class DiscoveryService {
   }) {
     final reference = now ?? DateTime.now();
     final values = rooms
-        .where((room) => room.createdWithin(maxAge, now: reference))
+        .where((room) => !room.locked && room.createdWithin(maxAge, now: reference))
         .toList()
       ..sort(
         (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -606,8 +607,9 @@ class DiscoveryService {
     final lower = value.toLowerCase();
     return rooms
         .where(
-          (room) =>
-              room.id == value || room.title.toLowerCase().contains(lower),
+          (room) => room.locked
+              ? room.id == value
+              : room.id == value || room.title.toLowerCase().contains(lower),
         )
         .toList();
   }
