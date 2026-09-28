@@ -44,6 +44,28 @@ class _StoreScreenState extends State<StoreScreen> {
     StoreItem(id: 'mic-glow', name: 'Mic Glow', price: 4200, type: 'Mic'),
   ];
 
+  void _useFrame(StoreItem item) {
+    final equipped = widget.state.inventory.equipFrame(item.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          equipped
+              ? item.name + ' frame is now active.'
+              : 'This frame is not in your Inventory.',
+        ),
+      ),
+    );
+    setState(() {});
+  }
+
+  void _removeFrame() {
+    widget.state.inventory.removeFrame();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Avatar frame removed.')),
+    );
+    setState(() {});
+  }
+
   void _buy(StoreItem item) {
     final bought = widget.state.inventory.purchase(item);
     if (bought && item.type == 'Vehicle') {
