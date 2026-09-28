@@ -2904,23 +2904,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return const Color(0xFFD71932);
     }
     if (value.contains('rocket')) return FeaturePalette.rocket;
-    if (value.contains('moderation')) return FeaturePalette.safety;
-    if (value.contains('friend')) return FeaturePalette.family;
-    if (value.contains('event')) return FeaturePalette.fruitParty;
-    if (value.contains('effect')) return FeaturePalette.gift;
-    if (value.contains('notice')) return FeaturePalette.social;
-    if (value.contains('theme')) return FeaturePalette.moments;
+    if (value.contains('moderation')) return const Color(0xFFFF5A5F);
+    if (value.contains('friend')) return const Color(0xFF42D392);
+    if (value.contains('event')) return const Color(0xFFFF8A34);
+    if (value.contains('effect')) return const Color(0xFFFF4FA3);
+    if (value.contains('notice')) return const Color(0xFF44C8FF);
+    if (value.contains('theme')) return const Color(0xFFB56CFF);
     if (value.contains('seat') || value.contains('request')) {
-      return FeaturePalette.family;
+      return const Color(0xFF42D392);
     }
-    if (value.contains('lucky')) return FeaturePalette.rank;
-    if (value.contains('pk')) return FeaturePalette.games;
+    if (value.contains('lucky')) return const Color(0xFFFFD45A);
+    if (value.contains('pk')) return const Color(0xFFFF5A5F);
     if (value.contains('locked') || value.contains('report')) {
-      return FeaturePalette.safety;
+      return const Color(0xFFFF4B4B);
     }
-    if (value.contains('open')) return FeaturePalette.family;
-    if (value.contains('screen')) return FeaturePalette.social;
-    if (value.contains('setting')) return FeaturePalette.discover;
+    if (value.contains('open')) return const Color(0xFF42D392);
+    if (value.contains('screen')) return const Color(0xFF44C8FF);
+    if (value.contains('setting')) return const Color(0xFFFFD45A);
     return FeaturePalette.social;
   }
 
@@ -2949,7 +2949,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ? const <Color>[Color(0xFFFF4FA3), Color(0xFF7B123D)]
             : isGame
                 ? const <Color>[Color(0xFF3A3A3A), Color(0xFF080808)]
-                : const <Color>[Color(0xFF211A0A), Color(0xFF050505)];
+                : <Color>[
+                    Color.lerp(const Color(0xFF050505), accent, 0.22)!,
+                    const Color(0xFF050505),
+                  ];
 
     return Container(
       width: size,
@@ -3278,13 +3281,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: isLp
+                      colors: tool.$1 == 'Lucky Bag'
                           ? const <Color>[Color(0xFF5B0710), Color(0xFF220204)]
-                          : const <Color>[Color(0xFF17130A), Color(0xFF050505)],
+                          : <Color>[
+                              Color.lerp(
+                                const Color(0xFF080808),
+                                _roomToolColor(tool.$1),
+                                0.13,
+                              )!,
+                              const Color(0xFF030303),
+                            ],
                     ),
-                    border: Border.all(color: RoyalPalette.deepGold.withValues(alpha: 0.78)),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x33FFD45A), blurRadius: 10),
+                    border: Border.all(
+                      color: RoyalPalette.gold.withValues(alpha: 0.88),
+                      width: 1.05,
+                    ),
+                    boxShadow: <BoxShadow>[
+                      const BoxShadow(color: Color(0x55FFD45A), blurRadius: 10),
+                      BoxShadow(
+                        color: _roomToolColor(tool.$1).withValues(alpha: 0.14),
+                        blurRadius: 12,
+                      ),
                     ],
                   ),
                   child: Column(
