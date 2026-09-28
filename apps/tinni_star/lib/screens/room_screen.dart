@@ -40,6 +40,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _seatInviteDialogOpen = false;
   bool _fruitJackpotOpen = false;
   bool _fruitPartyOpen = false;
+  Timer? _ribbonTimer;
+  final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
+  final Set<String> _seenRibbonIds = <String>{};
   RoomController get controller => widget.state.roomSession.controller!;
 
   @override
@@ -47,6 +50,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
+    _ribbonTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshCountryRibbons());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
@@ -398,8 +403,116 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
+    _ribbonTimer?.cancel();
     chat.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshCountryRibbons() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final rows = await widget.state.discovery.countryRibbons(account.authToken);
+      var changed = false;
+      for (final row in rows) {
+        final id = row['id']?.toString() ?? '';
+        if (id.isEmpty || !_seenRibbonIds.add(id)) continue;
+        _ribbonQueue.add(row);
+        changed = true;
+      }
+      _ribbonQueue.sort((a, b) {
+        final priority = ((b['priority'] as num?)?.toInt() ?? 0)
+            .compareTo((a['priority'] as num?)?.toInt() ?? 0);
+        if (priority != 0) return priority;
+        return ((a['created_at'] as num?)?.toInt() ?? 0)
+            .compareTo((b['created_at'] as num?)?.toInt() ?? 0);
+      });
+      if (changed && mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  void _finishRibbon(String id) {
+    if (!mounted) return;
+    setState(() => _ribbonQueue.removeWhere((row) => row['id']?.toString() == id));
+  }
+
+  void _enterRibbonRoom(Map<String, dynamic> ribbon) {
+    final roomId = ribbon['room_id']?.toString() ?? '';
+    RoomSummary? target;
+    for (final room in widget.state.discovery.rooms) {
+      if (room.id == roomId) { target = room; break; }
+    }
+    if (target == null || target.id == widget.room.id) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => RoomScreen(state: widget.state, room: target!)),
+    );
+  }
+
+  Widget _buildRibbonLane(Map<String, dynamic> ribbon, int lane) {
+    final id = ribbon['id']?.toString() ?? '';
+    final isLp = ribbon['kind']?.toString() == 'lp';
+    final name = ribbon['user_name']?.toString() ?? 'User';
+    final amount = (ribbon['amount'] as num?)?.toInt() ?? 0;
+    String amountText;
+    if (amount >= 1000000) {
+      amountText = (amount / 1000000).toStringAsFixed(amount % 1000000 == 0 ? 0 : 1) + 'M';
+    } else {
+      amountText = (amount / 100000).toStringAsFixed(amount % 100000 == 0 ? 0 : 1) + 'L';
+    }
+    final game = (ribbon['game_key']?.toString() ?? 'Game').replaceAll('_', ' ');
+    final background = isLp ? const Color(0xFF650812) : const Color(0xFF090909);
+    final message = isLp ? name + ' opened ' + amountText + ' LP' : name + ' WIN ' + amountText + ' • ' + game;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 6.0 + lane * 48.0,
+      height: 42,
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey<String>(id),
+        tween: Tween<double>(begin: 1.15, end: -1.15),
+        duration: const Duration(seconds: 8),
+        onEnd: () => _finishRibbon(id),
+        builder: (context, value, child) => FractionalTranslation(
+          translation: Offset(value, 0),
+          child: child,
+        ),
+        child: GestureDetector(
+          onTap: () => _enterRibbonRoom(ribbon),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(21),
+              border: Border.all(color: RoyalPalette.gold, width: 1.2),
+              boxShadow: const [BoxShadow(color: Color(0x66FFD45A), blurRadius: 10)],
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: RoyalPalette.panel2,
+                  child: Text(name.isEmpty ? '?' : name.characters.first.toUpperCase()),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    message,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                Icon(
+                  isLp ? Icons.shopping_bag_rounded : Icons.sports_esports_rounded,
+                  color: isLp ? const Color(0xFFD71932) : Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _refresh() {
@@ -4015,6 +4128,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
                 Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
                 Text(
                   'ID ' +
