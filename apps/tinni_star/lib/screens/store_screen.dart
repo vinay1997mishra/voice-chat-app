@@ -14,6 +14,8 @@ class StoreScreen extends StatefulWidget {
 
 class _StoreScreenState extends State<StoreScreen> {
   int tab = 0;
+  bool _syncing = false;
+  List<StoreItem>? _remoteFrames;
 
   static const catalog = <StoreItem>[
     StoreItem(id: 'vehicle-star', name: 'Star Vehicle', price: 5000, type: 'Vehicle'),
@@ -44,8 +46,63 @@ class _StoreScreenState extends State<StoreScreen> {
     StoreItem(id: 'mic-glow', name: 'Mic Glow', price: 4200, type: 'Mic'),
   ];
 
-  void _useFrame(StoreItem item) {
-    final equipped = widget.state.inventory.equipFrame(item.id);
+  String? get _token => widget.state.auth.current?.authToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncInventory();
+  }
+
+  Future<void> _syncInventory() async {
+    final token = _token;
+    if (token == null || token.isEmpty || _syncing) return;
+    _syncing = true;
+    try {
+      final results = await Future.wait([
+        widget.state.backend.inventory(token),
+        widget.state.backend.frameCatalog(token),
+        widget.state.backend.wallet(token),
+      ]);
+      widget.state.inventory.applyRemote(results[0] as Map<String, dynamic>);
+      widget.state.wallet.applyRemote(results[2] as RemoteWallet);
+      final remote = results[1] as List<Map<String, dynamic>>;
+      _remoteFrames = remote.map((row) {
+        final data = row['data'] is Map
+            ? Map<String, dynamic>.from(row['data'] as Map)
+            : <String, dynamic>{};
+        return StoreItem(
+          id: row['id']?.toString() ?? '',
+          name: row['name']?.toString() ?? 'Frame',
+          price: (row['price'] as num?)?.toInt() ??
+              (data['price'] as num?)?.toInt() ??
+              (data['coin_price'] as num?)?.toInt() ??
+              0,
+          type: 'Frame',
+        );
+      }).where((item) => item.id.isNotEmpty).toList(growable: false);
+    } catch (_) {
+      // Keep the built-in catalog available when the backend is temporarily offline.
+    } finally {
+      _syncing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _useFrame(StoreItem item) async {
+    final token = _token;
+    var equipped = false;
+    if (token != null && token.isNotEmpty) {
+      try {
+        final result = await widget.state.backend.equipFrame(token, item.id);
+        widget.state.inventory.applyRemote(
+          Map<String, dynamic>.from(result['inventory'] as Map),
+        );
+        equipped = widget.state.inventory.equippedFrameId == item.id;
+      } catch (_) {}
+    } else {
+      equipped = widget.state.inventory.equipFrame(item.id);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -58,16 +115,47 @@ class _StoreScreenState extends State<StoreScreen> {
     setState(() {});
   }
 
-  void _removeFrame() {
-    widget.state.inventory.removeFrame();
+  Future<void> _removeFrame() async {
+    final token = _token;
+    if (token != null && token.isNotEmpty) {
+      try {
+        final result = await widget.state.backend.equipFrame(token, null);
+        widget.state.inventory.applyRemote(
+          Map<String, dynamic>.from(result['inventory'] as Map),
+        );
+      } catch (_) {
+        return;
+      }
+    } else {
+      widget.state.inventory.removeFrame();
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Avatar frame removed.')),
     );
     setState(() {});
   }
 
-  void _buy(StoreItem item) {
-    final bought = widget.state.inventory.purchase(item);
+  Future<void> _buy(StoreItem item) async {
+    var bought = false;
+    final token = _token;
+    if (item.type == 'Frame' && token != null && token.isNotEmpty) {
+      try {
+        final result = await widget.state.backend.purchaseFrame(token, item.id);
+        widget.state.inventory.applyRemote(
+          Map<String, dynamic>.from(result['inventory'] as Map),
+        );
+        final wallet = Map<String, dynamic>.from(result['wallet'] as Map);
+        widget.state.wallet.applyRemote(RemoteWallet(
+          coins: (wallet['coins'] as num?)?.toInt() ?? widget.state.wallet.coins,
+          diamonds: (wallet['diamonds'] as num?)?.toInt() ?? widget.state.wallet.diamonds,
+          banned: wallet['banned'] == true,
+          updatedAt: (wallet['updated_at'] as num?)?.toInt() ?? 0,
+        ));
+        bought = widget.state.inventory.owned.contains(item.id);
+      } catch (_) {}
+    } else {
+      bought = widget.state.inventory.purchase(item);
+    }
     if (bought && item.type == 'Vehicle') {
       widget.state.identity.addVehicle(item.id);
     }
@@ -87,10 +175,16 @@ class _StoreScreenState extends State<StoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final owned = catalog
+    final dynamicCatalog = _remoteFrames == null || _remoteFrames!.isEmpty
+        ? catalog
+        : <StoreItem>[
+            ...catalog.where((item) => item.type != 'Frame'),
+            ..._remoteFrames!,
+          ];
+    final owned = dynamicCatalog
         .where((item) => widget.state.inventory.owned.contains(item.id))
         .toList(growable: false);
-    final items = tab == 0 ? catalog : owned;
+    final items = tab == 0 ? dynamicCatalog : owned;
 
     return Scaffold(
       key: const Key('store-screen'),
