@@ -21,6 +21,30 @@ class GamesScreen extends StatelessWidget {
   final VoidCallback? onFruitJackpot;
   final VoidCallback? onFruitParty;
 
+  void _showQuickGame(BuildContext context, String title, String subtitle) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.sports_esports_rounded, size: 54),
+              const SizedBox(height: 12),
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(subtitle, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              const Text('Available only from the active room Game Panel.'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final games = <(String, IconData, Color, VoidCallback)>[
@@ -81,6 +105,30 @@ class GamesScreen extends StatelessWidget {
           context,
           MaterialPageRoute(builder: (_) => const UnoScreen()),
         ),
+      ),
+      (
+        'Lucky Dice',
+        Icons.casino_rounded,
+        RoyalPalette.gold,
+        () => _showQuickGame(context, 'Lucky Dice', 'Roll the dice and match the winning number.'),
+      ),
+      (
+        'Lucky Wheel',
+        Icons.track_changes_rounded,
+        RoyalPalette.gold,
+        () => _showQuickGame(context, 'Lucky Wheel', 'Spin the wheel for the room result.'),
+      ),
+      (
+        'Rock Paper Scissors',
+        Icons.back_hand_rounded,
+        RoyalPalette.gold,
+        () => _showQuickGame(context, 'Rock Paper Scissors', 'Choose Rock, Paper or Scissors.'),
+      ),
+      (
+        'Teen Patti',
+        Icons.style_rounded,
+        RoyalPalette.gold,
+        () => _showQuickGame(context, 'Teen Patti', 'Room Teen Patti table.'),
       ),
     ];
 
