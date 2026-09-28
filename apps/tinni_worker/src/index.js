@@ -2378,6 +2378,25 @@ export default {
       }
     }
 
+    if (url.pathname === "/room-presence/seat-lock" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const seatIndex = Number(body.seat_index);
+      if (!roomId || !Number.isInteger(seatIndex) || seatIndex < 0) return json({ ok: false, error: "room_id and seat_index are required" }, 400);
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
+      if (String(room.owner_id) !== actorId && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can lock seats" }, 403);
+      try { return json(await store.setSeatLock({ seat_index: seatIndex, locked_by: actorId, locked: body.locked === true })); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to update seat lock") }, 400); }
+    }
+
     if (url.pathname === "/room-presence/seat-request" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
