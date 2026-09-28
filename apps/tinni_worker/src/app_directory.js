@@ -363,6 +363,22 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_calls_caller
         ON app_calls(caller_id, state, updated_at DESC);
 
+
+      CREATE TABLE IF NOT EXISTS gift_transactions (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        gift_id TEXT NOT NULL,
+        gift_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit_price INTEGER NOT NULL,
+        total_cost INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_gift_transactions_room_time
+        ON gift_transactions(room_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 2000000,
@@ -2305,6 +2321,56 @@ export class AppDirectoryStore extends DurableObject {
       target_user_id: targetId,
       blocked: Boolean(blockedValue),
     };
+  }
+
+  sendGift(senderIdValue, input) {
+    const senderId = String(senderIdValue || "").trim();
+    const roomId = String(input?.room_id || "").trim();
+    const giftId = cleanText(input?.gift_id, 80);
+    const giftName = cleanText(input?.gift_name, 80);
+    const quantity = Number(input?.quantity || 1);
+    const unitPrice = Number(input?.unit_price || 0);
+    const receivers = [...new Set((Array.isArray(input?.receiver_ids) ? input.receiver_ids : [])
+      .map((value) => String(value || "").trim()).filter(Boolean))];
+    if (!senderId || !roomId || !giftId || !giftName) throw new Error("Gift details are required");
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw new Error("Invalid gift quantity");
+    if (!Number.isInteger(unitPrice) || unitPrice < 1) throw new Error("Invalid gift price");
+    if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
+    if (receivers.includes(senderId)) throw new Error("You cannot send a gift to yourself");
+    const room = this._roomRow(roomId);
+    if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
+    for (const receiverId of receivers) {
+      const exists = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", receiverId).toArray()[0];
+      if (!exists) throw new Error("Gift recipient not found");
+    }
+    const wallet = this.getWallet(senderId);
+    if (wallet.banned) throw new Error("Wallet is unavailable");
+    const totalCost = unitPrice * quantity * receivers.length;
+    if (!Number.isSafeInteger(totalCost) || totalCost <= 0 || wallet.coins < totalCost) throw new Error("Insufficient coins");
+    const now = Date.now();
+    this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCost, now, senderId);
+    const transactions = [];
+    for (const receiverId of receivers) {
+      const id = "gift-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 10);
+      const receiverTotal = unitPrice * quantity;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO gift_transactions
+          (id, room_id, sender_id, receiver_id, gift_id, gift_name, quantity, unit_price, total_cost, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, roomId, senderId, receiverId, giftId, giftName, quantity, unitPrice, receiverTotal, now,
+      );
+      transactions.push({ id, room_id: roomId, sender_id: senderId, receiver_id: receiverId, gift_id: giftId, gift_name: giftName, quantity, unit_price: unitPrice, total_cost: receiverTotal, created_at: now });
+    }
+    return { ok: true, total_cost: totalCost, wallet: this.getWallet(senderId), transactions };
+  }
+
+  listRoomGifts(roomIdValue, limitValue = 100) {
+    const roomId = String(roomIdValue || "").trim();
+    const limit = Math.max(1, Math.min(200, Number(limitValue) || 100));
+    if (!roomId) return [];
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM gift_transactions WHERE room_id = ? ORDER BY created_at DESC LIMIT ?", roomId, limit,
+    ).toArray().map((row) => ({ ...row, quantity: Number(row.quantity), unit_price: Number(row.unit_price), total_cost: Number(row.total_cost), created_at: Number(row.created_at) }));
   }
 
   getWallet(userIdValue) {
