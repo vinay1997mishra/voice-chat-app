@@ -29,6 +29,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadOwnerTags();
+    _loadEconomyState();
+  }
+
+  Future<void> _loadEconomyState() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final wallet = await widget.state.backend.wallet(account.authToken);
+      final vip = await widget.state.backend.vipMe(account.authToken);
+      widget.state.wallet.applyRemote(wallet);
+      widget.state.identity.setVipLevel(
+        vip == null ? 0 : int.tryParse(vip['vip_level']?.toString() ?? '') ?? 0,
+      );
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   Future<void> _loadOwnerTags() async {
