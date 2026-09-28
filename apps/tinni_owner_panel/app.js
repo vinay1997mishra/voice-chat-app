@@ -1431,10 +1431,17 @@ async function handleAction(action, data) {
       body: JSON.stringify({
         name: String(data.name || "").trim(),
         data: {
-          level: Number(data.level || 0),
-          price: Number(data.price || 0),
-          entry: String(data.entry || "").trim(),
-          frame: String(data.frame || "").trim(),
+          level: Number(data.level || 0), order: Number(data.order || data.level || 0),
+          price: Number(data.price || 0), duration_days: Number(data.duration_days || 0),
+          badge: String(data.badge || "").trim(), profile_frame: String(data.profile_frame || "").trim(),
+          seat_frame: String(data.seat_frame || "").trim(), entry: String(data.entry || "").trim(),
+          entry_asset: String(data.entry_asset || "").trim(), entry_audio: String(data.entry_audio || "").trim(),
+          requirements: String(data.requirements || "").trim(),
+          privileges: String(data.privileges || "").split(",").map(v => v.trim()).filter(Boolean),
+          permissions: String(data.permissions || "").split(",").map(v => v.trim()).filter(Boolean),
+          special_effects: String(data.special_effects || "").split(",").map(v => v.trim()).filter(Boolean),
+          countries: String(data.countries || "").split(",").map(v => v.trim().toUpperCase()).filter(Boolean),
+          starts_at: String(data.starts_at || "").trim() || null, ends_at: String(data.ends_at || "").trim() || null,
         },
       }),
     });
