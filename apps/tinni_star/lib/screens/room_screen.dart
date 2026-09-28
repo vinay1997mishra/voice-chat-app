@@ -503,9 +503,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
                   ),
                 ),
-                Icon(
-                  isLp ? Icons.shopping_bag_rounded : Icons.sports_esports_rounded,
-                  color: isLp ? const Color(0xFFD71932) : Colors.white,
+                _roomActionLogo(
+                  label: isLp ? 'LP' : 'Game',
+                  icon: isLp
+                      ? Icons.shopping_bag_rounded
+                      : Icons.sports_esports_rounded,
+                  size: 32,
                 ),
               ],
             ),
@@ -2921,6 +2924,92 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return FeaturePalette.social;
   }
 
+  Widget _roomActionLogo({
+    required String label,
+    required IconData icon,
+    double size = 42,
+  }) {
+    final lower = label.toLowerCase();
+    final isLp = lower.contains('lucky') || lower == 'lp';
+    final isGift = lower.contains('gift');
+    final isGame = lower.contains('game');
+    final isMore = lower.contains('more') || lower.contains('4-box');
+    final accent = isLp
+        ? const Color(0xFFFF304F)
+        : isGift
+            ? const Color(0xFFFF4FA3)
+            : isGame
+                ? const Color(0xFFF5F5F5)
+                : isMore
+                    ? const Color(0xFFFFD45A)
+                    : _roomToolColor(label);
+    final inner = isLp
+        ? const <Color>[Color(0xFFD71932), Color(0xFF650812)]
+        : isGift
+            ? const <Color>[Color(0xFFFF4FA3), Color(0xFF7B123D)]
+            : isGame
+                ? const <Color>[Color(0xFF3A3A3A), Color(0xFF080808)]
+                : const <Color>[Color(0xFF211A0A), Color(0xFF050505)];
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: inner,
+        ),
+        border: Border.all(color: RoyalPalette.gold, width: 1.35),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(color: Color(0x88FFD45A), blurRadius: 9, spreadRadius: 0.4),
+          BoxShadow(color: Color(0x44FFF1A8), blurRadius: 16),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          Icon(icon, color: accent, size: size * 0.55),
+          if (isLp)
+            Positioned(
+              bottom: 5,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8D0717),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: RoyalPalette.gold, width: 0.6),
+                ),
+                child: const Text(
+                  'LP',
+                  style: TextStyle(
+                    color: RoyalPalette.gold,
+                    fontSize: 7,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          if (isGame) ...<Widget>[
+            Positioned(
+              left: size * 0.24,
+              top: size * 0.43,
+              child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFF44C8FF), shape: BoxShape.circle)),
+            ),
+            Positioned(
+              right: size * 0.24,
+              top: size * 0.36,
+              child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFFF4FA3), shape: BoxShape.circle)),
+            ),
+          ],
+          if (isMore)
+            const Icon(Icons.grid_view_rounded, color: RoyalPalette.gold),
+        ],
+      ),
+    );
+  }
+
   void _showGamePanel() {
     showModalBottomSheet<void>(
       context: context,
@@ -3171,10 +3260,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             itemBuilder: (_, index) {
               final tool = tools[index];
-              final color = _roomToolColor(tool.$1);
               final isLp = tool.$1 == 'Lucky Bag';
-              final isGame = tool.$1 == 'Game';
-              final iconColor = isGame ? Colors.white : color;
               return InkWell(
                 key: Key(
                   'room-tool-' +
@@ -3204,12 +3290,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ShiningIcon(
+                      _roomActionLogo(
+                        label: tool.$1,
                         icon: tool.$2,
-                        color: iconColor,
-                        size: 21,
-                        boxSize: 39,
-                        glow: 0.34,
+                        size: 42,
                       ),
                       const SizedBox(height: 5),
                       Text(
@@ -4860,12 +4944,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         minHeight: 48,
                       ),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
-                      icon: const ShiningIcon(
+                      icon: _roomActionLogo(
+                        label: 'Gift',
                         icon: Icons.card_giftcard_rounded,
-                        color: FeaturePalette.gift,
-                        size: 24,
-                        boxSize: 40,
-                        glow: 0.40,
+                        size: 42,
                       ),
                     ),
                     IconButton(
@@ -4878,12 +4960,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         minHeight: 46,
                       ),
                       onPressed: _showRoomTools,
-                      icon: const ShiningIcon(
+                      icon: _roomActionLogo(
+                        label: '4-Box',
                         icon: Icons.grid_view_rounded,
-                        color: FeaturePalette.social,
-                        size: 22,
-                        boxSize: 38,
-                        glow: 0.34,
+                        size: 42,
                       ),
                     ),
                     if (controller.inviteMode)
