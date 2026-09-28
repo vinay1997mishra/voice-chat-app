@@ -1172,7 +1172,7 @@ function openAction(action, preset = {}) {
     "vip-grant": ["Grant / Remove VIP", field("user_id","User ID") + field("vip_level","VIP level","number") + selectField("operation","Operation",[["grant","Grant"],["remove","Remove"]])],
     "gift-new": ["Add New Gift", field("name","Gift name") + field("coin_price","Coin price","number") + field("asset_url","Animation / asset URL") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
-    "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("price","Coin price","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
     "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
     "role-new": ["Create Role / Post", field("name","Name") + selectField("type","Type",[["role","Role"],["post","Post"]])],
@@ -1471,6 +1471,7 @@ async function handleAction(action, data) {
   const payload = { ...data };
   if (["gift-new","entry-new","frame-new","banner-new"].includes(action)) {
     payload.order = Number(data.order || 0);
+    if (action === "frame-new") payload.price = Math.max(0, Number(data.price || 0));
     payload.countries = String(data.countries || "").split(",").map(v => v.trim().toUpperCase()).filter(Boolean);
   }
   if (action === "game-switch") payload.enabled = String(data.enabled) === "true";
