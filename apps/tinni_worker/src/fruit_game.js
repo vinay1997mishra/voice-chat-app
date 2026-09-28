@@ -97,6 +97,7 @@ function dayKey(timeMs) {
 export class FruitGameStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.env = env;
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS fruit_meta (
         key TEXT PRIMARY KEY,
@@ -147,6 +148,7 @@ export class FruitGameStore extends DurableObject {
       "jackpot_payout",
       "INTEGER NOT NULL DEFAULT 0",
     );
+    try { this.ctx.storage.sql.exec("ALTER TABLE fruit_bets ADD COLUMN room_id TEXT"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
   }
 
   _ensureResultColumn(name, definition) {
@@ -181,7 +183,7 @@ export class FruitGameStore extends DurableObject {
 
   _bets(roundId) {
     return this.ctx.storage.sql.exec(
-      `SELECT user_id, fruit_key, amount, created_at
+      `SELECT user_id, fruit_key, amount, room_id, created_at
          FROM fruit_bets
         WHERE round_id = ?
         ORDER BY created_at ASC`,
@@ -190,6 +192,7 @@ export class FruitGameStore extends DurableObject {
       user_id: String(row.user_id),
       fruit_key: String(row.fruit_key),
       amount: Number(row.amount),
+      room_id: row.room_id ? String(row.room_id) : null,
       created_at: Number(row.created_at),
     }));
   }
@@ -374,6 +377,15 @@ export class FruitGameStore extends DurableObject {
         settledAt,
         userId,
       );
+    }
+
+    if (this.env?.APP_DIRECTORY) {
+      const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
+      for (const [userId, payout] of payoutsByUser) {
+        if (payout < 1000000) continue;
+        const roomId = bets.find((bet) => bet.user_id === userId && bet.room_id)?.room_id;
+        if (roomId) await directory.recordGameWinning(userId, roomId, "fruit_jackpot", payout);
+      }
     }
 
     let totalPayout = 0;
@@ -565,11 +577,13 @@ export class FruitGameStore extends DurableObject {
 
     const userId = String(input?.user_id || "").trim();
     const fruitKey = String(input?.fruit_key || "").trim();
+    const roomId = String(input?.room_id || "").trim();
     const amount = Number(input?.amount || 0);
     const roundId = roundIdAt(now);
     const remainingMs = bettingEndAt(roundId) - now;
 
     if (!userId) throw new Error("user_id is required");
+    if (!roomId) throw new Error("room_id is required");
     if (!FRUIT_BY_KEY.has(fruitKey)) throw new Error("Invalid fruit");
     if (!Number.isInteger(amount) || !ALLOWED_BET_SET.has(amount)) {
       throw new Error("Invalid bet amount");
@@ -601,13 +615,14 @@ export class FruitGameStore extends DurableObject {
 
     this.ctx.storage.sql.exec(
       `INSERT INTO fruit_bets
-        (id, round_id, user_id, fruit_key, amount, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (id, round_id, user_id, fruit_key, amount, room_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       crypto.randomUUID(),
       roundId,
       userId,
       fruitKey,
       amount,
+      roomId,
       now,
     );
 
