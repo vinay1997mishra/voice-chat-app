@@ -161,6 +161,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
   Future<void> _placeBet(FruitPartyKind fruit) async {
     final error = await game.placeBet(
       authToken: authToken,
+      roomId: widget.state.roomSession.room?.id ?? '',
       fruit: fruit,
       amount: _selectedBet,
     );
