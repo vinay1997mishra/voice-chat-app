@@ -3743,6 +3743,8 @@ export class AppDirectoryStore extends DurableObject {
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
          LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+        WHERE COALESCE(r.closed, 0) = 0
+          AND COALESCE(r.locked, 0) = 0
         ORDER BY r.created_at DESC
         LIMIT 500`,
     ).toArray().map(rowToRoom);
@@ -4296,7 +4298,7 @@ export class AppDirectoryStore extends DurableObject {
     const closed = input.closed === undefined ? Number(room.closed || 0) === 1 : input.closed === true;
     const photoDataUrl = input.photo_data_url === undefined ? room.photo_data_url : (input.photo_data_url ? String(input.photo_data_url) : null);
     if (!title) throw new Error("Room name is required");
-    if (!Number.isInteger(seatCount) || seatCount < 1 || seatCount > 30) throw new Error("Invalid room capacity");
+    if (!Number.isInteger(seatCount) || ![8,9,10,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42].includes(seatCount)) throw new Error("Room capacity must be 8-10 or 12-42 seats");
     if (!["public", "private", "invite"].includes(privacy)) throw new Error("privacy must be public, private or invite");
     if (photoDataUrl && (photoDataUrl.length > MAX_AVATAR_DATA_LENGTH || !photoDataUrl.startsWith("data:image/"))) throw new Error("Room photo is invalid");
     const now = Date.now();
