@@ -1731,6 +1731,19 @@ export default {
       });
     }
 
+    if (url.pathname === "/wallet" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/vip/catalog" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const items = await getAppDirectoryStore(env).ownerCatalog("vip");
+      return json({ ok: true, vip: items.filter((item) => item.enabled !== false) });
+    }
+
     if (url.pathname === "/gifts/send" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
