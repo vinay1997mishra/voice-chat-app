@@ -2475,11 +2475,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showRoomLuckyBag() {
     final account = widget.state.auth.current;
     if (account == null) {
-      _snack('Please sign in to use Lucky Bag.');
+      _snack('Please sign in to use LP.');
       return;
     }
-
-    final bagId = 'room-' + widget.room.id + '-lucky';
+    var selectedUsers = 5;
+    var selectedCoins = 100000;
+    var refreshKey = 0;
+    const allowed = <int, List<int>>{
+      5: <int>[100000, 500000, 1000000, 2000000, 5000000, 8000000, 10000000],
+      20: <int>[100000, 500000, 1000000, 2000000, 5000000, 8000000, 10000000],
+      50: <int>[500000, 1000000, 2000000, 5000000, 8000000, 10000000],
+      100: <int>[1000000, 2000000, 5000000, 8000000, 10000000],
+      200: <int>[1000000, 2000000, 5000000, 8000000, 10000000],
+      500: <int>[2000000, 5000000, 8000000, 10000000],
+    };
+    String coinLabel(int value) {
+      if (value == 100000) return '1L';
+      if (value == 500000) return '5L';
+      return (value ~/ 1000000).toString() + 'M';
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -2488,156 +2502,170 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          final bag = widget.state.rewards.luckyBags[bagId];
-          final active =
-              bag != null && !bag.expired && bag.remaining > 0;
-          final alreadyClaimed =
-              bag?.claimedBy.contains(account.userId) == true;
-
+          final future = widget.state.discovery.luckyPouch(
+            authToken: account.authToken,
+            roomId: widget.room.id,
+          );
           return SafeArea(
-            key: const Key('room-lucky-bag-panel'),
+            key: const Key('room-lp-panel'),
             child: SizedBox(
-              height: 390,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Lucky Bag',
-                      style: TextStyle(
-                        color: FeaturePalette.rocket,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: FeaturePalette.glow(FeaturePalette.rocket),
-                        border: Border.all(
-                          color: FeaturePalette.rocket.withValues(alpha: 0.60),
-                        ),
-                      ),
-                      child: Row(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+              child: FutureBuilder<Map<String, dynamic>>(
+                key: ValueKey<int>(refreshKey),
+                future: future,
+                builder: (context, snapshot) {
+                  final pouch = snapshot.data?['pouch'];
+                  final active = pouch is Map &&
+                      (pouch['remaining_slots'] as num? ?? 0).toInt() > 0;
+                  final claimed = active && pouch['claimed'] == true;
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                    children: [
+                      Row(
                         children: [
-                          const ShiningIcon(
-                            icon: Icons.redeem_rounded,
-                            color: FeaturePalette.rocket,
-                            size: 28,
-                            boxSize: 52,
-                            glow: 0.40,
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4A050B),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: RoyalPalette.gold, width: 1.4),
+                              boxShadow: const [
+                                BoxShadow(color: Color(0x557A0B16), blurRadius: 16),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.shopping_bag_rounded,
+                              color: Color(0xFFD71932),
+                              size: 34,
+                            ),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  active
-                                      ? (bag.reward.label)
-                                      : 'No active Lucky Bag',
-                                  style: const TextStyle(
-                                    color: RoyalPalette.cream,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  active
-                                      ? bag.remaining.toString() +
-                                          ' of ' +
-                                          bag.totalSlots.toString() +
-                                          ' rewards left • ' +
-                                          bag.reward.amount.toString() +
-                                          ' coins'
-                                      : 'Owner/Admin can start a Lucky Bag for this room.',
-                                  style: const TextStyle(
-                                    color: RoyalPalette.muted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
+                          const Expanded(
+                            child: Text(
+                              'LP • Lucky Pouch',
+                              style: TextStyle(
+                                color: RoyalPalette.gold,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    if (active)
-                      FilledButton.icon(
-                        key: const Key('room-lucky-bag-grab'),
-                        onPressed: alreadyClaimed
-                            ? null
-                            : () {
-                                final reward = widget.state.rewards
-                                    .grab(bagId, account.userId);
-                                if (reward == null) {
-                                  setSheetState(() {});
-                                  return;
-                                }
-                                if (reward.kind ==
-                                    LuckyBagRewardKind.coins) {
-                                  widget.state.wallet.creditCoins(
-                                    reward.amount,
-                                    reward.label,
-                                  );
-                                }
-                                widget.state.rewards.launchRocket(1000);
-                                widget.state.rewards.addRebate(50);
-                                setSheetState(() {});
-                                _snack(
-                                  reward.label +
-                                      ': +' +
-                                      reward.amount.toString(),
-                                );
-                              },
-                        icon: const Icon(Icons.touch_app_rounded),
-                        label: Text(
-                          alreadyClaimed
-                              ? 'Already grabbed'
-                              : 'Grab Lucky Bag',
-                        ),
-                      ),
-                    if (_canModerateSeats) ...[
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        key: const Key('room-lucky-bag-start'),
-                        onPressed: () {
-                          widget.state.rewards.createLuckyBag(
-                            id: bagId,
-                            senderId: account.userId,
-                            totalSlots: 10,
-                            reward: const LuckyBagReward(
-                              kind: LuckyBagRewardKind.coins,
-                              label: 'Room Lucky Bag',
-                              amount: 100,
+                      if (active) ...[
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF350409),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: RoyalPalette.gold),
+                          ),
+                          child: Text(
+                            (pouch['remaining_slots']?.toString() ?? '0') +
+                                ' users left • ' +
+                                coinLabel((pouch['remaining_coins'] as num? ?? 0).toInt()) +
+                                ' pool remaining',
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                              fontWeight: FontWeight.w800,
                             ),
-                          );
-                          setSheetState(() {});
-                        },
-                        icon: const Icon(Icons.add_circle_outline_rounded),
-                        label: Text(
-                          active ? 'Restart Lucky Bag' : 'Start Lucky Bag',
+                          ),
                         ),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          key: const Key('room-lp-open'),
+                          onPressed: claimed
+                              ? null
+                              : () async {
+                                  try {
+                                    final result = await widget.state.discovery.claimLuckyPouch(
+                                      authToken: account.authToken,
+                                      roomId: widget.room.id,
+                                    );
+                                    if (result['ok'] == true) {
+                                      _snack('LP received: ' +
+                                          coinLabel((result['coins'] as num? ?? 0).toInt()));
+                                    } else {
+                                      _snack(result['message']?.toString() ?? 'Next Time');
+                                    }
+                                    setSheetState(() => refreshKey++);
+                                  } catch (error) {
+                                    _snack(error.toString().replaceFirst('Bad state: ', ''));
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF760A16),
+                            foregroundColor: RoyalPalette.gold,
+                          ),
+                          icon: const Icon(Icons.touch_app_rounded),
+                          label: Text(claimed ? 'Already Opened' : 'OPEN'),
+                        ),
+                        const Divider(height: 30),
+                      ],
+                      const Text(
+                        '1. Select users',
+                        style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: allowed.keys.map((count) => ChoiceChip(
+                          label: Text(count.toString() + ' users'),
+                          selected: selectedUsers == count,
+                          onSelected: (_) => setSheetState(() {
+                            selectedUsers = count;
+                            selectedCoins = allowed[count]!.first;
+                          }),
+                        )).toList(),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        '2. Select coins',
+                        style: TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: allowed[selectedUsers]!.map((coins) => ChoiceChip(
+                          label: Text(coinLabel(coins)),
+                          selected: selectedCoins == coins,
+                          onSelected: (_) => setSheetState(() => selectedCoins = coins),
+                        )).toList(),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        key: const Key('room-lp-confirm'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF650812),
+                          foregroundColor: RoyalPalette.gold,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                        ),
+                        onPressed: () async {
+                          try {
+                            await widget.state.discovery.openLuckyPouch(
+                              authToken: account.authToken,
+                              roomId: widget.room.id,
+                              users: selectedUsers,
+                              coins: selectedCoins,
+                            );
+                            _snack('LP opened for ' +
+                                selectedUsers.toString() +
+                                ' users • ' +
+                                coinLabel(selectedCoins));
+                            setSheetState(() => refreshKey++);
+                          } catch (error) {
+                            _snack(error.toString().replaceFirst('Bad state: ', ''));
+                          }
+                        },
+                        child: const Text('CONFIRM', style: TextStyle(fontWeight: FontWeight.w900)),
                       ),
                     ],
-                    const Spacer(),
-                    Text(
-                      'Rocket Lv.' +
-                          widget.state.rewards.rocket.level.toString() +
-                          ' • Rebate ' +
-                          widget.state.rewards.rebateCoins.toString(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           );
@@ -2757,9 +2785,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (value.contains('music') || value.contains('sound')) {
       return FeaturePalette.music;
     }
-    if (value.contains('lucky bag') || value.contains('rocket')) {
-      return FeaturePalette.rocket;
+    if (value.contains('lp') || value.contains('lucky bag')) {
+      return const Color(0xFFD71932);
     }
+    if (value.contains('rocket')) return FeaturePalette.rocket;
     if (value.contains('moderation')) return FeaturePalette.safety;
     if (value.contains('friend')) return FeaturePalette.family;
     if (value.contains('event')) return FeaturePalette.fruitParty;
@@ -2802,8 +2831,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Lucky Bag',
-        Icons.rocket_launch_rounded,
+        'LP',
+        Icons.shopping_bag_rounded,
         () {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomLuckyBag();
