@@ -3471,10 +3471,24 @@ export default {
     }
 
     if (url.pathname === "/api/owner/action" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
-      }
       const body = await request.json().catch(() => ({}));
+      const actionPermissions = {
+        "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
+        "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id",
+        "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
+        "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
+        "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
+        "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
+        "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
+        "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create",
+        "entry-new":"assets.entries","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
+        "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
+        "feature-set":"policies.edit","catalog-toggle":"roles.manage","catalog-edit":"roles.manage","catalog-remove":"roles.manage",
+      };
+      const requiredPermission = actionPermissions[String(body.action || "")];
+      if (!ownerOnly(session) && (!requiredPermission || !sessionHasPermission(session, requiredPermission))) {
+        return json({ ok: false, error: "Owner or assigned staff permission required" }, 403);
+      }
       try {
         const result = await getAppDirectoryStore(env).ownerAction(body.action, body.data);
         await writeAudit(
