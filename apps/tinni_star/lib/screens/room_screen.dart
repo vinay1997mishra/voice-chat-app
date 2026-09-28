@@ -2996,90 +2996,137 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showRoomSettings() {
-    final controls = widget.state.roomControls;
     if (!_isRoomOwner) {
       _snack('Only the room owner can change room settings.');
       return;
     }
-
+    final items = <(String, IconData, VoidCallback)>[
+      ('Room DP', Icons.account_circle_rounded, () => _showRoomSettingEditor('Room DP', 'Room DP editing is available from room creation/profile media.')),
+      ('Room Name', Icons.edit_rounded, () => _showRoomSettingEditor('Room Name', widget.room.title)),
+      ('Room Level', Icons.stars_rounded, () => _showRoomSettingEditor('Room Level', 'Room level and progress')),
+      ('Room Background', Icons.wallpaper_rounded, _openRoomThemeSelector),
+      ('Kickout List', Icons.person_off_rounded, _showKickoutList),
+      ('Room Announcement', Icons.campaign_rounded, () => _showRoomSettingEditor('Room Announcement', widget.state.roomControls.settings.topic)),
+      ('Room Members/Admins', Icons.manage_accounts_rounded, _showRoomMembersAdmins),
+    ];
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          final settings = controls.settings;
-          return SafeArea(
-            child: ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(12),
-              children: [
-                const ListTile(
-                  title: Text(
-                    'Room Settings',
-                    style: TextStyle(
-                      color: FeaturePalette.discover,
-                      fontWeight: FontWeight.w900,
+      builder: (context) => SafeArea(
+        key: const Key('room-settings-navigation'),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(12),
+          children: [
+            const ListTile(title: Text('Room Settings', style: TextStyle(fontWeight: FontWeight.w900))),
+            for (final item in items)
+              ListTile(
+                title: Text(item.$1),
+                leading: Icon(item.$2),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () { Navigator.pop(context); item.$3(); },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRoomSettingEditor(String title, String value) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            Text(value.isEmpty ? 'Not set' : value),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _showKickoutList() {
+    final controls = widget.state.roomControls;
+    final ids = controls.roomKicks.keys.toList(growable: false);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        key: const Key('room-kickout-list'),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(12),
+          children: [
+            const ListTile(title: Text('Kickout List', style: TextStyle(fontWeight: FontWeight.w900))),
+            if (ids.isEmpty) const ListTile(title: Text('No kicked users.')),
+            for (final id in ids) ListTile(title: Text(id), leading: const Icon(Icons.person_off_rounded)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRoomMembersAdmins() {
+    final controls = widget.state.roomControls;
+    final currentUserId = widget.state.auth.current?.userId;
+    final members = widget.state.roomSession.liveMembers.where((m) => m.userId != currentUserId).toList(growable: false);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => DefaultTabController(
+        length: 2,
+        child: SafeArea(
+          key: const Key('room-members-admins'),
+          child: SizedBox(
+            height: 520,
+            child: Column(children: [
+              const TabBar(tabs: [Tab(text: 'Room Members'), Tab(text: 'Room Admins')]),
+              Expanded(child: TabBarView(children: [
+                ListView(children: [
+                  for (final member in members)
+                    ListTile(
+                      title: Text(member.displayName),
+                      subtitle: Text(member.userId),
+                      trailing: _isRoomOwner ? PopupMenuButton<String>(
+                        onSelected: (action) {
+                          if (action == 'admin') controls.setAdmin(member.userId, true);
+                          if (action == 'removeAdmin') controls.setAdmin(member.userId, false);
+                          if (action == 'remove') controls.kickFromRoom(member.userId);
+                          if (mounted) setState(() {});
+                        },
+                        itemBuilder: (_) => <PopupMenuEntry<String>>[
+                          if (controls.roles[member.userId] != RoomRole.admin) const PopupMenuItem(value: 'admin', child: Text('Add Admin')),
+                          if (controls.roles[member.userId] == RoomRole.admin) const PopupMenuItem(value: 'removeAdmin', child: Text('Remove Admin')),
+                          const PopupMenuItem(value: 'remove', child: Text('Remove Member')),
+                        ],
+                      ) : null,
                     ),
-                  ),
-                ),
-                SwitchListTile(
-                  title: Text(
-                    settings.visibility == RoomVisibility.publicRoom
-                        ? 'Room Open'
-                        : 'Room Locked',
-                  ),
-                  subtitle: Text(
-                    settings.visibility == RoomVisibility.publicRoom
-                        ? 'Turn off and set a password to lock the room.'
-                        : 'Turn on to open the room and reset wrong-password attempts.',
-                  ),
-                  value: settings.visibility == RoomVisibility.publicRoom,
-                  onChanged: (_) async {
-                    await _toggleRoomLock();
-                    if (context.mounted) {
-                      setSheetState(() {});
-                    }
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text('Free mic'),
-                  subtitle: const Text(
-                    'When off, users send a mic request and wait for approval.',
-                  ),
-                  value: controller.inviteMode == false,
-                  onChanged: (value) async {
-                    try {
-                      await widget.state.roomSession.setRoomMicMode(
-                        value ? 'free' : 'apply',
-                      );
-                      controls.settings = controls.settings.copyWith(
-                        micMode: value ? MicMode.free : MicMode.apply,
-                      );
-                      if (context.mounted) {
-                        setSheetState(() {});
-                      }
-                      if (mounted) setState(() {});
-                    } catch (error) {
-                      _snack(
-                        error.toString().replaceFirst('Bad state: ', ''),
-                      );
-                    }
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text('Only managers can speak'),
-                  value: settings.onlyManagersCanSpeak,
-                  onChanged: (value) {
-                    controls.settings = settings.copyWith(onlyManagersCanSpeak: value);
-                    setSheetState(() {});
-                    setState(() {});
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+                ]),
+                ListView(children: [
+                  for (final member in members)
+                    if (controls.roles[member.userId] == RoomRole.admin)
+                      ListTile(
+                        title: Text(member.displayName),
+                        subtitle: Text(member.userId),
+                        trailing: _isRoomOwner ? TextButton(
+                          onPressed: () { controls.setAdmin(member.userId, false); if (mounted) setState(() {}); },
+                          child: const Text('Remove Admin'),
+                        ) : null,
+                      ),
+                ]),
+              ])),
+            ]),
+          ),
+        ),
       ),
     );
   }
