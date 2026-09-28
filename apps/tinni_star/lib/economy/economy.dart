@@ -154,6 +154,25 @@ class InventoryService {
   final Set<String> owned = <String>{};
   String? equippedFrameId;
 
+  void applyRemote(Map<String, dynamic> data) {
+    final rawOwned = data['owned'];
+    owned
+      ..clear()
+      ..addAll(
+        rawOwned is List
+            ? rawOwned
+                .whereType<Map>()
+                .map((row) => row['item_id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+            : const <String>[],
+      );
+    final remoteFrame = data['equipped_frame_id']?.toString();
+    equippedFrameId =
+        remoteFrame != null && remoteFrame.isNotEmpty && owned.contains(remoteFrame)
+            ? remoteFrame
+            : null;
+  }
+
   bool get hasEquippedFrame =>
       equippedFrameId != null && owned.contains(equippedFrameId);
 
