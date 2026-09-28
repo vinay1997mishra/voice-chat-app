@@ -1705,9 +1705,14 @@ export default {
         if (!access.allowed) {
           return json({
             ok: false,
-            error: access.reason === "invite_required" ? "Room invite is required." : "Room password is required.",
+            error: access.reason === "blocked_by_room_owner"
+              ? "You cannot enter this user's room."
+              : access.reason === "invite_required"
+                ? "Room invite is required."
+                : "Room password is required.",
             room_locked: access.locked === true,
             invite_required: access.reason === "invite_required",
+            blocked_by_room_owner: access.reason === "blocked_by_room_owner",
           }, 403);
         }
 
