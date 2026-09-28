@@ -130,6 +130,7 @@ class TinniState {
         if (userId == null) return null;
         return roomControls.agencyNameFor(userId);
       },
+      equippedFrameIdProvider: () => inventory.equippedFrameId,
     );
   }
 
