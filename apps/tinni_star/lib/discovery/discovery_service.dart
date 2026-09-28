@@ -777,5 +777,119 @@ class DiscoveryService {
     return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
+  Future<Map<String, dynamic>> roomMembership({
+    required String authToken,
+    required String roomId,
+  }) async {
+    final request = await _httpClient.getUrl(apiBase.replace(
+      path: '/rooms/membership',
+      queryParameters: <String, String>{'room_id': roomId},
+    ));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load membership');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> setRoomMembership({
+    required String authToken,
+    required String roomId,
+    required bool member,
+  }) async {
+    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/membership'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'member': member}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to update membership');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> roomGiftRanking({
+    required String authToken,
+    required String roomId,
+    required String period,
+  }) async {
+    final request = await _httpClient.getUrl(apiBase.replace(
+      path: '/gifts/ranking',
+      queryParameters: <String, String>{'room_id': roomId, 'period': period},
+    ));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load sending ranking');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> luckyPouch({
+    required String authToken,
+    required String roomId,
+  }) async {
+    final request = await _httpClient.getUrl(apiBase.replace(
+      path: '/lucky-pouch',
+      queryParameters: <String, String>{'room_id': roomId},
+    ));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Lucky Pouch');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> openLuckyPouch({
+    required String authToken,
+    required String roomId,
+    required int users,
+    required int coins,
+  }) async {
+    final request = await _httpClient.postUrl(apiBase.replace(path: '/lucky-pouch/open'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'users': users, 'coins': coins}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to open Lucky Pouch');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> claimLuckyPouch({
+    required String authToken,
+    required String roomId,
+  }) async {
+    final request = await _httpClient.postUrl(apiBase.replace(path: '/lucky-pouch/claim'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{'room_id': roomId}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to claim Lucky Pouch');
+    }
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> countryRibbons(String authToken) async {
+    final request = await _httpClient.getUrl(apiBase.replace(path: '/ribbons'));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+    final raw = data['ribbons'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((row) => row.map((k, v) => MapEntry(k.toString(), v))).toList();
+  }
+
   void dispose() => _httpClient.close(force: true);
 }
