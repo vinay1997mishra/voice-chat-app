@@ -21,23 +21,33 @@ class GamesScreen extends StatelessWidget {
   final VoidCallback? onFruitJackpot;
   final VoidCallback? onFruitParty;
 
-  void _showQuickGame(BuildContext context, String title, String subtitle) {
+  void _showQuickGame(BuildContext context, String title, List<String> actions) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.sports_esports_rounded, size: 54),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(title, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(subtitle, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              const Text('Available only from the active room Game Panel.'),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: actions.map((action) => FilledButton.tonal(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$title • $action selected. Waiting for authoritative room round.')),
+                  ),
+                  child: Text(action),
+                )).toList(growable: false),
+              ),
+              const SizedBox(height: 14),
+              const Text('Room game selections never change wallet balance locally.'),
             ],
           ),
         ),
@@ -110,25 +120,25 @@ class GamesScreen extends StatelessWidget {
         'Lucky Dice',
         Icons.casino_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Lucky Dice', 'Roll the dice and match the winning number.'),
+        () => _showQuickGame(context, 'Lucky Dice', const ['1','2','3','4','5','6']),
       ),
       (
         'Lucky Wheel',
         Icons.track_changes_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Lucky Wheel', 'Spin the wheel for the room result.'),
+        () => _showQuickGame(context, 'Lucky Wheel', const ['Star','Crown','Rose','Diamond','Lion','Dragon']),
       ),
       (
         'Rock Paper Scissors',
         Icons.back_hand_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Rock Paper Scissors', 'Choose Rock, Paper or Scissors.'),
+        () => _showQuickGame(context, 'Rock Paper Scissors', const ['Rock','Paper','Scissors']),
       ),
       (
         'Teen Patti',
         Icons.style_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Teen Patti', 'Room Teen Patti table.'),
+        () => _showQuickGame(context, 'Teen Patti', const ['Join Table','View Table']),
       ),
     ];
 
