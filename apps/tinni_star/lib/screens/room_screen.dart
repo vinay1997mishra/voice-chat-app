@@ -3250,6 +3250,88 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _showSendingRanking() {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    var period = 'day';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+            child: Column(
+              children: [
+                const Text('Room Sending Ranking', style: TextStyle(color: RoyalPalette.gold, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 10),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'day', label: Text('Day')),
+                    ButtonSegment(value: 'week', label: Text('Week')),
+                    ButtonSegment(value: 'month', label: Text('Month')),
+                  ],
+                  selected: <String>{period},
+                  onSelectionChanged: (value) => setSheetState(() => period = value.first),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: FutureBuilder<Map<String, dynamic>>(
+                    future: widget.state.discovery.roomGiftRanking(
+                      authToken: account.authToken,
+                      roomId: widget.room.id,
+                      period: period,
+                    ),
+                    builder: (context, snapshot) {
+                      final raw = snapshot.data?['ranking'];
+                      final rows = raw is List ? raw.whereType<Map>().toList() : const <Map>[];
+                      if (snapshot.connectionState == ConnectionState.waiting && rows.isEmpty) {
+                        return const Center(child: CircularProgressIndicator(color: RoyalPalette.gold));
+                      }
+                      if (rows.isEmpty) return const Center(child: Text('No sending yet.', style: TextStyle(color: RoyalPalette.muted)));
+                      return ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
+                        itemCount: rows.length,
+                        itemBuilder: (context, index) {
+                          final row = rows[index];
+                          final rank = (row['rank'] as num? ?? index + 1).toInt();
+                          final name = row['name']?.toString() ?? 'User';
+                          final userId = row['user_id']?.toString() ?? '';
+                          final sending = (row['sending'] as num? ?? 0).toInt();
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: rank <= 3 ? RoyalPalette.deepGold : RoyalPalette.panel2,
+                              child: Text(rank.toString(), style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
+                            ),
+                            title: Text(name, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w800)),
+                            subtitle: Text('ID ' + userId, style: const TextStyle(color: RoyalPalette.muted)),
+                            trailing: Text(sending.toString(), style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
+                            onTap: () {
+                              for (final member in widget.state.roomSession.liveMembers) {
+                                if (member.userId == userId) {
+                                  Navigator.pop(sheetContext);
+                                  _openFullRoomProfile(member);
+                                  return;
+                                }
+                              }
+                              _snack('User ID: ' + userId);
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showRoomIdentityCard() {
     final account = widget.state.auth.current;
     if (account == null) return;
@@ -4143,6 +4225,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
           ),
           actions: [
+            IconButton(
+              key: const Key('room-sending-ranking-button'),
+              tooltip: 'Room sending',
+              onPressed: _showSendingRanking,
+              icon: const ShiningIcon(
+                icon: Icons.local_fire_department_rounded,
+                color: Color(0xFFFF8A3D),
+                size: 20,
+                boxSize: 36,
+                glow: 0.40,
+              ),
+            ),
             IconButton(
               key: const Key('room-rank-hall-button'),
               tooltip: 'Rank / Hall',
