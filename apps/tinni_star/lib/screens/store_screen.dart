@@ -200,12 +200,40 @@ class _StoreScreenState extends State<StoreScreen> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            FilledButton(
-                              onPressed: isOwned || tab == 1
-                                  ? null
-                                  : () => _buy(item),
-                              child: Text(isOwned ? 'Owned' : 'Buy'),
-                            ),
+                            if (item.type == 'Frame' && isOwned)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  FilledButton(
+                                    onPressed:
+                                        widget.state.inventory.equippedFrameId ==
+                                                item.id
+                                            ? null
+                                            : () => _useFrame(item),
+                                    child: Text(
+                                      widget.state.inventory.equippedFrameId ==
+                                              item.id
+                                          ? 'Using'
+                                          : 'Use',
+                                    ),
+                                  ),
+                                  if (widget.state.inventory.equippedFrameId ==
+                                      item.id) ...[
+                                    const SizedBox(width: 6),
+                                    TextButton(
+                                      onPressed: _removeFrame,
+                                      child: const Text('Remove'),
+                                    ),
+                                  ],
+                                ],
+                              )
+                            else
+                              FilledButton(
+                                onPressed: isOwned || tab == 1
+                                    ? null
+                                    : () => _buy(item),
+                                child: Text(isOwned ? 'Owned' : 'Buy'),
+                              ),
                           ],
                         ),
                       );
