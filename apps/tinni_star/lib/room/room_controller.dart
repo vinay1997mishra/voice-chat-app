@@ -20,6 +20,7 @@ class RoomController extends ChangeNotifier {
   int? mySeat;
   MicState micState = MicState.offSeat;
   bool? inviteModeOverride;
+  bool selfMuted = false;
 
   TinniFunctionConfig get config => runtime.config;
   bool get inviteMode => inviteModeOverride ?? config.inviteMode;
@@ -88,6 +89,7 @@ class RoomController extends ChangeNotifier {
     seats[index] = seats[index].copyWith(clearUser: true);
     mySeat = null;
     micState = MicState.offSeat;
+    selfMuted = false;
     notifyListeners();
   }
 
@@ -136,10 +138,20 @@ class RoomController extends ChangeNotifier {
   }
 
   void toggleMic() {
-    if (mySeat == null || micState == MicState.banned) return;
+    if (mySeat == null || micState == MicState.banned || selfMuted) return;
     micState = micState == MicState.live ? MicState.muted : MicState.live;
     notifyListeners();
   }
+
+  void setSelfMuted(bool muted) {
+    selfMuted = muted;
+    if (muted && micState == MicState.live) {
+      micState = MicState.muted;
+    }
+    notifyListeners();
+  }
+
+  void toggleSelfMuted() => setSelfMuted(!selfMuted);
 
   void toggleSeatLock(int index) {
     if (!config.seatLockEnabled || index < 0 || index >= seats.length) return;
