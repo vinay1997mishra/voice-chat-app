@@ -8,6 +8,7 @@ import '../community/family_service.dart';
 import '../identity/owner_tag.dart';
 import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
+import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
@@ -145,24 +146,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             accentColor: FeaturePalette.social,
             child: Row(
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: FeaturePalette.social,
-                      width: 2.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: FeaturePalette.social.withValues(alpha: 0.42),
-                        blurRadius: 16,
-                      ),
-                    ],
-                  ),
+                AnimatedAvatarFrame(
+                  size: 92,
+                  frameId: widget.state.inventory.equippedFrameId,
                   child: CircleAvatar(
-                    radius: 38,
                     backgroundColor: RoyalPalette.panel2,
                     backgroundImage: avatar,
                     child: avatar == null
