@@ -1769,10 +1769,60 @@ export default {
       return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id));
     }
 
+    if (url.pathname === "/cp/update" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json({ ok: true, cp: await getAppDirectoryStore(env).cpUpdate(appSession.user.user_id, body) }); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to update CP") }, 400); }
+    }
+
+    if (url.pathname === "/cp/memories" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, memories: await getAppDirectoryStore(env).cpMemories(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/cp/memories" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json({ ok: true, memory: await getAppDirectoryStore(env).cpAddMemory(appSession.user.user_id, body.text) }, 201); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
+    }
+
     if (url.pathname === "/wallet" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({ ok: true, wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/wallet/transactions" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/wallet/recharge" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json(await getAppDirectoryStore(env).applyRecharge(appSession.user.user_id, body)); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to apply recharge") }, 400); }
+    }
+
+    if (url.pathname === "/vip/me" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, vip: await getAppDirectoryStore(env).vipState(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/vip/purchase" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json(await getAppDirectoryStore(env).vipPurchase(appSession.user.user_id, body.vip_id)); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to purchase VIP") }, 400); }
     }
 
     if (url.pathname === "/vip/catalog" && request.method === "GET") {
