@@ -1731,6 +1731,34 @@ export default {
       });
     }
 
+    if (url.pathname === "/cp" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, cp: await getAppDirectoryStore(env).cpState(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/cp/request" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json({ ok: true, cp: await getAppDirectoryStore(env).cpRequest(appSession.user.user_id, body.target_user_id) }, 201); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to request CP") }, 400); }
+    }
+
+    if (url.pathname === "/cp/respond" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json({ ok: true, cp: await getAppDirectoryStore(env).cpRespond(appSession.user.user_id, body.accept === true) }); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to respond to CP") }, 400); }
+    }
+
+    if (url.pathname === "/cp/disconnect" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id));
+    }
+
     if (url.pathname === "/wallet" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
