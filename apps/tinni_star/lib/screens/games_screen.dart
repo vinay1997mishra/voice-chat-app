@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
@@ -21,11 +24,11 @@ class GamesScreen extends StatelessWidget {
   final VoidCallback? onFruitJackpot;
   final VoidCallback? onFruitParty;
 
-  void _showQuickGame(BuildContext context, String title, List<String> actions) {
+  void _showQuickGame(BuildContext context, String title, String gameKey, List<String> actions) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -33,26 +36,39 @@ class GamesScreen extends StatelessWidget {
             children: [
               const Icon(Icons.sports_esports_rounded, size: 54),
               const SizedBox(height: 10),
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: actions.map((action) => FilledButton.tonal(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$title • $action selected. Waiting for authoritative room round.')),
-                  ),
-                  child: Text(action),
-                )).toList(growable: false),
-              ),
+              Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: actions.map((action) => FilledButton.tonal(
+                onPressed: () async {
+                  final result = await _playQuickGame(gameKey, action);
+                  if (!sheetContext.mounted) return;
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(result)));
+                }, child: Text(action),
+              )).toList(growable: false)),
               const SizedBox(height: 14),
-              const Text('Room game selections never change wallet balance locally.'),
+              const Text('Result is generated and recorded by the Tinni Star server.'),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<String> _playQuickGame(String gameKey, String action) async {
+    final account = state.auth.current;
+    if (account == null) return 'Login required.';
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev/room-games/action'));
+      request.headers.contentType = ContentType.json;
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${account.authToken}');
+      request.write(jsonEncode(<String, String>{'room_id': roomId, 'game_key': gameKey, 'action': action}));
+      final response = await request.close();
+      final body = await utf8.decoder.bind(response).join();
+      final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) return data['error']?.toString() ?? 'Game request failed.';
+      return '${data['result'] ?? action}';
+    } catch (_) { return 'Server connection failed.'; } finally { client.close(force: true); }
   }
 
   @override
@@ -120,25 +136,25 @@ class GamesScreen extends StatelessWidget {
         'Lucky Dice',
         Icons.casino_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Lucky Dice', const ['1','2','3','4','5','6']),
+        () => _showQuickGame(context, 'Lucky Dice', 'lucky_dice', const ['1','2','3','4','5','6']),
       ),
       (
         'Lucky Wheel',
         Icons.track_changes_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Lucky Wheel', const ['Star','Crown','Rose','Diamond','Lion','Dragon']),
+        () => _showQuickGame(context, 'Lucky Wheel', 'lucky_wheel', const ['Star','Crown','Rose','Diamond','Lion','Dragon']),
       ),
       (
         'Rock Paper Scissors',
         Icons.back_hand_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Rock Paper Scissors', const ['Rock','Paper','Scissors']),
+        () => _showQuickGame(context, 'Rock Paper Scissors', 'rps', const ['Rock','Paper','Scissors']),
       ),
       (
         'Teen Patti',
         Icons.style_rounded,
         RoyalPalette.gold,
-        () => _showQuickGame(context, 'Teen Patti', const ['Join Table','View Table']),
+        () => _showQuickGame(context, 'Teen Patti', 'teen_patti', const ['Join Table','View Table']),
       ),
     ];
 
