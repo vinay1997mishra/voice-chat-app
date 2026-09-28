@@ -1967,7 +1967,9 @@ document.body.addEventListener("click", async e => {
     if (name === null || !name.trim()) return;
     const data = { ...(item.data || {}) };
 
-    if (item.kind === "gift") {
+    if (item.kind === "role" || item.kind === "post") {
+      // Name plus enable/disable/remove is the complete configurable surface for roles/posts today.
+    } else if (item.kind === "gift") {
       const price = prompt("Coin price", String(data.coin_price || 0));
       if (price === null) return;
       const asset = prompt("Animation / asset URL", String(data.asset_url || ""));
@@ -1985,6 +1987,16 @@ document.body.addEventListener("click", async e => {
       const asset = prompt("Banner image URL", String(data.asset_url || ""));
       if (asset === null) return;
       data.asset_url = asset.trim();
+    }
+
+    if (["gift","entry","frame","banner"].includes(item.kind)) {
+      const order = prompt("Display order", String(data.order || 0)); if (order === null) return;
+      const countries = prompt("Country codes, comma separated (blank = all)", Array.isArray(data.countries) ? data.countries.join(", ") : ""); if (countries === null) return;
+      const startsAt = prompt("Effective from (ISO/date-time, blank = none)", data.starts_at ? String(data.starts_at) : ""); if (startsAt === null) return;
+      const endsAt = prompt("Effective until (ISO/date-time, blank = none)", data.ends_at ? String(data.ends_at) : ""); if (endsAt === null) return;
+      data.order = Number(order || 0);
+      data.countries = countries.split(",").map(v => v.trim().toUpperCase()).filter(Boolean);
+      data.starts_at = startsAt.trim() || null; data.ends_at = endsAt.trim() || null;
     }
 
     try {
