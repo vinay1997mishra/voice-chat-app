@@ -49,23 +49,19 @@ class _RechargeScreenState extends State<RechargeScreen> {
   Future<void> _buy(BillingProduct product) async {
     try {
       final receipt = await widget.state.billing.purchase(product.id);
-      final applied =
-          widget.state.recharge.applyVerifiedReceipt(receipt, product);
+      final account = widget.state.auth.current;
+      if (account == null) throw StateError('Login session is required');
+      final remoteWallet = await widget.state.backend.applyRecharge(
+        account.authToken,
+        productId: product.id,
+        purchaseToken: receipt.purchaseToken,
+        verified: receipt.verified,
+      );
+      widget.state.wallet.applyRemote(remoteWallet);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            applied
-                ? product.title + ' added.'
-                : 'Purchase needs verified billing before coins are credited.',
-          ),
-        ),
+        SnackBar(content: Text(product.title + ' added.')),
       );
-      final account = widget.state.auth.current;
-      if (account != null) {
-        final remoteWallet = await widget.state.backend.wallet(account.authToken);
-        widget.state.wallet.applyRemote(remoteWallet);
-      }
       setState(() {});
     } catch (error) {
       if (!mounted) return;
