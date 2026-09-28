@@ -1,3 +1,5 @@
+import '../infra/app_backend_service.dart';
+
 enum CurrencyKind { coins, diamonds }
 
 class WalletEntry {
@@ -18,6 +20,11 @@ class WalletService {
   int coins;
   int diamonds;
   final List<WalletEntry> history = <WalletEntry>[];
+
+  void applyRemote(RemoteWallet remote) {
+    coins = remote.coins;
+    diamonds = remote.diamonds;
+  }
 
   bool spendCoins(int amount, String label) {
     if (amount <= 0 || coins < amount) return false;
