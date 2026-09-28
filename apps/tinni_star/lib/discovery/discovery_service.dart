@@ -246,6 +246,48 @@ class DiscoveryService {
     return room;
   }
 
+  Future<RoomSummary> updateRoomRemote({
+    required String authToken,
+    required String roomId,
+    String? title,
+    String? announcement,
+    String? category,
+    String? countryCode,
+    String? countryName,
+    String? flagEmoji,
+    int? seatCount,
+    String? partyMode,
+    String? privacy,
+    bool? closed,
+    String? photoDataUrl,
+  }) async {
+    if (authToken.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.patchUrl(apiBase.replace(path: '/rooms/settings'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final body = <String, dynamic>{'room_id': roomId};
+    if (title != null) body['title'] = title;
+    if (announcement != null) body['announcement'] = announcement;
+    if (category != null) body['category'] = category;
+    if (countryCode != null) body['country_code'] = countryCode;
+    if (countryName != null) body['country_name'] = countryName;
+    if (flagEmoji != null) body['flag_emoji'] = flagEmoji;
+    if (seatCount != null) body['seat_count'] = seatCount;
+    if (partyMode != null) body['party_mode'] = partyMode;
+    if (privacy != null) body['privacy'] = privacy;
+    if (closed != null) body['closed'] = closed;
+    if (photoDataUrl != null) body['photo_data_url'] = photoDataUrl;
+    request.write(jsonEncode(body));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to update room');
+    final room = _roomFromServer(_asMap(data['room']));
+    if (room == null) throw StateError('Server returned invalid room');
+    final index = rooms.indexWhere((item) => item.id == room.id);
+    if (index >= 0) rooms[index] = room; else rooms.insert(0, room);
+    return room;
+  }
+
   Future<RoomSummary> setRoomLock({
     required String authToken,
     required String roomId,
