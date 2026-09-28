@@ -1892,6 +1892,33 @@ export default {
       }
     }
 
+    if (url.pathname === "/rooms/seat-count" && request.method === "PATCH") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const seatCount = Number(body.seat_count);
+      if (!roomId || !Number.isInteger(seatCount)) {
+        return json({ ok: false, error: "room_id and seat_count are required" }, 400);
+      }
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const actorId = String(appSession.user.user_id);
+      const store = getRoomPresenceStore(env, roomId);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
+      const isAdmin = isManager && isMember;
+      if (String(room.owner_id) !== actorId && !isAdmin) {
+        return json({ ok: false, error: "Only room owner/admin can change seat count" }, 403);
+      }
+      try {
+        return json(await directory.updateRoomSeatCount(actorId, roomId, seatCount, isAdmin));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to change seat count") }, 400);
+      }
+    }
+
     if (url.pathname === "/rooms/settings" && request.method === "PATCH") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
