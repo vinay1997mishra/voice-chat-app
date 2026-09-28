@@ -627,6 +627,21 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS user_inventory (
+        user_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        item_kind TEXT NOT NULL,
+        acquired_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_inventory_user_kind
+        ON user_inventory(user_id, item_kind, acquired_at DESC);
+
+      CREATE TABLE IF NOT EXISTS user_equipment (
+        user_id TEXT PRIMARY KEY,
+        equipped_frame_id TEXT,
+        updated_at INTEGER NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_owner_catalog_kind
         ON owner_catalog(kind, updated_at DESC);
 
@@ -2980,6 +2995,104 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
     return { ok: true, wallet: this.getWallet(userId), duplicate: Boolean(existing) };
+  }
+
+  frameCatalog(countryCodeValue = "") {
+    const country = String(countryCodeValue || "").trim().toUpperCase();
+    return this.ownerCatalog("frame")
+      .filter((item) => {
+        if (item.enabled === false) return false;
+        const countries = Array.isArray(item.data?.countries)
+          ? item.data.countries.map((value) => String(value || "").toUpperCase())
+          : [];
+        const now = Date.now();
+        const startsAt = Number(item.data?.starts_at || 0);
+        const endsAt = Number(item.data?.ends_at || 0);
+        return (!countries.length || countries.includes(country)) &&
+          (!startsAt || startsAt <= now) && (!endsAt || endsAt > now);
+      })
+      .map((item) => ({
+        ...item,
+        price: Math.max(0, Number(item.data?.price || item.data?.coin_price || 0)),
+        asset_url: String(item.data?.asset_url || ""),
+        order: Number(item.data?.order || 0),
+      }))
+      .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  }
+
+  inventoryState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const rows = this.ctx.storage.sql.exec(
+      "SELECT item_id, item_kind, acquired_at FROM user_inventory WHERE user_id = ? ORDER BY acquired_at DESC",
+      userId,
+    ).toArray();
+    const equipment = this.ctx.storage.sql.exec(
+      "SELECT equipped_frame_id, updated_at FROM user_equipment WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return {
+      owned: rows.map((row) => ({
+        item_id: String(row.item_id),
+        item_kind: String(row.item_kind),
+        acquired_at: Number(row.acquired_at),
+      })),
+      equipped_frame_id: equipment?.equipped_frame_id
+        ? String(equipment.equipped_frame_id)
+        : null,
+      updated_at: Number(equipment?.updated_at || 0),
+    };
+  }
+
+  purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const frameId = String(frameIdValue || "").trim();
+    const frame = this.frameCatalog(countryCodeValue).find((item) => item.id === frameId);
+    if (!frame) throw new Error("Frame is unavailable");
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1",
+      userId, frameId,
+    ).toArray()[0];
+    if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+    const wallet = this.getWallet(userId);
+    const price = Math.max(0, Number(frame.price || 0));
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
+        price, now, userId,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'frame_purchase',?,0,?,?,?)",
+        crypto.randomUUID(), userId, -price, "frame:" + frameId, frame.name, now,
+      );
+    }
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at) VALUES (?,?, 'frame',?)",
+      userId, frameId, now,
+    );
+    return { ok: true, duplicate: false, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+  }
+
+  equipFrame(userIdValue, frameIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const frameId = frameIdValue == null ? "" : String(frameIdValue).trim();
+    if (frameId) {
+      const owned = this.ctx.storage.sql.exec(
+        "SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? AND item_kind = 'frame' LIMIT 1",
+        userId, frameId,
+      ).toArray()[0];
+      if (!owned) throw new Error("Frame is not owned");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO user_equipment (user_id,equipped_frame_id,updated_at)
+       VALUES (?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET equipped_frame_id=excluded.equipped_frame_id, updated_at=excluded.updated_at`,
+      userId, frameId || null, now,
+    );
+    return { ok: true, inventory: this.inventoryState(userId) };
   }
 
   vipState(userIdValue) {
