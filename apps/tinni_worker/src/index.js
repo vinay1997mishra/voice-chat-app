@@ -1514,6 +1514,51 @@ export default {
       return json({ ok: true, user: appSession.user });
     }
 
+    if (url.pathname === "/app/profile" && request.method === "PATCH") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const user = await getAppDirectoryStore(env).updateUserProfile(
+          appSession.user.user_id,
+          body,
+        );
+        return json({ ok: true, user });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update profile") }, 400);
+      }
+    }
+
+    if (url.pathname === "/users/search" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const query = String(url.searchParams.get("q") || "").trim();
+      if (!query) return json({ ok: true, users: [] });
+      return json({
+        ok: true,
+        users: await getAppDirectoryStore(env).searchUsers(query, 30),
+      });
+    }
+
+    if (url.pathname === "/social/followers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const requested = String(url.searchParams.get("user_id") || appSession.user.user_id).trim();
+      return json({
+        ok: true,
+        followers: await getAppDirectoryStore(env).listFollowers(requested),
+      });
+    }
+
+    if (url.pathname === "/rooms/recent" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        rooms: await getAppDirectoryStore(env).listRecentRooms(appSession.user.user_id),
+      });
+    }
+
     if (url.pathname === "/family" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
