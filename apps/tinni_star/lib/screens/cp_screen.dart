@@ -185,6 +185,7 @@ class _CpScreenState extends State<CpScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
+                        final stateContext = this.context;
                         final account = widget.state.auth.current;
                         if (account == null) return;
                         try {
@@ -213,6 +214,7 @@ class _CpScreenState extends State<CpScreen> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: () async {
+                  final stateContext = this.context;
                   final account = widget.state.auth.current;
                   if (account == null) return;
                   final controller = TextEditingController(text: cp.ringId ?? '');
