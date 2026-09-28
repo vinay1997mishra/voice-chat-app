@@ -159,6 +159,7 @@ function rowToRoom(row) {
     category: row.category ? String(row.category) : "",
     privacy: row.privacy ? String(row.privacy) : "public",
     closed: Number(row.closed || 0) === 1,
+    room_level: Math.max(1, Number(row.room_level || 1)),
   };
 }
 
@@ -738,7 +739,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN announcement TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public'",
-      "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0"
+      "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_rooms ADD COLUMN room_level INTEGER NOT NULL DEFAULT 1"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
