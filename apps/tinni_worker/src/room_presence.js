@@ -15,6 +15,7 @@ export class RoomPresenceStore extends DurableObject {
         family_tag TEXT,
         host_tag TEXT,
         agency_name TEXT,
+        equipped_frame_id TEXT,
         owner_tags_json TEXT NOT NULL DEFAULT '[]',
         seat_index INTEGER,
         seat_emote TEXT,
@@ -90,6 +91,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN family_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN host_tag TEXT",
       "ALTER TABLE room_members ADD COLUMN agency_name TEXT",
+      "ALTER TABLE room_members ADD COLUMN equipped_frame_id TEXT",
       "ALTER TABLE room_members ADD COLUMN owner_tags_json TEXT NOT NULL DEFAULT '[]'",
       "ALTER TABLE room_members ADD COLUMN owner_medals_json TEXT NOT NULL DEFAULT '[]'",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
@@ -766,6 +768,7 @@ export class RoomPresenceStore extends DurableObject {
       family_tag: row.family_tag ? String(row.family_tag) : null,
       host_tag: row.host_tag ? String(row.host_tag) : null,
       agency_name: row.agency_name ? String(row.agency_name) : null,
+      equipped_frame_id: row.equipped_frame_id ? String(row.equipped_frame_id) : null,
       owner_tags: (() => {
         try {
           const value = JSON.parse(String(row.owner_tags_json || "[]"));
@@ -820,6 +823,7 @@ export class RoomPresenceStore extends DurableObject {
     const familyTag = String(input?.family_tag || "").trim() || null;
     const hostTag = String(input?.host_tag || "").trim() || null;
     const agencyName = String(input?.agency_name || "").trim() || null;
+    const equippedFrameId = String(input?.equipped_frame_id || "").trim().slice(0, 80) || null;
     const ownerTags = Array.isArray(input?.owner_tags)
       ? input.owner_tags
           .map((item) => ({
@@ -904,9 +908,9 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
-         family_tag, host_tag, agency_name, owner_tags_json, owner_medals_json,
+         family_tag, host_tag, agency_name, equipped_frame_id, owner_tags_json, owner_medals_json,
          seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
@@ -915,6 +919,7 @@ export class RoomPresenceStore extends DurableObject {
          family_tag = excluded.family_tag,
          host_tag = excluded.host_tag,
          agency_name = excluded.agency_name,
+         equipped_frame_id = excluded.equipped_frame_id,
          owner_tags_json = excluded.owner_tags_json,
          owner_medals_json = excluded.owner_medals_json,
          seat_index = excluded.seat_index,
@@ -931,6 +936,7 @@ export class RoomPresenceStore extends DurableObject {
       familyTag,
       hostTag,
       agencyName,
+      equippedFrameId,
       ownerTagsJson,
       ownerMedalsJson,
       seatIndex,
