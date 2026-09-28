@@ -3263,7 +3263,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             itemBuilder: (_, index) {
               final tool = tools[index];
-              final isLp = tool.$1 == 'Lucky Bag';
               return InkWell(
                 key: Key(
                   'room-tool-' +
