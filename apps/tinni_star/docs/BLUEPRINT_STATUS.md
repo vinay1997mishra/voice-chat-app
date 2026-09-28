@@ -37,7 +37,7 @@ Status meanings:
 | CP/courting | `lib/relationship` | Implemented |
 | CP heartbeat/disconnect | `cp_features.dart` | Implemented |
 | Family/guild | `lib/community` | Implemented |
-| Family task/sign-in/lottery/wallet | `family_features.dart` | Implemented |
+| Family task/sign-in/wallet | `family_features.dart` | Implemented; retired Family Lottery and Gift Contribution are intentionally excluded |
 | KTV/music | `lib/media` | Implemented queue/state; production catalog/audio provider required |
 | Games | `lib/games` | Implemented game-session framework; production multiplayer server required |
 | Lucky Bag/Rocket/Rebate | `lib/rewards` | Implemented |
