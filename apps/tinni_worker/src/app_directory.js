@@ -132,6 +132,7 @@ function rowToRoom(row) {
     owner_flag_emoji: row.owner_flag_emoji
       ? String(row.owner_flag_emoji)
       : null,
+    member_count: Number(row.member_count || 0),
   };
 }
 
@@ -300,6 +301,29 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_app_blocks_target
         ON app_blocks(target_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS app_recent_rooms (
+        user_id TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        visited_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, room_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_recent_rooms_user_time
+        ON app_recent_rooms(user_id, visited_at DESC);
+
+      CREATE TABLE IF NOT EXISTS app_user_presence (
+        user_id TEXT PRIMARY KEY,
+        room_id TEXT,
+        last_seen INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_user_presence_seen
+        ON app_user_presence(last_seen DESC);
+
+      CREATE TABLE IF NOT EXISTS app_room_presence_counts (
+        room_id TEXT PRIMARY KEY,
+        member_count INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS direct_messages (
         id TEXT PRIMARY KEY,
@@ -1858,6 +1882,184 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map(rowToUser);
   }
 
+  async updateUserProfile(userIdValue, input) {
+    const userId = String(userIdValue || "").trim();
+    const current = await this.getUserById(userId);
+    if (!current) throw new Error("User not found");
+
+    const displayName = input?.display_name === undefined
+      ? current.display_name : cleanText(input.display_name, 40);
+    const signature = input?.signature === undefined
+      ? current.signature : cleanText(input.signature, 3000);
+    const countryCode = input?.country_code === undefined
+      ? current.country_code : cleanText(input.country_code, 2).toUpperCase();
+    const countryName = input?.country_name === undefined
+      ? current.country_name : cleanText(input.country_name, 80);
+    const flagEmoji = input?.flag_emoji === undefined
+      ? current.flag_emoji : cleanText(input.flag_emoji, 16);
+    const gender = input?.gender === undefined
+      ? current.gender : cleanText(input.gender, 12).toLowerCase();
+    const avatarDataUrl = input?.avatar_data_url === undefined
+      ? current.avatar_data_url
+      : (input.avatar_data_url ? String(input.avatar_data_url) : null);
+
+    if (!displayName) throw new Error("Name is required");
+    if (wordCount(signature) > 150) throw new Error("Signature can contain at most 150 words");
+    if (!countryCode || !countryName || !flagEmoji) throw new Error("Country and flag are required");
+    if (!VALID_GENDERS.has(gender)) throw new Error("Gender must be male or female");
+    if (avatarDataUrl && avatarDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
+      throw new Error("Profile photo is too large");
+    }
+    if (avatarDataUrl && !avatarDataUrl.startsWith("data:image/")) {
+      throw new Error("Profile photo format is invalid");
+    }
+
+    this.ctx.storage.sql.exec(
+      `UPDATE app_users
+          SET display_name = ?, signature = ?, country_code = ?, country_name = ?,
+              flag_emoji = ?, gender = ?, avatar_data_url = ?, updated_at = ?
+        WHERE user_id = ?`,
+      displayName, signature, countryCode, countryName, flagEmoji, gender,
+      avatarDataUrl, Date.now(), userId,
+    );
+    return this.getUserById(userId);
+  }
+
+  searchUsers(queryValue, limitValue = 30) {
+    const query = cleanText(queryValue, 80);
+    if (!query) return [];
+    const limit = Math.max(1, Math.min(50, Number(limitValue) || 30));
+    const exact = this._resolveOwnerUserId(query);
+    const like = "%" + query.replaceAll("%", "\\%").replaceAll("_", "\\_") + "%";
+    const now = Date.now();
+    const onlineCutoff = now - 90000;
+    return this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+              u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+              p.room_id AS active_room_id, p.last_seen
+         FROM app_users u
+         LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+        WHERE u.user_id = ? OR u.display_name LIKE ? ESCAPE '\\'
+        ORDER BY CASE WHEN u.user_id = ? THEN 0 ELSE 1 END, u.display_name ASC
+        LIMIT ?`,
+      exact, like, exact, limit,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      display_name: String(row.display_name),
+      signature: String(row.signature || ""),
+      country_code: String(row.country_code || ""),
+      country_name: String(row.country_name || ""),
+      flag_emoji: String(row.flag_emoji || ""),
+      gender: String(row.gender || ""),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      online: row.last_seen != null && Number(row.last_seen) >= onlineCutoff,
+      active_room_id:
+        row.last_seen != null && Number(row.last_seen) >= onlineCutoff && row.active_room_id
+          ? String(row.active_room_id) : null,
+    }));
+  }
+
+  listFollowers(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name, u.avatar_data_url
+         FROM app_follows f
+         JOIN app_users u ON u.user_id = f.follower_id
+        WHERE f.target_id = ?
+        ORDER BY f.created_at DESC`,
+      userId,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      display_name: String(row.display_name || row.user_id),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+    }));
+  }
+
+  touchPresence(userIdValue, roomIdValue, memberCountValue = null) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    if (!userId) throw new Error("user_id is required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO app_user_presence (user_id, room_id, last_seen)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET room_id = excluded.room_id, last_seen = excluded.last_seen`,
+      userId, roomId || null, now,
+    );
+    if (roomId && memberCountValue !== null && memberCountValue !== undefined) {
+      const count = Math.max(0, Number(memberCountValue) || 0);
+      this.ctx.storage.sql.exec(
+        `INSERT INTO app_room_presence_counts (room_id, member_count, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(room_id) DO UPDATE SET member_count = excluded.member_count, updated_at = excluded.updated_at`,
+        roomId, count, now,
+      );
+    }
+    return { ok: true, online: true, room_id: roomId || null, last_seen: now };
+  }
+
+  clearPresence(userIdValue, roomIdValue, memberCountValue = null) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    if (userId) this.ctx.storage.sql.exec("DELETE FROM app_user_presence WHERE user_id = ?", userId);
+    if (roomId && memberCountValue !== null && memberCountValue !== undefined) {
+      const now = Date.now();
+      const count = Math.max(0, Number(memberCountValue) || 0);
+      this.ctx.storage.sql.exec(
+        `INSERT INTO app_room_presence_counts (room_id, member_count, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(room_id) DO UPDATE SET member_count = excluded.member_count, updated_at = excluded.updated_at`,
+        roomId, count, now,
+      );
+    }
+    return { ok: true, online: false };
+  }
+
+  markRecentRoom(userIdValue, roomIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    if (!userId || !roomId) throw new Error("user_id and room_id are required");
+    const exists = this.ctx.storage.sql.exec("SELECT id FROM app_rooms WHERE id = ? LIMIT 1", roomId).toArray()[0];
+    if (!exists) throw new Error("Room not found");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO app_recent_rooms (user_id, room_id, visited_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, room_id) DO UPDATE SET visited_at = excluded.visited_at`,
+      userId, roomId, Date.now(),
+    );
+    const overflow = this.ctx.storage.sql.exec(
+      `SELECT room_id FROM app_recent_rooms WHERE user_id = ?
+        ORDER BY visited_at DESC LIMIT -1 OFFSET 25`, userId,
+    ).toArray();
+    for (const row of overflow) {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM app_recent_rooms WHERE user_id = ? AND room_id = ?",
+        userId, row.room_id,
+      );
+    }
+    return { ok: true };
+  }
+
+  listRecentRooms(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji,
+              COALESCE(pc.member_count, 0) AS member_count
+         FROM app_recent_rooms rr
+         JOIN app_rooms r ON r.id = rr.room_id
+         JOIN app_users u ON u.user_id = r.owner_id
+         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+        WHERE rr.user_id = ?
+        ORDER BY rr.visited_at DESC
+        LIMIT 25`,
+      userId,
+    ).toArray().map(rowToRoom);
+  }
+
   listFollowing(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return [];
@@ -3080,9 +3282,11 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
-              u.flag_emoji AS owner_flag_emoji
+              u.flag_emoji AS owner_flag_emoji,
+              COALESCE(pc.member_count, 0) AS member_count
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
+         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
         ORDER BY r.created_at DESC
         LIMIT 500`,
     ).toArray().map(rowToRoom);
