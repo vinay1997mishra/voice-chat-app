@@ -306,6 +306,14 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_blocks_target
         ON app_blocks(target_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS app_room_invites (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        invited_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id)
+      );
+
       CREATE TABLE IF NOT EXISTS app_recent_rooms (
         user_id TEXT NOT NULL,
         room_id TEXT NOT NULL,
@@ -3575,6 +3583,14 @@ export class AppDirectoryStore extends DurableObject {
     if (String(room.owner_id) === userId) {
       return { ok: true, allowed: true, owner_bypass: true };
     }
+    const privacy = String(room.privacy || "public").toLowerCase();
+    if (privacy === "private" || privacy === "invite") {
+      const invite = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_room_invites WHERE room_id = ? AND user_id = ? LIMIT 1",
+        roomId, userId,
+      ).toArray()[0];
+      if (!invite) return { ok: true, allowed: false, reason: "invite_required", privacy };
+    }
     if (Number(room.locked) !== 1) {
       return { ok: true, allowed: true, locked: false };
     }
@@ -3801,6 +3817,24 @@ export class AppDirectoryStore extends DurableObject {
       blocked: false,
       attempts_remaining: Math.max(0, 5 - attempts),
     };
+  }
+
+  setRoomInvite(roomIdValue, targetUserIdValue, invitedByValue, enabledValue = true) {
+    const roomId = String(roomIdValue || "").trim();
+    const targetUserId = String(targetUserIdValue || "").trim();
+    const invitedBy = String(invitedByValue || "").trim();
+    if (!roomId || !targetUserId || !invitedBy) throw new Error("room_id, target_user_id and invited_by are required");
+    if (!this._roomRow(roomId)) throw new Error("Room not found");
+    if (!this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", targetUserId).toArray()[0]) throw new Error("Target user not found");
+    if (enabledValue === true) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO app_room_invites (room_id, user_id, invited_by, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(room_id, user_id) DO UPDATE SET invited_by = excluded.invited_by, created_at = excluded.created_at`,
+        roomId, targetUserId, invitedBy, Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec("DELETE FROM app_room_invites WHERE room_id = ? AND user_id = ?", roomId, targetUserId);
+    }
+    return { ok: true, room_id: roomId, target_user_id: targetUserId, invited: enabledValue === true };
   }
 
   async updateRoom(ownerIdValue, roomIdValue, input = {}) {
