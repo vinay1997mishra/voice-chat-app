@@ -133,6 +133,10 @@ function rowToRoom(row) {
       ? String(row.owner_flag_emoji)
       : null,
     member_count: Number(row.member_count || 0),
+    announcement: row.announcement ? String(row.announcement) : "",
+    category: row.category ? String(row.category) : "",
+    privacy: row.privacy ? String(row.privacy) : "public",
+    closed: Number(row.closed || 0) === 1,
   };
 }
 
@@ -564,7 +568,11 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_calls ADD COLUMN cost_coins_per_minute INTEGER NOT NULL DEFAULT 200000",
       "ALTER TABLE app_calls ADD COLUMN receiver_diamonds_per_minute INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_calls ADD COLUMN stats_recorded INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_wallets ADD COLUMN banned INTEGER NOT NULL DEFAULT 0"
+      "ALTER TABLE app_wallets ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_rooms ADD COLUMN announcement TEXT NOT NULL DEFAULT '',",
+      "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT '',",
+      "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public',",
+      "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -3793,6 +3801,39 @@ export class AppDirectoryStore extends DurableObject {
       blocked: false,
       attempts_remaining: Math.max(0, 5 - attempts),
     };
+  }
+
+  async updateRoom(ownerIdValue, roomIdValue, input = {}) {
+    const ownerId = String(ownerIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const room = this._roomRow(roomId);
+    if (!room) throw new Error("Room not found");
+    if (String(room.owner_id) !== ownerId) throw new Error("Only the room owner can edit room settings");
+
+    const title = input.title === undefined ? String(room.title) : cleanText(input.title, 60);
+    const announcement = input.announcement === undefined ? String(room.announcement || "") : cleanText(input.announcement, 500);
+    const category = input.category === undefined ? String(room.category || "") : cleanText(input.category, 40);
+    const countryCode = input.country_code === undefined ? String(room.country_code) : cleanText(input.country_code, 8).toUpperCase();
+    const countryName = input.country_name === undefined ? String(room.country_name) : cleanText(input.country_name, 80);
+    const flagEmoji = input.flag_emoji === undefined ? String(room.flag_emoji) : cleanText(input.flag_emoji, 16);
+    const seatCount = input.seat_count === undefined ? Number(room.seat_count) : Number(input.seat_count);
+    const partyMode = input.party_mode === undefined ? String(room.party_mode) : cleanText(input.party_mode, 40);
+    const privacy = input.privacy === undefined ? String(room.privacy || "public") : String(input.privacy || "").trim().toLowerCase();
+    const closed = input.closed === undefined ? Number(room.closed || 0) === 1 : input.closed === true;
+    const photoDataUrl = input.photo_data_url === undefined ? room.photo_data_url : (input.photo_data_url ? String(input.photo_data_url) : null);
+    if (!title) throw new Error("Room name is required");
+    if (!Number.isInteger(seatCount) || seatCount < 1 || seatCount > 30) throw new Error("Invalid room capacity");
+    if (!["public", "private", "invite"].includes(privacy)) throw new Error("privacy must be public, private or invite");
+    if (photoDataUrl && (photoDataUrl.length > MAX_AVATAR_DATA_LENGTH || !photoDataUrl.startsWith("data:image/"))) throw new Error("Room photo is invalid");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE app_rooms SET title = ?, announcement = ?, category = ?, country_code = ?, country_name = ?, flag_emoji = ?, seat_count = ?, party_mode = ?, privacy = ?, closed = ?, photo_data_url = ?, updated_at = ? WHERE id = ?`,
+      title, announcement, category, countryCode, countryName, flagEmoji, seatCount, partyMode, privacy, closed ? 1 : 0, photoDataUrl, now, roomId,
+    );
+    const updated = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name, u.avatar_data_url AS owner_avatar_data_url, u.flag_emoji AS owner_flag_emoji FROM app_rooms r JOIN app_users u ON u.user_id = r.owner_id WHERE r.id = ? LIMIT 1`, roomId,
+    ).toArray()[0];
+    return { ok: true, room: rowToRoom(updated) };
   }
 
   async setRoomLock(ownerIdValue, roomIdValue, input) {
