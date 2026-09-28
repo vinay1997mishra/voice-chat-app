@@ -532,6 +532,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  Future<void> _toggleSelfMute() async {
+    if (controller.mySeat == null) {
+      _snack('Join a seat before using self mute.');
+      return;
+    }
+    final muted = !controller.selfMuted;
+    try {
+      await widget.state.roomSession.setSelfMute(muted);
+      if (mounted) setState(() {});
+      _snack(muted ? 'Self mute on.' : 'Self mute off.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
   Future<void> _leaveSeatAndMute() async {
     controller.leaveSeat();
     await widget.state.roomSession.setMicFromController();
@@ -4263,6 +4278,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             : controller.micState == MicState.live
                                 ? FeaturePalette.family
                                 : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-self-mute-button'),
+                      tooltip: controller.selfMuted ? 'Self mute off' : 'Self mute on',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(minWidth: 46, minHeight: 46),
+                      onPressed: controller.mySeat == null ? null : _toggleSelfMute,
+                      icon: ShiningIcon(
+                        icon: controller.selfMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                        color: controller.mySeat == null ? RoyalPalette.muted : controller.selfMuted ? FeaturePalette.safety : FeaturePalette.family,
                         size: 22,
                         boxSize: 38,
                         glow: controller.mySeat == null ? 0.08 : 0.34,
