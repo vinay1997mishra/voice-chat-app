@@ -4128,8 +4128,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
-              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
                 Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
                 Text(
                   'ID ' +
@@ -4183,6 +4181,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         body: Stack(
           children: [
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             Positioned.fill(
               child: Container(
           decoration: BoxDecoration(
