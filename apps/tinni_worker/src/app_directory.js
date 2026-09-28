@@ -2082,6 +2082,25 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0]);
   }
 
+  findRoomByExactId(roomIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji,
+              COALESCE(pc.member_count, 0) AS member_count
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+        WHERE r.id = ?
+          AND COALESCE(r.closed, 0) = 0
+        LIMIT 1`,
+      roomId,
+    ).toArray()[0];
+    return row ? rowToRoom(row) : null;
+  }
+
   searchUsers(queryValue, limitValue = 30) {
     const query = cleanText(queryValue, 80);
     if (!query) return [];
