@@ -11,7 +11,6 @@ import '../ui/royal_theme.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'feature_center_screen.dart';
-import 'cp_screen.dart';
 import 'vip_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -268,25 +267,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          RoyalPanel(
-            key: const Key('mine-cp-panel'),
-            gradient: FeaturePalette.glow(FeaturePalette.cp),
-            accentColor: FeaturePalette.cp,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CpScreen(state: widget.state),
-              ),
-            ).then((_) => setState(() {})),
-            child: const ListTile(
-              leading: Icon(Icons.favorite_rounded, color: FeaturePalette.cp),
-              title: Text('CP', style: TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text('CP request, relationship, intimacy, memories and disconnect'),
-              trailing: Icon(Icons.chevron_right_rounded),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const GoldSectionTitle('Royal Center'),
+          // CP is intentionally kept out of Mine. Open CP from its dedicated panel.
+                    const GoldSectionTitle('Royal Center'),
           const SizedBox(height: 10),
           GridView.count(
             physics: const NeverScrollableScrollPhysics(),
