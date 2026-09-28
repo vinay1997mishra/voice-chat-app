@@ -386,6 +386,17 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_game_actions (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        game_key TEXT NOT NULL,
+        action_value TEXT NOT NULL,
+        server_result TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_game_actions_room_time ON room_game_actions(room_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS cp_relationships (
         user_a TEXT NOT NULL,
         user_b TEXT NOT NULL,
@@ -2385,6 +2396,27 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       "SELECT * FROM gift_transactions WHERE room_id = ? ORDER BY created_at DESC LIMIT ?", roomId, limit,
     ).toArray().map((row) => ({ ...row, quantity: Number(row.quantity), unit_price: Number(row.unit_price), total_cost: Number(row.total_cost), created_at: Number(row.created_at) }));
+  }
+
+  playRoomQuickGame(userIdValue, input = {}) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(input.room_id || "").trim();
+    const gameKey = String(input.game_key || "").trim().toLowerCase();
+    const action = cleanText(input.action, 40);
+    if (!userId || !roomId || !action) throw new Error("room_id, game_key and action are required");
+    const allowed = new Set(["lucky_dice", "lucky_wheel", "rps", "teen_patti"]);
+    if (!allowed.has(gameKey)) throw new Error("Unsupported room game");
+    const room = this.ctx.storage.sql.exec("SELECT id, closed FROM app_rooms WHERE id = ? LIMIT 1", roomId).toArray()[0];
+    if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
+    let result = action;
+    const random = crypto.getRandomValues(new Uint32Array(1))[0];
+    if (gameKey === "lucky_dice") result = String((random % 6) + 1);
+    if (gameKey === "lucky_wheel") result = ["Star","Crown","Rose","Diamond","Lion","Dragon"][random % 6];
+    if (gameKey === "rps") result = ["Rock","Paper","Scissors"][random % 3];
+    if (gameKey === "teen_patti") result = action === "Join Table" ? "joined" : "viewing";
+    const now = Date.now(); const id = "game-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec("INSERT INTO room_game_actions (id,room_id,user_id,game_key,action_value,server_result,created_at) VALUES (?,?,?,?,?,?,?)", id, roomId, userId, gameKey, action, result, now);
+    return { ok: true, id, room_id: roomId, user_id: userId, game_key: gameKey, action, result, created_at: now };
   }
 
   cpState(userIdValue) {
