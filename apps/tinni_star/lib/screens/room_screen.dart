@@ -1809,7 +1809,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     List<(String, String)> recipients() {
-      final values = <(String, String)>[];
+      final account = widget.state.auth.current;
+      final values = <(String, String)>[
+        (senderId, account?.displayName ?? 'You'),
+      ];
       if (ownerId != senderId) {
         values.add((ownerId, 'Room Owner'));
       }
@@ -1817,13 +1820,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final seat = controller.seats[index];
         final name = seat.userName;
         if (name == null) continue;
-        final id = name == 'You' ? senderId : 'seat-${index + 1}';
-        if (id == senderId) continue;
+        final liveMatch = widget.state.roomSession.liveMembers.where(
+          (member) => member.seatIndex == index,
+        );
+        final id = name == 'You'
+            ? senderId
+            : liveMatch.isNotEmpty
+                ? liveMatch.first.userId
+                : 'seat-${index + 1}';
         if (values.any((item) => item.$1 == id)) continue;
         values.add((id, name));
       }
       for (final member in widget.state.roomSession.liveMembers) {
-        if (member.userId == senderId) continue;
         if (values.any((item) => item.$1 == member.userId)) continue;
         values.add((member.userId, member.displayName));
       }
@@ -1982,13 +1990,39 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                           ]
                                         : const [],
                                   ),
-                                  child: Icon(
-                                    index == 0
-                                        ? Icons.workspace_premium_rounded
-                                        : Icons.person_rounded,
-                                    color: selected
-                                        ? FeaturePalette.gift
-                                        : FeaturePalette.social,
+                                  child: ClipOval(
+                                    child: Builder(
+                                      builder: (_) {
+                                        final account = widget.state.auth.current;
+                                        String? avatar;
+                                        if (recipient.$1 == senderId) {
+                                          avatar = account?.avatarDataUrl;
+                                        } else {
+                                          for (final member in widget.state.roomSession.liveMembers) {
+                                            if (member.userId == recipient.$1) {
+                                              avatar = member.avatarDataUrl;
+                                              break;
+                                            }
+                                          }
+                                        }
+                                        if (avatar != null && avatar.isNotEmpty) {
+                                          return Image.network(
+                                            avatar,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) => Icon(
+                                              Icons.person_rounded,
+                                              color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                            ),
+                                          );
+                                        }
+                                        return Icon(
+                                          recipient.$1 == senderId
+                                              ? Icons.account_circle_rounded
+                                              : Icons.person_rounded,
+                                          color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
