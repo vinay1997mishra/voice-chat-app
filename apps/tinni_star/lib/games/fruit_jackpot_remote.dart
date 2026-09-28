@@ -106,6 +106,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
 
   Future<String?> placeBet({
     required String authToken,
+    required String roomId,
     required FruitKind fruit,
     required int amount,
   }) async {
@@ -124,6 +125,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
         jsonEncode(<String, Object>{
           'fruit_key': fruit.name,
           'amount': amount,
+          'room_id': roomId,
         }),
       );
 
