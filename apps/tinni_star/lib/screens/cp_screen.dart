@@ -31,6 +31,10 @@ class _CpScreenState extends State<CpScreen> {
     try {
       final remote = await widget.state.backend.cpState(account.authToken);
       widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+      final memories = await widget.state.backend.cpMemories(account.authToken);
+      widget.state.cp.memories
+        ..clear()
+        ..addAll(memories);
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -104,8 +108,19 @@ class _CpScreenState extends State<CpScreen> {
     );
     controller.dispose();
     if (value == null || value.isEmpty) return;
-    widget.state.cp.addMemory(value);
-    setState(() {});
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.cpAddMemory(account.authToken, value);
+      final memories = await widget.state.backend.cpMemories(account.authToken);
+      widget.state.cp.memories
+        ..clear()
+        ..addAll(memories);
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+    }
   }
 
   @override
@@ -169,9 +184,17 @@ class _CpScreenState extends State<CpScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        widget.state.cp.addIntimacy(100);
-                        setState(() {});
+                      onPressed: () async {
+                        final account = widget.state.auth.current;
+                        if (account == null) return;
+                        try {
+                          final remote = await widget.state.backend.cpUpdate(account.authToken, 'intimacy', {'delta': 100});
+                          widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+                          if (mounted) setState(() {});
+                        } catch (error) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                        }
                       },
                       icon: const Icon(Icons.favorite_border_rounded),
                       label: const Text('+100 Intimacy'),
