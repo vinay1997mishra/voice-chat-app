@@ -2872,8 +2872,8 @@ export default {
         durationMs = Number(rawDuration);
         const allowed = new Set([
           2 * 60 * 60 * 1000,
-          6 * 60 * 60 * 1000,
-          24 * 60 * 60 * 1000,
+          12 * 60 * 60 * 1000,
+          48 * 60 * 60 * 1000,
         ]);
         if (!allowed.has(durationMs)) {
           return json({ ok: false, error: "Invalid kick duration" }, 400);
@@ -2885,6 +2885,38 @@ export default {
         kicked_by: actorId,
         duration_ms: durationMs,
       }));
+    }
+
+    if (url.pathname === "/room-presence/kicks" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) !== String(appSession.user.user_id)) {
+        return json({ ok: false, error: "Only room owner can view Kickout List" }, 403);
+      }
+      return json({ ok: true, kicks: await getRoomPresenceStore(env, roomId).kickList() });
+    }
+
+    if (url.pathname === "/room-presence/unkick" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const targetUserId = String(body.target_user_id || "").trim();
+      if (!roomId || !targetUserId) {
+        return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
+      }
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      if (String(room.owner_id) !== String(appSession.user.user_id)) {
+        return json({ ok: false, error: "Only room owner can unkick users" }, 403);
+      }
+      return json(await getRoomPresenceStore(env, roomId).unkick(targetUserId));
     }
 
     if (
