@@ -1868,6 +1868,22 @@ export default {
       catch (error) { return json({ ok:false,error:String(error?.message||"Unable to load sending ranking") },400); }
     }
 
+    if (url.pathname === "/rooms/follow" && request.method === "GET") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const roomId=String(url.searchParams.get("room_id")||"").trim();
+      try{return json({ok:true,...await getAppDirectoryStore(env).roomFollowState(roomId,appSession.user.user_id)});}
+      catch(error){return json({ok:false,error:String(error?.message||"Unable to load room follow")},400);}
+    }
+
+    if (url.pathname === "/rooms/follow" && request.method === "POST") {
+      const appSession=await verifyAppSession(request,env);
+      if(!appSession)return json({ok:false,error:"Unauthorized"},401);
+      const body=await request.json().catch(()=>({}));
+      try{return json(await getAppDirectoryStore(env).setRoomFollow(appSession.user.user_id,body.room_id,body.following===true));}
+      catch(error){return json({ok:false,error:String(error?.message||"Unable to update room follow")},400);}
+    }
+
     if (url.pathname === "/rooms/membership" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
