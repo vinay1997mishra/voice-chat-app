@@ -923,6 +923,7 @@ async function loadOwnerState() {
         entry: String(item.data?.entry || ""),
         frame: String(item.data?.frame || ""),
         price: Number(item.data?.price || 0),
+        data: { ...(item.data || {}) },
       }))
       .sort((a, b) => a.level - b.level);
 
@@ -1182,12 +1183,17 @@ function openAction(action, preset = {}) {
       field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)
     ],
     "vip-edit": ["Edit VIP",
-      field("catalog_id","Catalog ID","hidden","") +
-      field("name","VIP name") +
-      field("level","VIP level","number") +
-      field("price","Price / requirement","number") +
-      field("entry","Entry effect") +
-      field("frame","Frame")
+      field("catalog_id","Catalog ID","hidden","") + field("name","VIP name") +
+      field("level","VIP level","number") + field("order","Display order","number") +
+      field("price","Price / requirement","number") + field("duration_days","Validity days (0 = permanent)","number") +
+      field("badge","Badge asset / label") + field("profile_frame","Profile frame") + field("seat_frame","Seat frame") +
+      field("entry","Vehicle / animal / 3D entry") + field("entry_asset","Entry animation asset") +
+      field("entry_audio","Entry audio asset") + field("requirements","Requirements") +
+      field("privileges","Privileges (comma separated)","text","",false) +
+      field("permissions","Permissions / benefits (comma separated)","text","",false) +
+      field("special_effects","Special effects (comma separated)","text","",false) +
+      field("countries","Country codes (comma separated, blank = all)","text","",false) +
+      field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)
     ],
     "game-switch": ["Game Master Switch",
       selectField("enabled","Status",[["true","Enable games"],["false","Disable games"]])
@@ -2059,6 +2065,13 @@ document.body.addEventListener("click", async e => {
       price: vip.price,
       entry: vip.entry,
       frame: vip.frame,
+      order: vip.data?.order ?? vip.level,
+      duration_days: vip.data?.duration_days ?? 0,
+      badge: vip.data?.badge || "", profile_frame: vip.data?.profile_frame || vip.data?.frame || "",
+      seat_frame: vip.data?.seat_frame || "", entry_asset: vip.data?.entry_asset || "", entry_audio: vip.data?.entry_audio || "",
+      requirements: vip.data?.requirements || "", privileges: (vip.data?.privileges || []).join(", "),
+      permissions: (vip.data?.permissions || []).join(", "), special_effects: (vip.data?.special_effects || []).join(", "),
+      countries: (vip.data?.countries || []).join(", "), starts_at: vip.data?.starts_at || "", ends_at: vip.data?.ends_at || "",
     });
     return;
   }
