@@ -45,6 +45,24 @@ class ActiveRoomSession extends ChangeNotifier {
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
 
+  Future<Map<String, dynamic>> sendGift({
+    required String roomId,
+    required String authToken,
+    required String giftId,
+    required String giftName,
+    required int quantity,
+    required int unitPrice,
+    required List<String> receiverIds,
+  }) => presence.sendGift(
+        roomId: roomId,
+        authToken: authToken,
+        giftId: giftId,
+        giftName: giftName,
+        quantity: quantity,
+        unitPrice: unitPrice,
+        receiverIds: receiverIds,
+      );
+
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
   bool get moderationChatBanned => presence.selfChatBanned;
