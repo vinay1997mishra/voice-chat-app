@@ -402,6 +402,15 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_gift_transactions_room_time
         ON gift_transactions(room_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS room_follows (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_follows_room
+        ON room_follows(room_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS room_memberships (
         room_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
@@ -2506,6 +2515,39 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  roomFollowState(roomIdValue, userIdValue) {
+    const roomId=String(roomIdValue||"").trim(), userId=String(userIdValue||"").trim();
+    if(!this._roomRow(roomId)) throw new Error("Room not found");
+    const following=userId ? Boolean(this.ctx.storage.sql.exec(
+      "SELECT 1 AS yes FROM room_follows WHERE room_id=? AND user_id=? LIMIT 1",roomId,userId,
+    ).toArray()[0]) : false;
+    const total=Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM room_follows WHERE room_id=?",roomId,
+    ).toArray()[0]?.count||0);
+    const present=Number(this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS count FROM room_follows f
+         JOIN app_user_presence p ON p.user_id=f.user_id
+         WHERE f.room_id=? AND p.room_id=? AND p.last_seen>=?`,
+      roomId,roomId,Date.now()-120000,
+    ).toArray()[0]?.count||0);
+    return {room_id:roomId,following,follower_count:total,present_follower_count:present};
+  }
+
+  setRoomFollow(userIdValue,roomIdValue,enabledValue){
+    const userId=String(userIdValue||"").trim(),roomId=String(roomIdValue||"").trim();
+    if(!userId||!roomId)throw new Error("room_id and user are required");
+    if(!this._roomRow(roomId))throw new Error("Room not found");
+    if(enabledValue)this.ctx.storage.sql.exec(
+      "INSERT INTO room_follows(room_id,user_id,created_at) VALUES(?,?,?) ON CONFLICT(room_id,user_id) DO UPDATE SET created_at=excluded.created_at",
+      roomId,userId,Date.now(),
+    );
+    else {
+      this.ctx.storage.sql.exec("DELETE FROM room_follows WHERE room_id=? AND user_id=?",roomId,userId);
+      this.ctx.storage.sql.exec("DELETE FROM room_memberships WHERE room_id=? AND user_id=?",roomId,userId);
+    }
+    return {ok:true,...this.roomFollowState(roomId,userId),membership:this.roomMembershipState(roomId,userId)};
+  }
+
   roomMembershipState(roomIdValue, userIdValue) {
     const roomId = String(roomIdValue || "").trim();
     const userId = String(userIdValue || "").trim();
@@ -2543,6 +2585,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!this.getUserById(userId)) throw new Error("User not found");
     const state = this.roomMembershipState(roomId, userId);
     if (enabledValue) {
+      if (!this.roomFollowState(roomId, userId).following) throw new Error("Follow the room before becoming a member");
       if (!state.is_member && state.member_limit != null && state.member_count >= state.member_limit) {
         throw new Error("Room member limit reached");
       }
