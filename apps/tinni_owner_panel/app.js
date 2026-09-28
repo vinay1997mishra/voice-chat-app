@@ -987,7 +987,9 @@ function renderRoles() {
     ? items.map((item) => `
         <span class="chip">
           ${escapeHtml(item.name)}
-          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">×</button>
+          <button type="button" data-catalog-edit="${escapeHtml(item.id)}" title="Edit">Edit</button>
+          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">Disable</button>
+          <button type="button" data-catalog-remove="${escapeHtml(item.id)}" title="Remove">Remove</button>
         </span>
       `).join("")
     : '<span class="muted">No roles/posts yet.</span>';
@@ -1007,6 +1009,7 @@ function renderVips() {
       <td class="table-actions">
         <button data-vip-edit="${escapeHtml(v.id)}">Edit</button>
         <button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>
+        <button data-catalog-remove="${escapeHtml(v.id)}">Remove</button>
       </td>
     </tr>
   `).join("");
