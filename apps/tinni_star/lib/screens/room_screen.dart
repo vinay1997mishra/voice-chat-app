@@ -2779,12 +2779,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        controls.effectsEnabled ? 'Block Effects' : 'Allow Effects',
-        Icons.hide_image_rounded,
-        () {
-          final enabled = controls.toggleEffects();
-          _snack(enabled ? 'Gift effects enabled.' : 'Gift effects blocked.');
-        },
+        'Effects',
+        Icons.auto_awesome_rounded,
+        _showEffectsPanel,
       ),
       (
         controls.noticesVisible ? 'Hide Notice' : 'Show Notice',
@@ -2947,6 +2944,51 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEffectsPanel() {
+    final controls = widget.state.roomControls;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          key: const Key('room-effects-panel'),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.all(12),
+            children: [
+              const ListTile(
+                leading: Icon(Icons.auto_awesome_rounded, color: FeaturePalette.gift),
+                title: Text('Effects', style: TextStyle(fontWeight: FontWeight.w900)),
+                subtitle: Text('Room visual and gift effects'),
+              ),
+              SwitchListTile(
+                key: const Key('room-effects-enabled'),
+                title: const Text('Gift & room effects'),
+                subtitle: Text(controls.effectsEnabled ? 'Effects are visible in this room.' : 'Effects are blocked in this room.'),
+                value: controls.effectsEnabled,
+                onChanged: (value) {
+                  if (controls.effectsEnabled != value) controls.toggleEffects();
+                  setSheetState(() {});
+                  if (mounted) setState(() {});
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.checkroom_rounded),
+                title: const Text('Room Theme'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _isRoomOwner ? () {
+                  Navigator.pop(context);
+                  _openRoomThemeSelector();
+                } : null,
+              ),
+            ],
           ),
         ),
       ),
