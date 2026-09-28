@@ -107,8 +107,29 @@ function rowToUser(row) {
   };
 }
 
+function roomSeatLayout(seatCountValue) {
+  const seatCount = Number(seatCountValue);
+  let rowCount;
+  if (seatCount >= 8 && seatCount <= 10) rowCount = 2;
+  else if (seatCount >= 12 && seatCount <= 18) rowCount = 3;
+  else if (seatCount >= 19 && seatCount <= 28) rowCount = 4;
+  else if (seatCount >= 29 && seatCount <= 35) rowCount = 5;
+  else if (seatCount >= 36 && seatCount <= 42) rowCount = 6;
+  else return { row_count: 0, row_sizes: [] };
+
+  const base = Math.floor(seatCount / rowCount);
+  const extra = seatCount % rowCount;
+  return {
+    row_count: rowCount,
+    row_sizes: Array.from({ length: rowCount }, (_, index) =>
+      base + (index < extra ? 1 : 0)
+    ),
+  };
+}
+
 function rowToRoom(row) {
   if (!row) return null;
+  const seatLayout = roomSeatLayout(row.seat_count);
   return {
     id: String(row.id),
     owner_id: String(row.owner_id),
@@ -117,6 +138,8 @@ function rowToRoom(row) {
     country_name: String(row.country_name),
     flag_emoji: String(row.flag_emoji),
     seat_count: Number(row.seat_count),
+    seat_row_count: seatLayout.row_count,
+    seat_row_sizes: seatLayout.row_sizes,
     party_mode: String(row.party_mode),
     locked: Number(row.locked) === 1,
     photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
