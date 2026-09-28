@@ -110,6 +110,26 @@ class AppBackendService {
       banned: row['banned'] == true, updatedAt: _asInt(row['updated_at']));
   }
 
+  Future<List<Map<String, dynamic>>> frameCatalog(String token) async {
+    final data = await _request('GET', '/frames/catalog', token);
+    final raw = data['frames'];
+    if (raw is! List) return const [];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> inventory(String token) async {
+    final data = await _request('GET', '/inventory', token);
+    return _map(data['inventory']);
+  }
+
+  Future<Map<String, dynamic>> purchaseFrame(String token, String frameId) async {
+    return _request('POST', '/frames/purchase', token, body: {'frame_id': frameId});
+  }
+
+  Future<Map<String, dynamic>> equipFrame(String token, String? frameId) async {
+    return _request('POST', '/frames/equip', token, body: {'frame_id': frameId});
+  }
+
   Future<Map<String, dynamic>?> vipMe(String token) async {
     final data = await _request('GET', '/vip/me', token);
     final value = data['vip'];
