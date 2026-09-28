@@ -92,6 +92,7 @@ class RoomPresenceService extends ChangeNotifier {
   int? selfForcedSeatIndex;
   RoomSeatInvite? pendingSeatInvite;
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
+  final Set<int> lockedSeats = <int>{};
   String? lastError;
 
   Future<void> join({
@@ -146,6 +147,7 @@ class RoomPresenceService extends ChangeNotifier {
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
       seatRequests.clear();
+      lockedSeats.clear();
       notifyListeners();
     }
   }
@@ -232,6 +234,19 @@ class RoomPresenceService extends ChangeNotifier {
     );
     this.micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     notifyListeners();
+  }
+
+  Future<void> setSeatLock({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+    required bool locked,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-lock',
+      authToken,
+      <String, Object>{'room_id': roomId, 'seat_index': seatIndex, 'locked': locked},
+    );
   }
 
     Future<void> requestSeat({
@@ -522,6 +537,13 @@ class RoomPresenceService extends ChangeNotifier {
       } else {
         pendingSeatInvite = null;
       }
+    }
+
+    if (data.containsKey('locked_seats')) {
+      final rawLocked = data['locked_seats'];
+      lockedSeats
+        ..clear()
+        ..addAll(rawLocked is List ? rawLocked.map(_asInt) : const <int>[]);
     }
 
     if (data.containsKey('seat_requests')) {
