@@ -1667,8 +1667,9 @@ export default {
         if (!access.allowed) {
           return json({
             ok: false,
-            error: "Room password is required.",
-            room_locked: true,
+            error: access.reason === "invite_required" ? "Room invite is required." : "Room password is required.",
+            room_locked: access.locked === true,
+            invite_required: access.reason === "invite_required",
           }, 403);
         }
 
