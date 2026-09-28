@@ -284,7 +284,11 @@ class DiscoveryService {
     final room = _roomFromServer(_asMap(data['room']));
     if (room == null) throw StateError('Server returned invalid room');
     final index = rooms.indexWhere((item) => item.id == room.id);
-    if (index >= 0) rooms[index] = room; else rooms.insert(0, room);
+    if (index >= 0) {
+      rooms[index] = room;
+    } else {
+      rooms.insert(0, room);
+    }
     return room;
   }
 
