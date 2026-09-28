@@ -2382,14 +2382,40 @@ export class AppDirectoryStore extends DurableObject {
     const senderId = String(senderIdValue || "").trim();
     const roomId = String(input?.room_id || "").trim();
     const giftId = cleanText(input?.gift_id, 80);
-    const giftName = cleanText(input?.gift_name, 80);
     const quantity = Number(input?.quantity || 1);
-    const unitPrice = Number(input?.unit_price || 0);
     const receivers = [...new Set((Array.isArray(input?.receiver_ids) ? input.receiver_ids : [])
       .map((value) => String(value || "").trim()).filter(Boolean))];
-    if (!senderId || !roomId || !giftId || !giftName) throw new Error("Gift details are required");
+    if (!senderId || !roomId || !giftId) throw new Error("Gift details are required");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw new Error("Invalid gift quantity");
-    if (!Number.isInteger(unitPrice) || unitPrice < 1) throw new Error("Invalid gift price");
+
+    // Gift identity and price are server-authoritative. Never trust client
+    // gift_name/unit_price because a modified APK could submit a cheaper price.
+    const catalogRow = this.ctx.storage.sql.exec(
+      "SELECT name, data_json, enabled FROM owner_catalog WHERE id = ? AND kind = 'gift' LIMIT 1",
+      giftId,
+    ).toArray()[0];
+    let giftName = "";
+    let unitPrice = 0;
+    if (catalogRow && Number(catalogRow.enabled || 0) === 1) {
+      let data = {};
+      try { data = JSON.parse(String(catalogRow.data_json || "{}")); } catch {}
+      giftName = cleanText(catalogRow.name, 80);
+      unitPrice = Number(data.price || 0);
+    } else {
+      // Preserve the built-in starter catalog until Owner Panel migrates it.
+      const builtIn = {
+        rose: { name: "Rose", price: 100 },
+        crystal: { name: "Crystal", price: 500 },
+        crown: { name: "Crown", price: 1000 },
+      }[giftId];
+      if (builtIn) {
+        giftName = builtIn.name;
+        unitPrice = builtIn.price;
+      }
+    }
+    if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 1) {
+      throw new Error("Gift is unavailable");
+    }
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
     const room = this._roomRow(roomId);
     if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
