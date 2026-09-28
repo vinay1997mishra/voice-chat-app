@@ -1481,6 +1481,13 @@ export class AppDirectoryStore extends DurableObject {
       }
       case "catalog-toggle": return this.ownerCatalogPatch(data.id, { enabled: data.enabled === true });
       case "catalog-edit": return this.ownerCatalogPatch(data.id, data.patch || {});
+      case "catalog-remove": {
+        const id = String(data.id || "").trim();
+        const row = this.ctx.storage.sql.exec("SELECT id, kind FROM owner_catalog WHERE id = ? LIMIT 1", id).toArray()[0];
+        if (!row) throw new Error("Catalog item not found");
+        this.ctx.storage.sql.exec("DELETE FROM owner_catalog WHERE id = ?", id);
+        return { ok: true, id, kind: String(row.kind) };
+      }
       default: throw new Error("Unsupported Owner action: " + action);
     }
   }
