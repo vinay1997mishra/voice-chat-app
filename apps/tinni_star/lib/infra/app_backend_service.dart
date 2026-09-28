@@ -76,6 +76,50 @@ class AppBackendService {
     await _request('POST', '/cp/disconnect', token, body: const {});
   }
 
+  Future<RemoteCp> cpUpdate(String token, String action, Map<String, dynamic> values) async {
+    final data = await _request('POST', '/cp/update', token, body: {'action': action, ...values});
+    final cp = _cp(data['cp']);
+    if (cp == null) throw StateError('Server returned invalid CP');
+    return cp;
+  }
+
+  Future<List<String>> cpMemories(String token) async {
+    final data = await _request('GET', '/cp/memories', token);
+    final raw = data['memories'];
+    if (raw is! List) return const [];
+    return raw.map((value) => _map(value)['text']?.toString() ?? '').where((value) => value.isNotEmpty).toList(growable: false);
+  }
+
+  Future<void> cpAddMemory(String token, String text) async {
+    await _request('POST', '/cp/memories', token, body: {'text': text});
+  }
+
+  Future<List<Map<String, dynamic>>> walletTransactions(String token) async {
+    final data = await _request('GET', '/wallet/transactions', token);
+    final raw = data['transactions'];
+    if (raw is! List) return const [];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<RemoteWallet> applyRecharge(String token, {required String productId, required String purchaseToken, required bool verified}) async {
+    final data = await _request('POST', '/wallet/recharge', token, body: {
+      'product_id': productId, 'purchase_token': purchaseToken, 'verified': verified,
+    });
+    final row = _map(data['wallet']);
+    return RemoteWallet(coins: _asInt(row['coins']), diamonds: _asInt(row['diamonds']),
+      banned: row['banned'] == true, updatedAt: _asInt(row['updated_at']));
+  }
+
+  Future<Map<String, dynamic>?> vipMe(String token) async {
+    final data = await _request('GET', '/vip/me', token);
+    final value = data['vip'];
+    return value == null ? null : _map(value);
+  }
+
+  Future<Map<String, dynamic>> vipPurchase(String token, String vipId) async {
+    return _request('POST', '/vip/purchase', token, body: {'vip_id': vipId});
+  }
+
   Future<List<VipCatalogItem>> vipCatalog(String token) async {
     final data = await _request('GET', '/vip/catalog', token);
     final raw = data['vip'];
