@@ -2331,10 +2331,14 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
       const themes = await getAppDirectoryStore(env).listRoomThemes(roomId);
+      const ownerState = await getAppDirectoryStore(env).ownerState();
+      const policy = ownerState.settings?.room_theme_user_policy || {
+        prices: { "7": 10000000, "10": 14000000, "15": 20000000, "30": 35000000, permanent: 100000000 },
+      };
       return json({
         ok: true,
-        user_price_coins: 10000000,
-        user_duration_days: 7,
+        user_duration_options: [7, 10, 15, 30, "permanent"],
+        user_prices: policy.prices,
         themes,
       });
     }
