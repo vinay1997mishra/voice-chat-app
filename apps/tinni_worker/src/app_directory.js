@@ -4044,6 +4044,22 @@ export class AppDirectoryStore extends DurableObject {
     if (String(room.owner_id) === userId) {
       return { ok: true, allowed: true, owner_bypass: true };
     }
+
+    // Personal block rule: if the room owner blocked this user, the blocked
+    // user cannot enter the owner's room. A block created by the visitor
+    // against the owner does not prevent the visitor from entering.
+    const ownerBlockedVisitor = this.ctx.storage.sql.exec(
+      `SELECT blocker_id
+         FROM app_blocks
+        WHERE blocker_id = ? AND target_id = ?
+        LIMIT 1`,
+      String(room.owner_id),
+      userId,
+    ).toArray()[0];
+    if (ownerBlockedVisitor) {
+      return { ok: true, allowed: false, reason: "blocked_by_room_owner" };
+    }
+
     const privacy = String(room.privacy || "public").toLowerCase();
     if (privacy === "private" || privacy === "invite") {
       const invite = this.ctx.storage.sql.exec(
