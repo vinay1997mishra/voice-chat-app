@@ -21,6 +21,7 @@ class ActiveRoomSession extends ChangeNotifier {
     this.familyTagProvider,
     this.hostTagProvider,
     this.agencyNameProvider,
+    this.equippedFrameIdProvider,
   });
 
   final FunctionPackRuntime runtime;
@@ -31,6 +32,7 @@ class ActiveRoomSession extends ChangeNotifier {
   final String? Function()? familyTagProvider;
   final String? Function()? hostTagProvider;
   final String? Function()? agencyNameProvider;
+  final String? Function()? equippedFrameIdProvider;
 
   RoomSummary? room;
   RoomController? controller;
@@ -73,6 +75,7 @@ class ActiveRoomSession extends ChangeNotifier {
   String? get _familyTag => familyTagProvider?.call();
   String? get _hostTag => hostTagProvider?.call();
   String? get _agencyName => agencyNameProvider?.call();
+  String? get _equippedFrameId => equippedFrameIdProvider?.call();
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -324,6 +327,7 @@ class ActiveRoomSession extends ChangeNotifier {
       familyTag: _familyTag,
       hostTag: _hostTag,
       agencyName: _agencyName,
+      equippedFrameId: _equippedFrameId,
     );
     await presence.setEmote(
       roomId: roomId,
@@ -419,6 +423,7 @@ class ActiveRoomSession extends ChangeNotifier {
           familyTag: _familyTag,
           hostTag: _hostTag,
           agencyName: _agencyName,
+          equippedFrameId: _equippedFrameId,
         );
         await _applyForcedSeatChange();
         await _enforceModerationMute();
