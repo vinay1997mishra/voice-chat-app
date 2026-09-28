@@ -2336,7 +2336,6 @@ export class AppDirectoryStore extends DurableObject {
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw new Error("Invalid gift quantity");
     if (!Number.isInteger(unitPrice) || unitPrice < 1) throw new Error("Invalid gift price");
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
-    if (receivers.includes(senderId)) throw new Error("You cannot send a gift to yourself");
     const room = this._roomRow(roomId);
     if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
     for (const receiverId of receivers) {
