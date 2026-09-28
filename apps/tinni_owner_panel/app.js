@@ -1039,6 +1039,7 @@ function renderCatalogList(rootId, kind, emptyText) {
         <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
           ${item.enabled ? "Disable" : "Enable"}
         </button>
+        <button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>
       </div>
     </div>
   `).join("");
@@ -1904,6 +1905,18 @@ document.body.addEventListener("click", async e => {
     } catch (error) {
       toast(error.message);
     }
+    return;
+  }
+
+  const catalogRemove = e.target.closest("[data-catalog-remove]")?.dataset.catalogRemove;
+  if (catalogRemove) {
+    const item = state.catalog.find((entry) => entry.id === catalogRemove);
+    if (!item) { toast("Catalog item not found."); return; }
+    if (!confirm("Permanently remove " + item.name + "?")) return;
+    try {
+      await runOwnerAction("catalog-remove", { id: catalogRemove });
+      toast(item.name + " removed.");
+    } catch (error) { toast(error.message); }
     return;
   }
 
