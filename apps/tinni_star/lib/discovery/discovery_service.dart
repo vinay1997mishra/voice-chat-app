@@ -777,6 +777,40 @@ class DiscoveryService {
     return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
+  Future<Map<String, dynamic>> roomFollow({
+    required String authToken,
+    required String roomId,
+  }) async {
+    final request = await _httpClient.getUrl(apiBase.replace(
+      path: '/rooms/follow',
+      queryParameters: <String, String>{'room_id': roomId},
+    ));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load room follow');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> setRoomFollow({
+    required String authToken,
+    required String roomId,
+    required bool following,
+  }) async {
+    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/follow'));
+    request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'following': following}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to update room follow');
+    }
+    return data;
+  }
+
   Future<Map<String, dynamic>> roomMembership({
     required String authToken,
     required String roomId,
