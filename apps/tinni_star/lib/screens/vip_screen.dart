@@ -58,7 +58,7 @@ class _VipScreenState extends State<VipScreen> {
             height: 46,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: 12,
+              itemCount: 11,
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 final level = index + 1;
