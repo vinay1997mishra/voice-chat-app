@@ -10,7 +10,7 @@ class RoomController extends ChangeNotifier {
   }
 
   final FunctionPackRuntime runtime;
-  final int? seatCountOverride;
+  int? seatCountOverride;
 
   final List<RoomMessage> messages = [
     const RoomMessage('System', 'Welcome to Tinni Star ✨'),
@@ -24,6 +24,25 @@ class RoomController extends ChangeNotifier {
 
   TinniFunctionConfig get config => runtime.config;
   bool get inviteMode => inviteModeOverride ?? config.inviteMode;
+
+  void setSeatCount(int seatCount) {
+    final oldSeats = seats;
+    final oldMySeat = mySeat;
+    seatCountOverride = normalizeSeatCount(seatCount);
+    _rebuildSeats();
+    final copyCount = oldSeats.length < seats.length ? oldSeats.length : seats.length;
+    for (var index = 0; index < copyCount; index++) {
+      seats[index] = oldSeats[index];
+    }
+    if (oldMySeat != null && oldMySeat < seats.length) {
+      mySeat = oldMySeat;
+    } else {
+      mySeat = null;
+      micState = MicState.offSeat;
+      selfMuted = false;
+    }
+    notifyListeners();
+  }
 
   void refreshFunctionPack() {
     final oldSeat = mySeat;
