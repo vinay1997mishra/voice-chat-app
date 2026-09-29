@@ -32,7 +32,24 @@ class KtvService {
   static const int maxLocalSongs = 300;
 
   AudioPlayer? _player;
-  AudioPlayer get _audio => _player ??= AudioPlayer();
+  bool _completionListenerAttached = false;
+  AudioPlayer get _audio {
+    final player = _player ??= AudioPlayer();
+    if (!_completionListenerAttached) {
+      _completionListenerAttached = true;
+      player.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          _playNextAfterCompletion();
+        }
+      });
+    }
+    return player;
+  }
+
+  Future<void> _playNextAfterCompletion() async {
+    final next = startNext();
+    if (next != null) await playCurrent();
+  }
   bool get isPlaying => _player?.playing ?? false;
 
   Future<void> playCurrent() async {
@@ -60,6 +77,7 @@ class KtvService {
   Future<void> dispose() async {
     final player = _player;
     _player = null;
+    _completionListenerAttached = false;
     if (player != null) await player.dispose();
   }
 
