@@ -79,6 +79,57 @@ jobs:
         working-directory: apps/tinni_star
         run: flutter pub get
 
+      - name: Patch PAG 1.0.7 for Flutter v2 Android embedding
+        working-directory: apps/tinni_star
+        run: |
+          PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
+          PAG_JAVA="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/src/main/java/com/example/flutter_pag_plugin/FlutterPagPlugin.java' -print -quit)"
+          test -n "$PAG_GRADLE" && test -n "$PAG_JAVA"
+          sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
+          grep -q "namespace 'org.libpag.pag'" "$PAG_GRADLE" || sed -i "0,/android {/s//android {\\n    namespace 'org.libpag.pag'/" "$PAG_GRADLE"
+          sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_1_8/g' "$PAG_GRADLE"
+          sed -i "s/jvmTarget = ['\"]17['\"]/jvmTarget = '1.8'/g" "$PAG_GRADLE"
+          python3 - "$PAG_JAVA" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          lines = p.read_text().splitlines()
+          out = []
+          skipping = False
+          depth = 0
+          for line in lines:
+              stripped = line.strip()
+              if 'import io.flutter.view.FlutterNativeView;' in line:
+                  continue
+              if 'PluginRegistry.Registrar registrar;' in line and not stripped.startswith('public'):
+                  continue
+              legacy_method = (
+                  (stripped.startswith('public FlutterPagPlugin(') and 'PluginRegistry.Registrar' in line) or
+                  (stripped.startswith('public static void registerWith(') and 'PluginRegistry.Registrar' in line)
+              )
+              if legacy_method:
+                  skipping = True
+                  depth = line.count('{') - line.count('}')
+                  continue
+              if skipping:
+                  depth += line.count('{') - line.count('}')
+                  if depth <= 0:
+                      skipping = False
+                  continue
+              out.append(line)
+          s = '\n'.join(out) + '\n'
+          start = s.find('            if (registrar != null) {')
+          end_marker = '            } else if (flutterAssets != null) {'
+          end = s.find(end_marker, start)
+          if start >= 0 and end >= 0:
+              s = s[:start] + '            if (flutterAssets != null) {' + s[end + len(end_marker):]
+          forbidden = ('FlutterNativeView', 'PluginRegistry.Registrar', 'ViewDestroyListener', 'registrar.')
+          leftovers = [x for x in forbidden if x in s]
+          if leftovers:
+              raise SystemExit('PAG legacy API remains: ' + ', '.join(leftovers))
+          p.write_text(s)
+          PY
+
       - name: Analyze
         working-directory: apps/tinni_star
         run: flutter analyze
