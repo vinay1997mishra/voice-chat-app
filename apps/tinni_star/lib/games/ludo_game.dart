@@ -150,6 +150,54 @@ class LudoGame {
     status = '${currentPlayer.name.toUpperCase()} turn.';
   }
 
+  void applyServerState(Map<String, dynamic> data) {
+    LudoPlayer? parsePlayer(dynamic value) {
+      final name = value?.toString().toLowerCase() ?? '';
+      for (final player in LudoPlayer.values) {
+        if (player.name == name) return player;
+      }
+      return null;
+    }
+
+    final remoteCurrent = parsePlayer(data['current_player']);
+    if (remoteCurrent != null) currentPlayer = remoteCurrent;
+
+    final remoteRolled = data['rolled'];
+    if (remoteRolled == null) {
+      rolled = null;
+    } else if (remoteRolled is num) {
+      rolled = remoteRolled.toInt();
+    } else {
+      rolled = int.tryParse(remoteRolled.toString());
+    }
+
+    winner = parsePlayer(data['winner']);
+    status = data['status']?.toString() ?? status;
+
+    final rawTokens = data['tokens'];
+    if (rawTokens is Map) {
+      for (final player in LudoPlayer.values) {
+        final raw = rawTokens[player.name];
+        if (raw is! List) continue;
+        final next = <LudoToken>[];
+        for (var index = 0; index < 4; index += 1) {
+          final value = index < raw.length ? raw[index] : -1;
+          final progress = value is num
+              ? value.toInt()
+              : int.tryParse(value.toString()) ?? -1;
+          next.add(
+            LudoToken(
+              player: player,
+              index: index,
+              progress: progress.clamp(-1, 57),
+            ),
+          );
+        }
+        tokens[player] = List<LudoToken>.unmodifiable(next);
+      }
+    }
+  }
+
   void reset() {
     for (final player in LudoPlayer.values) {
       tokens[player] = List<LudoToken>.generate(
