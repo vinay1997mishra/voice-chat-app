@@ -3104,9 +3104,7 @@ export class AppDirectoryStore extends DurableObject {
     }
     const wallet = this.getWallet(senderId);
     if (wallet.banned) throw new Error("Wallet is unavailable");
-    const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const chargedUnitPrice = freeIds.includes(senderId) ? 0 : unitPrice;
+    const chargedUnitPrice = this._effectivePrice(senderId, "gift:" + giftId, unitPrice).price;
     const totalCost = chargedUnitPrice * quantity * receivers.length;
     if (!Number.isSafeInteger(totalCost) || totalCost < 0 || wallet.coins < totalCost) throw new Error("Insufficient coins");
     const now = Date.now();
@@ -3176,8 +3174,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!this.getUserById(targetId)) throw new Error("User not found");
     if (this.cpState(userId) || this.cpState(targetId)) throw new Error("A CP flow is already active");
     const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(policies.cp_connect_coins || 0));
+    const price = this._effectivePrice(userId, "cp:connect", Math.max(0, Number(policies.cp_connect_coins || 0))).price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -3201,8 +3198,7 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
     if (!row) return { ok: true, cp: null, wallet: this.getWallet(userId) };
     const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(policies.cp_disconnect_coins || 0));
+    const price = this._effectivePrice(userId, "cp:disconnect", Math.max(0, Number(policies.cp_disconnect_coins || 0))).price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -3349,9 +3345,8 @@ export class AppDirectoryStore extends DurableObject {
     if (offer.assigned_user_id) throw new Error("Unique ID is already assigned");
     const taken = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
     if (taken) throw new Error("Unique ID is already in use");
-    const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(offer.price_coins || 0));
+    const effective = this._effectivePrice(userId, "unique_id:" + publicId, Math.max(0, Number(offer.price_coins || 0)), Math.max(0, Number(offer.duration_days || 0)));
+    const price = effective.price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -3365,7 +3360,7 @@ export class AppDirectoryStore extends DurableObject {
     }
     const previousId = userId;
     const changed = this._changeUserId(previousId, publicId);
-    const durationDays = Math.max(0, Number(offer.duration_days || 0));
+    const durationDays = effective.duration_days ?? Math.max(0, Number(offer.duration_days || 0));
     const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
     this.ctx.storage.sql.exec(
       "UPDATE owner_unique_ids SET assigned_user_id = ?, assigned_at = ?, expires_at = ?, previous_user_id = ?, updated_at = ? WHERE public_id = ?", publicId, now, expiresAt, previousId, now, publicId,
@@ -4715,9 +4710,9 @@ export class AppDirectoryStore extends DurableObject {
     });
     const priceKey = permanent ? "permanent" : String(durationDays);
     const ownerPolicies = this.ownerState().policies;
-    const freeIds = Array.isArray(ownerPolicies.free_user_ids) ? ownerPolicies.free_user_ids.map(String) : [];
     const configuredThemePrice = Number(policy?.prices?.[priceKey] ?? (permanent ? null : ownerPolicies.room_theme_coins));
-    const priceCoins = freeIds.includes(userId) ? 0 : configuredThemePrice;
+    const themeEffective = this._effectivePrice(userId, "room_theme:" + priceKey, configuredThemePrice, permanent ? 0 : durationDays);
+    const priceCoins = themeEffective.price;
     if (!Number.isSafeInteger(priceCoins) || priceCoins < 0) {
       throw new Error("Custom background price is not configured");
     }
@@ -4728,7 +4723,8 @@ export class AppDirectoryStore extends DurableObject {
 
     const now = Date.now();
     const id = "theme-user-" + roomId + "-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
-    const expiresAt = permanent ? null : now + durationDays * 24 * 60 * 60 * 1000;
+    const effectiveThemeDays = themeEffective.duration_days ?? (permanent ? 0 : durationDays);
+    const expiresAt = effectiveThemeDays === 0 ? null : now + effectiveThemeDays * 24 * 60 * 60 * 1000;
 
     if (priceCoins > 0) {
       this.ctx.storage.sql.exec(
