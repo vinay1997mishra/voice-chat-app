@@ -4567,6 +4567,24 @@ export class AppDirectoryStore extends DurableObject {
     const settlement = this._ensureSettlementBalance(userId);
     const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
+    const privilegedRows = this.ctx.storage.sql.exec(
+      "SELECT wallet_type,banned,updated_at FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant')",
+      userId,
+    ).toArray();
+    const privileged = {};
+    for (const privilegedRow of privilegedRows) {
+      const walletType = String(privilegedRow.wallet_type || "");
+      if (!["coin_seller","merchant"].includes(walletType)) continue;
+      const guard = this._privilegedWalletGuard(userId, walletType);
+      privileged[walletType] = {
+        active: true,
+        balance: guard.security_frozen ? 0 : guard.balance,
+        banned: Number(privilegedRow.banned || 0) === 1,
+        security_frozen: guard.security_frozen,
+        freeze_reason: guard.freeze_reason,
+        updated_at: Number(privilegedRow.updated_at || now),
+      };
+    }
     return {
       user_id: userId,
       coins: coinGuard.security_frozen ? 0 : Number(row?.coins || 0),
@@ -4585,6 +4603,8 @@ export class AppDirectoryStore extends DurableObject {
       banned: Number(row?.banned || 0) === 1,
       security_frozen: coinGuard.security_frozen,
       freeze_reason: coinGuard.freeze_reason,
+      coin_seller_wallet: privileged.coin_seller || null,
+      merchant_wallet: privileged.merchant || null,
       updated_at: Number(row?.updated_at || now),
     };
   }
@@ -5875,7 +5895,7 @@ export class AppDirectoryStore extends DurableObject {
     return { notified };
   }
 
-  transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue) {
+  transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue, walletTypeValue = "") {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
     this._enforceActionRate(senderId, "seller_coin_transfer", 10, 60000, 300000);
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
@@ -5883,10 +5903,19 @@ export class AppDirectoryStore extends DurableObject {
     if (!senderId || !recipientId) throw new Error("Sender and recipient IDs are required");
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
 
-    const walletRows = this.ctx.storage.sql.exec(
-      "SELECT wallet_type,banned FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END",
-      senderId,
-    ).toArray();
+    const requestedWalletType = String(walletTypeValue || "").trim().toLowerCase();
+    if (requestedWalletType && !["coin_seller","merchant"].includes(requestedWalletType)) {
+      throw new Error("Unsupported sender wallet type");
+    }
+    const walletRows = requestedWalletType
+      ? this.ctx.storage.sql.exec(
+          "SELECT wallet_type,banned FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+          senderId, requestedWalletType,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          "SELECT wallet_type,banned FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END",
+          senderId,
+        ).toArray();
     let source = null;
     for (const row of walletRows) {
       if (Number(row.banned || 0) === 1) continue;
