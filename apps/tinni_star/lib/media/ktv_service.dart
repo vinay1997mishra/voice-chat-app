@@ -216,7 +216,13 @@ class KtvService {
   }
 
   Future<bool> removeLocalSongAndFile(String songId) async {
-    final song = library.where((item) => item.local && item.id == songId).firstOrNull;
+    Song? song;
+    for (final item in library) {
+      if (item.local && item.id == songId) {
+        song = item;
+        break;
+      }
+    }
     if (song == null) return false;
     final removed = removeLocalSong(songId);
     if (!removed) return false;
