@@ -1123,7 +1123,7 @@ export class AppDirectoryStore extends DurableObject {
       bd_target_1_percent: 7, bd_target_2_usd: 1000,
       bd_target_2_percent: 10, minimum_transfer_usd: 2,
       direct_call_coins: 400000, random_call_coins: 500000, receiver_percent: 80,
-      room_theme_coins: 10000000, frame_default_coins: 0, vip_default_coins: 0,
+      room_theme_coins: 10000000, cp_connect_coins: 0, cp_disconnect_coins: 0, frame_default_coins: 0, vip_default_coins: 0,
       unique_id_purchase_coins: 0, free_user_ids: [],
     };
     const treasury = this.ctx.storage.sql.exec(
@@ -1642,6 +1642,8 @@ export class AppDirectoryStore extends DurableObject {
         policies.random_call_coins = Math.max(0, Number(data.random_call_coins || 0));
         policies.receiver_percent = Math.max(0, Math.min(100, Number(data.receiver_percent || 0)));
         policies.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
+        policies.cp_connect_coins = Math.max(0, Number(data.cp_connect_coins || 0));
+        policies.cp_disconnect_coins = Math.max(0, Number(data.cp_disconnect_coins || 0));
         policies.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
         policies.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
         policies.unique_id_purchase_coins = Math.max(0, Number(data.unique_id_purchase_coins || 0));
