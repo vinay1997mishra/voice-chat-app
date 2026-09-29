@@ -3888,10 +3888,6 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
-  applyRecharge() {
-    throw new Error("Real-money recharge is disabled");
-  }
-
   frameCatalog(countryCodeValue = "") {
     const country = String(countryCodeValue || "").trim().toUpperCase();
     return this.ownerCatalog("frame")
