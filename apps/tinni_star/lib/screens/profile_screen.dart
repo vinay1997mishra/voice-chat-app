@@ -417,6 +417,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          if (widget.state.wallet.securityFrozen) ...[
+            RoyalPanel(
+              gradient: FeaturePalette.glow(FeaturePalette.safety),
+              accentColor: FeaturePalette.safety,
+              child: const Row(
+                children: [
+                  ShiningIcon(
+                    icon: Icons.lock_rounded,
+                    color: FeaturePalette.safety,
+                    size: 22,
+                    boxSize: 42,
+                    glow: 0.34,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Wallet security frozen\nUnexpected coin credit detected. Only the Platform Owner can unfreeze this wallet.',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(
