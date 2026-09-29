@@ -180,8 +180,6 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
     final latest = _latest;
     final latestFresh = _fresh(latest);
     final revealResult = latestFresh && !game.inResultSpin;
-    const luckyActive = false;
-    const bonusFruits = <FruitPartyKind>{};
     final frameBlink = (_tick ~/ 7).isEven;
 
     return LayoutBuilder(
@@ -280,7 +278,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                               final moving =
                                   (game.bettingOpen || game.inResultSpin) &&
                                   fruit == _movingFruit;
-                              final bonus = bonusFruits.contains(fruit);
+                              const bonus = false;
                               final winner = revealResult &&
                                   true &&
                                   latest?.fruit == fruit;
@@ -298,31 +296,6 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                               );
                             },
                           ),
-                          if (luckyActive)
-                            Positioned(
-                              left: 4,
-                              right: 4,
-                              bottom: 0,
-                              child: IgnorePointer(
-                                child: Container(
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(99),
-                                    gradient: LinearGradient(
-                                      colors: (_tick ~/ 2).isEven
-                                          ? const [
-                                              Color(0x00FF42D9),
-                                              Color(0xFFFF42D9),
-                                              Color(0xFFFFD84D),
-                                              Color(0x00FF42D9),
-                                            ]
-                                          : const [
-                                              Color(0x00FFD84D),
-                                              Color(0xFF57E7FF),
-                                              Color(0xFFFF42D9),
-                                              Color(0x00FFD84D),
-                                            ],
-                                    ),
                                     boxShadow: const [
                                       BoxShadow(
                                         color: Color(0xAAFF42D9),
@@ -348,39 +321,6 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                   ],
                 ),
               ),
-              if (luckyActive) ...[
-                const SizedBox(height: 4),
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(9),
-                    gradient: LinearGradient(
-                      colors: (_tick ~/ 3).isEven
-                          ? const [
-                              Color(0xFF5C0B82),
-                              Color(0xFFB6128D),
-                              Color(0xFF4A1B8C),
-                            ]
-                          : const [
-                              Color(0xFF4A1B8C),
-                              Color(0xFFE08720),
-                              Color(0xFF5C0B82),
-                            ],
-                    ),
-                  ),
-                  child: Text(
-                    'FRUIT PARTY',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
               SizedBox(height: tight ? 4 : 6),
               SizedBox(
                 height: tight ? 29 : 33,
