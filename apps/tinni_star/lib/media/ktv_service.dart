@@ -31,32 +31,37 @@ class KtvQueueEntry {
 class KtvService {
   static const int maxLocalSongs = 300;
 
-  final AudioPlayer _player = AudioPlayer();
-  bool get isPlaying => _player.playing;
+  AudioPlayer? _player;
+  AudioPlayer get _audio => _player ??= AudioPlayer();
+  bool get isPlaying => _player?.playing ?? false;
 
   Future<void> playCurrent() async {
     final song = current?.song;
     final path = song?.sourcePath;
     if (song == null || !song.local || path == null || path.isEmpty) return;
-    await _player.setFilePath(path);
-    await _player.play();
+    await _audio.setFilePath(path);
+    await _audio.play();
   }
 
-  Future<void> pause() => _player.pause();
-  Future<void> resume() => _player.play();
+  Future<void> pause() => _audio.pause();
+  Future<void> resume() => _audio.play();
 
   Future<void> stopPlayback() async {
-    await _player.stop();
+    await _audio.stop();
   }
 
   Future<KtvQueueEntry?> playNext() async {
-    await _player.stop();
+    await _audio.stop();
     final next = startNext();
     if (next != null) await playCurrent();
     return next;
   }
 
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    final player = _player;
+    _player = null;
+    if (player != null) await player.dispose();
+  }
 
   final List<Song> library = <Song>[
     const Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
