@@ -154,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
                         itemCount: _notifications.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (_, index) {
                           final notice = _notifications[index];
                           return RoyalPanel(
