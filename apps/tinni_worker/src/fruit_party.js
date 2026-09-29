@@ -5,8 +5,7 @@ export const PARTY_RESULT_SPIN_MS = 5000;
 export const PARTY_ROUND_CYCLE_MS =
   PARTY_ROUND_MS + PARTY_RESULT_SPIN_MS;
 export const PARTY_BET_LOCK_MS = 0;
-export const PARTY_START_BALANCE = 10000000;
-export const PARTY_LUCKY_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const PARTY_PARTY_START_BALANCE = 10000000;
 export const PARTY_BET_AMOUNTS = Object.freeze([
   5000,
   25000,
@@ -55,15 +54,6 @@ function weightedFruit() {
   if (roll < 75) return X5[randomIndex(X5.length)];
   if (roll < 95) return MID[randomIndex(MID.length)];
   return HIGH[randomIndex(HIGH.length)];
-}
-
-function randomDistinctFruits(count) {
-  const pool = [...PARTY_FRUITS];
-  const result = [];
-  while (pool.length && result.length < count) {
-    result.push(pool.splice(randomIndex(pool.length), 1)[0]);
-  }
-  return result;
 }
 
 function roundIdAt(ms) {
@@ -171,7 +161,7 @@ export class FruitPartyStore extends DurableObject {
        VALUES (?, ?, 0, ?, ?)
        ON CONFLICT(user_id) DO NOTHING`,
       userId,
-      PARTY_START_BALANCE,
+      PARTY_PARTY_START_BALANCE,
       today,
       now,
     );
@@ -207,37 +197,6 @@ export class FruitPartyStore extends DurableObject {
     };
   }
 
-  _luckyRounds(roundId) {
-    const windowId = Math.floor(
-      roundStartAt(roundId) / PARTY_LUCKY_WINDOW_MS,
-    );
-    let rounds = [];
-    if (this._meta("lucky_window_id") === String(windowId)) {
-      try {
-        rounds = JSON.parse(this._meta("lucky_rounds_json", "[]"));
-      } catch {
-        rounds = [];
-      }
-    }
-
-    if (this._meta("lucky_window_id") !== String(windowId) ||
-        !Array.isArray(rounds)) {
-      const windowStart = windowId * PARTY_LUCKY_WINDOW_MS;
-      const windowEnd = windowStart + PARTY_LUCKY_WINDOW_MS;
-      const firstRound = Math.ceil(windowStart / PARTY_ROUND_CYCLE_MS);
-      const lastRound = Math.floor((windowEnd - 1) / PARTY_ROUND_CYCLE_MS);
-      const totalRounds = Math.max(1, lastRound - firstRound + 1);
-      const count = 3 + randomIndex(2);
-      const selected = new Set();
-      while (selected.size < Math.min(count, totalRounds)) {
-        selected.add(firstRound + randomIndex(totalRounds));
-      }
-      rounds = [...selected].sort((a, b) => a - b);
-      this._setMeta("lucky_window_id", windowId);
-      this._setMeta("lucky_rounds_json", JSON.stringify(rounds));
-    }
-    return rounds;
-  }
 
   async _ensureStarted(now = Date.now()) {
     const currentRound = roundIdAt(now);
@@ -294,12 +253,9 @@ export class FruitPartyStore extends DurableObject {
     const bets = this._bets(roundId);
     const players = new Set(bets.map((bet) => bet.user_id));
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
-    const lucky11 = this._luckyRounds(roundId).includes(roundId);
-    const bonusFruits = lucky11 ? randomDistinctFruits(3) : [];
-    const winner = lucky11 ? bonusFruits[0] : weightedFruit();
-    const winningKeys = lucky11
-      ? new Set(bonusFruits.map((fruit) => fruit.key))
-      : new Set([winner.key]);
+    const bonusFruits = [];
+    const winner = weightedFruit();
+    const winningKeys = new Set([winner.key]);
 
     const payouts = new Map();
     let totalPayout = 0;
@@ -347,7 +303,7 @@ export class FruitPartyStore extends DurableObject {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       roundId,
       winner.key,
-      lucky11 ? "lucky_11_random_3" : "weighted_random",
+      "weighted_random",
       JSON.stringify(bonusFruits.map((fruit) => fruit.key)),
       totalBet,
       totalPayout,
@@ -390,9 +346,9 @@ export class FruitPartyStore extends DurableObject {
         user_id: userId,
         bet_count: Number(userBet.bet_count || 0),
         total_bet: Number(userBet.total_bet || 0),
-        balance: Number(wallet?.balance || START_BALANCE),
+        balance: Number(wallet?.balance || PARTY_START_BALANCE),
         today_winnings: Number(wallet?.today_winnings || 0),
-        net_profit: Number(wallet?.balance || START_BALANCE) - START_BALANCE,
+        net_profit: Number(wallet?.balance || PARTY_START_BALANCE) - PARTY_START_BALANCE,
       };
     }
 
@@ -448,8 +404,7 @@ export class FruitPartyStore extends DurableObject {
         round_id: Number(row.round_id),
         fruit: FRUIT_BY_KEY.get(String(row.fruit_key)),
         mode: String(row.mode),
-        special_kind:
-          String(row.mode) === "lucky_11_random_3" ? "lucky11" : null,
+        special_kind: null,
         bonus_fruits: Array.isArray(bonusKeys)
           ? bonusKeys
               .map((key) => FRUIT_BY_KEY.get(String(key)))
@@ -486,12 +441,6 @@ export class FruitPartyStore extends DurableObject {
       config: {
         bet_amounts: PARTY_BET_AMOUNTS,
         fruits: PARTY_FRUITS,
-        lucky_11: {
-          window_ms: PARTY_LUCKY_WINDOW_MS,
-          events_per_window_min: 3,
-          events_per_window_max: 4,
-          random_bonus_fruits: 3,
-        },
       },
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
