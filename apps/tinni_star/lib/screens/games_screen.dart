@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
@@ -56,18 +53,17 @@ class GamesScreen extends StatelessWidget {
   Future<String> _playQuickGame(String gameKey, String action) async {
     final account = state.auth.current;
     if (account == null) return 'Login required.';
-    final client = HttpClient();
     try {
-      final request = await client.postUrl(Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev/room-games/action'));
-      request.headers.contentType = ContentType.json;
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${account.authToken}');
-      request.write(jsonEncode(<String, String>{'room_id': roomId, 'game_key': gameKey, 'action': action}));
-      final response = await request.close();
-      final body = await utf8.decoder.bind(response).join();
-      final data = body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
-      if (response.statusCode < 200 || response.statusCode >= 300) return data['error']?.toString() ?? 'Game request failed.';
-      return '${data['result'] ?? action}';
-    } catch (_) { return 'Server connection failed.'; } finally { client.close(force: true); }
+      final data = await state.backend.roomGameAction(
+        account.authToken,
+        roomId: roomId,
+        gameKey: gameKey,
+        action: action,
+      );
+      return data['result']?.toString() ?? action;
+    } catch (error) {
+      return error.toString().replaceFirst('Bad state: ', '');
+    }
   }
 
   @override
@@ -119,7 +115,9 @@ class GamesScreen extends StatelessWidget {
         FeaturePalette.ludo,
         () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const LudoScreen()),
+          MaterialPageRoute(
+            builder: (_) => LudoScreen(state: state, roomId: roomId),
+          ),
         ),
       ),
       (
