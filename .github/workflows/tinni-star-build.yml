@@ -88,6 +88,7 @@ jobs:
           test -n "$PAG_GRADLE" && test -n "$PAG_JAVA" && test -n "$PAG_MANIFEST"
           sed -i -E 's/[[:space:]]+package="[^"]+"//' "$PAG_MANIFEST"
           sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g; s/compileSdk[[:space:]]+[0-9]+/compileSdk 36/g' "$PAG_GRADLE"
           grep -q "namespace 'org.libpag.pag'" "$PAG_GRADLE" || sed -i "0,/android {/s//android {\\n    namespace 'org.libpag.pag'/" "$PAG_GRADLE"
           sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$PAG_GRADLE"
           sed -i "s/jvmTarget = ['\"]1.8['\"]/jvmTarget = '17'/g" "$PAG_GRADLE"
