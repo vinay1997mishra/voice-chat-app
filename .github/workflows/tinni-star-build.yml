@@ -85,7 +85,16 @@ jobs:
           PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
           test -n "$PAG_GRADLE"
           sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
-          grep -n 'mavenCentral()' "$PAG_GRADLE"
+          python3 - "$PAG_GRADLE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          if "namespace " not in s:
+              s = s.replace("android {", "android {\n    namespace 'org.libpag.pag'", 1)
+          p.write_text(s)
+          PY
+          grep -n -E 'mavenCentral\(\)|namespace' "$PAG_GRADLE"
 
       - name: Analyze
         working-directory: apps/tinni_star
