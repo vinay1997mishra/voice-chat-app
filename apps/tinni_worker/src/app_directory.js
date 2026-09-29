@@ -1110,6 +1110,9 @@ export class AppDirectoryStore extends DurableObject {
       agency_commission_percent: 20, bd_target_1_usd: 500,
       bd_target_1_percent: 7, bd_target_2_usd: 1000,
       bd_target_2_percent: 10, minimum_transfer_usd: 2,
+      direct_call_coins: 400000, random_call_coins: 500000, receiver_percent: 80,
+      room_theme_coins: 10000000, frame_default_coins: 0, vip_default_coins: 0,
+      unique_id_purchase_coins: 0, free_user_ids: [],
     };
     const treasury = this.ctx.storage.sql.exec(
       "SELECT balance, updated_at FROM owner_treasury WHERE singleton_id = 1 LIMIT 1",
@@ -1598,6 +1601,7 @@ export class AppDirectoryStore extends DurableObject {
         policies.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
         policies.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
         policies.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
+        policies.unique_id_purchase_coins = Math.max(0, Number(data.unique_id_purchase_coins || 0));
         policies.free_user_ids = Array.isArray(data.free_user_ids) ? data.free_user_ids.map(String) : [];
         return this._setOwnerSetting("policies", policies);
       }
@@ -2805,7 +2809,7 @@ export class AppDirectoryStore extends DurableObject {
       let data = {};
       try { data = JSON.parse(String(catalogRow.data_json || "{}")); } catch {}
       giftName = cleanText(catalogRow.name, 80);
-      unitPrice = Number(data.price || 0);
+      unitPrice = Number(data.coin_price ?? data.price ?? 0);
     } else {
       // Preserve the built-in starter catalog until Owner Panel migrates it.
       const builtIn = {
