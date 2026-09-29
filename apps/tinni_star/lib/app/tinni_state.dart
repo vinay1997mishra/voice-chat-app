@@ -141,6 +141,23 @@ class TinniState {
   void attachConnectorBridge(AnamikaLinkBridge bridge) {
     connectorBridge = bridge;
   }
+
+  Map<String, Object?> remoteConfigValues = <String, Object?>{};
+
+  Future<void> refreshRemoteConfig() async {
+    try {
+      remoteConfigValues = Map<String, Object?>.from(
+        await remoteConfig.fetch(),
+      );
+    } catch (error, stackTrace) {
+      crashReporter.record(error, stackTrace);
+    }
+  }
+
+  bool remoteFlag(String key, {bool fallback = true}) {
+    final value = remoteConfigValues[key];
+    return value is bool ? value : fallback;
+  }
   final WalletService wallet;
   late final GiftService gifts;
   late final InventoryService inventory;
