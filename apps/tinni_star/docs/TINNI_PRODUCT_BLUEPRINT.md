@@ -275,7 +275,9 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - Gift receiving converts 1 gifted Coin into 1 Diamond for the receiver.
 - The Wallet shows the Diamond balance and, directly below it, the automatically calculated USD value.
 - Current settlement reference: 4,000,000 Diamonds = $1.70, so the displayed USD value is calculated from that rate.
+- At this rate, $2 is approximately 4,705,882 Diamonds (about 4.71M Diamonds).
 - Host, Agency and BD balances become transferable when the withdrawable USD value reaches at least $2.
+- Balances below $2 cannot be transferred.
 - A **Transfer** action is shown in the Wallet beside/under the Diamond balance.
 - Transfer opens a recipient search where the sender enters a User ID.
 - Only a valid **Coin Seller** or **Merchant** account may be selected as the transfer recipient.
