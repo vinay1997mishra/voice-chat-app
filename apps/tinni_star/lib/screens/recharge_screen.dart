@@ -44,6 +44,128 @@ class _RechargeScreenState extends State<RechargeScreen> {
   }
 
 
+  Future<void> _transferFromRoleWallet(String walletType) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final recipientController = TextEditingController();
+    final amountController = TextEditingController();
+    String? errorText;
+    bool sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            walletType == 'merchant'
+                ? 'Merchant Coin Transfer'
+                : 'Coin Seller Transfer',
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: recipientController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Receiver User ID',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () {
+                    recipientController.text = account.userId;
+                  },
+                  icon: const Icon(Icons.person_rounded),
+                  label: const Text('My Normal Wallet'),
+                ),
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Coin amount',
+                  ),
+                ),
+                if (errorText != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    errorText!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: sending
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: sending
+                  ? null
+                  : () async {
+                      final recipient = recipientController.text.trim();
+                      final amount =
+                          int.tryParse(amountController.text.trim()) ?? 0;
+                      if (recipient.isEmpty || amount <= 0) {
+                        setDialogState(
+                          () => errorText =
+                              'Enter a valid User ID and coin amount.',
+                        );
+                        return;
+                      }
+                      setDialogState(() {
+                        sending = true;
+                        errorText = null;
+                      });
+                      try {
+                        await widget.state.backend.transferCoins(
+                          account.authToken,
+                          recipientUserId: recipient,
+                          amountCoins: amount,
+                          walletType: walletType,
+                        );
+                        if (!dialogContext.mounted) return;
+                        Navigator.of(dialogContext).pop();
+                        await _load();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Transferred ' +
+                                  amount.toString() +
+                                  ' coins to ID ' +
+                                  recipient,
+                            ),
+                          ),
+                        );
+                      } catch (error) {
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() {
+                          sending = false;
+                          errorText = error
+                              .toString()
+                              .replaceFirst('Bad state: ', '');
+                        });
+                      }
+                    },
+              child: Text(sending ? 'Sending…' : 'Transfer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    recipientController.dispose();
+    amountController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,6 +215,80 @@ class _RechargeScreenState extends State<RechargeScreen> {
                   Text(
                     errorText!,
                     style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ],
+                if (widget.state.wallet.securityFrozen) ...[
+                  const SizedBox(height: 10),
+                  RoyalPanel(
+                    gradient: FeaturePalette.glow(FeaturePalette.safety),
+                    accentColor: FeaturePalette.safety,
+                    child: const Text(
+                      'Wallet security frozen. Unexpected coin credit was detected. Usable coin balance is hidden and only the Platform Owner can remove this freeze.',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+                if (widget.state.wallet.coinSellerActive) ...[
+                  const SizedBox(height: 10),
+                  RoyalPanel(
+                    gradient: FeaturePalette.glow(FeaturePalette.wallet),
+                    accentColor: FeaturePalette.wallet,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const ShiningIcon(
+                        icon: Icons.storefront_rounded,
+                        color: FeaturePalette.wallet,
+                        size: 22,
+                        boxSize: 42,
+                        glow: 0.34,
+                      ),
+                      title: const Text('Coin Seller Wallet'),
+                      subtitle: Text(
+                        widget.state.wallet.coinSellerFrozen
+                            ? 'Security frozen'
+                            : 'Balance: ' +
+                                widget.state.wallet.coinSellerBalance.toString(),
+                      ),
+                      trailing: FilledButton(
+                        onPressed: widget.state.wallet.coinSellerFrozen
+                            ? null
+                            : () => _transferFromRoleWallet('coin_seller'),
+                        child: const Text('Transfer'),
+                      ),
+                    ),
+                  ),
+                ],
+                if (widget.state.wallet.merchantActive) ...[
+                  const SizedBox(height: 10),
+                  RoyalPanel(
+                    gradient: FeaturePalette.glow(FeaturePalette.wallet),
+                    accentColor: FeaturePalette.wallet,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const ShiningIcon(
+                        icon: Icons.account_balance_rounded,
+                        color: FeaturePalette.wallet,
+                        size: 22,
+                        boxSize: 42,
+                        glow: 0.34,
+                      ),
+                      title: const Text('Merchant Wallet'),
+                      subtitle: Text(
+                        widget.state.wallet.merchantFrozen
+                            ? 'Security frozen'
+                            : 'Balance: ' +
+                                widget.state.wallet.merchantBalance.toString(),
+                      ),
+                      trailing: FilledButton(
+                        onPressed: widget.state.wallet.merchantFrozen
+                            ? null
+                            : () => _transferFromRoleWallet('merchant'),
+                        child: const Text('Transfer'),
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 14),
