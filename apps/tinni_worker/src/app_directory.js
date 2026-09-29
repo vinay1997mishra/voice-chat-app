@@ -644,6 +644,10 @@ export class AppDirectoryStore extends DurableObject {
         public_id TEXT PRIMARY KEY,
         price_coins INTEGER NOT NULL DEFAULT 0,
         assigned_user_id TEXT,
+        duration_days INTEGER NOT NULL DEFAULT 0,
+        assigned_at INTEGER,
+        expires_at INTEGER,
+        previous_user_id TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -656,6 +660,7 @@ export class AppDirectoryStore extends DurableObject {
         item_id TEXT NOT NULL,
         item_kind TEXT NOT NULL,
         acquired_at INTEGER NOT NULL,
+        expires_at INTEGER,
         PRIMARY KEY(user_id, item_id)
       );
       CREATE INDEX IF NOT EXISTS idx_user_inventory_user_kind
@@ -1121,6 +1126,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   ownerState() {
+    this._ensureEconomyMigrations();
     const defaultFeatures = {
       voice_rooms: true, gifts: true, vip: true, games: true,
       host_system: true, agency_system: true, bd_system: true,
@@ -1412,7 +1418,7 @@ export class AppDirectoryStore extends DurableObject {
     const oldId = this._resolveOwnerUserId(oldIdValue);
     const newId = String(newIdValue || "").trim();
     if (!oldId || !newId) throw new Error("Current and new user ID are required");
-    if (!/^\d{6,12}$/.test(newId)) throw new Error("New public ID must contain 6 to 12 digits");
+    if (!/^\d{4,8}$/.test(newId)) throw new Error("New public ID must contain 4 to 8 digits");
     if (oldId === newId) return this.ownerSearchUsers(newId, 1)[0];
     const user = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", oldId,
@@ -3140,31 +3146,8 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
-  applyRecharge(userIdValue, input = {}) {
-    const userId = this._resolveOwnerUserId(userIdValue);
-    const productId = String(input.product_id || "").trim();
-    const purchaseToken = String(input.purchase_token || "").trim();
-    const verified = input.verified === true;
-    const products = { coins_small: 50000, coins_large: 500000 };
-    const coins = products[productId];
-    if (!coins) throw new Error("Unknown recharge product");
-    if (!purchaseToken) throw new Error("Purchase token is required");
-    if (!verified) throw new Error("Billing receipt is not verified");
-    this.getWallet(userId);
-    const reference = "recharge:" + purchaseToken;
-    const existing = this.ctx.storage.sql.exec(
-      "SELECT id FROM wallet_transactions WHERE user_id = ? AND reference_id = ? LIMIT 1",
-      userId, reference,
-    ).toArray()[0];
-    if (!existing) {
-      const now = Date.now();
-      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?", coins, now, userId);
-      this.ctx.storage.sql.exec(
-        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'recharge',?,0,?,?,?)",
-        crypto.randomUUID(), userId, coins, reference, productId, now,
-      );
-    }
-    return { ok: true, wallet: this.getWallet(userId), duplicate: Boolean(existing) };
+  applyRecharge() {
+    throw new Error("Real-money recharge is disabled");
   }
 
   frameCatalog(countryCodeValue = "") {
@@ -3193,8 +3176,8 @@ export class AppDirectoryStore extends DurableObject {
   inventoryState(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const rows = this.ctx.storage.sql.exec(
-      "SELECT item_id, item_kind, acquired_at FROM user_inventory WHERE user_id = ? ORDER BY acquired_at DESC",
-      userId,
+      "SELECT item_id, item_kind, acquired_at, expires_at FROM user_inventory WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY acquired_at DESC",
+      userId, Date.now(),
     ).toArray();
     const equipment = this.ctx.storage.sql.exec(
       "SELECT equipped_frame_id, updated_at FROM user_equipment WHERE user_id = ? LIMIT 1",
@@ -3205,6 +3188,7 @@ export class AppDirectoryStore extends DurableObject {
         item_id: String(row.item_id),
         item_kind: String(row.item_kind),
         acquired_at: Number(row.acquired_at),
+        expires_at: row.expires_at == null ? null : Number(row.expires_at),
       })),
       equipped_frame_id: equipment?.equipped_frame_id
         ? String(equipment.equipped_frame_id)
@@ -3280,8 +3264,9 @@ export class AppDirectoryStore extends DurableObject {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,0,?,?,?)", crypto.randomUUID(), userId, kind + "_purchase", -price, kind + ":" + item.id, item.name, now);
     }
-    this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at) VALUES (?,?,?,?)", userId, item.id, kind, now);
-    return { ok: true, duplicate: false, price_coins: price, duration_days: item.duration_days, expires_at: item.duration_days > 0 ? now + item.duration_days * 86400000 : null, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+    const expiresAt = item.duration_days > 0 ? now + item.duration_days * 86400000 : null;
+    this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?,?,?,?)", userId, item.id, kind, now, expiresAt);
+    return { ok: true, duplicate: false, price_coins: price, duration_days: item.duration_days, expires_at: expiresAt, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
   }
 
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
@@ -3312,8 +3297,8 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
     this.ctx.storage.sql.exec(
-      "INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at) VALUES (?,?, 'frame',?)",
-      userId, frameId, now,
+      "INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?, 'frame',?,?)",
+      userId, frameId, now, Math.max(0, Number(frame.data?.duration_days || 0)) > 0 ? now + Math.max(0, Number(frame.data?.duration_days || 0)) * 86400000 : null,
     );
     return { ok: true, duplicate: false, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
   }
@@ -3323,8 +3308,8 @@ export class AppDirectoryStore extends DurableObject {
     const frameId = frameIdValue == null ? "" : String(frameIdValue).trim();
     if (frameId) {
       const owned = this.ctx.storage.sql.exec(
-        "SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? AND item_kind = 'frame' LIMIT 1",
-        userId, frameId,
+        "SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? AND item_kind = 'frame' AND (expires_at IS NULL OR expires_at > ?) LIMIT 1",
+        userId, frameId, Date.now(),
       ).toArray()[0];
       if (!owned) throw new Error("Frame is not owned");
     }
@@ -4551,8 +4536,8 @@ export class AppDirectoryStore extends DurableObject {
       );
       this.ctx.storage.sql.exec(
         `INSERT INTO wallet_transactions
-          (id, user_id, kind, amount_coins, reference, created_at)
-         VALUES (?, ?, 'room_theme_purchase', ?, ?, ?)`,
+          (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at)
+         VALUES (?, ?, 'room_theme_purchase', ?, 0, ?, 'Room theme purchase', ?)`,
         "wallet-theme-" + crypto.randomUUID(),
         userId,
         -priceCoins,
