@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../billing/billing_adapter.dart';
+import '../economy/economy.dart';
 import '../ui/royal_theme.dart';
 
 class RechargeScreen extends StatefulWidget {
@@ -15,7 +15,6 @@ class RechargeScreen extends StatefulWidget {
 class _RechargeScreenState extends State<RechargeScreen> {
   bool loading = true;
   String? errorText;
-  List<BillingProduct> products = const <BillingProduct>[];
 
   @override
   void initState() {
@@ -30,10 +29,8 @@ class _RechargeScreenState extends State<RechargeScreen> {
         final remoteWallet = await widget.state.backend.wallet(account.authToken);
         widget.state.wallet.applyRemote(remoteWallet);
       }
-      final values = await widget.state.billing.products();
       if (!mounted) return;
       setState(() {
-        products = values;
         loading = false;
         errorText = null;
       });
@@ -46,32 +43,6 @@ class _RechargeScreenState extends State<RechargeScreen> {
     }
   }
 
-  Future<void> _buy(BillingProduct product) async {
-    try {
-      final receipt = await widget.state.billing.purchase(product.id);
-      final account = widget.state.auth.current;
-      if (account == null) throw StateError('Login session is required');
-      final remoteWallet = await widget.state.backend.applyRecharge(
-        account.authToken,
-        productId: product.id,
-        purchaseToken: receipt.purchaseToken,
-        verified: receipt.verified,
-      );
-      widget.state.wallet.applyRemote(remoteWallet);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(product.title + ' added.')),
-      );
-      setState(() {});
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +50,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
       key: const Key('recharge-screen'),
       appBar: AppBar(
         title: const Text(
-          'Recharge',
+          'Wallet',
           style: TextStyle(
             color: FeaturePalette.wallet,
             fontWeight: FontWeight.w900,
@@ -106,7 +77,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Coins ' + widget.state.wallet.coins.toString(),
+                          'Coins ' + widget.state.wallet.coins.toString() + '\nDiamonds ' + widget.state.wallet.diamonds.toString(),
                           style: const TextStyle(
                             color: RoyalPalette.cream,
                             fontSize: 18,
@@ -125,38 +96,35 @@ class _RechargeScreenState extends State<RechargeScreen> {
                   ),
                 ],
                 const SizedBox(height: 14),
-                const GoldSectionTitle('Recharge packs'),
+                const GoldSectionTitle('Wallet activity'),
                 const SizedBox(height: 8),
-                for (final product in products)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: RoyalPanel(
-                      gradient: FeaturePalette.glow(FeaturePalette.wallet),
-                      accentColor: FeaturePalette.wallet,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.monetization_on_rounded,
-                            color: FeaturePalette.wallet,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              product.title,
-                              style: const TextStyle(
-                                color: RoyalPalette.cream,
-                                fontWeight: FontWeight.w800,
-                              ),
+                if (widget.state.wallet.history.isEmpty)
+                  const RoyalPanel(
+                    child: Text(
+                      'No wallet activity yet. Tinni Star uses coins and diamonds only; there are no real-money purchase packs.',
+                      style: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  )
+                else
+                  for (final entry in widget.state.wallet.history)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: RoyalPanel(
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(entry.label),
+                          trailing: Text(
+                            (entry.amount > 0 ? '+' : '') + entry.amount.toString(),
+                            style: TextStyle(
+                              color: entry.currency == CurrencyKind.coins
+                                  ? FeaturePalette.wallet
+                                  : FeaturePalette.gift,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
-                          FilledButton(
-                            onPressed: () => _buy(product),
-                            child: const Text('Top up'),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
               ],
             ),
     );
