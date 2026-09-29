@@ -100,14 +100,29 @@ jobs:
           test -n "$PAG_JAVA"
           python3 - "$PAG_JAVA" <<'PY'
           from pathlib import Path
-          import re, sys
+          import sys
           p = Path(sys.argv[1])
-          s = p.read_text()
-          s = s.replace('import io.flutter.view.FlutterNativeView;\\n', '')
-          s = re.sub(r'\\n\\s*io\\.flutter\\.plugin\\.common\\.PluginRegistry\\.Registrar registrar;\\n', '\\n', s)
-          s = re.sub(r'\\n\\s*public FlutterPagPlugin\\(io\\.flutter\\.plugin\\.common\\.PluginRegistry\\.Registrar registrar\\) \\{.*?\\n\\s*\\}', '\\n', s, flags=re.S)
-          s = re.sub(r'\\n\\s*public static void registerWith\\(io\\.flutter\\.plugin\\.common\\.PluginRegistry\\.Registrar registrar\\) \\{.*?\\n\\s*\\}\\);?\\n\\s*\\}', '\\n', s, flags=re.S)
-          # Fail early if any removed v1 embedding symbols survived the patch.
+          lines = p.read_text().splitlines()
+          out = []
+          skip_depth = 0
+          skipping = False
+          for line in lines:
+              stripped = line.strip()
+              if 'import io.flutter.view.FlutterNativeView;' in line:
+                  continue
+              if 'PluginRegistry.Registrar registrar;' in line and not stripped.startswith('public'):
+                  continue
+              if (stripped.startswith('public FlutterPagPlugin(') and 'PluginRegistry.Registrar' in line) or (stripped.startswith('public static void registerWith(') and 'PluginRegistry.Registrar' in line):
+                  skipping = True
+                  skip_depth = line.count('{') - line.count('}')
+                  continue
+              if skipping:
+                  skip_depth += line.count('{') - line.count('}')
+                  if skip_depth <= 0:
+                      skipping = False
+                  continue
+              out.append(line)
+          s = '\\n'.join(out) + '\\n'
           legacy = ('FlutterNativeView', 'PluginRegistry.Registrar', 'ViewDestroyListener')
           leftovers = [name for name in legacy if name in s]
           if leftovers:
