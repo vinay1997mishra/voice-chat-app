@@ -42,6 +42,16 @@ void main() {
     return state;
   }
 
+  test('one room per user and room ID equals owner user ID', () {
+    final state = makeState();
+    final account = state.auth.current!;
+    final owned = state.discovery.ownedRooms(account.userId);
+
+    expect(owned, hasLength(1));
+    expect(owned.single.id, account.userId);
+    expect(owned.single.ownerId, account.userId);
+  });
+
   testWidgets('Party defaults to the signed-in user country rooms',
       (tester) async {
     final state = makeState();
