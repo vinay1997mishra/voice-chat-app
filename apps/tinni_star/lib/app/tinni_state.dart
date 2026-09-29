@@ -84,7 +84,7 @@ class TinniState {
         backend = AppBackendService(),
         realtime = RealtimeCoordinator(
           rtc: LiveKitRtcAdapter(),
-          im: LocalImAdapter(),
+          im: BackendImAdapter(),
         ),
         roomPresence = RoomPresenceService() {
     gifts = GiftService(wallet);
