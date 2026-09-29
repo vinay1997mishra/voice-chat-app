@@ -163,6 +163,7 @@ const staffPermissionGroups = [
       ["users.invisible", "Invisible ID"],
       ["users.locked_room_bypass", "Locked-room bypass"],
       ["users.change_id", "Change public ID"],
+      ["users.unique_id", "Create and price purchasable unique IDs"],
     ],
   },
   {
@@ -285,8 +286,8 @@ const actionPermission = {
   "user-invisible": "users.invisible",
   "locked-bypass": "users.locked_room_bypass",
   "id-change": "users.change_id",
-  "unique-id-new": "users.change_id",
-  "unique-id-price": "users.change_id",
+  "unique-id-new": "users.unique_id",
+  "unique-id-price": "users.unique_id",
   "room-ban": "rooms.ban",
   "room-name": "rooms.rename",
   "room-dp": "rooms.dp",
@@ -331,7 +332,7 @@ function catalogPermission(item, operation) {
   const kind = String(item?.kind || "");
   if (kind === "vip") return operation === "toggle" ? "vip.toggle" : "vip.edit";
   if (kind === "gift") return operation === "remove" ? "gifts.remove" : (operation === "edit" ? "gifts.edit" : "gifts.remove");
-  if (kind === "entry" || kind === "frame") return kind === "entry" ? "assets.entries" : "assets.frames";
+  if (kind === "entry" || kind === "vehicle" || kind === "frame" || kind === "profile_card") return (kind === "entry" || kind === "vehicle") ? "assets.entries" : "assets.frames";
   if (kind === "banner") return operation === "remove" ? "banners.remove" : "banners.create";
   return "roles.manage";
 }
