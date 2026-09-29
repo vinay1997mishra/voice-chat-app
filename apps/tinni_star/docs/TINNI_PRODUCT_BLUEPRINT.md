@@ -83,6 +83,10 @@ Rows stay balanced; each row can differ by at most one seat.
 
 The room belongs to the user who created it. Creating a room must never grant platform-owner privileges.
 
+- Each user ID can create **exactly one room**.
+- That room's **Room ID is exactly the same as the owner's User ID**.
+- A second create-room attempt for the same user must not create another room; the existing room is returned/opened instead.
+
 ## 4. Room screen
 
 Main room areas:
