@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app/tinni_state.dart';
@@ -23,8 +22,7 @@ class SharingScreen extends StatelessWidget {
   String get text => payload.title + ' ' + payload.link;
 
   Future<void> _systemShare(BuildContext context) async {
-    state.sharing.prepare(ShareTarget.copyLink, payload);
-    await SharePlus.instance.share(ShareParams(text: text));
+    await state.sharing.share(ShareTarget.copyLink, payload);
   }
 
   Future<void> _copy(BuildContext context) async {
@@ -94,12 +92,12 @@ class SharingScreen extends StatelessWidget {
       (
         'Instagram',
         Icons.camera_alt_rounded,
-        () => _systemShare(context),
+        () => state.sharing.share(ShareTarget.instagram, payload),
       ),
       (
         'Snapchat',
         Icons.photo_camera_front_rounded,
-        () => _systemShare(context),
+        () => state.sharing.share(ShareTarget.snapchat, payload),
       ),
     ];
 
