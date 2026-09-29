@@ -328,6 +328,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   String? errorText;
   late CallState remoteState;
   Timer? statusTimer;
+  Timer? watermarkTimer;
+  int watermarkStep = 0;
 
   @override
   void initState() {
@@ -337,6 +339,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': true});
     }
     _connect();
+    if (widget.call.media == CallMedia.video) {
+      watermarkTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+        if (mounted) setState(() => watermarkStep = (watermarkStep + 1) % 6);
+      });
+    }
     statusTimer = Timer.periodic(
       const Duration(seconds: 2),
       (_) => _pollStatus(),
@@ -466,6 +473,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void dispose() {
     statusTimer?.cancel();
+    watermarkTimer?.cancel();
     if (widget.call.media == CallMedia.video) {
       _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': false});
     }
@@ -485,8 +493,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
           automaticallyImplyLeading: false,
           title: const Text('Tinni Star Call'),
         ),
-        body: Center(
-          child: Padding(
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -569,7 +580,86 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
               ],
             ),
           ),
+            ),
+            if (widget.call.media == CallMedia.video)
+              _VideoPrivacyWatermark(
+                userId: widget.state.auth.current?.userId ?? '',
+                callId: widget.call.id,
+                step: watermarkStep,
+              ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _VideoPrivacyWatermark extends StatelessWidget {
+  const _VideoPrivacyWatermark({
+    required this.userId,
+    required this.callId,
+    required this.step,
+  });
+
+  final String userId;
+  final String callId;
+  final int step;
+
+  @override
+  Widget build(BuildContext context) {
+    final positions = <Alignment>[
+      const Alignment(-0.78, -0.72),
+      const Alignment(0.72, -0.48),
+      const Alignment(-0.62, 0.02),
+      const Alignment(0.62, 0.34),
+      const Alignment(-0.70, 0.72),
+      const Alignment(0.68, 0.78),
+    ];
+    final safeUser = userId.isEmpty ? 'private' : userId;
+    final shortCall = callId.length <= 8 ? callId : callId.substring(callId.length - 8);
+    final stamp = 'TINNI STAR • ID ' + safeUser + ' • ' + shortCall;
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Align(
+            alignment: positions[step % positions.length],
+            child: Transform.rotate(
+              angle: -0.22,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+                ),
+                child: Text(
+                  stamp,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.48),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Center(
+            child: Transform.rotate(
+              angle: -0.42,
+              child: Text(
+                'TINNI STAR • ' + safeUser,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
