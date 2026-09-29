@@ -84,7 +84,9 @@ jobs:
         run: |
           PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
           PAG_JAVA="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/src/main/java/com/example/flutter_pag_plugin/FlutterPagPlugin.java' -print -quit)"
-          test -n "$PAG_GRADLE" && test -n "$PAG_JAVA"
+          PAG_MANIFEST="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/src/main/AndroidManifest.xml' -print -quit)"
+          test -n "$PAG_GRADLE" && test -n "$PAG_JAVA" && test -n "$PAG_MANIFEST"
+          sed -i -E 's/[[:space:]]+package="[^"]+"//' "$PAG_MANIFEST"
           sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
           grep -q "namespace 'org.libpag.pag'" "$PAG_GRADLE" || sed -i "0,/android {/s//android {\\n    namespace 'org.libpag.pag'/" "$PAG_GRADLE"
           sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$PAG_GRADLE"
