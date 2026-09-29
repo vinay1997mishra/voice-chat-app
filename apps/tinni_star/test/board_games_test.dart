@@ -5,10 +5,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/games/ludo_game.dart';
+import 'package:tinni_star/games/game_service.dart';
 import 'package:tinni_star/games/uno_game.dart';
 import 'package:tinni_star/screens/games_screen.dart';
 
 void main() {
+  test('game framework enforces room sessions and round lifecycle', () {
+    final games = GameService();
+    final session = games.openRoomGame(
+      roomId: 'room-1',
+      userId: 'user-1',
+      kind: GameKind.fruitParty,
+    );
+    expect(GameService.catalog, hasLength(8));
+    expect(session.state, GameSessionState.open);
+    session.closeBetting();
+    session.beginSettlement();
+    session.publishResult();
+    expect(session.round, 1);
+    session.nextRound();
+    expect(session.state, GameSessionState.open);
+    expect(
+      () => games.openRoomGame(
+        roomId: '', userId: 'user-1', kind: GameKind.lucky777,
+      ),
+      throwsStateError,
+    );
+  });
+
   test('Ludo creates four players with four tokens and valid dice', () {
     final game = LudoGame(random: Random(7));
 
