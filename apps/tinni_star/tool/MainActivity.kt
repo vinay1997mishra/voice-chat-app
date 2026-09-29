@@ -15,6 +15,9 @@ class MainActivity : FlutterActivity() {
     private val privacyChannel = "tinni.star/privacy"
     private val voicePermissionRequest = 744
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var privacyMethodChannel: MethodChannel? = null
+    private var captureCallback: android.app.Activity.ScreenCaptureCallback? = null
+    private var recordingCallback: java.util.function.Consumer<Int>? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -42,17 +45,20 @@ class MainActivity : FlutterActivity() {
         }
 
 
-        MethodChannel(
+        privacyMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             privacyChannel
-        ).setMethodCallHandler { call, result ->
+        )
+        privacyMethodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "setSecureScreen" -> {
                     val enabled = call.argument<Boolean>("enabled") == true
                     runOnUiThread {
                         if (enabled) {
                             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                            registerPrivacyDetection()
                         } else {
+                            unregisterPrivacyDetection()
                             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         }
                     }
@@ -72,6 +78,35 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+
+    private fun registerPrivacyDetection() {
+        if (Build.VERSION.SDK_INT >= 34 && captureCallback == null) {
+            captureCallback = android.app.Activity.ScreenCaptureCallback {
+                privacyMethodChannel?.invokeMethod("captureAttempt", mapOf("action" to "screenshot"))
+            }
+            registerScreenCaptureCallback(mainExecutor, captureCallback!!)
+        }
+        if (Build.VERSION.SDK_INT >= 35 && recordingCallback == null) {
+            recordingCallback = java.util.function.Consumer<Int> { state ->
+                if (state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE) {
+                    privacyMethodChannel?.invokeMethod("captureAttempt", mapOf("action" to "screen_recording"))
+                }
+            }
+            windowManager.addScreenRecordingCallback(mainExecutor, recordingCallback!!)
+        }
+    }
+
+    private fun unregisterPrivacyDetection() {
+        if (Build.VERSION.SDK_INT >= 34) {
+            captureCallback?.let { unregisterScreenCaptureCallback(it) }
+        }
+        captureCallback = null
+        if (Build.VERSION.SDK_INT >= 35) {
+            recordingCallback?.let { windowManager.removeScreenRecordingCallback(it) }
+        }
+        recordingCallback = null
     }
 
     private fun voiceRoomPermissions(): Array<String> {
