@@ -1,6 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 
+class RemoteRoleWallet {
+  const RemoteRoleWallet({
+    required this.balance,
+    required this.banned,
+    required this.securityFrozen,
+    required this.freezeReason,
+  });
+
+  final int balance;
+  final bool banned;
+  final bool securityFrozen;
+  final String freezeReason;
+  final RemoteRoleWallet? coinSellerWallet;
+  final RemoteRoleWallet? merchantWallet;
+}
+
 class RemoteWallet {
   const RemoteWallet({
     required this.coins,
@@ -17,6 +33,8 @@ class RemoteWallet {
     this.canTransferSettlement = false,
     this.securityFrozen = false,
     this.freezeReason = '',
+    this.coinSellerWallet,
+    this.merchantWallet,
   });
   final int coins;
   final int diamonds;
@@ -225,6 +243,8 @@ class AppBackendService {
       canTransferSettlement: row['can_transfer_settlement'] == true,
       securityFrozen: row['security_frozen'] == true,
       freezeReason: row['freeze_reason']?.toString() ?? '',
+      coinSellerWallet: _roleWallet(row['coin_seller_wallet']),
+      merchantWallet: _roleWallet(row['merchant_wallet']),
     );
   }
 
@@ -333,6 +353,26 @@ class AppBackendService {
       canTransferSettlement: row['can_transfer_settlement'] == true,
       securityFrozen: row['security_frozen'] == true,
       freezeReason: row['freeze_reason']?.toString() ?? '',
+      coinSellerWallet: _roleWallet(row['coin_seller_wallet']),
+      merchantWallet: _roleWallet(row['merchant_wallet']),
+    );
+  }
+
+  Future<Map<String, dynamic>> transferCoins(
+    String token, {
+    required String recipientUserId,
+    required int amountCoins,
+    required String walletType,
+  }) async {
+    return _request(
+      'POST',
+      '/wallet/coins/transfer',
+      token,
+      body: {
+        'recipient_user_id': recipientUserId,
+        'amount_coins': amountCoins,
+        'wallet_type': walletType,
+      },
     );
   }
 
@@ -457,6 +497,17 @@ class AppBackendService {
   }
 
   void dispose() => _httpClient.close(force: true);
+}
+
+RemoteRoleWallet? _roleWallet(dynamic value) {
+  final row = _map(value);
+  if (row.isEmpty || row['active'] != true) return null;
+  return RemoteRoleWallet(
+    balance: _asInt(row['balance']),
+    banned: row['banned'] == true,
+    securityFrozen: row['security_frozen'] == true,
+    freezeReason: row['freeze_reason']?.toString() ?? '',
+  );
 }
 
 Map<String, dynamic> _map(dynamic value) {
