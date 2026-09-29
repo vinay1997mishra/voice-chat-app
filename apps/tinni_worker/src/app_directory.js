@@ -2924,8 +2924,34 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, settled_days: settled, credited_coins: credited };
   }
 
+  settleExpiredUniqueIds(timestamp = Date.now()) {
+    this._ensureEconomyMigrations();
+    const rows = this.ctx.storage.sql.exec(
+      "SELECT public_id,assigned_user_id,previous_user_id FROM owner_unique_ids WHERE assigned_user_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at <= ?",
+      timestamp,
+    ).toArray();
+    let released = 0;
+    for (const row of rows) {
+      const currentId = String(row.assigned_user_id || "");
+      const previousId = String(row.previous_user_id || "");
+      if (!currentId || !previousId) continue;
+      try {
+        this._changeUserId(currentId, previousId);
+        this.ctx.storage.sql.exec(
+          "UPDATE owner_unique_ids SET assigned_user_id=NULL,assigned_at=NULL,expires_at=NULL,previous_user_id=NULL,updated_at=? WHERE public_id=?",
+          timestamp, row.public_id,
+        );
+        released += 1;
+      } catch {}
+    }
+    return released;
+  }
+
   async alarm() {
-    return this.settleRoomGiftOwnerShares(Date.now());
+    const now = Date.now();
+    const gifts = this.settleRoomGiftOwnerShares(now);
+    const uniqueIdsReleased = this.settleExpiredUniqueIds(now);
+    return { ...gifts, unique_ids_released: uniqueIdsReleased };
   }
 
   sendGift(senderIdValue, input) {
@@ -3236,6 +3262,7 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       "UPDATE owner_unique_ids SET assigned_user_id = ?, assigned_at = ?, expires_at = ?, previous_user_id = ?, updated_at = ? WHERE public_id = ?", publicId, now, expiresAt, previousId, now, publicId,
     );
+    if (expiresAt != null) this.ctx.storage.setAlarm(this._nextIndiaMidnightUtc(now));
     return { ok: true, user: changed, public_id: publicId, price_coins: price, duration_days: durationDays, expires_at: expiresAt, permanent: durationDays === 0, wallet: this.getWallet(publicId) };
   }
 
