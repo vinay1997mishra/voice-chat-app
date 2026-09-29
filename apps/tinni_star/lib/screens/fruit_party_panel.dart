@@ -296,17 +296,6 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                               );
                             },
                           ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0xAAFF42D9),
-                                        blurRadius: 14,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
