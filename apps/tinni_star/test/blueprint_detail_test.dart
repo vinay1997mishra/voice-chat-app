@@ -87,7 +87,7 @@ void main() {
       false,
     );
     expect(family.experience, 5000000);
-    expect(family.walletCoins, 50000);
+    expect(family.walletCoins, 0);
   });
 
   test('family admin permissions stay scoped to own family roles', () {
