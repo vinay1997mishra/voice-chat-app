@@ -180,10 +180,8 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
     final latest = _latest;
     final latestFresh = _fresh(latest);
     final revealResult = latestFresh && !game.inResultSpin;
-    final luckyActive = revealResult && latest?.isLucky11 == true;
-    final bonusFruits = luckyActive
-        ? latest!.bonusFruits.toSet()
-        : const <FruitPartyKind>{};
+    const luckyActive = false;
+    const bonusFruits = <FruitPartyKind>{};
     final frameBlink = (_tick ~/ 7).isEven;
 
     return LayoutBuilder(
@@ -484,9 +482,7 @@ class _PartyHistoryRail extends StatelessWidget {
                           item.fruit.emoji,
                           style: TextStyle(
                             fontSize: 17,
-                            color: item.isLucky11
-                                ? const Color(0xFFFFD54F)
-                                : null,
+                            color: null,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -1173,9 +1169,7 @@ class _PartyResultStrip extends StatelessWidget {
                           result.fruit.emoji,
                           style: TextStyle(
                             fontSize: 13,
-                            color: result.isLucky11
-                                ? const Color(0xFFFFD54F)
-                                : null,
+                            color: null,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
