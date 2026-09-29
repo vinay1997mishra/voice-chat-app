@@ -269,7 +269,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                               final fruit = _board[index];
                               if (fruit == null) {
                                 return _PartyLucky11Tile(
-                                  active: luckyActive,
+                                  active: false,
                                   tick: _tick,
                                 );
                               }
@@ -314,7 +314,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                     SizedBox(
                       width: railWidth,
                       child: _PartyLuckyRail(
-                        active: luckyActive,
+                        active: false,
                         spinning: game.inResultSpin,
                       ),
                     ),
