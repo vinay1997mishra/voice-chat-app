@@ -42,6 +42,17 @@ void main() {
     return state;
   }
 
+  testWidgets('Party defaults to the signed-in user country rooms',
+      (tester) async {
+    final state = makeState();
+    await tester.pumpWidget(TinniStarApp(state: state));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('home-party-page')), findsOneWidget);
+    expect(find.text('My Real Room'), findsWidgets);
+    expect(find.text('Friend Room'), findsNothing);
+  });
+
   testWidgets(
     'top Mine is room-focused and separate from bottom profile Mine',
     (tester) async {
