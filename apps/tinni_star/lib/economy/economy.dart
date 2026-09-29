@@ -15,15 +15,372 @@ class WalletEntry {
 }
 
 class WalletService {
-  WalletService({this.coins = 2000000, this.diamonds = 17125});
+  WalletService({this.coins = 2000000, this.diamonds = 0});
 
   int coins;
   int diamonds;
+  bool diamondWalletVisible = false;
+  bool isHost = false;
+  bool isAgency = false;
+  bool isBd = false;
+  int diamondUsdCents = 0;
+  int commissionUsdCents = 0;
+  int withdrawableUsdCents = 0;
+  bool canTransferSettlement = false;
   final List<WalletEntry> history = <WalletEntry>[];
+
+  String get diamondUsdText =>
+      '\
+  bool spendCoins(int amount, String label) {
+    if (amount <= 0 || coins < amount) return false;
+    coins -= amount;
+    history.insert(
+      0,
+      WalletEntry(label: label, amount: -amount, currency: CurrencyKind.coins),
+    );
+    return true;
+  }
+
+  void creditCoins(int amount, String label) {
+    if (amount <= 0) return;
+    coins += amount;
+    history.insert(
+      0,
+      WalletEntry(label: label, amount: amount, currency: CurrencyKind.coins),
+    );
+  }
+
+  void creditDiamonds(int amount, String label) {
+    if (amount <= 0) return;
+    diamonds += amount;
+    history.insert(
+      0,
+      WalletEntry(
+        label: label,
+        amount: amount,
+        currency: CurrencyKind.diamonds,
+      ),
+    );
+  }
+}
+
+class GiftDefinition {
+  const GiftDefinition({
+    required this.id,
+    required this.name,
+    required this.price,
+    required this.effectKind,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final String effectKind;
+}
+
+class GiftTransaction {
+  const GiftTransaction({
+    required this.gift,
+    required this.quantity,
+    required this.senderId,
+    required this.receiverIds,
+    required this.totalCost,
+  });
+
+  final GiftDefinition gift;
+  final int quantity;
+  final String senderId;
+  final List<String> receiverIds;
+  final int totalCost;
+}
+
+class GiftService {
+  GiftService(this.wallet);
+
+  final WalletService wallet;
+  final List<GiftTransaction> sent = <GiftTransaction>[];
+
+  static const catalog = [
+    GiftDefinition(id: 'rose', name: 'Rose', price: 100, effectKind: 'svga'),
+    GiftDefinition(
+      id: 'crystal',
+      name: 'Crystal',
+      price: 500,
+      effectKind: 'pag',
+    ),
+    GiftDefinition(id: 'crown', name: 'Crown', price: 1000, effectKind: 'mp4'),
+  ];
+
+  GiftTransaction? send({
+    required GiftDefinition gift,
+    required int quantity,
+    required int maxCombo,
+    required String senderId,
+    required List<String> receiverIds,
+  }) {
+    if (quantity < 1 ||
+        quantity > maxCombo ||
+        receiverIds.isEmpty ||
+        senderId.isEmpty) {
+      return null;
+    }
+    final total = gift.price * quantity * receiverIds.length;
+    if (!wallet.spendCoins(total, 'Gift: ' + gift.name)) return null;
+    final transaction = GiftTransaction(
+      gift: gift,
+      quantity: quantity,
+      senderId: senderId,
+      receiverIds: List<String>.unmodifiable(receiverIds),
+      totalCost: total,
+    );
+    sent.insert(0, transaction);
+    return transaction;
+  }
+}
+
+class StoreItem {
+  const StoreItem({
+    required this.id,
+    required this.name,
+    required this.price,
+    required this.type,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final String type;
+}
+
+class InventoryService {
+  InventoryService(this.wallet);
+
+  final WalletService wallet;
+  final Set<String> owned = <String>{};
+  String? equippedFrameId;
+
+  void applyRemote(Map<String, dynamic> data) {
+    final rawOwned = data['owned'];
+    owned
+      ..clear()
+      ..addAll(
+        rawOwned is List
+            ? rawOwned
+                .whereType<Map>()
+                .map((row) => row['item_id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+            : const <String>[],
+      );
+    final remoteFrame = data['equipped_frame_id']?.toString();
+    equippedFrameId =
+        remoteFrame != null && remoteFrame.isNotEmpty && owned.contains(remoteFrame)
+            ? remoteFrame
+            : null;
+  }
+
+  bool get hasEquippedFrame =>
+      equippedFrameId != null && owned.contains(equippedFrameId);
+
+  bool equipFrame(String frameId) {
+    if (!owned.contains(frameId)) return false;
+    equippedFrameId = frameId;
+    return true;
+  }
+
+  void removeFrame() {
+    equippedFrameId = null;
+  }
+
+  bool purchase(StoreItem item) {
+    if (owned.contains(item.id)) return false;
+    if (!wallet.spendCoins(item.price, 'Store: ' + item.name)) return false;
+    owned.add(item.id);
+    return true;
+  }
+}
+ + (diamondUsdCents / 100).toStringAsFixed(2);
+  String get withdrawableUsdText =>
+      '\
+  bool spendCoins(int amount, String label) {
+    if (amount <= 0 || coins < amount) return false;
+    coins -= amount;
+    history.insert(
+      0,
+      WalletEntry(label: label, amount: -amount, currency: CurrencyKind.coins),
+    );
+    return true;
+  }
+
+  void creditCoins(int amount, String label) {
+    if (amount <= 0) return;
+    coins += amount;
+    history.insert(
+      0,
+      WalletEntry(label: label, amount: amount, currency: CurrencyKind.coins),
+    );
+  }
+
+  void creditDiamonds(int amount, String label) {
+    if (amount <= 0) return;
+    diamonds += amount;
+    history.insert(
+      0,
+      WalletEntry(
+        label: label,
+        amount: amount,
+        currency: CurrencyKind.diamonds,
+      ),
+    );
+  }
+}
+
+class GiftDefinition {
+  const GiftDefinition({
+    required this.id,
+    required this.name,
+    required this.price,
+    required this.effectKind,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final String effectKind;
+}
+
+class GiftTransaction {
+  const GiftTransaction({
+    required this.gift,
+    required this.quantity,
+    required this.senderId,
+    required this.receiverIds,
+    required this.totalCost,
+  });
+
+  final GiftDefinition gift;
+  final int quantity;
+  final String senderId;
+  final List<String> receiverIds;
+  final int totalCost;
+}
+
+class GiftService {
+  GiftService(this.wallet);
+
+  final WalletService wallet;
+  final List<GiftTransaction> sent = <GiftTransaction>[];
+
+  static const catalog = [
+    GiftDefinition(id: 'rose', name: 'Rose', price: 100, effectKind: 'svga'),
+    GiftDefinition(
+      id: 'crystal',
+      name: 'Crystal',
+      price: 500,
+      effectKind: 'pag',
+    ),
+    GiftDefinition(id: 'crown', name: 'Crown', price: 1000, effectKind: 'mp4'),
+  ];
+
+  GiftTransaction? send({
+    required GiftDefinition gift,
+    required int quantity,
+    required int maxCombo,
+    required String senderId,
+    required List<String> receiverIds,
+  }) {
+    if (quantity < 1 ||
+        quantity > maxCombo ||
+        receiverIds.isEmpty ||
+        senderId.isEmpty) {
+      return null;
+    }
+    final total = gift.price * quantity * receiverIds.length;
+    if (!wallet.spendCoins(total, 'Gift: ' + gift.name)) return null;
+    final transaction = GiftTransaction(
+      gift: gift,
+      quantity: quantity,
+      senderId: senderId,
+      receiverIds: List<String>.unmodifiable(receiverIds),
+      totalCost: total,
+    );
+    sent.insert(0, transaction);
+    return transaction;
+  }
+}
+
+class StoreItem {
+  const StoreItem({
+    required this.id,
+    required this.name,
+    required this.price,
+    required this.type,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final String type;
+}
+
+class InventoryService {
+  InventoryService(this.wallet);
+
+  final WalletService wallet;
+  final Set<String> owned = <String>{};
+  String? equippedFrameId;
+
+  void applyRemote(Map<String, dynamic> data) {
+    final rawOwned = data['owned'];
+    owned
+      ..clear()
+      ..addAll(
+        rawOwned is List
+            ? rawOwned
+                .whereType<Map>()
+                .map((row) => row['item_id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+            : const <String>[],
+      );
+    final remoteFrame = data['equipped_frame_id']?.toString();
+    equippedFrameId =
+        remoteFrame != null && remoteFrame.isNotEmpty && owned.contains(remoteFrame)
+            ? remoteFrame
+            : null;
+  }
+
+  bool get hasEquippedFrame =>
+      equippedFrameId != null && owned.contains(equippedFrameId);
+
+  bool equipFrame(String frameId) {
+    if (!owned.contains(frameId)) return false;
+    equippedFrameId = frameId;
+    return true;
+  }
+
+  void removeFrame() {
+    equippedFrameId = null;
+  }
+
+  bool purchase(StoreItem item) {
+    if (owned.contains(item.id)) return false;
+    if (!wallet.spendCoins(item.price, 'Store: ' + item.name)) return false;
+    owned.add(item.id);
+    return true;
+  }
+}
+ + (withdrawableUsdCents / 100).toStringAsFixed(2);
 
   void applyRemote(RemoteWallet remote) {
     coins = remote.coins;
     diamonds = remote.diamonds;
+    diamondWalletVisible = remote.diamondWalletVisible;
+    isHost = remote.isHost;
+    isAgency = remote.isAgency;
+    isBd = remote.isBd;
+    diamondUsdCents = remote.diamondUsdCents;
+    commissionUsdCents = remote.commissionUsdCents;
+    withdrawableUsdCents = remote.withdrawableUsdCents;
+    canTransferSettlement = remote.canTransferSettlement;
   }
 
   bool spendCoins(int amount, String label) {
