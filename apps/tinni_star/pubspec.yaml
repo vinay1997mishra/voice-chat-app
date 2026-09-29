@@ -22,6 +22,9 @@ dependencies:
   share_plus: ^13.3.0
   livekit_client: ^2.13.0
   just_audio: ^0.10.5
+  video_player: ^2.14.0
+  flutter_svga: ^0.0.13
+  pag: ^1.0.7
 
 dev_dependencies:
   flutter_test:
