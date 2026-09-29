@@ -2989,8 +2989,17 @@ export class AppDirectoryStore extends DurableObject {
         unitPrice = builtIn.price;
       }
     }
-    if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 1) {
+    if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 0) {
       throw new Error("Gift is unavailable");
+    }
+    if (catalogRow) {
+      let giftData = {};
+      try { giftData = JSON.parse(String(catalogRow.data_json || "{}")); } catch {}
+      const now = Date.now();
+      if ((giftData.starts_at && Number(giftData.starts_at) > now) ||
+          (giftData.ends_at && Number(giftData.ends_at) <= now)) {
+        throw new Error("Gift is unavailable");
+      }
     }
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
     const room = this._roomRow(roomId);
@@ -3001,22 +3010,27 @@ export class AppDirectoryStore extends DurableObject {
     }
     const wallet = this.getWallet(senderId);
     if (wallet.banned) throw new Error("Wallet is unavailable");
-    const totalCost = unitPrice * quantity * receivers.length;
-    if (!Number.isSafeInteger(totalCost) || totalCost <= 0 || wallet.coins < totalCost) throw new Error("Insufficient coins");
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const chargedUnitPrice = freeIds.includes(senderId) ? 0 : unitPrice;
+    const totalCost = chargedUnitPrice * quantity * receivers.length;
+    if (!Number.isSafeInteger(totalCost) || totalCost < 0 || wallet.coins < totalCost) throw new Error("Insufficient coins");
     const now = Date.now();
-    this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCost, now, senderId);
-    this._recordRoomGiftSending(room, totalCost, now);
+    if (totalCost > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCost, now, senderId);
+      this._recordRoomGiftSending(room, totalCost, now);
+    }
     const transactions = [];
     for (const receiverId of receivers) {
       const id = "gift-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 10);
-      const receiverTotal = unitPrice * quantity;
+      const receiverTotal = chargedUnitPrice * quantity;
       this.ctx.storage.sql.exec(
         `INSERT INTO gift_transactions
           (id, room_id, sender_id, receiver_id, gift_id, gift_name, quantity, unit_price, total_cost, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, roomId, senderId, receiverId, giftId, giftName, quantity, unitPrice, receiverTotal, now,
+        id, roomId, senderId, receiverId, giftId, giftName, quantity, chargedUnitPrice, receiverTotal, now,
       );
-      transactions.push({ id, room_id: roomId, sender_id: senderId, receiver_id: receiverId, gift_id: giftId, gift_name: giftName, quantity, unit_price: unitPrice, total_cost: receiverTotal, created_at: now });
+      transactions.push({ id, room_id: roomId, sender_id: senderId, receiver_id: receiverId, gift_id: giftId, gift_name: giftName, quantity, unit_price: chargedUnitPrice, total_cost: receiverTotal, created_at: now });
     }
     return { ok: true, total_cost: totalCost, wallet: this.getWallet(senderId), transactions };
   }
@@ -3381,7 +3395,10 @@ export class AppDirectoryStore extends DurableObject {
     const item = this.ownerCatalog("vip").find((value) => value.id === vipId && value.enabled !== false);
     if (!item) throw new Error("VIP level is unavailable");
     const level = Math.max(1, Number(item.data?.level || 0));
-    const price = Math.max(0, Number(item.data?.price || 0));
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const configuredPrice = Math.max(0, Number(item.data?.price ?? item.data?.coin_price ?? policies.vip_default_coins ?? 0));
+    const price = freeIds.includes(userId) ? 0 : configuredPrice;
     const durationDays = Math.max(0, Number(item.data?.duration_days || item.data?.duration || 30));
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
