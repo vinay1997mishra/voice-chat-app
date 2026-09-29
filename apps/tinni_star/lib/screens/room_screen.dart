@@ -2302,12 +2302,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showRoomMusic() {
+  Future<void> _showRoomMusic() async {
     final account = widget.state.auth.current;
     if (account == null) {
       _snack('Please sign in to use room music.');
       return;
     }
+    await widget.state.ktv.loadLocalSongs();
+    if (!mounted) return;
 
     showModalBottomSheet<void>(
       context: context,
@@ -2417,7 +2419,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             _snack('This audio file could not be opened.');
                             return;
                           }
-                          final song = widget.state.ktv.addLocalSong(
+                          final song = await widget.state.ktv.importLocalSong(
                             fileName: file.name,
                             sourcePath: path,
                           );
@@ -2545,8 +2547,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                                   !sheetContext.mounted) {
                                                 return;
                                               }
-                                              final removed = widget.state.ktv
-                                                  .removeLocalSong(song.id);
+                                              final removed = await widget.state.ktv
+                                                  .removeLocalSongAndFile(song.id);
                                               if (removed) {
                                                 setSheetState(() {});
                                                 _snack(
