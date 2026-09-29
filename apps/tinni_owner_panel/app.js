@@ -265,6 +265,7 @@ const staffPermissionGroups = [
       ["policies.view", "View policies / economy"],
       ["policies.create", "Create settings"],
       ["policies.edit", "Edit targets / commissions / rules"],
+      ["policies.pricing", "Change call/theme/frame/VIP coin rates and free rules"],
     ],
   },
   {
@@ -315,6 +316,7 @@ const actionPermission = {
   "policy-new": "policies.create",
   "policy-set": "policies.edit",
   "feature-set": "policies.edit",
+  "pricing-set": "policies.pricing",
   // Catalog permissions are resolved from the item's kind at click time.
   "catalog-toggle": "roles.manage",
   "catalog-edit": "roles.manage",
@@ -1147,9 +1149,10 @@ function openAction(action, preset = {}) {
     "room-name": ["Change Room Name", field("room_id","Room ID") + field("room_name","New room name")],
     "room-dp": ["Change Room DP", field("room_id","Room ID") + field("asset_url","DP asset URL")],
     "room-bg": ["Room Background", field("room_id","Room ID") + field("asset_url","Background asset URL")],
-    "room-theme-new": ["Add Free Room Theme",
+    "room-theme-new": ["Add Room Theme",
       field("name","Theme name") +
       field("asset","Theme image HTTPS URL") +
+      field("price_coins","Coin price (0 = free)","number","0") +
       selectField("duration_mode","Duration",[["scheduled","Set Date & Time"],["permanent","Permanent"]]) +
       field("starts_at","Start date/time (blank = now)","datetime-local") +
       field("ends_at","End date/time","datetime-local")
@@ -1209,6 +1212,15 @@ function openAction(action, preset = {}) {
       field("user_id","User ID (blank = all users)","text","",false)
     ],
     "policy-new": ["Create New Setting", field("key","Setting key") + field("value","Value")],
+    "pricing-set": ["Call / Theme / Frame / VIP Pricing",
+      field("direct_call_coins","Direct call coins/min","number","400000") +
+      field("random_call_coins","Random call coins/min","number","500000") +
+      field("receiver_percent","Verified receiver diamond %","number","80") +
+      field("room_theme_coins","Default room theme coins (0 = free)","number","10000000") +
+      field("frame_default_coins","Default frame coins (0 = free)","number","0") +
+      field("vip_default_coins","Default VIP coins (0 = free)","number","0") +
+      field("free_user_ids","Free user IDs (comma separated)","text","",false)
+    ],
   };
 
   const item = maps[action] || [pretty(action), field("target_id","Target user / room ID") + field("reason","Reason / details")];
@@ -1482,6 +1494,16 @@ async function handleAction(action, data) {
       throw new Error("Enter valid minimum and maximum bet limits.");
     }
   }
+  if (action === "pricing-set") {
+    payload.direct_call_coins = Math.max(0, Number(data.direct_call_coins || 0));
+    payload.random_call_coins = Math.max(0, Number(data.random_call_coins || 0));
+    payload.receiver_percent = Math.max(0, Math.min(100, Number(data.receiver_percent || 0)));
+    payload.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
+    payload.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
+    payload.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
+    payload.free_user_ids = String(data.free_user_ids || "").split(",").map(v => v.trim()).filter(Boolean);
+  }
+  if (action === "room-theme-new") payload.price_coins = Math.max(0, Number(data.price_coins || 0));
   if (action === "policy-new" && !String(data.key || "").trim()) {
     throw new Error("Setting key is required.");
   }
