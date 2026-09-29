@@ -5,7 +5,6 @@ import '../auth/auth_persistence.dart';
 import '../background/session_lifecycle.dart';
 import '../background/room_foreground_service.dart';
 import '../background/room_permission_bridge.dart';
-import '../billing/billing_adapter.dart';
 import '../calls/call_service.dart';
 import '../community/family_features.dart';
 import '../community/family_service.dart';
@@ -18,7 +17,6 @@ import '../discovery/discovery_service.dart';
 import '../dynamic/dynamic_feed.dart';
 import '../economy/economy.dart';
 import '../economy/entitlement_service.dart';
-import '../economy/recharge_service.dart';
 import '../economy/gift_features.dart';
 import '../effects/effect_queue.dart';
 import '../effects/effect_players.dart';
@@ -77,7 +75,6 @@ class TinniState {
         roomForegroundService = const RoomForegroundServiceBridge(),
         roomPermissions = const RoomPermissionBridge(),
         sharing = ShareService(),
-        billing = LocalBillingAdapter(),
         cpFeatures = CpFeatureService(),
         parties = PartyService(),
         push = LocalPushAdapter(),
@@ -91,7 +88,6 @@ class TinniState {
         ),
         roomPresence = RoomPresenceService() {
     gifts = GiftService(wallet);
-    recharge = RechargeService(wallet);
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
     ktvFeatures = KtvFeatureService(ktv);
@@ -143,7 +139,6 @@ class TinniState {
   }
   final WalletService wallet;
   late final GiftService gifts;
-  late final RechargeService recharge;
   late final InventoryService inventory;
   final AuthService auth;
   AuthPersistence? authPersistence;
@@ -183,7 +178,6 @@ class TinniState {
   final RoomForegroundServiceBridge roomForegroundService;
   final RoomPermissionBridge roomPermissions;
   final ShareService sharing;
-  final BillingAdapter billing;
   final CpFeatureService cpFeatures;
   final PartyService parties;
   final PushAdapter push;
