@@ -298,6 +298,7 @@ const actionPermission = {
   "wallet-seller": "wallets.seller",
   "wallet-merchant": "wallets.merchant",
   "treasury-send": "wallets.treasury_send",
+  "wallet-security-unfreeze": "__owner_only__",
   "bd-activate": "hierarchy.bd_manage",
   "agency-activate": "hierarchy.agency_manage",
   "agency-to-bd": "hierarchy.agency_bd_link",
@@ -1144,6 +1145,10 @@ function openAction(action, preset = {}) {
       field("user_id","Receiver user ID","text","10000001") +
       field("amount","Coin amount","number","2000000") +
       selectField("wallet_type","Receiver wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
+    ],
+    "wallet-security-unfreeze": ["Owner Security Unfreeze",
+      field("user_id","User ID","text","10000001") +
+      selectField("wallet_type","Wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
     "user-search": ["Search User", field("user_id","Current or old user ID","text","10000001")],
     "user-ban": ["ID Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban"],["unban","Unban"]]) + field("reason","Reason")],
