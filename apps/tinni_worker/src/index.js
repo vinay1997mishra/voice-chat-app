@@ -1829,6 +1829,30 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to apply recharge") }, 400); }
     }
 
+    if (url.pathname === "/unique-ids/catalog" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const rows = getAppDirectoryStore(env).ctx.storage.sql.exec(
+        "SELECT public_id,price_coins,duration_days,assigned_user_id,enabled,updated_at FROM owner_unique_ids WHERE enabled = 1 ORDER BY LENGTH(public_id), public_id"
+      ).toArray();
+      return json({ ok: true, unique_ids: rows.map((row) => ({
+        public_id: String(row.public_id), price_coins: Number(row.price_coins || 0),
+        duration_days: Number(row.duration_days || 0), permanent: Number(row.duration_days || 0) === 0,
+        available: !row.assigned_user_id, updated_at: Number(row.updated_at || 0),
+      })) });
+    }
+
+    if (url.pathname === "/unique-ids/purchase" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).purchaseUniqueId(appSession.user.user_id, body.public_id));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to purchase unique ID") }, 400);
+      }
+    }
+
     if (url.pathname === "/frames/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
