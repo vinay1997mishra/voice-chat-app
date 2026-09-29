@@ -724,6 +724,36 @@ export class AppDirectoryStore extends DurableObject {
         PRIMARY KEY(user_id, role)
       );
 
+      CREATE TABLE IF NOT EXISTS hierarchy_period_earnings (
+        period_key TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        eligible_coins INTEGER NOT NULL DEFAULT 0,
+        credited_usd_cents INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(period_key, user_id, role)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hierarchy_period_role
+        ON hierarchy_period_earnings(period_key, role, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS settlement_balances (
+        user_id TEXT PRIMARY KEY,
+        usd_cents INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS settlement_transfers (
+        id TEXT PRIMARY KEY,
+        sender_user_id TEXT NOT NULL,
+        recipient_user_id TEXT NOT NULL,
+        recipient_role TEXT NOT NULL,
+        usd_cents INTEGER NOT NULL,
+        diamonds_debited INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_settlement_transfers_sender
+        ON settlement_transfers(sender_user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS owner_room_controls (
         room_id TEXT PRIMARY KEY,
         banned INTEGER NOT NULL DEFAULT 0,
@@ -841,7 +871,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at)
-       SELECT user_id, 2000000, 17125, ? FROM app_users`,
+       SELECT user_id, 2000000, 0, ? FROM app_users`,
       Date.now(),
     );
     this.ctx.storage.sql.exec(
@@ -1222,10 +1252,10 @@ export class AppDirectoryStore extends DurableObject {
       vehicle_entries: true, frames: true,
     };
     const defaultPolicies = {
-      coins_per_usd: 2000000, diamonds_per_coin: 1,
+      coins_per_usd: 2000000, diamonds_per_coin: 1, diamond_usd_reference_diamonds: 4000000, diamond_usd_reference_cents: 170,
       room_online_exp_per_minute: 50, room_online_daily_minutes_cap: 480,
-      host_first_target_received_coins: 4000000, host_first_target_usd: 1.6,
-      agency_commission_percent: 20, bd_target_1_usd: 500,
+      host_first_target_received_coins: 4000000, host_first_target_usd: 1.7,
+      agency_commission_percent: 10, bd_target_1_usd: 500,
       bd_target_1_percent: 7, bd_target_2_usd: 1000,
       bd_target_2_percent: 10, minimum_transfer_usd: 2,
       direct_call_coins: 400000, random_call_coins: 500000, receiver_percent: 80,
@@ -1484,10 +1514,54 @@ export class AppDirectoryStore extends DurableObject {
     const role = String(roleValue || "").trim().toLowerCase();
     if (!userId || !role) throw new Error("User ID and role are required");
     const exists = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
+      "SELECT user_id, country_code FROM app_users WHERE user_id = ? LIMIT 1", userId,
     ).toArray()[0];
     if (!exists) throw new Error("User not found");
-    const parent = parentValue ? this._resolveOwnerUserId(parentValue) : null;
+    const active = activeValue !== false;
+    let parent = parentValue ? this._resolveOwnerUserId(parentValue) : null;
+
+    if (role === "agency" && active) {
+      // Agency Owner is always a Host of their own Agency.
+      parent = parent || null;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO owner_hierarchy
+          (user_id, role, parent_user_id, active, data_json, updated_at)
+         VALUES (?, 'host', ?, 1, ?, ?)
+         ON CONFLICT(user_id, role) DO UPDATE SET
+           parent_user_id=excluded.parent_user_id, active=1,
+           data_json=excluded.data_json, updated_at=excluded.updated_at`,
+        userId, userId, JSON.stringify({ agency_owner_host: true }), Date.now(),
+      );
+    }
+
+    if (role === "host" && active) {
+      if (!parent) throw new Error("Host must belong to an Agency");
+      const agency = this.ctx.storage.sql.exec(
+        "SELECT active FROM owner_hierarchy WHERE user_id = ? AND role = 'agency' LIMIT 1",
+        parent,
+      ).toArray()[0];
+      if (!agency || Number(agency.active || 0) !== 1) {
+        throw new Error("Active Agency is required");
+      }
+      const ownsAgency = this.ctx.storage.sql.exec(
+        "SELECT active FROM owner_hierarchy WHERE user_id = ? AND role = 'agency' LIMIT 1",
+        userId,
+      ).toArray()[0];
+      if (ownsAgency && Number(ownsAgency.active || 0) === 1 && parent !== userId) {
+        throw new Error("Agency Owner can only be Host of their own Agency");
+      }
+      const hostUser = this.ctx.storage.sql.exec(
+        "SELECT country_code FROM app_users WHERE user_id = ? LIMIT 1", userId,
+      ).toArray()[0];
+      const agencyUser = this.ctx.storage.sql.exec(
+        "SELECT country_code FROM app_users WHERE user_id = ? LIMIT 1", parent,
+      ).toArray()[0];
+      if (String(hostUser?.country_code || "").toUpperCase() !==
+          String(agencyUser?.country_code || "").toUpperCase()) {
+        throw new Error("Host and Agency must be from the same country");
+      }
+    }
+
     this.ctx.storage.sql.exec(
       `INSERT INTO owner_hierarchy
         (user_id, role, parent_user_id, active, data_json, updated_at)
@@ -1495,11 +1569,133 @@ export class AppDirectoryStore extends DurableObject {
        ON CONFLICT(user_id, role) DO UPDATE SET
          parent_user_id = excluded.parent_user_id, active = excluded.active,
          data_json = excluded.data_json, updated_at = excluded.updated_at`,
-      userId, role, parent, activeValue === false ? 0 : 1,
+      userId, role, parent, active ? 1 : 0,
       JSON.stringify(dataValue && typeof dataValue === "object" ? dataValue : {}),
       Date.now(),
     );
-    return { user_id: userId, role, parent_user_id: parent, active: activeValue !== false };
+
+    if (role === "agency" && !active) {
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_hierarchy SET active = 0, updated_at = ? WHERE user_id = ? AND role = 'host' AND parent_user_id = ?",
+        Date.now(), userId, userId,
+      );
+    }
+    return { user_id: userId, role, parent_user_id: parent, active };
+  }
+
+  _activeHierarchy(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT user_id,role,parent_user_id,updated_at FROM owner_hierarchy WHERE user_id = ? AND active = 1 ORDER BY updated_at DESC",
+      userId,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id), role: String(row.role),
+      parent_user_id: row.parent_user_id ? String(row.parent_user_id) : null,
+      activated_at: Number(row.updated_at || 0),
+    }));
+  }
+
+  _isActiveHost(userIdValue) {
+    return this._activeHierarchy(userIdValue).some((row) => row.role === "host");
+  }
+
+  _periodKey(nowValue = Date.now()) {
+    const d = new Date(Number(nowValue || Date.now()));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const half = d.getUTCDate() <= 15 ? "H1" : "H2";
+    return y + "-" + m + "-" + half;
+  }
+
+  _ensureSettlementBalance(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO settlement_balances (user_id,usd_cents,updated_at) VALUES (?,0,?)",
+      userId, now,
+    );
+    return this.ctx.storage.sql.exec(
+      "SELECT usd_cents,updated_at FROM settlement_balances WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+  }
+
+  _creditSettlement(userIdValue, usdCentsValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const cents = Math.max(0, Math.floor(Number(usdCentsValue || 0)));
+    if (!userId || cents <= 0) return;
+    this._ensureSettlementBalance(userId);
+    this.ctx.storage.sql.exec(
+      "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
+      cents, Date.now(), userId,
+    );
+  }
+
+  _recordHostEligibleGift(hostUserIdValue, receivedCoinsValue, nowValue = Date.now()) {
+    const hostUserId = this._resolveOwnerUserId(hostUserIdValue);
+    const receivedCoins = Math.max(0, Math.floor(Number(receivedCoinsValue || 0)));
+    if (!hostUserId || receivedCoins <= 0 || !this._isActiveHost(hostUserId)) return;
+    const hostRole = this._activeHierarchy(hostUserId).find((row) => row.role === "host");
+    const agencyId = hostRole?.parent_user_id;
+    if (!agencyId) return;
+    const period = this._periodKey(nowValue);
+    const now = Number(nowValue || Date.now());
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO hierarchy_period_earnings(period_key,user_id,role,eligible_coins,credited_usd_cents,updated_at)
+       VALUES (?,?,'host',?,0,?)
+       ON CONFLICT(period_key,user_id,role) DO UPDATE SET
+         eligible_coins=eligible_coins+excluded.eligible_coins,updated_at=excluded.updated_at`,
+      period, hostUserId, receivedCoins, now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO hierarchy_period_earnings(period_key,user_id,role,eligible_coins,credited_usd_cents,updated_at)
+       VALUES (?,?,'agency',?,0,?)
+       ON CONFLICT(period_key,user_id,role) DO UPDATE SET
+         eligible_coins=eligible_coins+excluded.eligible_coins,updated_at=excluded.updated_at`,
+      period, agencyId, receivedCoins, now,
+    );
+
+    const agencyRow = this.ctx.storage.sql.exec(
+      "SELECT eligible_coins,credited_usd_cents FROM hierarchy_period_earnings WHERE period_key=? AND user_id=? AND role='agency' LIMIT 1",
+      period, agencyId,
+    ).toArray()[0];
+    const agencyGrossCents = Math.floor(Number(agencyRow?.eligible_coins || 0) * 170 / 4000000);
+    const agencyCommissionCents = Math.floor(agencyGrossCents * 10 / 100);
+    const agencyDelta = Math.max(0, agencyCommissionCents - Number(agencyRow?.credited_usd_cents || 0));
+    if (agencyDelta > 0) {
+      this._creditSettlement(agencyId, agencyDelta);
+      this.ctx.storage.sql.exec(
+        "UPDATE hierarchy_period_earnings SET credited_usd_cents=?,updated_at=? WHERE period_key=? AND user_id=? AND role='agency'",
+        agencyCommissionCents, now, period, agencyId,
+      );
+    }
+
+    const agencyHierarchy = this._activeHierarchy(agencyId).find((row) => row.role === "agency");
+    const bdId = agencyHierarchy?.parent_user_id;
+    if (!bdId) return;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO hierarchy_period_earnings(period_key,user_id,role,eligible_coins,credited_usd_cents,updated_at)
+       VALUES (?,?,'bd',?,0,?)
+       ON CONFLICT(period_key,user_id,role) DO UPDATE SET
+         eligible_coins=eligible_coins+excluded.eligible_coins,updated_at=excluded.updated_at`,
+      period, bdId, receivedCoins, now,
+    );
+    const bdRow = this.ctx.storage.sql.exec(
+      "SELECT eligible_coins,credited_usd_cents FROM hierarchy_period_earnings WHERE period_key=? AND user_id=? AND role='bd' LIMIT 1",
+      period, bdId,
+    ).toArray()[0];
+    const bdGrossCents = Math.floor(Number(bdRow?.eligible_coins || 0) * 170 / 4000000);
+    const bdPercent = bdGrossCents >= 100000 ? 10 : (bdGrossCents >= 50000 ? 7 : 0);
+    const bdCommissionCents = Math.floor(bdGrossCents * bdPercent / 100);
+    const bdDelta = Math.max(0, bdCommissionCents - Number(bdRow?.credited_usd_cents || 0));
+    if (bdDelta > 0) {
+      this._creditSettlement(bdId, bdDelta);
+      this.ctx.storage.sql.exec(
+        "UPDATE hierarchy_period_earnings SET credited_usd_cents=?,updated_at=? WHERE period_key=? AND user_id=? AND role='bd'",
+        bdCommissionCents, now, period, bdId,
+      );
+    }
   }
 
   _changeUserId(oldIdValue, newIdValue) {
@@ -1961,7 +2157,7 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets
         (user_id, coins, diamonds, updated_at)
-       VALUES (?, 2000000, 17125, ?)`,
+       VALUES (?, 2000000, 0, ?)`,
       userId,
       now,
     );
@@ -3121,6 +3317,21 @@ export class AppDirectoryStore extends DurableObject {
         id, roomId, senderId, receiverId, giftId, giftName, quantity, chargedUnitPrice, receiverTotal, now,
       );
       transactions.push({ id, room_id: roomId, sender_id: senderId, receiver_id: receiverId, gift_id: giftId, gift_name: giftName, quantity, unit_price: chargedUnitPrice, total_cost: receiverTotal, created_at: now });
+      if (receiverTotal > 0 && this._isActiveHost(receiverId)) {
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
+          receiverId, now,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
+          receiverTotal, now, receiverId,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?,?)",
+          "wallet-" + crypto.randomUUID(), receiverId, receiverTotal, id, "Host gift: " + giftName, now,
+        );
+        this._recordHostEligibleGift(receiverId, receiverTotal, now);
+      }
     }
     return { ok: true, total_cost: totalCost, wallet: this.getWallet(senderId), transactions };
   }
@@ -3520,7 +3731,7 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets
         (user_id, coins, diamonds, banned, updated_at)
-       VALUES (?, 2000000, 17125, 0, ?)`,
+       VALUES (?, 2000000, 0, 0, ?)`,
       userId,
       now,
     );
@@ -3528,13 +3739,125 @@ export class AppDirectoryStore extends DurableObject {
       "SELECT user_id, coins, diamonds, banned, updated_at FROM app_wallets WHERE user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
+    const roles = this._activeHierarchy(userId);
+    const isHost = roles.some((item) => item.role === "host");
+    const isAgency = roles.some((item) => item.role === "agency");
+    const isBd = roles.some((item) => item.role === "bd");
+    const storedDiamonds = Number(row?.diamonds || 0);
+    const visibleDiamonds = isHost ? storedDiamonds : 0;
+    const diamondUsdCents = isHost ? Math.floor(visibleDiamonds * 170 / 4000000) : 0;
+    const settlement = this._ensureSettlementBalance(userId);
+    const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
+    const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
     return {
       user_id: userId,
       coins: Number(row?.coins || 0),
-      diamonds: Number(row?.diamonds || 0),
+      diamonds: visibleDiamonds,
+      diamond_wallet_visible: isHost,
+      is_host: isHost,
+      is_agency: isAgency,
+      is_bd: isBd,
+      diamond_usd_cents: diamondUsdCents,
+      commission_usd_cents: commissionUsdCents,
+      withdrawable_usd_cents: withdrawableUsdCents,
+      can_transfer_settlement: (isHost || isAgency || isBd) && withdrawableUsdCents >= 200,
+      usd_rate: { reference_diamonds: 4000000, reference_usd_cents: 170 },
+      roles,
       banned: Number(row?.banned || 0) === 1,
       updated_at: Number(row?.updated_at || now),
     };
+  }
+
+  settlementRecipient(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("Recipient ID is required");
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const roleRow = this.ctx.storage.sql.exec(
+      "SELECT wallet_type FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') AND banned=0 ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!roleRow) throw new Error("Recipient must be an active Coin Seller or Merchant");
+    return {
+      user_id: String(user.user_id),
+      display_name: String(user.display_name || user.user_id),
+      avatar_data_url: user.avatar_data_url ? String(user.avatar_data_url) : null,
+      role: String(roleRow.wallet_type),
+    };
+  }
+
+  transferSettlement(senderUserIdValue, recipientUserIdValue, usdCentsValue) {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const recipient = this.settlementRecipient(recipientUserIdValue);
+    const usdCents = Math.floor(Number(usdCentsValue || 0));
+    if (usdCents < 200) throw new Error("Minimum transfer is $2");
+    if (senderId === recipient.user_id) throw new Error("Cannot transfer to your own account");
+
+    const wallet = this.getWallet(senderId);
+    if (!(wallet.is_host || wallet.is_agency || wallet.is_bd)) {
+      throw new Error("Only Host, Agency or BD settlement can be transferred");
+    }
+    if (wallet.withdrawable_usd_cents < usdCents) {
+      throw new Error("Settlement balance is not enough");
+    }
+
+    let remaining = usdCents;
+    let diamondsDebited = 0;
+    const commissionRow = this._ensureSettlementBalance(senderId);
+    const commissionCents = Number(commissionRow?.usd_cents || 0);
+    const commissionDebit = Math.min(remaining, commissionCents);
+    if (commissionDebit > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE settlement_balances SET usd_cents=usd_cents-?,updated_at=? WHERE user_id=?",
+        commissionDebit, Date.now(), senderId,
+      );
+      remaining -= commissionDebit;
+    }
+    if (remaining > 0) {
+      if (!wallet.is_host) throw new Error("Settlement balance is not enough");
+      diamondsDebited = Math.ceil(remaining * 4000000 / 170);
+      if (diamondsDebited > wallet.diamonds) throw new Error("Diamond balance is not enough");
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET diamonds=diamonds-?,updated_at=? WHERE user_id=?",
+        diamondsDebited, Date.now(), senderId,
+      );
+    }
+
+    this._ensureSettlementBalance(recipient.user_id);
+    this.ctx.storage.sql.exec(
+      "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
+      usdCents, Date.now(), recipient.user_id,
+    );
+    const id = "settle-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO settlement_transfers(id,sender_user_id,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?)",
+      id, senderId, recipient.user_id, recipient.role, usdCents, diamondsDebited, now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'settlement_transfer',0,?,?,?,?,?)",
+      "wallet-" + crypto.randomUUID(), senderId, -diamondsDebited, id,
+      "Transferred $" + (usdCents / 100).toFixed(2) + " to " + recipient.user_id, now,
+    );
+    return { ok: true, transfer_id: id, recipient, usd_cents: usdCents, diamonds_debited: diamondsDebited, wallet: this.getWallet(senderId) };
+  }
+
+  settlementTransfers(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM settlement_transfers WHERE sender_user_id=? ORDER BY created_at DESC LIMIT 200",
+      userId,
+    ).toArray().map((row) => ({
+      id: String(row.id), sender_user_id: String(row.sender_user_id),
+      recipient_user_id: String(row.recipient_user_id),
+      recipient_role: String(row.recipient_role),
+      usd_cents: Number(row.usd_cents || 0),
+      diamonds_debited: Number(row.diamonds_debited || 0),
+      created_at: Number(row.created_at || 0),
+    }));
   }
 
   callVerificationStatus(userIdValue) {
