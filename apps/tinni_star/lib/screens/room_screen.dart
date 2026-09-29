@@ -2302,14 +2302,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _showRoomMusic() async {
+  void _showRoomMusic() {
     final account = widget.state.auth.current;
     if (account == null) {
       _snack('Please sign in to use room music.');
       return;
     }
-    await widget.state.ktv.loadLocalSongs();
-    if (!mounted) return;
+    unawaited(widget.state.ktv.loadLocalSongs());
 
     showModalBottomSheet<void>(
       context: context,
