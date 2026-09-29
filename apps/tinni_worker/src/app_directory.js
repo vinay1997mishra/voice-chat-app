@@ -383,6 +383,16 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_user_notifications_user_time
         ON user_notifications(user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS event_notification_dispatches (
+        event_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        dispatched_at INTEGER NOT NULL,
+        PRIMARY KEY(event_id, phase, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_event_notification_dispatches_user_time
+        ON event_notification_dispatches(user_id, dispatched_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_calls (
         id TEXT PRIMARY KEY,
         caller_id TEXT NOT NULL,
@@ -3299,7 +3309,12 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     const gifts = this.settleRoomGiftOwnerShares(now);
     const uniqueIdsReleased = this.settleExpiredUniqueIds(now);
-    return { ...gifts, unique_ids_released: uniqueIdsReleased };
+    const eventNotifications = this.dispatchEventNotifications(now);
+    return {
+      ...gifts,
+      unique_ids_released: uniqueIdsReleased,
+      event_notifications_sent: Number(eventNotifications?.sent || 0),
+    };
   }
 
   _recordSecurityEvent(userIdValue, actionKeyValue, reasonValue, metadata = {}) {
@@ -5285,7 +5300,108 @@ export class AppDirectoryStore extends DurableObject {
     return { id, user_id: userId, type, title, message, created_at: now };
   }
 
+  dispatchEventNotifications(nowValue = Date.now()) {
+    const now = Number(nowValue || Date.now());
+    const eventRows = this.ctx.storage.sql.exec(
+      `SELECT id,kind,name,data_json,created_at,updated_at
+         FROM owner_catalog
+        WHERE enabled = 1
+          AND kind IN ('event','activity','reward_event')
+        ORDER BY created_at DESC
+        LIMIT 200`,
+    ).toArray();
+    if (!eventRows.length) return { ok: true, sent: 0 };
+
+    const users = this.ctx.storage.sql.exec(
+      "SELECT user_id,country_code FROM app_users ORDER BY created_at DESC",
+    ).toArray();
+    const dayStart = now - 24 * 60 * 60 * 1000;
+    let sent = 0;
+
+    for (const row of eventRows) {
+      let data = {};
+      try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
+      const startsAt = Number(data.starts_at || data.start_at || 0);
+      const endsAt = Number(data.ends_at || data.end_at || 0);
+      const createdAt = Number(row.created_at || 0);
+      const isReward = String(row.kind) === "reward_event";
+      const phases = [];
+
+      if (createdAt > 0 && createdAt <= now && now - createdAt <= 24 * 60 * 60 * 1000) {
+        phases.push(["new", createdAt]);
+      }
+      if (startsAt > 0 && startsAt <= now && now - startsAt <= 24 * 60 * 60 * 1000) {
+        phases.push(["start", startsAt]);
+      }
+      if (endsAt > 0 && endsAt <= now && now - endsAt <= 24 * 60 * 60 * 1000) {
+        phases.push(["end", endsAt]);
+      }
+      if (!phases.length) continue;
+
+      const targetedCountries = Array.isArray(data.countries)
+        ? new Set(data.countries.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean))
+        : new Set();
+      const title = cleanText(row.name, 120) || (isReward ? "Reward event" : "Tinni Star event");
+
+      for (const [phase] of phases) {
+        for (const user of users) {
+          const userId = String(user.user_id || "");
+          const country = String(user.country_code || "").toUpperCase();
+          if (!userId) continue;
+          if (targetedCountries.size && !targetedCountries.has(country)) continue;
+
+          const already = this.ctx.storage.sql.exec(
+            "SELECT event_id FROM event_notification_dispatches WHERE event_id=? AND phase=? AND user_id=? LIMIT 1",
+            String(row.id), phase, userId,
+          ).toArray()[0];
+          if (already) continue;
+
+          const countRow = this.ctx.storage.sql.exec(
+            `SELECT COUNT(*) AS count
+               FROM user_notifications
+              WHERE user_id=?
+                AND created_at>=?
+                AND type IN ('event_new','event_start','event_end','reward_new','reward_start','reward_end')`,
+            userId, dayStart,
+          ).toArray()[0];
+          if (Number(countRow?.count || 0) >= 15) continue;
+
+          const type = (isReward ? "reward_" : "event_") + phase;
+          const message = phase === "new"
+            ? title + " is available."
+            : phase === "start"
+              ? title + " has started."
+              : title + " has ended.";
+          const notice = this._notifyUser(
+            userId,
+            type,
+            title,
+            message,
+            {
+              metadata: {
+                event_id: String(row.id),
+                event_kind: String(row.kind),
+                phase,
+                starts_at: startsAt || null,
+                ends_at: endsAt || null,
+              },
+            },
+          );
+          if (!notice) continue;
+          this.ctx.storage.sql.exec(
+            "INSERT OR IGNORE INTO event_notification_dispatches(event_id,phase,user_id,dispatched_at) VALUES (?,?,?,?)",
+            String(row.id), phase, userId, now,
+          );
+          sent += 1;
+        }
+      }
+    }
+
+    return { ok: true, sent };
+  }
+
   listUserNotifications(userIdValue, limitValue = 200) {
+    this.dispatchEventNotifications(Date.now());
     const userId = this._resolveOwnerUserId(userIdValue);
     const limit = Math.max(1, Math.min(300, Number(limitValue || 200)));
     return this.ctx.storage.sql.exec(
