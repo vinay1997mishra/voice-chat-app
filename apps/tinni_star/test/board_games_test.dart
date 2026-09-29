@@ -19,7 +19,7 @@ void main() {
     expect(GameService.catalog, hasLength(7));
     expect(
       GameService.catalog.firstWhere((g) => g.kind == GameKind.ludo).requiresServerAuthority,
-      isFalse,
+      isTrue,
     );
     expect(
       GameService.catalog.firstWhere((g) => g.kind == GameKind.fruitJackpot).requiresServerAuthority,
