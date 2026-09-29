@@ -265,7 +265,7 @@ const staffPermissionGroups = [
       ["policies.view", "View policies / economy"],
       ["policies.create", "Create settings"],
       ["policies.edit", "Edit targets / commissions / rules"],
-      ["policies.pricing", "Change call/theme/frame/VIP coin rates and free rules"],
+      ["policies.pricing", "Change all coin purchase rates, gifts, unique IDs and free rules"],
     ],
   },
   {
@@ -1219,6 +1219,7 @@ function openAction(action, preset = {}) {
       field("room_theme_coins","Default room theme coins (0 = free)","number","10000000") +
       field("frame_default_coins","Default frame coins (0 = free)","number","0") +
       field("vip_default_coins","Default VIP coins (0 = free)","number","0") +
+      field("unique_id_purchase_coins","Unique ID purchase coins (0 = free)","number","0") +
       field("free_user_ids","Free user IDs (comma separated)","text","",false)
     ],
   };
@@ -1501,6 +1502,7 @@ async function handleAction(action, data) {
     payload.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
     payload.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
     payload.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
+    payload.unique_id_purchase_coins = Math.max(0, Number(data.unique_id_purchase_coins || 0));
     payload.free_user_ids = String(data.free_user_ids || "").split(",").map(v => v.trim()).filter(Boolean);
   }
   if (action === "room-theme-new") payload.price_coins = Math.max(0, Number(data.price_coins || 0));
