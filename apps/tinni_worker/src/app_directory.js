@@ -2944,11 +2944,18 @@ export class AppDirectoryStore extends DurableObject {
     if (!userId || !targetId || userId === targetId) throw new Error("Choose another user for CP");
     if (!this.getUserById(targetId)) throw new Error("User not found");
     if (this.cpState(userId) || this.cpState(targetId)) throw new Error("A CP flow is already active");
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(policies.cp_connect_coins || 0));
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const pair = [userId, targetId].sort(); const now = Date.now();
-    this.ctx.storage.sql.exec(
-      "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,?)",
-      pair[0], pair[1], userId, now, now,
-    );
+    if (price > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_connect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + targetId, "CP connect", now);
+    }
+    this.ctx.storage.sql.exec("INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,?)", pair[0], pair[1], userId, now, now);
     return this.cpState(userId);
   }
 
@@ -2961,9 +2968,20 @@ export class AppDirectoryStore extends DurableObject {
 
   cpDisconnect(userIdValue) {
     const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
-    if (!row) return { ok: true, cp: null };
+    if (!row) return { ok: true, cp: null, wallet: this.getWallet(userId) };
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(policies.cp_disconnect_coins || 0));
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_disconnect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + row.user_a + ":" + row.user_b, "CP disconnect", now);
+    }
     this.ctx.storage.sql.exec("DELETE FROM cp_relationships WHERE user_a = ? AND user_b = ?", row.user_a, row.user_b);
-    return { ok: true, cp: null };
+    return { ok: true, cp: null, charged_coins: price, wallet: this.getWallet(userId) };
   }
 
   cpUpdate(userIdValue, input = {}) {
