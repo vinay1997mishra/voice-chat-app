@@ -1859,6 +1859,47 @@ export default {
       });
     }
 
+    if (url.pathname === "/wallet/coins/transfer" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).transferCoinsFromSeller(
+          appSession.user.user_id,
+          body.recipient_user_id,
+          body.amount_coins,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to transfer coins") }, 400);
+      }
+    }
+
+    if (url.pathname === "/notifications" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        notifications: await getAppDirectoryStore(env).listUserNotifications(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        ),
+      });
+    }
+
+    if (url.pathname === "/notifications/read" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).markUserNotificationRead(
+          appSession.user.user_id,
+          body.notification_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to mark notification") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet/recharge" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -3259,6 +3300,7 @@ export default {
           const result = await store.join(presenceBody);
           await directory.touchPresence(user.user_id, roomId, result.members?.length || 0);
           await directory.markRecentRoom(user.user_id, roomId);
+          await directory.notifyFollowersOnline(user.user_id, roomId);
           return json(result, 201);
         }
         if (url.pathname.endsWith("/heartbeat")) {
