@@ -17,6 +17,7 @@ class _StoreScreenState extends State<StoreScreen> {
   int tab = 0;
   bool _syncing = false;
   List<StoreItem>? _remoteFrames;
+  List<StoreItem>? _remoteStore;
 
   static const catalog = <StoreItem>[
     StoreItem(id: 'vehicle-star', name: 'Star Vehicle', price: 5000, type: 'Vehicle'),
@@ -64,6 +65,9 @@ class _StoreScreenState extends State<StoreScreen> {
         widget.state.backend.inventory(token),
         widget.state.backend.frameCatalog(token),
         widget.state.backend.wallet(token),
+        widget.state.backend.storeCatalog(token, 'vehicle'),
+        widget.state.backend.storeCatalog(token, 'entry'),
+        widget.state.backend.storeCatalog(token, 'profile_card'),
       ]);
       widget.state.inventory.applyRemote(results[0] as Map<String, dynamic>);
       widget.state.wallet.applyRemote(results[2] as RemoteWallet);
@@ -80,6 +84,25 @@ class _StoreScreenState extends State<StoreScreen> {
               (data['coin_price'] as num?)?.toInt() ??
               0,
           type: 'Frame',
+        );
+      }).where((item) => item.id.isNotEmpty).toList(growable: false);
+      final storeRows = <Map<String, dynamic>>[
+        ...(results[3] as List<Map<String, dynamic>>),
+        ...(results[4] as List<Map<String, dynamic>>),
+        ...(results[5] as List<Map<String, dynamic>>),
+      ];
+      _remoteStore = storeRows.map((row) {
+        final kind = row['kind']?.toString() ?? '';
+        final type = kind == 'profile_card'
+            ? 'Profile Card'
+            : kind == 'entry'
+                ? 'Entry'
+                : 'Vehicle';
+        return StoreItem(
+          id: row['id']?.toString() ?? '',
+          name: row['name']?.toString() ?? type,
+          price: (row['price_coins'] as num?)?.toInt() ?? 0,
+          type: type,
         );
       }).where((item) => item.id.isNotEmpty).toList(growable: false);
     } catch (_) {
@@ -141,9 +164,17 @@ class _StoreScreenState extends State<StoreScreen> {
   Future<void> _buy(StoreItem item) async {
     var bought = false;
     final token = _token;
-    if (item.type == 'Frame' && token != null && token.isNotEmpty) {
+    if (token != null && token.isNotEmpty) {
       try {
-        final result = await widget.state.backend.purchaseFrame(token, item.id);
+        final Map<String, dynamic> result;
+        if (item.type == 'Frame') {
+          result = await widget.state.backend.purchaseFrame(token, item.id);
+        } else {
+          final kind = item.type == 'Profile Card'
+              ? 'profile_card'
+              : item.type.toLowerCase();
+          result = await widget.state.backend.purchaseStoreItem(token, kind, item.id);
+        }
         widget.state.inventory.applyRemote(
           Map<String, dynamic>.from(result['inventory'] as Map),
         );
@@ -156,8 +187,6 @@ class _StoreScreenState extends State<StoreScreen> {
         ));
         bought = widget.state.inventory.owned.contains(item.id);
       } catch (_) {}
-    } else {
-      bought = widget.state.inventory.purchase(item);
     }
     if (bought && item.type == 'Vehicle') {
       widget.state.identity.addVehicle(item.id);
@@ -179,12 +208,13 @@ class _StoreScreenState extends State<StoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dynamicCatalog = _remoteFrames == null || _remoteFrames!.isEmpty
-        ? catalog
-        : <StoreItem>[
-            ...catalog.where((item) => item.type != 'Frame'),
-            ..._remoteFrames!,
-          ];
+    final dynamicCatalog = <StoreItem>[
+      if (_remoteStore != null) ..._remoteStore!,
+      if (_remoteFrames != null && _remoteFrames!.isNotEmpty)
+        ..._remoteFrames!
+      else
+        ...catalog.where((item) => item.type == 'Frame'),
+    ];
     final owned = dynamicCatalog
         .where((item) => widget.state.inventory.owned.contains(item.id))
         .toList(growable: false);
