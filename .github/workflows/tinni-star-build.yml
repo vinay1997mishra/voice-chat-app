@@ -92,6 +92,17 @@ jobs:
           s = p.read_text()
           if "namespace " not in s:
               s = s.replace("android {", "android {\n    namespace 'org.libpag.pag'", 1)
+          if "compileOptions {" not in s:
+              s = s.replace("android {", """android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }""", 1)
+          if "kotlinOptions {" not in s:
+              s = s.replace("android {", """android {
+    kotlinOptions {
+        jvmTarget = '17'
+    }""", 1)
           p.write_text(s)
           PY
           grep -n -E 'mavenCentral\(\)|namespace' "$PAG_GRADLE"
