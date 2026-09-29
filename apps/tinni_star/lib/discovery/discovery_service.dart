@@ -490,6 +490,8 @@ class DiscoveryService {
     required String name,
     required String asset,
     required bool policyConfirmed,
+    int durationDays = 7,
+    bool permanent = false,
   }) async {
     if (authToken.trim().isEmpty) {
       throw StateError('Login session is required');
@@ -509,6 +511,8 @@ class DiscoveryService {
         'name': name.trim(),
         'asset': asset,
         'policy_confirmed': policyConfirmed,
+        'duration_days': durationDays,
+        'permanent': permanent,
       }),
     );
 
