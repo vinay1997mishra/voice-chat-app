@@ -40,10 +40,9 @@ Top swipe/tap sections:
 - Recommended rooms
 - Popular/New filters
 - Room cards with room identity and online count
-- By default, users see rooms from their own selected/profile country.
-- Above the Party room list, a country selector lets users temporarily browse another country.
-- The selector shows all supported countries with both flag and country name.
-- After a country is selected, Party shows that country's rooms until the user switches country again.
+- By default, Party shows rooms from the user's selected/profile country.
+- The country selector stays in the **Country** tab, not on the Party page.
+- When the user selects another country from the Country tab, Party switches to that selected country's rooms.
 
 ### Party > Events
 
@@ -195,7 +194,6 @@ Game Center includes:
 
 - **Fruit Jackpot** — continuous timed fruit rounds with 5× / 10× / 20× / 40× multipliers, jackpot display and recent-result history
 - **Ludo** — actual local playable board flow
-- **UNO** — actual local playable card flow
 - Lucky 777
 - Blackjack
 - Gift Draw
@@ -335,7 +333,7 @@ Semantic accents:
 - VIP / Noble: progressive blue → violet → magenta, with higher-level legendary accents.
 - Gifts/custom gifts: purple/magenta; CP gifts pink; crown/dragon/rank gifts amber.
 - Family / seat-success / active mic: emerald green.
-- Games: per-game color — Fruit Jackpot amber, Fruit Party pink, Ludo green, UNO red.
+- Games: per-game color — Fruit Jackpot amber, Fruit Party pink, Ludo green.
 - Music/KTV/messages: cyan/teal.
 - Social/follow/discover: blue.
 - Wallet/coins: warm amber; diamonds: cyan.
