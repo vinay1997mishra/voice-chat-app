@@ -2399,7 +2399,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           IconButton(
                             tooltip: 'Next',
                             onPressed: () {
-                              widget.state.ktv.giveUp();
+                              await widget.state.ktv.playNext();
                               setSheetState(() {});
                             },
                             icon: const Icon(Icons.skip_next_rounded),
@@ -2435,6 +2435,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                           if (widget.state.ktv.current == null) {
                             widget.state.ktv.startNext();
+                            await widget.state.ktv.playCurrent();
                           }
                           setSheetState(() {});
                           _snack(song.title + ' added from phone.');
@@ -2567,11 +2568,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     : const Icon(
                                         Icons.playlist_add_rounded,
                                       ),
-                                onTap: () {
-                                  widget.state.ktv
-                                      .addToQueue(song, account.userId);
+                                onTap: () async {
+                                  widget.state.ktv.addToQueue(song, account.userId);
                                   if (widget.state.ktv.current == null) {
                                     widget.state.ktv.startNext();
+                                    await widget.state.ktv.playCurrent();
                                   }
                                   setSheetState(() {});
                                 },
