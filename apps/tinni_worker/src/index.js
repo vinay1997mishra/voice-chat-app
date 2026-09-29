@@ -1822,6 +1822,43 @@ export default {
       return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id) });
     }
 
+    if (url.pathname === "/wallet/settlement/recipient" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        const recipient = await getAppDirectoryStore(env).settlementRecipient(
+          url.searchParams.get("user_id") || "",
+        );
+        return json({ ok: true, recipient });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Recipient not found") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/settlement/transfer" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).transferSettlement(
+          appSession.user.user_id,
+          body.recipient_user_id,
+          body.usd_cents,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to transfer settlement") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/settlement/transfers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        transfers: await getAppDirectoryStore(env).settlementTransfers(appSession.user.user_id),
+      });
+    }
+
     if (url.pathname === "/wallet/recharge" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
