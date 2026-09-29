@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svga/flutter_svga.dart';
+import 'package:pag/pag.dart';
+import 'package:video_player/video_player.dart';
 
 import 'effect_queue.dart';
 
@@ -60,6 +63,22 @@ class _EffectOverlayState extends State<EffectOverlay> {
         ? effect.asset.split(':').last.replaceAll('_', ' ')
         : effect.asset;
 
+    final lowerAsset = effect.asset.toLowerCase();
+    final isRenderableAsset = lowerAsset.startsWith('https://') &&
+        (lowerAsset.endsWith('.svga') || lowerAsset.endsWith('.pag') ||
+         lowerAsset.endsWith('.mp4') || lowerAsset.endsWith('.gif'));
+    if (isRenderableAsset) {
+      return IgnorePointer(
+        child: Center(
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width * .92,
+            height: MediaQuery.sizeOf(context).height * .52,
+            child: _BinaryEffectView(key: ValueKey(effect.id), asset: effect.asset),
+          ),
+        ),
+      );
+    }
+
     return IgnorePointer(
       child: Center(
         child: TweenAnimationBuilder<double>(
@@ -104,5 +123,66 @@ class _EffectOverlayState extends State<EffectOverlay> {
         ),
       ),
     );
+  }
+}
+
+
+class _BinaryEffectView extends StatefulWidget {
+  const _BinaryEffectView({super.key, required this.asset});
+  final String asset;
+  @override
+  State<_BinaryEffectView> createState() => _BinaryEffectViewState();
+}
+
+class _BinaryEffectViewState extends State<_BinaryEffectView> {
+  VideoPlayerController? _video;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.asset.toLowerCase().endsWith('.mp4')) {
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.asset),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+      _video = controller;
+      controller.initialize().then((_) async {
+        if (!mounted) return;
+        await controller.setLooping(false);
+        await controller.play();
+        if (mounted) setState(() {});
+      }).catchError((_) {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _video?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = widget.asset.toLowerCase();
+    if (lower.endsWith('.gif')) {
+      return Image.network(widget.asset, fit: BoxFit.contain, gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink());
+    }
+    if (lower.endsWith('.svga')) {
+      return SVGAEasyPlayer(resUrl: widget.asset, fit: BoxFit.contain);
+    }
+    if (lower.endsWith('.pag')) {
+      return PAGView.network(widget.asset, autoPlay: true, repeatCount: 1,
+        defaultBuilder: (_) => const SizedBox.shrink());
+    }
+    final video = _video;
+    if (video != null && video.value.isInitialized) {
+      return FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(width: video.value.size.width, height: video.value.size.height,
+          child: VideoPlayer(video)),
+      );
+    }
+    return const Center(child: CircularProgressIndicator());
   }
 }
