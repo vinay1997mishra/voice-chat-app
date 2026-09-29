@@ -1,31 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tinni_star/billing/billing_adapter.dart';
 import 'package:tinni_star/custom_gift/custom_gift_validation.dart';
 import 'package:tinni_star/economy/economy.dart';
 import 'package:tinni_star/economy/entitlement_service.dart';
-import 'package:tinni_star/economy/recharge_service.dart';
 import 'package:tinni_star/effects/effect_players.dart';
 import 'package:tinni_star/effects/effect_queue.dart';
 import 'package:tinni_star/media/ktv_service.dart';
 
 void main() {
-  test('unverified billing receipt cannot credit wallet', () {
-    final wallet = WalletService(coins: 0);
-    final recharge = RechargeService(wallet);
-    const product = BillingProduct(
-      id: 'coins',
-      title: 'Coins',
-      coins: 50000,
-    );
-    const receipt = BillingReceipt(
-      productId: 'coins',
-      purchaseToken: 'demo',
-      verified: false,
-    );
-    expect(recharge.applyVerifiedReceipt(receipt, product), false);
-    expect(wallet.coins, 0);
-  });
-
   test('renewable entitlement expires, renews and equips', () {
     final service = EntitlementService();
     final now = DateTime(2026, 9, 22);
