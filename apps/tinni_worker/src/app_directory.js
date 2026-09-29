@@ -3129,6 +3129,43 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, user: changed, public_id: publicId, price_coins: price, duration_days: durationDays, expires_at: expiresAt, permanent: durationDays === 0, wallet: this.getWallet(publicId) };
   }
 
+  purchasableCatalog(kindValue = "", countryCodeValue = "") {
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    const country = cleanText(countryCodeValue, 8).toUpperCase();
+    const now = Date.now();
+    return this.ownerCatalog(kind).filter((item) => {
+      if (!item.enabled) return false;
+      const data = item.data || {};
+      if (data.starts_at && Number(data.starts_at) > now) return false;
+      if (data.ends_at && Number(data.ends_at) <= now) return false;
+      const countries = Array.isArray(data.countries) ? data.countries.map((v) => String(v).toUpperCase()) : [];
+      return !country || countries.length === 0 || countries.includes(country);
+    }).map((item) => ({ ...item, price_coins: Math.max(0, Number(item.data?.coin_price ?? item.data?.price ?? 0)), duration_days: Math.max(0, Number(item.data?.duration_days ?? 0)) }));
+  }
+
+  purchaseCatalogItem(userIdValue, kindValue, itemIdValue, countryCodeValue = "") {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    if (!["entry","vehicle","profile_card"].includes(kind)) throw new Error("Unsupported purchasable item type");
+    const item = this.purchasableCatalog(kind, countryCodeValue).find((v) => v.id === String(itemIdValue || "").trim());
+    if (!item) throw new Error("Item is unavailable");
+    const existing = this.ctx.storage.sql.exec("SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1", userId, item.id).toArray()[0];
+    if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const price = freeIds.includes(userId) ? 0 : item.price_coins;
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,0,?,?,?)", crypto.randomUUID(), userId, kind + "_purchase", -price, kind + ":" + item.id, item.name, now);
+    }
+    this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at) VALUES (?,?,?,?)", userId, item.id, kind, now);
+    return { ok: true, duplicate: false, price_coins: price, duration_days: item.duration_days, expires_at: item.duration_days > 0 ? now + item.duration_days * 86400000 : null, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+  }
+
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const frameId = String(frameIdValue || "").trim();
@@ -3140,7 +3177,9 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
     const wallet = this.getWallet(userId);
-    const price = Math.max(0, Number(frame.price || 0));
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(frame.price ?? policies.frame_default_coins ?? 0));
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
