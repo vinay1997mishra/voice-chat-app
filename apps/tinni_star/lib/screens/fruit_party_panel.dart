@@ -284,7 +284,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                                   fruit == _movingFruit;
                               final bonus = bonusFruits.contains(fruit);
                               final winner = revealResult &&
-                                  latest?.isLucky11 != true &&
+                                  true &&
                                   latest?.fruit == fruit;
 
                               return _PartyFruitTile(
@@ -373,7 +373,7 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                     ),
                   ),
                   child: Text(
-                    'LUCKY 11 • 3 EXTRA: ${latest!.bonusFruits.map((f) => f.emoji).join('  ')}',
+                    'FRUIT PARTY',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -481,9 +481,9 @@ class _PartyHistoryRail extends StatelessWidget {
                     children: [
                       for (final item in recent)
                         Text(
-                          item.isLucky11 ? '⑪' : item.fruit.emoji,
+                          item.fruit.emoji,
                           style: TextStyle(
-                            fontSize: item.isLucky11 ? 15 : 17,
+                            fontSize: 17,
                             color: item.isLucky11
                                 ? const Color(0xFFFFD54F)
                                 : null,
@@ -1170,9 +1170,9 @@ class _PartyResultStrip extends StatelessWidget {
                     children: [
                       for (final result in recent)
                         Text(
-                          result.isLucky11 ? '⑪' : result.fruit.emoji,
+                          result.fruit.emoji,
                           style: TextStyle(
-                            fontSize: result.isLucky11 ? 15 : 13,
+                            fontSize: 13,
                             color: result.isLucky11
                                 ? const Color(0xFFFFD54F)
                                 : null,
