@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.3.2
   share_plus: ^13.3.0
   livekit_client: ^2.13.0
+  just_audio: ^0.10.5
 
 dev_dependencies:
   flutter_test:
