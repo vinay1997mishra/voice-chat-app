@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 
@@ -2922,88 +2923,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required IconData icon,
     double size = 42,
   }) {
-    final lower = label.toLowerCase();
-    final isLp = lower.contains('lucky') || lower == 'lp';
-    final isGift = lower.contains('gift');
-    final isGame = lower.contains('game');
-    final isMore = lower.contains('more') || lower.contains('4-box');
-    final accent = isLp
-        ? const Color(0xFFFF304F)
-        : isGift
-            ? const Color(0xFFFF4FA3)
-            : isGame
-                ? const Color(0xFFF5F5F5)
-                : isMore
-                    ? const Color(0xFFFFD45A)
-                    : _roomToolColor(label);
-    final inner = isLp
-        ? const <Color>[Color(0xFFD71932), Color(0xFF650812)]
-        : isGift
-            ? const <Color>[Color(0xFFFF4FA3), Color(0xFF7B123D)]
-            : isGame
-                ? const <Color>[Color(0xFF3A3A3A), Color(0xFF080808)]
-                : <Color>[
-                    Color.lerp(const Color(0xFF050505), accent, 0.22)!,
-                    const Color(0xFF050505),
-                  ];
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: inner,
-        ),
-        border: Border.all(color: RoyalPalette.gold, width: 1.35),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(color: Color(0x88FFD45A), blurRadius: 9, spreadRadius: 0.4),
-          BoxShadow(color: Color(0x44FFF1A8), blurRadius: 16),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          Icon(icon, color: accent, size: size * 0.55),
-          if (isLp)
-            Positioned(
-              bottom: 5,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8D0717),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: RoyalPalette.gold, width: 0.6),
-                ),
-                child: const Text(
-                  'LP',
-                  style: TextStyle(
-                    color: RoyalPalette.gold,
-                    fontSize: 7,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ),
-          if (isGame) ...<Widget>[
-            Positioned(
-              left: size * 0.24,
-              top: size * 0.43,
-              child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFF44C8FF), shape: BoxShape.circle)),
-            ),
-            Positioned(
-              right: size * 0.24,
-              top: size * 0.36,
-              child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFFF4FA3), shape: BoxShape.circle)),
-            ),
-          ],
-          if (isMore)
-            const Icon(Icons.grid_view_rounded, color: RoyalPalette.gold),
-        ],
-      ),
-    );
+    return _PremiumRoomToolLogo(label: label, fallbackIcon: icon, size: size);
   }
 
   void _showGamePanel() {
@@ -5353,4 +5273,92 @@ class _ProfileAction extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _PremiumRoomToolLogo extends StatelessWidget {
+  const _PremiumRoomToolLogo({required this.label, required this.fallbackIcon, required this.size});
+  final String label;
+  final IconData fallbackIcon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _PremiumRoomToolPainter(label),
+        child: Semantics(label: label, child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _PremiumRoomToolPainter extends CustomPainter {
+  const _PremiumRoomToolPainter(this.label);
+  final String label;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lower = label.toLowerCase();
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    final shell = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF3B2A08), Color(0xFF090909), Color(0xFF000000)],
+        stops: [0, .62, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: r));
+    canvas.drawCircle(center, r - 1, shell);
+    canvas.drawCircle(center, r - 1.5, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = const Color(0xFFFFD45A));
+    canvas.drawCircle(center, r - 4, Paint()..style = PaintingStyle.stroke..strokeWidth = .7..color = const Color(0x88FFF1A8));
+
+    if (lower.contains('gift')) {
+      final box = Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: r * 1.05, height: r * .72);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..shader = const LinearGradient(colors:[Color(0xFFFF6FB1),Color(0xFF8A1749)]).createShader(box));
+      canvas.drawRect(Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: 3, height: box.height), Paint()..color=const Color(0xFFFFD45A));
+      canvas.drawLine(Offset(box.left, box.top + 5), Offset(box.right, box.top + 5), Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      final bow=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..color=const Color(0xFFFFD45A);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx-5, box.top-3), width: 10, height: 7), bow);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx+5, box.top-3), width: 10, height: 7), bow);
+    } else if (lower.contains('music') || lower.contains('sound')) {
+      final p=Paint()..color=const Color(0xFF5FE7FF)..strokeWidth=3.2..strokeCap=StrokeCap.round;
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+4,center.dy+7),p);
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+12,center.dy-7),p);
+      canvas.drawCircle(Offset(center.dx-1,center.dy+9),5,p);
+      canvas.drawCircle(Offset(center.dx+10,center.dy+6),5,p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx-1,center.dy+9),p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx+4,center.dy-10),p);
+    } else if (lower.contains('lucky') || lower == 'lp') {
+      final pouch=Path()..moveTo(center.dx-11,center.dy-4)..quadraticBezierTo(center.dx-14,center.dy+14,center.dx,center.dy+15)..quadraticBezierTo(center.dx+14,center.dy+14,center.dx+11,center.dy-4)..close();
+      canvas.drawPath(pouch,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF304F),Color(0xFF700817)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawLine(Offset(center.dx-9,center.dy-3),Offset(center.dx+9,center.dy-3),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      _text(canvas,'LP',center,const Color(0xFFFFE27A),9);
+    } else if (lower.contains('game')) {
+      final pad=RRect.fromRectAndRadius(Rect.fromCenter(center:center,width:r*1.25,height:r*.78),const Radius.circular(7));
+      canvas.drawRRect(pad,Paint()..shader=const LinearGradient(colors:[Color(0xFF555555),Color(0xFF090909)]).createShader(pad.outerRect));
+      final p=Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2;
+      canvas.drawLine(Offset(center.dx-8,center.dy),Offset(center.dx-2,center.dy),p);
+      canvas.drawLine(Offset(center.dx-5,center.dy-3),Offset(center.dx-5,center.dy+3),p);
+      canvas.drawCircle(Offset(center.dx+6,center.dy-2),2.3,Paint()..color=const Color(0xFFFF4FA3));
+      canvas.drawCircle(Offset(center.dx+11,center.dy+3),2.3,Paint()..color=const Color(0xFF44C8FF));
+    } else if (lower.contains('moderation') || lower.contains('shield')) {
+      final shield=Path()..moveTo(center.dx,center.dy-13)..lineTo(center.dx+11,center.dy-8)..lineTo(center.dx+9,center.dy+5)..quadraticBezierTo(center.dx,center.dy+15,center.dx-9,center.dy+5)..lineTo(center.dx-11,center.dy-8)..close();
+      canvas.drawPath(shield,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF6A6A),Color(0xFF7A1111)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawPath(shield,Paint()..style=PaintingStyle.stroke..strokeWidth=1.5..color=const Color(0xFFFFD45A));
+    } else if (lower.contains('setting')) {
+      canvas.drawCircle(center,10,Paint()..style=PaintingStyle.stroke..strokeWidth=5..color=const Color(0xFFFFD45A));
+      canvas.drawCircle(center,3,Paint()..color=const Color(0xFF050505));
+      for(int i=0;i<8;i++){final a=i*3.14159265/4;canvas.drawLine(Offset(center.dx+10*math.cos(a),center.dy+10*math.sin(a)),Offset(center.dx+15*math.cos(a),center.dy+15*math.sin(a)),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=3..strokeCap=StrokeCap.round);}
+    } else {
+      _text(canvas, label.isEmpty ? '•' : label.substring(0,1).toUpperCase(), center, const Color(0xFFFFD45A), 15);
+    }
+    canvas.drawArc(Rect.fromCircle(center:center,radius:r-5),3.7,1.2,false,Paint()..style=PaintingStyle.stroke..strokeWidth=1.4..color=const Color(0x88FFFFFF));
+  }
+
+  void _text(Canvas canvas,String text,Offset center,Color color,double fontSize){
+    final tp=TextPainter(text:TextSpan(text:text,style:TextStyle(color:color,fontSize:fontSize,fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+    tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
+  }
+  @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
 }
