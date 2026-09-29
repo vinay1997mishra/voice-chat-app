@@ -270,7 +270,13 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - Coin Seller inventory wallet when that role is active
 - Merchant wallet when that role is active
 - Tinni Star does not use real-money in-app recharge as a user recharge flow.
-- User coin additions come from the app's wallet/role flows such as Coin Seller transfers and other owner-authorized coin operations.
+- A newly created account starts with **0 Coins**. No automatic signup/start balance is granted.
+- Normal User, Coin Seller and Merchant wallets may be funded/credited only through the protected **Owner Panel / authorized Staff Panel** wallet controls, or by an existing Coin Seller/Merchant transferring coins from their already-funded inventory wallet.
+- A Coin Seller or Merchant may transfer existing inventory coins to any valid user ID, including their **own normal user wallet**.
+- Coin Seller/Merchant transfers are redistribution only: the sender inventory balance is debited by the exact amount credited to the recipient normal wallet.
+- Unexpected positive coin balance drift from any unrecognized source is not made available to the user. The unexpected amount is quarantined and the affected wallet enters a **security freeze**.
+- While security-frozen, the app exposes no usable coin balance from that wallet and spending/transfer operations are blocked.
+- Normal wallet ban/unban or Staff Panel controls do **not** remove a security freeze. Only the Platform Owner can remove the security freeze from the Owner Panel.
 - All user-side purchases and paid actions use **Coins only**.
 - Diamonds are not a purchase currency for users.
 - Coins are used for VIP, gifts, frames, room themes/backgrounds, store/inventory items, game bets/paid game actions, CP/family paid items, entries/effects, and any other purchasable user feature unless the Owner Panel explicitly marks an item as free.
