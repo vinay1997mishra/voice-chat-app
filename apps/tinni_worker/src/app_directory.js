@@ -573,6 +573,29 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_security_events_user_time
         ON security_events(user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS client_analytics_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        properties_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_analytics_user_time
+        ON client_analytics_events(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_client_analytics_name_time
+        ON client_analytics_events(event_name, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS client_crash_reports (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        error_text TEXT NOT NULL,
+        stack_text TEXT NOT NULL DEFAULT '',
+        context_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_crash_user_time
+        ON client_crash_reports(user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS cp_relationships (
         user_a TEXT NOT NULL,
         user_b TEXT NOT NULL,
@@ -3399,6 +3422,45 @@ export class AppDirectoryStore extends DurableObject {
       unique_ids_released: uniqueIdsReleased,
       event_notifications_sent: Number(eventNotifications?.sent || 0),
     };
+  }
+
+  recordClientAnalytics(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const eventName = cleanText(input.event_name, 80);
+    if (!userId || !eventName) throw new Error("event_name is required");
+    this._enforceActionRate(userId, "analytics_event", 120, 60000, 60000);
+    const properties = input.properties && typeof input.properties === "object"
+      ? input.properties
+      : {};
+    const propertiesJson = JSON.stringify(properties);
+    if (propertiesJson.length > 6000) throw new Error("Analytics properties are too large");
+    const id = "analytics-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO client_analytics_events(id,user_id,event_name,properties_json,created_at) VALUES (?,?,?,?,?)",
+      id, userId, eventName, propertiesJson, now,
+    );
+    return { ok: true, id, created_at: now };
+  }
+
+  recordClientCrash(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const errorText = cleanText(input.error, 2000);
+    const stackText = cleanText(input.stack, 12000);
+    if (!userId || !errorText) throw new Error("error is required");
+    this._enforceActionRate(userId, "crash_report", 20, 60000, 300000);
+    const context = input.context && typeof input.context === "object"
+      ? input.context
+      : {};
+    const contextJson = JSON.stringify(context);
+    if (contextJson.length > 6000) throw new Error("Crash context is too large");
+    const id = "crash-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO client_crash_reports(id,user_id,error_text,stack_text,context_json,created_at) VALUES (?,?,?,?,?,?)",
+      id, userId, errorText, stackText, contextJson, now,
+    );
+    return { ok: true, id, created_at: now };
   }
 
   _recordSecurityEvent(userIdValue, actionKeyValue, reasonValue, metadata = {}) {
