@@ -78,15 +78,19 @@ class TinniState {
         cpFeatures = CpFeatureService(),
         parties = PartyService(),
         push = LocalPushAdapter(),
-        analytics = LocalAnalyticsAdapter(),
-        crashReporter = LocalCrashReporter(),
-        remoteConfig = LocalRemoteConfigAdapter(),
         backend = AppBackendService(),
         realtime = RealtimeCoordinator(
           rtc: LiveKitRtcAdapter(),
           im: BackendImAdapter(),
         ),
         roomPresence = RoomPresenceService() {
+    analytics = BackendAnalyticsAdapter(
+      tokenProvider: () => auth.current?.authToken,
+    );
+    crashReporter = BackendCrashReporter(
+      tokenProvider: () => auth.current?.authToken,
+    );
+    remoteConfig = BackendRemoteConfigAdapter();
     gifts = GiftService(wallet);
     inventory = InventoryService(wallet);
     familyFeatures = FamilyFeatureService(family);
@@ -181,9 +185,9 @@ class TinniState {
   final CpFeatureService cpFeatures;
   final PartyService parties;
   final PushAdapter push;
-  final AnalyticsAdapter analytics;
-  final CrashReporter crashReporter;
-  final RemoteConfigAdapter remoteConfig;
+  late final AnalyticsAdapter analytics;
+  late final CrashReporter crashReporter;
+  late final RemoteConfigAdapter remoteConfig;
   final AppBackendService backend;
   final RealtimeCoordinator realtime;
   final RoomPresenceService roomPresence;
