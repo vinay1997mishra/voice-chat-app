@@ -4574,7 +4574,10 @@ export class AppDirectoryStore extends DurableObject {
       prices: { "7": 10000000, "10": 14000000, "15": 20000000, "30": 35000000, permanent: 100000000 },
     });
     const priceKey = permanent ? "permanent" : String(durationDays);
-    const priceCoins = Number(policy?.prices?.[priceKey]);
+    const ownerPolicies = this.ownerState().policies;
+    const freeIds = Array.isArray(ownerPolicies.free_user_ids) ? ownerPolicies.free_user_ids.map(String) : [];
+    const configuredThemePrice = Number(policy?.prices?.[priceKey] ?? (permanent ? null : ownerPolicies.room_theme_coins));
+    const priceCoins = freeIds.includes(userId) ? 0 : configuredThemePrice;
     if (!Number.isSafeInteger(priceCoins) || priceCoins < 0) {
       throw new Error("Custom background price is not configured");
     }
