@@ -79,6 +79,14 @@ jobs:
         working-directory: apps/tinni_star
         run: flutter pub get
 
+      - name: Patch legacy PAG Android repository
+        working-directory: apps/tinni_star
+        run: |
+          PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
+          test -n "$PAG_GRADLE"
+          sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
+          grep -n 'mavenCentral()' "$PAG_GRADLE"
+
       - name: Analyze
         working-directory: apps/tinni_star
         run: flutter analyze
