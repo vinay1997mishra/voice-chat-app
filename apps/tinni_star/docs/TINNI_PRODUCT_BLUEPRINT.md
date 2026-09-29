@@ -249,8 +249,12 @@ Production relationship and settlement rules are server-authoritative, including
 
 - same-country Host/Agency rule
 - Host target cycles
-- Agency commissions
-- BD targets/commission
+- Each Agency's eligible target is the combined eligible target completed by all Hosts under that Agency.
+- The Agency receives a 10% commission on that combined eligible Host target.
+- The Agency Owner (the user ID that owns the Agency) is also a Host of that same Agency.
+- An Agency Owner cannot join, transfer to, or act as a Host under another Agency while owning their Agency.
+- BD target is calculated from the combined eligible target of all Agencies under that BD.
+- BD commission is 7% when the combined Agency target reaches $500 and 10% when it reaches $1000.
 - exit requests
 - complaint timers
 - automatic settlement/exchange rules
