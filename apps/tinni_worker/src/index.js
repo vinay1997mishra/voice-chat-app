@@ -1759,6 +1759,68 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to play room game") }, 400); }
     }
 
+    if (url.pathname === "/ludo/state" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const ownerState = await getAppDirectoryStore(env).ownerState();
+      if (ownerState.features?.games === false || ownerState.game_config?.enabled === false) {
+        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
+      }
+      try {
+        return json(await getAppDirectoryStore(env).ludoState(
+          appSession.user.user_id,
+          roomId,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load Ludo") }, 400);
+      }
+    }
+
+    if (url.pathname === "/ludo/roll" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).ludoRoll(
+          appSession.user.user_id,
+          body.room_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to roll Ludo dice") }, 400);
+      }
+    }
+
+    if (url.pathname === "/ludo/move" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).ludoMove(
+          appSession.user.user_id,
+          body.room_id,
+          body.token_index,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to move Ludo token") }, 400);
+      }
+    }
+
+    if (url.pathname === "/ludo/reset" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).ludoReset(
+          appSession.user.user_id,
+          body.room_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to restart Ludo") }, 400);
+      }
+    }
+
     if (url.pathname === "/cp" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
