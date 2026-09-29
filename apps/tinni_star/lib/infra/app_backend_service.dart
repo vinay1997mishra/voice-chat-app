@@ -30,6 +30,27 @@ class RemoteWallet {
   final bool canTransferSettlement;
 }
 
+class RemoteNotification {
+  const RemoteNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.message,
+    required this.createdAt,
+    required this.read,
+    this.sourceUserId,
+    this.metadata = const <String, dynamic>{},
+  });
+  final String id;
+  final String type;
+  final String title;
+  final String message;
+  final int createdAt;
+  final bool read;
+  final String? sourceUserId;
+  final Map<String, dynamic> metadata;
+}
+
 class SettlementRecipient {
   const SettlementRecipient({
     required this.userId,
@@ -75,6 +96,34 @@ class AppBackendService {
 
   final Uri apiBase;
   final HttpClient _httpClient;
+
+  Future<List<RemoteNotification>> notifications(String token) async {
+    final data = await _request('GET', '/notifications', token);
+    final raw = data['notifications'];
+    if (raw is! List) return const <RemoteNotification>[];
+    return raw.whereType<Map>().map((item) {
+      final row = _map(item);
+      return RemoteNotification(
+        id: row['id']?.toString() ?? '',
+        type: row['type']?.toString() ?? 'general',
+        title: row['title']?.toString() ?? 'Tinni Star',
+        message: row['message']?.toString() ?? '',
+        createdAt: _asInt(row['created_at']),
+        read: row['read'] == true,
+        sourceUserId: row['source_user_id']?.toString(),
+        metadata: _map(row['metadata']),
+      );
+    }).where((item) => item.id.isNotEmpty).toList(growable: false);
+  }
+
+  Future<void> markNotificationRead(String token, String notificationId) async {
+    await _request(
+      'POST',
+      '/notifications/read',
+      token,
+      body: {'notification_id': notificationId},
+    );
+  }
 
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
