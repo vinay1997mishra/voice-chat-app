@@ -19,6 +19,7 @@ const STAFF_PERMISSIONS = new Set([
   "users.invisible",
   "users.locked_room_bypass",
   "users.change_id",
+  "users.unique_id",
 
   "rooms.search",
   "rooms.ban",
@@ -3748,7 +3749,7 @@ export default {
       const body = await request.json().catch(() => ({}));
       const actionPermissions = {
         "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
-        "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id",
+        "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
         "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
         "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
         "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
