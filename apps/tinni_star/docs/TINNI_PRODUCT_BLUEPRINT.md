@@ -265,6 +265,9 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - Merchant wallet when that role is active
 - Tinni Star does not use real-money in-app recharge as a user recharge flow.
 - User coin additions come from the app's wallet/role flows such as Coin Seller transfers and other owner-authorized coin operations.
+- All user-side purchases and paid actions use **Coins only**.
+- Diamonds are not a purchase currency for users.
+- Coins are used for VIP, gifts, frames, room themes/backgrounds, store/inventory items, game bets/paid game actions, CP/family paid items, entries/effects, and any other purchasable user feature unless the Owner Panel explicitly marks an item as free.
 
 The **Owner Treasury Wallet exists only in the separate Owner Web Panel**, not in the Android app.
 
