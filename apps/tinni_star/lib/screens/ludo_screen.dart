@@ -1,10 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../app/tinni_state.dart';
 import '../games/ludo_game.dart';
 import '../ui/royal_theme.dart';
 
 class LudoScreen extends StatefulWidget {
-  const LudoScreen({super.key});
+  const LudoScreen({
+    super.key,
+    required this.state,
+    required this.roomId,
+  });
+
+  final TinniState state;
+  final String roomId;
 
   @override
   State<LudoScreen> createState() => _LudoScreenState();
@@ -12,11 +22,133 @@ class LudoScreen extends StatefulWidget {
 
 class _LudoScreenState extends State<LudoScreen> {
   late LudoGame game;
+  Timer? _syncTimer;
+  bool _remoteReady = false;
+  bool _syncing = false;
+  String? _myColor;
+  String? _errorText;
 
   @override
   void initState() {
     super.initState();
     game = LudoGame();
+    Future<void>.delayed(Duration.zero, () => _syncRemote(initial: true));
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
+  }
+
+  void _applyRemote(Map<String, dynamic> data) {
+    game.applyServerState(data);
+    _myColor = data['player_color']?.toString();
+    _remoteReady = true;
+    _errorText = null;
+  }
+
+  Future<void> _syncRemote({bool initial = false}) async {
+    if (_syncing) return;
+    final account = widget.state.auth.current;
+    if (account == null) {
+      if (mounted) {
+        setState(() => _errorText = 'Login is required for server Ludo.');
+      }
+      return;
+    }
+    _syncing = true;
+    try {
+      final data = await widget.state.backend.ludoState(
+        account.authToken,
+        roomId: widget.roomId,
+      );
+      if (!mounted) return;
+      setState(() => _applyRemote(data));
+      _syncTimer ??= Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _syncRemote(),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (initial || !_remoteReady) {
+        setState(() {
+          _errorText = error.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _rollRemote() async {
+    final account = widget.state.auth.current;
+    if (account == null || !_remoteReady || _syncing) return;
+    _syncing = true;
+    try {
+      final data = await widget.state.backend.ludoRoll(
+        account.authToken,
+        roomId: widget.roomId,
+      );
+      if (!mounted) return;
+      setState(() => _applyRemote(data));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _moveRemote(int tokenIndex) async {
+    final account = widget.state.auth.current;
+    if (account == null || !_remoteReady || _syncing) return;
+    _syncing = true;
+    try {
+      final data = await widget.state.backend.ludoMove(
+        account.authToken,
+        roomId: widget.roomId,
+        tokenIndex: tokenIndex,
+      );
+      if (!mounted) return;
+      setState(() => _applyRemote(data));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _resetRemote() async {
+    final account = widget.state.auth.current;
+    if (account == null || !_remoteReady || _syncing) return;
+    _syncing = true;
+    try {
+      final data = await widget.state.backend.ludoReset(
+        account.authToken,
+        roomId: widget.roomId,
+      );
+      if (!mounted) return;
+      setState(() => _applyRemote(data));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    } finally {
+      _syncing = false;
+    }
   }
 
   Color _playerColor(LudoPlayer player) {
@@ -46,7 +178,7 @@ class _LudoScreenState extends State<LudoScreen> {
         actions: [
           IconButton(
             tooltip: 'Restart',
-            onPressed: () => setState(game.reset),
+            onPressed: _remoteReady && !_syncing ? _resetRemote : null,
             icon: const ShiningIcon(
               icon: Icons.refresh_rounded,
               color: FeaturePalette.ludo,
@@ -97,6 +229,23 @@ class _LudoScreenState extends State<LudoScreen> {
                               fontSize: 11,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            !_remoteReady
+                                ? (_errorText ?? 'Connecting to server…')
+                                : (_myColor == null
+                                    ? 'Spectating • Server synced'
+                                    : 'You are ' +
+                                        _myColor!.toUpperCase() +
+                                        ' • Server synced'),
+                            style: TextStyle(
+                              color: _errorText == null
+                                  ? RoyalPalette.muted
+                                  : FeaturePalette.safety,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -108,11 +257,17 @@ class _LudoScreenState extends State<LudoScreen> {
                         shadowColor: _playerColor(game.currentPlayer),
                         elevation: 5,
                       ),
-                      onPressed: game.winner != null || game.rolled != null
+                      onPressed: !_remoteReady ||
+                              _syncing ||
+                              game.winner != null ||
+                              game.rolled != null ||
+                              _myColor != game.currentPlayer.name
                           ? null
-                          : () => setState(game.roll),
+                          : _rollRemote,
                       child: Text(
-                        game.rolled == null ? 'ROLL' : '🎲 ${game.rolled}',
+                        game.rolled == null
+                            ? 'ROLL'
+                            : '🎲 ' + game.rolled.toString(),
                       ),
                     ),
                   ],
@@ -142,13 +297,12 @@ class _LudoScreenState extends State<LudoScreen> {
                                   boardSize: side,
                                   color: _playerColor(player),
                                   enabled:
+                                      _remoteReady &&
+                                      !_syncing &&
+                                      _myColor == player.name &&
                                       player == game.currentPlayer &&
                                       movable.contains(token.index),
-                                  onTap: () {
-                                    if (game.move(token.index)) {
-                                      setState(() {});
-                                    }
-                                  },
+                                  onTap: () => _moveRemote(token.index),
                                 ),
                           ],
                         ),
