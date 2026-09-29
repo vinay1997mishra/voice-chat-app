@@ -2,11 +2,45 @@ import 'dart:convert';
 import 'dart:io';
 
 class RemoteWallet {
-  const RemoteWallet({required this.coins, required this.diamonds, required this.banned, required this.updatedAt});
+  const RemoteWallet({
+    required this.coins,
+    required this.diamonds,
+    required this.banned,
+    required this.updatedAt,
+    this.diamondWalletVisible = false,
+    this.isHost = false,
+    this.isAgency = false,
+    this.isBd = false,
+    this.diamondUsdCents = 0,
+    this.commissionUsdCents = 0,
+    this.withdrawableUsdCents = 0,
+    this.canTransferSettlement = false,
+  });
   final int coins;
   final int diamonds;
   final bool banned;
   final int updatedAt;
+  final bool diamondWalletVisible;
+  final bool isHost;
+  final bool isAgency;
+  final bool isBd;
+  final int diamondUsdCents;
+  final int commissionUsdCents;
+  final int withdrawableUsdCents;
+  final bool canTransferSettlement;
+}
+
+class SettlementRecipient {
+  const SettlementRecipient({
+    required this.userId,
+    required this.displayName,
+    required this.role,
+    this.avatarDataUrl,
+  });
+  final String userId;
+  final String displayName;
+  final String role;
+  final String? avatarDataUrl;
 }
 
 class RemoteCp {
@@ -50,6 +84,14 @@ class AppBackendService {
       diamonds: _asInt(row['diamonds']),
       banned: row['banned'] == true,
       updatedAt: _asInt(row['updated_at']),
+      diamondWalletVisible: row['diamond_wallet_visible'] == true,
+      isHost: row['is_host'] == true,
+      isAgency: row['is_agency'] == true,
+      isBd: row['is_bd'] == true,
+      diamondUsdCents: _asInt(row['diamond_usd_cents']),
+      commissionUsdCents: _asInt(row['commission_usd_cents']),
+      withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
+      canTransferSettlement: row['can_transfer_settlement'] == true,
     );
   }
 
@@ -99,6 +141,64 @@ class AppBackendService {
     final raw = data['transactions'];
     if (raw is! List) return const [];
     return raw.map(_map).toList(growable: false);
+  }
+
+  Future<SettlementRecipient> settlementRecipient(
+    String token,
+    String userId,
+  ) async {
+    final base = apiBase.replace(path: '/wallet/settlement/recipient');
+    final uri = base.replace(queryParameters: {'user_id': userId});
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Recipient not found');
+    }
+    final row = _map(data['recipient']);
+    return SettlementRecipient(
+      userId: row['user_id']?.toString() ?? '',
+      displayName: row['display_name']?.toString() ?? '',
+      role: row['role']?.toString() ?? '',
+      avatarDataUrl: row['avatar_data_url']?.toString(),
+    );
+  }
+
+  Future<RemoteWallet> transferSettlement(
+    String token, {
+    required String recipientUserId,
+    required int usdCents,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/wallet/settlement/transfer',
+      token,
+      body: {
+        'recipient_user_id': recipientUserId,
+        'usd_cents': usdCents,
+      },
+    );
+    final row = _map(data['wallet']);
+    return RemoteWallet(
+      coins: _asInt(row['coins']),
+      diamonds: _asInt(row['diamonds']),
+      banned: row['banned'] == true,
+      updatedAt: _asInt(row['updated_at']),
+      diamondWalletVisible: row['diamond_wallet_visible'] == true,
+      isHost: row['is_host'] == true,
+      isAgency: row['is_agency'] == true,
+      isBd: row['is_bd'] == true,
+      diamondUsdCents: _asInt(row['diamond_usd_cents']),
+      commissionUsdCents: _asInt(row['commission_usd_cents']),
+      withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
+      canTransferSettlement: row['can_transfer_settlement'] == true,
+    );
   }
 
   Future<RemoteWallet> applyRecharge(String token, {required String productId, required String purchaseToken, required bool verified}) async {
