@@ -85,7 +85,26 @@ jobs:
           PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
           test -n "$PAG_GRADLE"
           sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
-          python3 -c "from pathlib import Path; import sys; p=Path(sys.argv[1]); s=p.read_text(); s=s.replace('android {', \"android {\\n    namespace 'org.libpag.pag'\\n    compileOptions {\\n        sourceCompatibility JavaVersion.VERSION_17\\n        targetCompatibility JavaVersion.VERSION_17\\n    }\\n    kotlinOptions {\\n        jvmTarget = '17'\\n    }\", 1); p.write_text(s)" "$PAG_GRADLE"
+          python3 - "$PAG_GRADLE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          s = s.replace("android {", "android {\n    namespace 'org.libpag.pag'", 1)
+          s += """
+
+android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+"""
+          p.write_text(s)
+          PY
           grep -n -E 'mavenCentral\(\)|namespace|jvmTarget|sourceCompatibility|targetCompatibility' "$PAG_GRADLE"
 
       - name: Analyze
