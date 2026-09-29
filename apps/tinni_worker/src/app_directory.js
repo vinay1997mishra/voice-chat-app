@@ -3878,13 +3878,13 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     const receiverFemale =
       String(receiver?.gender || "").toLowerCase() === "female";
-    const directCostPerMinute = receiverVerification.verified
-      ? VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE
-      : UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE;
-    const rewardPercent = receiverVerification.verified
-      ? VERIFIED_RECEIVER_REWARD_PERCENT
-      : UNVERIFIED_RECEIVER_REWARD_PERCENT;
-    const receiverRewardPerMinute = receiverFemale
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const directCostPerMinute = freeIds.includes(callerId)
+      ? 0
+      : Math.max(0, Number(policies.direct_call_coins ?? VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE));
+    const rewardPercent = Math.max(0, Math.min(100, Number(policies.receiver_percent ?? VERIFIED_RECEIVER_REWARD_PERCENT)));
+    const receiverRewardPerMinute = receiverFemale && receiverVerification.verified
       ? Math.floor(directCostPerMinute * rewardPercent / 100)
       : 0;
 
@@ -3949,9 +3949,15 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Unsupported call type");
     }
 
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const randomCostPerMinute = freeIds.includes(callerId)
+      ? 0
+      : Math.max(0, Number(policies.random_call_coins ?? RANDOM_CALL_COST_COINS_PER_MINUTE));
+    const rewardPercent = Math.max(0, Math.min(100, Number(policies.receiver_percent ?? VERIFIED_RECEIVER_REWARD_PERCENT)));
     const callerWallet = this.getWallet(callerId);
-    if (callerWallet.coins < RANDOM_CALL_COST_COINS_PER_MINUTE) {
-      throw new Error("At least 500,000 coins are required to start a random call");
+    if (callerWallet.coins < randomCostPerMinute) {
+      throw new Error("At least " + randomCostPerMinute.toLocaleString("en-US") + " coins are required to start a random call");
     }
 
     const candidate = this._randomCallCandidate(callerId, gender);
@@ -3965,8 +3971,7 @@ export class AppDirectoryStore extends DurableObject {
       receiverVerification.eligible_for_receiver_earnings === true;
     const receiverRewardPerMinute = receiverEligible
       ? Math.floor(
-          RANDOM_CALL_COST_COINS_PER_MINUTE *
-            VERIFIED_RECEIVER_REWARD_PERCENT / 100
+          randomCostPerMinute * rewardPercent / 100
         )
       : 0;
 
@@ -3999,7 +4004,7 @@ export class AppDirectoryStore extends DurableObject {
       media,
       roomId,
       receiverEligible ? 1 : 0,
-      RANDOM_CALL_COST_COINS_PER_MINUTE,
+      randomCostPerMinute,
       receiverRewardPerMinute,
       now,
       now,
@@ -4008,7 +4013,7 @@ export class AppDirectoryStore extends DurableObject {
       call_kind: "random",
       verified: receiverVerification.verified === true,
       gender: receiverVerification.gender,
-      cost_coins_per_minute: RANDOM_CALL_COST_COINS_PER_MINUTE,
+      cost_coins_per_minute: randomCostPerMinute,
       receiver_diamonds_per_minute: receiverRewardPerMinute,
     });
     return this.getCall(id);
