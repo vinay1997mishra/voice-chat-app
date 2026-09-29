@@ -2364,7 +2364,29 @@ export default {
       ) {
         return json({ ok: false, error: "Not a call participant" }, 403);
       }
-      return json({ ok: true, call });
+      const incident = await directory.latestCallPrivacyIncident(callId);
+      return json({ ok: true, call, privacy_incident: incident });
+    }
+
+    if (url.pathname === "/calls/privacy-incident" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const directory = getAppDirectoryStore(env);
+        const call = await directory.reportCallPrivacyIncident(
+          appSession.user.user_id,
+          body.call_id,
+          body.action,
+        );
+        return json({
+          ok: true,
+          call,
+          privacy_incident: await directory.latestCallPrivacyIncident(body.call_id),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to report privacy incident") }, 400);
+      }
     }
 
     if (url.pathname === "/calls/incoming" && request.method === "GET") {
