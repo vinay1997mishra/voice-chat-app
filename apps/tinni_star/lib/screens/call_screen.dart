@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:livekit_client/livekit_client.dart';
 
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
@@ -332,6 +333,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   Timer? statusTimer;
   Timer? watermarkTimer;
   int watermarkStep = 0;
+  EventsListener<RoomEvent>? rtcEvents;
+  VideoTrack? remoteVideoTrack;
+  VideoTrack? localVideoTrack;
 
   @override
   void initState() {
@@ -393,6 +397,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
           if (rtc is LiveKitRtcAdapter) {
             await rtc.setCameraPublished(true);
             cameraPublished = true;
+            _bindVideoTracks(rtc);
           }
         }
       } else {
@@ -412,6 +417,41 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         errorText = error.toString().replaceFirst('Bad state: ', '');
       });
     }
+  }
+
+  void _bindVideoTracks(LiveKitRtcAdapter rtc) {
+    final room = rtc.room;
+    if (room == null) return;
+    rtcEvents?.dispose();
+    rtcEvents = room.createListener()
+      ..on<TrackSubscribedEvent>((_) => _refreshVideoTracks(rtc))
+      ..on<TrackUnsubscribedEvent>((_) => _refreshVideoTracks(rtc))
+      ..on<TrackPublishedEvent>((_) => _refreshVideoTracks(rtc))
+      ..on<TrackUnpublishedEvent>((_) => _refreshVideoTracks(rtc))
+      ..on<ParticipantDisconnectedEvent>((_) => _refreshVideoTracks(rtc));
+    _refreshVideoTracks(rtc);
+  }
+
+  void _refreshVideoTracks(LiveKitRtcAdapter rtc) {
+    final room = rtc.room;
+    if (room == null || !mounted) return;
+    VideoTrack? remote;
+    for (final participant in room.remoteParticipants.values) {
+      for (final publication in participant.videoTrackPublications) {
+        final track = publication.track;
+        if (track is VideoTrack && !publication.muted) { remote = track; break; }
+      }
+      if (remote != null) break;
+    }
+    VideoTrack? local;
+    final lp = room.localParticipant;
+    if (lp != null) {
+      for (final publication in lp.videoTrackPublications) {
+        final track = publication.track;
+        if (track is VideoTrack && !publication.muted) { local = track; break; }
+      }
+    }
+    setState(() { remoteVideoTrack = remote; localVideoTrack = local; });
   }
 
   Future<void> _pollStatus() async {
@@ -513,6 +553,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   void dispose() {
     statusTimer?.cancel();
     watermarkTimer?.cancel();
+    rtcEvents?.dispose();
     if (widget.call.media == CallMedia.video) {
       _privacyChannel.setMethodCallHandler(null);
       _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': false});
@@ -536,6 +577,30 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         body: Stack(
           fit: StackFit.expand,
           children: [
+            if (widget.call.media == CallMedia.video && privacyIncident == null)
+              Positioned.fill(
+                child: remoteVideoTrack != null
+                    ? VideoTrackRenderer(remoteVideoTrack!)
+                    : Container(
+                        color: Colors.black,
+                        alignment: Alignment.center,
+                        child: Text(
+                          connecting ? 'Connecting video…' : 'Waiting for peer video…',
+                          style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+              ),
+            if (widget.call.media == CallMedia.video && localVideoTrack != null && privacyIncident == null)
+              Positioned(
+                right: 16,
+                top: 18,
+                width: 112,
+                height: 158,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: VideoTrackRenderer(localVideoTrack!),
+                ),
+              ),
             Center(
               child: Padding(
             padding: const EdgeInsets.all(24),
