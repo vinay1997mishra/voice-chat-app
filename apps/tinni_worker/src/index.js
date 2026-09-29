@@ -1784,7 +1784,8 @@ export default {
     if (url.pathname === "/cp/disconnect" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id)); }\n      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to disconnect CP") }, 400); }
+      try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id)); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to disconnect CP") }, 400); }
     }
 
     if (url.pathname === "/cp/update" && request.method === "POST") {
