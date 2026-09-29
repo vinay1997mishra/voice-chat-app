@@ -123,7 +123,16 @@ jobs:
                   continue
               out.append(line)
           s = '\n'.join(out) + '\n'
-          # v2 embedding uses FlutterAssets; remove the remaining registrar-only asset branch.\n          s = s.replace('            if (registrar != null) {\\n                if (flutterPackage == null || flutterPackage.isEmpty()) {\\n                    assetKey = registrar.lookupKeyForAsset(assetName);\\n                } else {\\n                    assetKey = registrar.lookupKeyForAsset(assetName, flutterPackage);\\nn                }\\n            } else if (flutterAssets != null) {', '            if (flutterAssets != null) {')\n          legacy = ('FlutterNativeView', 'PluginRegistry.Registrar', 'ViewDestroyListener', 'registrar.')
+          # v2 embedding uses FlutterAssets; remove the remaining registrar-only asset branch.
+          old = """            if (registrar != null) {
+                if (flutterPackage == null || flutterPackage.isEmpty()) {
+                    assetKey = registrar.lookupKeyForAsset(assetName);
+                } else {
+                    assetKey = registrar.lookupKeyForAsset(assetName, flutterPackage);
+                }
+            } else if (flutterAssets != null) {"""
+          s = s.replace(old, "            if (flutterAssets != null) {")
+          legacy = ('FlutterNativeView', 'PluginRegistry.Registrar', 'ViewDestroyListener', 'registrar.')
           leftovers = [name for name in legacy if name in s]
           if leftovers:
               raise SystemExit('PAG v1 embedding patch incomplete: ' + ', '.join(leftovers))
