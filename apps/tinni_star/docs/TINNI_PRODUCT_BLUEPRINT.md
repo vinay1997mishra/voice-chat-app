@@ -180,7 +180,7 @@ Contains:
 - Public ID
 - VIP/Noble badges
 - Coins
-- Diamonds
+- Diamonds (Host-only; hidden for non-Hosts)
 - VIP
 - Gifts
 - Family
@@ -193,13 +193,13 @@ Games and CP are intentionally not placed in Mine. Games open only from the Room
 Game Center includes:
 
 - **Fruit Jackpot** — continuous timed fruit rounds with 5× / 10× / 20× / 40× multipliers, jackpot display and recent-result history
-- **Ludo** — actual local playable board flow
+- **Ludo** — room-only server-authoritative multiplayer board flow; dice, turn, token movement, captures, winner state and restart authority are validated by the backend
 - Lucky 777
 - Blackjack
 - Gift Draw
 - Guessing
 
-Online/multiplayer authority must be provided by the production game backend.
+Online/multiplayer game authority is server-side; clients only render and request allowed actions.
 
 ## 10. VIP
 
@@ -320,7 +320,7 @@ The following must be backed by real server/provider integrations before product
 - Fruit Jackpot round/result authority, aggregate bet exposure and settlement
 - push notifications
 - media/effect asset storage
-- fraud/abuse controls
+- fraud/abuse controls, including server-side request-rate limits and temporary blocks for gift sending, settlement transfers, Coin Seller/Merchant coin transfers and game actions
 - protected platform-owner APIs
 
 Local demo state must not be treated as production financial authority.
