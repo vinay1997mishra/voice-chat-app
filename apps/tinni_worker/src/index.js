@@ -1962,14 +1962,6 @@ export default {
       }
     }
 
-    if (url.pathname === "/wallet/recharge" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      try { return json(await getAppDirectoryStore(env).applyRecharge(appSession.user.user_id, body)); }
-      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to apply recharge") }, 400); }
-    }
-
     if (url.pathname === "/unique-ids/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
