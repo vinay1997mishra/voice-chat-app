@@ -30,6 +30,7 @@ class KtvQueueEntry {
 
 class KtvService {
   static const int maxLocalSongs = 300;
+  // Continuous playback: completed songs advance through the room queue.
 
   AudioPlayer? _player;
   bool _completionListenerAttached = false;
