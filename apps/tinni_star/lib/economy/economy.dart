@@ -29,6 +29,12 @@ class WalletService {
   bool canTransferSettlement = false;
   bool securityFrozen = false;
   String freezeReason = '';
+  int coinSellerBalance = 0;
+  int merchantBalance = 0;
+  bool coinSellerActive = false;
+  bool merchantActive = false;
+  bool coinSellerFrozen = false;
+  bool merchantFrozen = false;
   final List<WalletEntry> history = <WalletEntry>[];
 
   String get diamondUsdText =>
@@ -49,6 +55,12 @@ class WalletService {
     canTransferSettlement = remote.canTransferSettlement;
     securityFrozen = remote.securityFrozen;
     freezeReason = remote.freezeReason;
+    coinSellerActive = remote.coinSellerWallet != null;
+    merchantActive = remote.merchantWallet != null;
+    coinSellerBalance = remote.coinSellerWallet?.balance ?? 0;
+    merchantBalance = remote.merchantWallet?.balance ?? 0;
+    coinSellerFrozen = remote.coinSellerWallet?.securityFrozen ?? false;
+    merchantFrozen = remote.merchantWallet?.securityFrozen ?? false;
   }
 
   bool spendCoins(int amount, String label) {
