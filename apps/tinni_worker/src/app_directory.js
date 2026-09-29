@@ -402,6 +402,18 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_gift_transactions_room_time
         ON gift_transactions(room_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS room_gift_owner_daily (
+        room_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        gift_coins INTEGER NOT NULL DEFAULT 0,
+        owner_share_coins INTEGER NOT NULL DEFAULT 0,
+        settled_at INTEGER,
+        PRIMARY KEY(room_id, day_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_gift_owner_daily_unsettled
+        ON room_gift_owner_daily(settled_at, day_key);
+
       CREATE TABLE IF NOT EXISTS room_follows (
         room_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
@@ -2832,6 +2844,84 @@ export class AppDirectoryStore extends DurableObject {
     return { id, kind:"game", room_id:roomId, amount, game_key:gameKey };
   }
 
+  _indiaGiftDayKey(timestamp = Date.now()) {
+    const shifted = new Date(Number(timestamp) + 19800000);
+    return shifted.toISOString().slice(0, 10);
+  }
+
+  _nextIndiaMidnightUtc(timestamp = Date.now()) {
+    const shifted = new Date(Number(timestamp) + 19800000);
+    const nextShiftedMidnight = Date.UTC(
+      shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + 1,
+    );
+    return nextShiftedMidnight - 19800000;
+  }
+
+  _recordRoomGiftSending(room, totalCoins, timestamp = Date.now()) {
+    const coins = Math.max(0, Math.floor(Number(totalCoins || 0)));
+    if (!room || coins <= 0) return;
+    const roomId = String(room.id || "").trim();
+    const ownerId = String(room.owner_id || "").trim();
+    if (!roomId || !ownerId) return;
+    const dayKey = this._indiaGiftDayKey(timestamp);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_gift_owner_daily
+        (room_id,owner_id,day_key,gift_coins,owner_share_coins,settled_at)
+       VALUES (?,?,?, ?,0,NULL)
+       ON CONFLICT(room_id,day_key) DO UPDATE SET
+         gift_coins = room_gift_owner_daily.gift_coins + excluded.gift_coins,
+         owner_id = excluded.owner_id`,
+      roomId, ownerId, dayKey, coins,
+    );
+    this.ctx.storage.setAlarm(this._nextIndiaMidnightUtc(timestamp));
+  }
+
+  settleRoomGiftOwnerShares(timestamp = Date.now()) {
+    const today = this._indiaGiftDayKey(timestamp);
+    const rows = this.ctx.storage.sql.exec(
+      "SELECT room_id,owner_id,day_key,gift_coins FROM room_gift_owner_daily WHERE settled_at IS NULL AND day_key < ? ORDER BY day_key ASC",
+      today,
+    ).toArray();
+    let settled = 0;
+    let credited = 0;
+    for (const row of rows) {
+      const giftCoins = Math.max(0, Math.floor(Number(row.gift_coins || 0)));
+      const share = Math.floor(giftCoins * 0.10);
+      const ownerId = String(row.owner_id || "");
+      const reference = "room-gift-share:" + String(row.room_id) + ":" + String(row.day_key);
+      const existing = this.ctx.storage.sql.exec(
+        "SELECT id FROM wallet_transactions WHERE user_id = ? AND reference_id = ? LIMIT 1",
+        ownerId, reference,
+      ).toArray()[0];
+      if (!existing && share > 0) {
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,updated_at) VALUES (?,0,0,?)",
+          ownerId, timestamp,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?",
+          share, timestamp, ownerId,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'room_gift_owner_share',?,0,?,?,?)",
+          crypto.randomUUID(), ownerId, share, reference, "10% daily Gift Box sending share", timestamp,
+        );
+        credited += share;
+      }
+      this.ctx.storage.sql.exec(
+        "UPDATE room_gift_owner_daily SET owner_share_coins = ?, settled_at = ? WHERE room_id = ? AND day_key = ? AND settled_at IS NULL",
+        share, timestamp, row.room_id, row.day_key,
+      );
+      settled += 1;
+    }
+    this.ctx.storage.setAlarm(this._nextIndiaMidnightUtc(timestamp));
+    return { ok: true, settled_days: settled, credited_coins: credited };
+  }
+
+  async alarm() {
+    return this.settleRoomGiftOwnerShares(Date.now());
+  }
+
   sendGift(senderIdValue, input) {
     const senderId = String(senderIdValue || "").trim();
     const roomId = String(input?.room_id || "").trim();
@@ -2883,6 +2973,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!Number.isSafeInteger(totalCost) || totalCost <= 0 || wallet.coins < totalCost) throw new Error("Insufficient coins");
     const now = Date.now();
     this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCost, now, senderId);
+    this._recordRoomGiftSending(room, totalCost, now);
     const transactions = [];
     for (const receiverId of receivers) {
       const id = "gift-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 10);
