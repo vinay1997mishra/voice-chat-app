@@ -272,8 +272,10 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - All user-side purchases and paid actions use **Coins only**.
 - Diamonds are not a purchase currency for users.
 - Coins are used for VIP, gifts, frames, room themes/backgrounds, store/inventory items, game bets/paid game actions, CP/family paid items, entries/effects, and any other purchasable user feature unless the Owner Panel explicitly marks an item as free.
-- Gift receiving converts 1 gifted Coin into 1 Diamond for the receiver.
-- The Wallet shows the Diamond balance and, directly below it, the automatically calculated USD value.
+- Diamond earning/display is Host-only.
+- An active Host under an Agency, including an Agency Owner acting as the Host of their own Agency, receives 1 Diamond for each 1 Coin received through eligible gifts.
+- Users who are not an active Host do not receive or see a Diamond wallet/section even after receiving coins or gifts; their Wallet shows Coins only.
+- For eligible Hosts, the Wallet shows the Diamond balance and, directly below it, the automatically calculated USD value.
 - Current settlement reference: 4,000,000 Diamonds = $1.70, so the displayed USD value is calculated from that rate.
 - At this rate, $2 is approximately 4,705,882 Diamonds (about 4.71M Diamonds).
 - Host, Agency and BD balances become transferable when the withdrawable USD value reaches at least $2.
