@@ -1769,7 +1769,7 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      try { return json({ ok: true, cp: await getAppDirectoryStore(env).cpRequest(appSession.user.user_id, body.target_user_id) }, 201); }
+      try { const store = getAppDirectoryStore(env); return json({ ok: true, cp: await store.cpRequest(appSession.user.user_id, body.target_user_id), wallet: await store.getWallet(appSession.user.user_id) }, 201); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to request CP") }, 400); }
     }
 
@@ -1784,7 +1784,7 @@ export default {
     if (url.pathname === "/cp/disconnect" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id));
+      try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id)); }\n      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to disconnect CP") }, 400); }
     }
 
     if (url.pathname === "/cp/update" && request.method === "POST") {
