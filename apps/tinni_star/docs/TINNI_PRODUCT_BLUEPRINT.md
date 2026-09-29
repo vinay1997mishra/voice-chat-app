@@ -40,6 +40,10 @@ Top swipe/tap sections:
 - Recommended rooms
 - Popular/New filters
 - Room cards with room identity and online count
+- By default, users see rooms from their own selected/profile country.
+- Above the Party room list, a country selector lets users temporarily browse another country.
+- The selector shows all supported countries with both flag and country name.
+- After a country is selected, Party shows that country's rooms until the user switches country again.
 
 ### Party > Events
 
@@ -51,8 +55,11 @@ Top swipe/tap sections:
 
 ### Party > Country
 
-- Country filter
-- Country-specific room list
+- Country filter with all supported countries.
+- Every country entry shows flag + country name.
+- Default country is the user's selected/profile country.
+- Country-specific room list.
+- Users may visit another country's Party rooms by selecting that country.
 
 ## 3. Create Room
 
@@ -147,11 +154,22 @@ The gift panel contains a **horizontally swipeable recipient strip**.
 - Recommended/New/Country results
 - Room opening and recent tracking
 
-## 7. Message
+## 7. Message and notifications
 
 - Private message list
 - Friend/social message flow
 - Production realtime delivery plugs into the IM adapter
+- Push/in-app notifications are required for:
+  - every new private message
+  - incoming calls
+  - missed calls
+  - followed users coming online
+  - coins received from a Coin Seller
+  - room-owner commission credits, including the configured 10% commission on eligible total room gift sending
+  - event/reward start notifications
+  - event/reward ending notifications
+  - other event-related reminders
+- Event/reward notification campaigns may send up to 15 event-related notifications per day per user when applicable.
 
 ## 8. Mine (profile)
 
@@ -245,6 +263,8 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - Normal User Wallet
 - Coin Seller inventory wallet when that role is active
 - Merchant wallet when that role is active
+- Tinni Star does not use real-money in-app recharge as a user recharge flow.
+- User coin additions come from the app's wallet/role flows such as Coin Seller transfers and other owner-authorized coin operations.
 
 The **Owner Treasury Wallet exists only in the separate Owner Web Panel**, not in the Android app.
 
@@ -258,7 +278,15 @@ It is not a room-owner panel and is not shown inside the app.
 
 It controls platform configuration, users, rooms, wallets, Host/Agency/BD policy, VIP, gifts, entries, frames, banners, custom panels and audit history after protected Owner APIs are connected.
 
-## 15. Production boundaries
+## 15. KTV / Music local storage
+
+- Music/KTV songs added or downloaded by a user are stored in that phone's app-private local storage.
+- The app does not depend on a permanent cloud song library for those user-added local tracks.
+- When Tinni Star is uninstalled, its app-private music/song files are deleted with the app data.
+- Reinstalling the app does not restore those locally stored songs automatically.
+- The room Music list may contain up to 300 songs.
+
+## 16. Production boundaries
 
 The following must be backed by real server/provider integrations before production launch:
 
@@ -267,7 +295,6 @@ The following must be backed by real server/provider integrations before product
 - online presence
 - production wallet/diamond accounting
 - gift settlement
-- recharge verification
 - Host/Agency/BD settlement
 - multiplayer games
 - Fruit Jackpot round/result authority, aggregate bet exposure and settlement
