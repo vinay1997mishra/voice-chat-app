@@ -498,7 +498,7 @@ export class AppDirectoryStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 2000000,
-        diamonds INTEGER NOT NULL DEFAULT 17125,
+        diamonds INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
 
@@ -512,6 +512,45 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_room_game_actions_room_time ON room_game_actions(room_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS ludo_room_sessions (
+        room_id TEXT PRIMARY KEY,
+        state_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS ludo_room_players (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        color TEXT NOT NULL,
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id, user_id),
+        UNIQUE(room_id, color)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ludo_room_players_room
+        ON ludo_room_players(room_id, joined_at ASC);
+
+      CREATE TABLE IF NOT EXISTS security_action_windows (
+        user_id TEXT NOT NULL,
+        action_key TEXT NOT NULL,
+        window_start INTEGER NOT NULL,
+        action_count INTEGER NOT NULL DEFAULT 0,
+        blocked_until INTEGER,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, action_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS security_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        action_key TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_security_events_user_time
+        ON security_events(user_id, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS cp_relationships (
         user_a TEXT NOT NULL,
@@ -3263,8 +3302,70 @@ export class AppDirectoryStore extends DurableObject {
     return { ...gifts, unique_ids_released: uniqueIdsReleased };
   }
 
+  _recordSecurityEvent(userIdValue, actionKeyValue, reasonValue, metadata = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return;
+    this.ctx.storage.sql.exec(
+      "INSERT INTO security_events(id,user_id,action_key,reason,metadata_json,created_at) VALUES (?,?,?,?,?,?)",
+      "security-" + crypto.randomUUID(),
+      userId,
+      cleanText(actionKeyValue, 80),
+      cleanText(reasonValue, 200),
+      JSON.stringify(metadata && typeof metadata === "object" ? metadata : {}),
+      Date.now(),
+    );
+  }
+
+  _enforceActionRate(userIdValue, actionKeyValue, maxActions, windowMs, blockMs = 60000) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const actionKey = cleanText(actionKeyValue, 80);
+    if (!userId || !actionKey) throw new Error("Invalid security action");
+    const now = Date.now();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT window_start,action_count,blocked_until FROM security_action_windows WHERE user_id=? AND action_key=? LIMIT 1",
+      userId, actionKey,
+    ).toArray()[0];
+
+    if (row && Number(row.blocked_until || 0) > now) {
+      throw new Error("Too many requests. Try again shortly.");
+    }
+
+    const currentStart = Number(row?.window_start || 0);
+    const currentCount = Number(row?.action_count || 0);
+    if (!row || now - currentStart >= windowMs) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO security_action_windows(user_id,action_key,window_start,action_count,blocked_until,updated_at)
+         VALUES (?,?,?,1,NULL,?)
+         ON CONFLICT(user_id,action_key) DO UPDATE SET
+           window_start=excluded.window_start,action_count=1,blocked_until=NULL,updated_at=excluded.updated_at`,
+        userId, actionKey, now, now,
+      );
+      return;
+    }
+
+    if (currentCount >= maxActions) {
+      const blockedUntil = now + Math.max(1000, Number(blockMs || 60000));
+      this.ctx.storage.sql.exec(
+        "UPDATE security_action_windows SET blocked_until=?,updated_at=? WHERE user_id=? AND action_key=?",
+        blockedUntil, now, userId, actionKey,
+      );
+      this._recordSecurityEvent(userId, actionKey, "rate_limit", {
+        max_actions: maxActions,
+        window_ms: windowMs,
+        blocked_until: blockedUntil,
+      });
+      throw new Error("Too many requests. Try again shortly.");
+    }
+
+    this.ctx.storage.sql.exec(
+      "UPDATE security_action_windows SET action_count=action_count+1,updated_at=? WHERE user_id=? AND action_key=?",
+      now, userId, actionKey,
+    );
+  }
+
   sendGift(senderIdValue, input) {
     const senderId = String(senderIdValue || "").trim();
+    this._enforceActionRate(senderId, "gift_send", 20, 10000, 60000);
     const roomId = String(input?.room_id || "").trim();
     const giftId = cleanText(input?.gift_id, 80);
     const quantity = Number(input?.quantity || 1);
@@ -3366,8 +3467,289 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row) => ({ ...row, quantity: Number(row.quantity), unit_price: Number(row.unit_price), total_cost: Number(row.total_cost), created_at: Number(row.created_at) }));
   }
 
+  _ludoInitialState() {
+    return {
+      current_player: "red",
+      rolled: null,
+      winner: null,
+      status: "RED starts. Roll the dice.",
+      tokens: {
+        red: [-1, -1, -1, -1],
+        green: [-1, -1, -1, -1],
+        yellow: [-1, -1, -1, -1],
+        blue: [-1, -1, -1, -1],
+      },
+    };
+  }
+
+  _ludoTrackIndex(color, progress) {
+    const offsets = { red: 0, green: 13, yellow: 26, blue: 39 };
+    if (!(color in offsets) || progress < 0 || progress >= 52) return -1;
+    return (offsets[color] + progress) % 52;
+  }
+
+  _ludoMovableIndexes(state) {
+    const dice = Number(state?.rolled || 0);
+    const color = String(state?.current_player || "red");
+    const tokens = Array.isArray(state?.tokens?.[color]) ? state.tokens[color] : [];
+    if (!dice || state?.winner) return [];
+    const result = [];
+    for (let index = 0; index < tokens.length; index += 1) {
+      const progress = Number(tokens[index]);
+      if (progress >= 57) continue;
+      if (progress < 0) {
+        if (dice === 6) result.push(index);
+      } else if (progress + dice <= 57) {
+        result.push(index);
+      }
+    }
+    return result;
+  }
+
+  _ludoAdvancePlayer(roomIdValue, state, keepTurn = false) {
+    const roomId = String(roomIdValue || "").trim();
+    const previousRoll = Number(state.rolled || 0);
+    state.rolled = null;
+    if (state.winner) return;
+    if (keepTurn && previousRoll === 6) {
+      state.status = String(state.current_player).toUpperCase() + " gets another roll.";
+      return;
+    }
+    const colorOrder = ["red", "green", "yellow", "blue"];
+    const occupied = new Set(
+      this.ctx.storage.sql.exec(
+        "SELECT color FROM ludo_room_players WHERE room_id=? ORDER BY joined_at ASC",
+        roomId,
+      ).toArray().map((row) => String(row.color)),
+    );
+    const currentIndex = colorOrder.indexOf(String(state.current_player));
+    for (let offset = 1; offset <= colorOrder.length; offset += 1) {
+      const next = colorOrder[(Math.max(0, currentIndex) + offset) % colorOrder.length];
+      if (occupied.has(next)) {
+        state.current_player = next;
+        state.status = next.toUpperCase() + " turn.";
+        return;
+      }
+    }
+    state.status = String(state.current_player).toUpperCase() + " turn.";
+  }
+
+  _requireActiveRoomUser(userIdValue, roomIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const roomId = String(roomIdValue || "").trim();
+    const room = this.ctx.storage.sql.exec(
+      "SELECT id,owner_id,closed FROM app_rooms WHERE id=? LIMIT 1",
+      roomId,
+    ).toArray()[0];
+    if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
+    const presence = this.ctx.storage.sql.exec(
+      "SELECT room_id,last_seen FROM app_user_presence WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!presence || String(presence.room_id || "") !== roomId ||
+        Date.now() - Number(presence.last_seen || 0) > 120000) {
+      throw new Error("You must be active inside this room to play");
+    }
+    return { userId, roomId, room };
+  }
+
+  _ensureLudoPlayer(userIdValue, roomIdValue) {
+    const { userId, roomId } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    let player = this.ctx.storage.sql.exec(
+      "SELECT color,joined_at FROM ludo_room_players WHERE room_id=? AND user_id=? LIMIT 1",
+      roomId, userId,
+    ).toArray()[0];
+    if (!player) {
+      const used = new Set(
+        this.ctx.storage.sql.exec(
+          "SELECT color FROM ludo_room_players WHERE room_id=?",
+          roomId,
+        ).toArray().map((row) => String(row.color)),
+      );
+      const color = ["red", "green", "yellow", "blue"].find((item) => !used.has(item));
+      if (color) {
+        const now = Date.now();
+        this.ctx.storage.sql.exec(
+          "INSERT INTO ludo_room_players(room_id,user_id,color,joined_at) VALUES (?,?,?,?)",
+          roomId, userId, color, now,
+        );
+        player = { color, joined_at: now };
+      }
+    }
+    return player ? String(player.color) : null;
+  }
+
+  _loadLudoState(roomIdValue) {
+    const roomId = String(roomIdValue || "").trim();
+    let row = this.ctx.storage.sql.exec(
+      "SELECT state_json,version,updated_at FROM ludo_room_sessions WHERE room_id=? LIMIT 1",
+      roomId,
+    ).toArray()[0];
+    if (!row) {
+      const state = this._ludoInitialState();
+      const now = Date.now();
+      this.ctx.storage.sql.exec(
+        "INSERT INTO ludo_room_sessions(room_id,state_json,version,updated_at) VALUES (?,?,1,?)",
+        roomId, JSON.stringify(state), now,
+      );
+      row = { state_json: JSON.stringify(state), version: 1, updated_at: now };
+    }
+    let state;
+    try { state = JSON.parse(String(row.state_json || "{}")); }
+    catch { state = this._ludoInitialState(); }
+    return {
+      state,
+      version: Math.max(1, Number(row.version || 1)),
+      updated_at: Number(row.updated_at || 0),
+    };
+  }
+
+  _saveLudoState(roomIdValue, state, expectedVersionValue) {
+    const roomId = String(roomIdValue || "").trim();
+    const expectedVersion = Math.max(1, Number(expectedVersionValue || 1));
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE ludo_room_sessions SET state_json=?,version=version+1,updated_at=? WHERE room_id=? AND version=?",
+      JSON.stringify(state), now, roomId, expectedVersion,
+    );
+    const row = this.ctx.storage.sql.exec(
+      "SELECT version FROM ludo_room_sessions WHERE room_id=? LIMIT 1",
+      roomId,
+    ).toArray()[0];
+    const nextVersion = Number(row?.version || 0);
+    if (nextVersion !== expectedVersion + 1) {
+      throw new Error("Game state changed. Refresh and try again.");
+    }
+    return nextVersion;
+  }
+
+  _publicLudoState(userIdValue, roomIdValue, loadedValue = null) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const roomId = String(roomIdValue || "").trim();
+    const loaded = loadedValue || this._loadLudoState(roomId);
+    const players = this.ctx.storage.sql.exec(
+      "SELECT user_id,color,joined_at FROM ludo_room_players WHERE room_id=? ORDER BY joined_at ASC",
+      roomId,
+    ).toArray().map((row) => ({
+      user_id: String(row.user_id),
+      color: String(row.color),
+      joined_at: Number(row.joined_at || 0),
+    }));
+    const mine = players.find((row) => row.user_id === userId) || null;
+    return {
+      ok: true,
+      room_id: roomId,
+      player_color: mine?.color || null,
+      spectator: !mine,
+      players,
+      version: loaded.version,
+      updated_at: loaded.updated_at,
+      ...loaded.state,
+      movable_indexes: this._ludoMovableIndexes(loaded.state),
+    };
+  }
+
+  ludoState(userIdValue, roomIdValue) {
+    const { roomId } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    this._ensureLudoPlayer(userIdValue, roomId);
+    return this._publicLudoState(userIdValue, roomId);
+  }
+
+  ludoRoll(userIdValue, roomIdValue) {
+    const { userId, roomId } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    this._enforceActionRate(userId, "ludo_roll", 20, 30000, 60000);
+    const color = this._ensureLudoPlayer(userId, roomId);
+    if (!color) throw new Error("Ludo table already has four players");
+    const loaded = this._loadLudoState(roomId);
+    const state = loaded.state;
+    if (state.winner) return this._publicLudoState(userId, roomId, loaded);
+    if (String(state.current_player) !== color) throw new Error("It is not your turn");
+    if (state.rolled != null) return this._publicLudoState(userId, roomId, loaded);
+
+    const random = crypto.getRandomValues(new Uint32Array(1))[0];
+    state.rolled = (random % 6) + 1;
+    state.status = color.toUpperCase() + " rolled " + state.rolled + ".";
+    if (this._ludoMovableIndexes(state).length === 0) {
+      this._ludoAdvancePlayer(roomId, state, false);
+    }
+    const version = this._saveLudoState(roomId, state, loaded.version);
+    return this._publicLudoState(userId, roomId, {
+      state, version, updated_at: Date.now(),
+    });
+  }
+
+  ludoMove(userIdValue, roomIdValue, tokenIndexValue) {
+    const { userId, roomId } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    this._enforceActionRate(userId, "ludo_move", 30, 30000, 60000);
+    const color = this._ensureLudoPlayer(userId, roomId);
+    if (!color) throw new Error("Ludo table already has four players");
+    const tokenIndex = Number(tokenIndexValue);
+    if (!Number.isInteger(tokenIndex) || tokenIndex < 0 || tokenIndex > 3) {
+      throw new Error("Invalid Ludo token");
+    }
+    const loaded = this._loadLudoState(roomId);
+    const state = loaded.state;
+    if (state.winner) return this._publicLudoState(userId, roomId, loaded);
+    if (String(state.current_player) !== color) throw new Error("It is not your turn");
+    const dice = Number(state.rolled || 0);
+    if (!dice) throw new Error("Roll the dice first");
+    const movable = this._ludoMovableIndexes(state);
+    if (!movable.includes(tokenIndex)) throw new Error("That token cannot move");
+
+    const tokens = state.tokens[color];
+    const current = Number(tokens[tokenIndex]);
+    const next = current < 0 ? 0 : current + dice;
+    tokens[tokenIndex] = next;
+
+    if (next < 52) {
+      const sharedIndex = this._ludoTrackIndex(color, next);
+      const safe = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
+      if (!safe.has(sharedIndex)) {
+        for (const opponent of ["red", "green", "yellow", "blue"]) {
+          if (opponent === color) continue;
+          for (let index = 0; index < state.tokens[opponent].length; index += 1) {
+            const progress = Number(state.tokens[opponent][index]);
+            if (progress >= 0 && progress < 52 &&
+                this._ludoTrackIndex(opponent, progress) === sharedIndex) {
+              state.tokens[opponent][index] = -1;
+            }
+          }
+        }
+      }
+    }
+
+    if (state.tokens[color].every((progress) => Number(progress) >= 57)) {
+      state.winner = color;
+      state.rolled = null;
+      state.status = color.toUpperCase() + " wins!";
+    } else {
+      state.status = color.toUpperCase() + " moved token " + (tokenIndex + 1) + ".";
+      this._ludoAdvancePlayer(roomId, state, dice === 6);
+    }
+
+    const version = this._saveLudoState(roomId, state, loaded.version);
+    return this._publicLudoState(userId, roomId, {
+      state, version, updated_at: Date.now(),
+    });
+  }
+
+  ludoReset(userIdValue, roomIdValue) {
+    const { userId, roomId, room } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    if (String(room.owner_id || "") !== userId) {
+      throw new Error("Only the room owner can restart Ludo");
+    }
+    this._enforceActionRate(userId, "ludo_reset", 3, 60000, 120000);
+    const state = this._ludoInitialState();
+    const loaded = this._loadLudoState(roomId);
+    const version = this._saveLudoState(roomId, state, loaded.version);
+    return this._publicLudoState(userId, roomId, {
+      state, version, updated_at: Date.now(),
+    });
+  }
+
   playRoomQuickGame(userIdValue, input = {}) {
     const userId = String(userIdValue || "").trim();
+    this._enforceActionRate(userId, "quick_game_action", 30, 60000, 120000);
     const roomId = String(input.room_id || "").trim();
     const gameKey = String(input.game_key || "").trim().toLowerCase();
     const action = cleanText(input.action, 40);
@@ -3812,6 +4194,7 @@ export class AppDirectoryStore extends DurableObject {
 
   transferSettlement(senderUserIdValue, recipientUserIdValue, usdCentsValue) {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    this._enforceActionRate(senderId, "settlement_transfer", 5, 60000, 300000);
     const recipient = this.settlementRecipient(recipientUserIdValue);
     const usdCents = Math.floor(Number(usdCentsValue || 0));
     if (usdCents < 200) throw new Error("Minimum transfer is $2");
@@ -4969,6 +5352,7 @@ export class AppDirectoryStore extends DurableObject {
 
   transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue) {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    this._enforceActionRate(senderId, "seller_coin_transfer", 10, 60000, 300000);
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
     const amount = Math.floor(Number(amountValue || 0));
     if (!senderId || !recipientId) throw new Error("Sender and recipient IDs are required");
