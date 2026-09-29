@@ -518,9 +518,29 @@ export class AppDirectoryStore extends DurableObject {
 
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
-        coins INTEGER NOT NULL DEFAULT 2000000,
+        coins INTEGER NOT NULL DEFAULT 0,
         diamonds INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS wallet_coin_guards (
+        user_id TEXT PRIMARY KEY,
+        expected_coins INTEGER NOT NULL DEFAULT 0,
+        quarantined_coins INTEGER NOT NULL DEFAULT 0,
+        security_frozen INTEGER NOT NULL DEFAULT 0,
+        freeze_reason TEXT NOT NULL DEFAULT '',
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS privileged_wallet_coin_guards (
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        expected_balance INTEGER NOT NULL DEFAULT 0,
+        quarantined_coins INTEGER NOT NULL DEFAULT 0,
+        security_frozen INTEGER NOT NULL DEFAULT 0,
+        freeze_reason TEXT NOT NULL DEFAULT '',
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, wallet_type)
       );
 
       CREATE TABLE IF NOT EXISTS room_game_actions (
@@ -968,12 +988,22 @@ export class AppDirectoryStore extends DurableObject {
     );
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at)
-       SELECT user_id, 2000000, 0, ? FROM app_users`,
+       SELECT user_id, 0, 0, ? FROM app_users`,
       Date.now(),
     );
     this.ctx.storage.sql.exec(
       "INSERT OR IGNORE INTO owner_treasury (singleton_id, balance, updated_at) VALUES (1, 0, ?)",
       Date.now(),
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO wallet_coin_guards
+        (user_id,expected_coins,quarantined_coins,security_frozen,freeze_reason,updated_at)
+       SELECT user_id,coins,0,0,'',updated_at FROM app_wallets`,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO privileged_wallet_coin_guards
+        (user_id,wallet_type,expected_balance,quarantined_coins,security_frozen,freeze_reason,updated_at)
+       SELECT user_id,wallet_type,balance,0,0,'',updated_at FROM owner_wallets`,
     );
 
     const defaultVipEntries = [
@@ -1500,6 +1530,239 @@ export class AppDirectoryStore extends DurableObject {
     return this._userControls(userId);
   }
 
+  _normalWalletGuard(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User ID is required");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO app_wallets(user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
+      userId, now,
+    );
+    const wallet = this.ctx.storage.sql.exec(
+      "SELECT coins FROM app_wallets WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    const actual = Math.max(0, Number(wallet?.coins || 0));
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO wallet_coin_guards
+        (user_id,expected_coins,quarantined_coins,security_frozen,freeze_reason,updated_at)
+       VALUES (?,?,0,0,'',?)`,
+      userId, actual, now,
+    );
+    let guard = this.ctx.storage.sql.exec(
+      "SELECT * FROM wallet_coin_guards WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    const expected = Math.max(0, Number(guard?.expected_coins || 0));
+
+    if (actual > expected) {
+      const unexpected = actual - expected;
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET coins=?,updated_at=? WHERE user_id=?",
+        expected, now, userId,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE wallet_coin_guards
+            SET quarantined_coins=quarantined_coins+?,
+                security_frozen=1,
+                freeze_reason='unauthorized_coin_credit',
+                updated_at=?
+          WHERE user_id=?`,
+        unexpected, now, userId,
+      );
+      this._recordSecurityEvent(
+        userId,
+        "wallet_coin_guard",
+        "unauthorized_coin_credit",
+        { unexpected_coins: unexpected },
+      );
+    } else if (actual < expected) {
+      // Normal spending reduces the expected balance; only positive drift is suspicious.
+      this.ctx.storage.sql.exec(
+        "UPDATE wallet_coin_guards SET expected_coins=?,updated_at=? WHERE user_id=?",
+        actual, now, userId,
+      );
+    }
+
+    guard = this.ctx.storage.sql.exec(
+      "SELECT * FROM wallet_coin_guards WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    const current = this.ctx.storage.sql.exec(
+      "SELECT coins FROM app_wallets WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    return {
+      user_id: userId,
+      coins: Math.max(0, Number(current?.coins || 0)),
+      expected_coins: Math.max(0, Number(guard?.expected_coins || 0)),
+      quarantined_coins: Math.max(0, Number(guard?.quarantined_coins || 0)),
+      security_frozen: Number(guard?.security_frozen || 0) === 1,
+      freeze_reason: String(guard?.freeze_reason || ""),
+    };
+  }
+
+  _privilegedWalletGuard(userIdValue, walletTypeValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = String(walletTypeValue || "").trim().toLowerCase();
+    if (!userId || !["coin_seller","merchant"].includes(walletType)) {
+      throw new Error("Valid Coin Seller or Merchant wallet is required");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO owner_wallets
+        (user_id,wallet_type,balance,banned,updated_at)
+       VALUES (?,?,0,0,?)`,
+      userId, walletType, now,
+    );
+    const wallet = this.ctx.storage.sql.exec(
+      "SELECT balance FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    const actual = Math.max(0, Number(wallet?.balance || 0));
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO privileged_wallet_coin_guards
+        (user_id,wallet_type,expected_balance,quarantined_coins,security_frozen,freeze_reason,updated_at)
+       VALUES (?,?,?,0,0,'',?)`,
+      userId, walletType, actual, now,
+    );
+    let guard = this.ctx.storage.sql.exec(
+      "SELECT * FROM privileged_wallet_coin_guards WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    const expected = Math.max(0, Number(guard?.expected_balance || 0));
+
+    if (actual > expected) {
+      const unexpected = actual - expected;
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_wallets SET balance=?,updated_at=? WHERE user_id=? AND wallet_type=?",
+        expected, now, userId, walletType,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE privileged_wallet_coin_guards
+            SET quarantined_coins=quarantined_coins+?,
+                security_frozen=1,
+                freeze_reason='unauthorized_coin_credit',
+                updated_at=?
+          WHERE user_id=? AND wallet_type=?`,
+        unexpected, now, userId, walletType,
+      );
+      this._recordSecurityEvent(
+        userId,
+        "privileged_wallet_coin_guard",
+        "unauthorized_coin_credit",
+        { wallet_type: walletType, unexpected_coins: unexpected },
+      );
+    } else if (actual < expected) {
+      this.ctx.storage.sql.exec(
+        "UPDATE privileged_wallet_coin_guards SET expected_balance=?,updated_at=? WHERE user_id=? AND wallet_type=?",
+        actual, now, userId, walletType,
+      );
+    }
+
+    guard = this.ctx.storage.sql.exec(
+      "SELECT * FROM privileged_wallet_coin_guards WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    const current = this.ctx.storage.sql.exec(
+      "SELECT balance FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    return {
+      user_id: userId,
+      wallet_type: walletType,
+      balance: Math.max(0, Number(current?.balance || 0)),
+      expected_balance: Math.max(0, Number(guard?.expected_balance || 0)),
+      quarantined_coins: Math.max(0, Number(guard?.quarantined_coins || 0)),
+      security_frozen: Number(guard?.security_frozen || 0) === 1,
+      freeze_reason: String(guard?.freeze_reason || ""),
+    };
+  }
+
+  _creditNormalWalletAuthorized(userIdValue, amountValue, sourceValue = "authorized_transfer") {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    const guard = this._normalWalletGuard(userIdValue);
+    if (guard.security_frozen) throw new Error("Wallet is security-frozen. Owner unfreeze is required.");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    return this._normalWalletGuard(guard.user_id);
+  }
+
+  _creditPrivilegedWalletAuthorized(userIdValue, walletTypeValue, amountValue) {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    const guard = this._privilegedWalletGuard(userIdValue, walletTypeValue);
+    if (guard.security_frozen) throw new Error("Wallet is security-frozen. Owner unfreeze is required.");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_wallets SET balance=balance+?,updated_at=? WHERE user_id=? AND wallet_type=?",
+      amount, now, guard.user_id, guard.wallet_type,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_coin_guards SET expected_balance=expected_balance+?,updated_at=? WHERE user_id=? AND wallet_type=?",
+      amount, now, guard.user_id, guard.wallet_type,
+    );
+    return this._privilegedWalletGuard(guard.user_id, guard.wallet_type);
+  }
+
+  _debitPrivilegedWalletAuthorized(userIdValue, walletTypeValue, amountValue) {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    const guard = this._privilegedWalletGuard(userIdValue, walletTypeValue);
+    if (guard.security_frozen) throw new Error("Wallet is security-frozen. Owner unfreeze is required.");
+    if (guard.balance < amount) throw new Error("Wallet balance is not enough");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_wallets SET balance=balance-?,updated_at=? WHERE user_id=? AND wallet_type=?",
+      amount, now, guard.user_id, guard.wallet_type,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_coin_guards SET expected_balance=MAX(0,expected_balance-?),updated_at=? WHERE user_id=? AND wallet_type=?",
+      amount, now, guard.user_id, guard.wallet_type,
+    );
+    return this._privilegedWalletGuard(guard.user_id, guard.wallet_type);
+  }
+
+  _ownerUnfreezeWalletSecurity(userIdValue, walletTypeValue = "normal") {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
+    const now = Date.now();
+    if (walletType === "normal") {
+      this._normalWalletGuard(userId);
+      const wallet = this.ctx.storage.sql.exec(
+        "SELECT coins FROM app_wallets WHERE user_id=? LIMIT 1", userId,
+      ).toArray()[0];
+      this.ctx.storage.sql.exec(
+        `UPDATE wallet_coin_guards
+            SET expected_coins=?,quarantined_coins=0,security_frozen=0,freeze_reason='',updated_at=?
+          WHERE user_id=?`,
+        Math.max(0, Number(wallet?.coins || 0)), now, userId,
+      );
+      return { wallet_type: "normal", ...this._normalWalletGuard(userId) };
+    }
+    if (!["coin_seller","merchant"].includes(walletType)) throw new Error("Unsupported wallet type");
+    this._privilegedWalletGuard(userId, walletType);
+    const wallet = this.ctx.storage.sql.exec(
+      "SELECT balance FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    this.ctx.storage.sql.exec(
+      `UPDATE privileged_wallet_coin_guards
+          SET expected_balance=?,quarantined_coins=0,security_frozen=0,freeze_reason='',updated_at=?
+        WHERE user_id=? AND wallet_type=?`,
+      Math.max(0, Number(wallet?.balance || 0)), now, userId, walletType,
+    );
+    return this._privilegedWalletGuard(userId, walletType);
+  }
+
   _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
@@ -1511,28 +1774,32 @@ export class AppDirectoryStore extends DurableObject {
     if (!user) throw new Error("User not found");
 
     if (walletType === "normal") {
+      const guard = this._normalWalletGuard(userId);
+      if (guard.security_frozen && !["ban","unban"].includes(operation)) {
+        throw new Error("Wallet is security-frozen. Only Owner can remove the security freeze.");
+      }
       const now = Date.now();
-      this.ctx.storage.sql.exec(
-        "INSERT OR IGNORE INTO app_wallets (user_id, coins, diamonds, updated_at) VALUES (?, 0, 0, ?)",
-        userId, now,
-      );
       if (operation === "credit") {
-        this.ctx.storage.sql.exec(
-          "UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?",
-          amount, now, userId,
-        );
+        this._creditNormalWalletAuthorized(userId, amount, "owner_or_staff_panel");
       } else if (operation === "debit") {
         const wallet = this.getWallet(userId);
+        if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
         if (wallet.coins < amount) throw new Error("Wallet balance is too low");
         this.ctx.storage.sql.exec(
-          "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
+          "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
+          amount, now, userId,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE wallet_coin_guards SET expected_coins=MAX(0,expected_coins-?),updated_at=? WHERE user_id=?",
           amount, now, userId,
         );
       } else if (operation === "ban" || operation === "unban") {
         this.ctx.storage.sql.exec(
-          "UPDATE app_wallets SET banned = ?, updated_at = ? WHERE user_id = ?",
+          "UPDATE app_wallets SET banned=?,updated_at=? WHERE user_id=?",
           operation === "ban" ? 1 : 0, now, userId,
         );
+      } else if (operation !== "create") {
+        throw new Error("Unsupported wallet operation");
       }
       return { wallet_type: "normal", ...this.getWallet(userId) };
     }
@@ -1540,43 +1807,31 @@ export class AppDirectoryStore extends DurableObject {
     if (!["coin_seller", "merchant"].includes(walletType)) {
       throw new Error("Unsupported wallet type");
     }
+    const guard = this._privilegedWalletGuard(userId, walletType);
+    if (guard.security_frozen && !["ban","unban"].includes(operation)) {
+      throw new Error("Wallet is security-frozen. Only Owner can remove the security freeze.");
+    }
     const now = Date.now();
-    this.ctx.storage.sql.exec(
-      `INSERT OR IGNORE INTO owner_wallets
-        (user_id, wallet_type, balance, banned, updated_at)
-       VALUES (?, ?, 0, 0, ?)`,
-      userId, walletType, now,
-    );
-    const row = this.ctx.storage.sql.exec(
-      "SELECT * FROM owner_wallets WHERE user_id = ? AND wallet_type = ? LIMIT 1",
-      userId, walletType,
-    ).toArray()[0];
     if (operation === "credit") {
-      this.ctx.storage.sql.exec(
-        "UPDATE owner_wallets SET balance = balance + ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
-        amount, now, userId, walletType,
-      );
+      this._creditPrivilegedWalletAuthorized(userId, walletType, amount);
     } else if (operation === "debit") {
-      if (Number(row?.balance || 0) < amount) throw new Error("Wallet balance is too low");
-      this.ctx.storage.sql.exec(
-        "UPDATE owner_wallets SET balance = balance - ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
-        amount, now, userId, walletType,
-      );
+      this._debitPrivilegedWalletAuthorized(userId, walletType, amount);
     } else if (operation === "ban" || operation === "unban") {
       this.ctx.storage.sql.exec(
-        "UPDATE owner_wallets SET banned = ?, updated_at = ? WHERE user_id = ? AND wallet_type = ?",
+        "UPDATE owner_wallets SET banned=?,updated_at=? WHERE user_id=? AND wallet_type=?",
         operation === "ban" ? 1 : 0, now, userId, walletType,
       );
     } else if (operation !== "create") {
       throw new Error("Unsupported wallet operation");
     }
     const updated = this.ctx.storage.sql.exec(
-      "SELECT * FROM owner_wallets WHERE user_id = ? AND wallet_type = ? LIMIT 1",
+      "SELECT banned,updated_at FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
       userId, walletType,
     ).toArray()[0];
+    const current = this._privilegedWalletGuard(userId, walletType);
     return {
-      user_id: userId, wallet_type: walletType,
-      balance: Number(updated?.balance || 0),
+      ...current,
+      balance: current.security_frozen ? 0 : current.balance,
       banned: Number(updated?.banned || 0) === 1,
       updated_at: Number(updated?.updated_at || now),
     };
@@ -1597,7 +1852,14 @@ export class AppDirectoryStore extends DurableObject {
     if (amount <= 0) throw new Error("Enter a valid coin amount");
     const treasury = this.ownerState().treasury;
     if (treasury.balance < amount) throw new Error("Owner Treasury balance is not enough");
-    const walletType = String(walletTypeValue || "normal");
+    const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
+    if (walletType === "normal") {
+      const guard = this._normalWalletGuard(userIdValue);
+      if (guard.security_frozen) throw new Error("Target wallet is security-frozen");
+    } else {
+      const guard = this._privilegedWalletGuard(userIdValue, walletType);
+      if (guard.security_frozen) throw new Error("Target wallet is security-frozen");
+    }
     this.ctx.storage.sql.exec(
       "UPDATE owner_treasury SET balance = balance - ?, updated_at = ? WHERE singleton_id = 1",
       amount, Date.now(),
@@ -1876,6 +2138,7 @@ export class AppDirectoryStore extends DurableObject {
     switch (action) {
       case "treasury-add": return this._ownerTreasuryAdd(data.amount);
       case "treasury-send": return this._ownerTreasurySend(data.user_id, data.wallet_type, data.amount);
+      case "wallet-security-unfreeze": return this._ownerUnfreezeWalletSecurity(data.user_id, data.wallet_type);
       case "user-search": return { users: this.ownerSearchUsers(data.user_id || data.query, 50) };
       case "user-ban": return this._setUserControl(data.user_id, { banned: String(data.status) === "ban" });
       case "device-ban": return this._setUserControl(data.user_id, { device_banned: String(data.status) === "ban" });
@@ -2254,7 +2517,7 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets
         (user_id, coins, diamonds, updated_at)
-       VALUES (?, 2000000, 0, ?)`,
+       VALUES (?, 0, 0, ?)`,
       userId,
       now,
     );
@@ -3272,10 +3535,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE lucky_pouches SET remaining_coins=?, remaining_slots=?, completed_at=? WHERE id=?",
       nextCoins, nextSlots, complete ? now : null, pouch.id,
     );
-    this.ctx.storage.sql.exec(
-      "INSERT INTO app_wallets (user_id,coins,diamonds,updated_at) VALUES (?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET coins=app_wallets.coins+excluded.coins,updated_at=excluded.updated_at",
-      userId, coins, now,
-    );
+    this._creditNormalWalletAuthorized(userId, coins, "lucky_pouch_redistribution");
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
       "wallet-" + crypto.randomUUID(), userId, "lucky_pouch_claim", coins, 0, String(pouch.id)+":"+userId, "Lucky Pouch claim", now,
@@ -3362,10 +3622,7 @@ export class AppDirectoryStore extends DurableObject {
           "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,updated_at) VALUES (?,0,0,?)",
           ownerId, timestamp,
         );
-        this.ctx.storage.sql.exec(
-          "UPDATE app_wallets SET coins = coins + ?, updated_at = ? WHERE user_id = ?",
-          share, timestamp, ownerId,
-        );
+        this._creditNormalWalletAuthorized(ownerId, share, "room_commission");
         this.ctx.storage.sql.exec(
           "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'room_gift_owner_share',?,0,?,?,?)",
           crypto.randomUUID(), ownerId, share, reference, "10% daily Gift Box sending share", timestamp,
@@ -4291,10 +4548,11 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO app_wallets
         (user_id, coins, diamonds, banned, updated_at)
-       VALUES (?, 2000000, 0, 0, ?)`,
+       VALUES (?, 0, 0, 0, ?)`,
       userId,
       now,
     );
+    const coinGuard = this._normalWalletGuard(userId);
     const row = this.ctx.storage.sql.exec(
       "SELECT user_id, coins, diamonds, banned, updated_at FROM app_wallets WHERE user_id = ? LIMIT 1",
       userId,
@@ -4311,7 +4569,7 @@ export class AppDirectoryStore extends DurableObject {
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
     return {
       user_id: userId,
-      coins: Number(row?.coins || 0),
+      coins: coinGuard.security_frozen ? 0 : Number(row?.coins || 0),
       diamonds: visibleDiamonds,
       diamond_wallet_visible: isHost,
       is_host: isHost,
@@ -4320,10 +4578,13 @@ export class AppDirectoryStore extends DurableObject {
       diamond_usd_cents: diamondUsdCents,
       commission_usd_cents: commissionUsdCents,
       withdrawable_usd_cents: withdrawableUsdCents,
-      can_transfer_settlement: (isHost || isAgency || isBd) && withdrawableUsdCents >= 200,
+      can_transfer_settlement: !coinGuard.security_frozen &&
+        (isHost || isAgency || isBd) && withdrawableUsdCents >= 200,
       usd_rate: { reference_diamonds: 4000000, reference_usd_cents: 170 },
       roles,
       banned: Number(row?.banned || 0) === 1,
+      security_frozen: coinGuard.security_frozen,
+      freeze_reason: coinGuard.freeze_reason,
       updated_at: Number(row?.updated_at || now),
     };
   }
@@ -5620,49 +5881,65 @@ export class AppDirectoryStore extends DurableObject {
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
     const amount = Math.floor(Number(amountValue || 0));
     if (!senderId || !recipientId) throw new Error("Sender and recipient IDs are required");
-    if (senderId === recipientId) throw new Error("Cannot transfer coins to your own account");
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
 
-    const seller = this.ctx.storage.sql.exec(
-      "SELECT wallet_type,balance,banned FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END LIMIT 1",
+    const walletRows = this.ctx.storage.sql.exec(
+      "SELECT wallet_type,banned FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END",
       senderId,
-    ).toArray()[0];
-    if (!seller || Number(seller.banned || 0) === 1) {
-      throw new Error("Active Coin Seller or Merchant wallet is required");
+    ).toArray();
+    let source = null;
+    for (const row of walletRows) {
+      if (Number(row.banned || 0) === 1) continue;
+      const guard = this._privilegedWalletGuard(senderId, row.wallet_type);
+      if (!guard.security_frozen && guard.balance >= amount) {
+        source = guard;
+        break;
+      }
     }
-    if (Number(seller.balance || 0) < amount) throw new Error("Seller wallet balance is not enough");
+    if (!source) throw new Error("Active funded Coin Seller or Merchant wallet is required");
+
     const recipient = this.ctx.storage.sql.exec(
       "SELECT user_id,display_name FROM app_users WHERE user_id=? LIMIT 1", recipientId,
     ).toArray()[0];
     if (!recipient) throw new Error("Recipient not found");
+    const recipientGuard = this._normalWalletGuard(recipientId);
+    if (recipientGuard.security_frozen) {
+      throw new Error("Recipient wallet is security-frozen. Owner unfreeze is required.");
+    }
+
+    const debited = this._debitPrivilegedWalletAuthorized(senderId, source.wallet_type, amount);
+    this._creditNormalWalletAuthorized(
+      recipientId,
+      amount,
+      source.wallet_type === "merchant" ? "merchant_transfer" : "coin_seller_transfer",
+    );
 
     const now = Date.now();
+    const reference = source.wallet_type + "-transfer:" + crypto.randomUUID();
     this.ctx.storage.sql.exec(
-      "UPDATE owner_wallets SET balance=balance-?,updated_at=? WHERE user_id=? AND wallet_type=?",
-      amount, now, senderId, seller.wallet_type,
-    );
-    this.ctx.storage.sql.exec(
-      "INSERT OR IGNORE INTO app_wallets(user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
-      recipientId, now,
-    );
-    this.ctx.storage.sql.exec(
-      "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",
-      amount, now, recipientId,
-    );
-    const reference = "seller-transfer:" + crypto.randomUUID();
-    this.ctx.storage.sql.exec(
-      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'coin_seller_received',?,0,?,?,?)",
-      "wallet-" + crypto.randomUUID(), recipientId, amount, reference,
-      "Coins received from " + String(seller.wallet_type).replaceAll("_", " "), now,
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?, ?,0,?,?,?)",
+      "wallet-" + crypto.randomUUID(),
+      recipientId,
+      source.wallet_type === "merchant" ? "merchant_received" : "coin_seller_received",
+      amount,
+      reference,
+      "Coins received from " + String(source.wallet_type).replaceAll("_", " "),
+      now,
     );
     this._notifyUser(
       recipientId,
       "coins_received",
       "Coins received",
-      amount.toLocaleString("en-US") + " coins received from " + String(seller.wallet_type).replaceAll("_", " ") + ".",
-      { source_user_id: senderId, metadata: { amount_coins: amount, sender_role: String(seller.wallet_type) } },
+      amount.toLocaleString("en-US") + " coins received from " + String(source.wallet_type).replaceAll("_", " ") + ".",
+      { source_user_id: senderId, metadata: { amount_coins: amount, sender_role: String(source.wallet_type) } },
     );
-    return { ok: true, recipient_wallet: this.getWallet(recipientId), sender_balance: Number(seller.balance || 0) - amount };
+    return {
+      ok: true,
+      recipient_wallet: this.getWallet(recipientId),
+      sender_wallet_type: source.wallet_type,
+      sender_balance: debited.balance,
+      self_transfer: senderId === recipientId,
+    };
   }
 
   sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
