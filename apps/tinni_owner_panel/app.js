@@ -321,6 +321,8 @@ const actionPermission = {
   "policy-set": "policies.edit",
   "feature-set": "policies.edit",
   "pricing-set": "policies.pricing",
+  "user-price-override-set": "policies.pricing",
+  "user-price-override-remove": "policies.pricing",
   // Catalog permissions are resolved from the item's kind at click time.
   "catalog-toggle": "roles.manage",
   "catalog-edit": "roles.manage",
@@ -1219,6 +1221,16 @@ function openAction(action, preset = {}) {
       field("user_id","User ID (blank = all users)","text","",false)
     ],
     "policy-new": ["Create New Setting", field("key","Setting key") + field("value","Value")],
+    "user-price-override-set": ["Per-user Price / Free / Validity",
+      field("user_id","User ID") +
+      field("price_key","Price key (e.g. call:direct, frame:frame-1, vip:vip-1, entry:item-id, vehicle:item-id, profile_card:item-id, or *)") +
+      field("price_coins","Custom price coins (0 = free)","number","0") +
+      field("duration_days","Custom purchased validity days (blank = item default, 0 = permanent)","number","",false) +
+      field("expires_at","Override rule expires at (blank = no expiry)","datetime-local","",false)
+    ],
+    "user-price-override-remove": ["Remove Per-user Price Override",
+      field("user_id","User ID") + field("price_key","Price key")
+    ],
     "pricing-set": ["Call / Theme / Frame / VIP Pricing",
       field("direct_call_coins","Direct call coins/min","number","400000") +
       field("random_call_coins","Random call coins/min","number","500000") +
@@ -1503,6 +1515,19 @@ async function handleAction(action, data) {
     if (payload.min_bet < 0 || payload.max_bet <= 0 || payload.max_bet < payload.min_bet) {
       throw new Error("Enter valid minimum and maximum bet limits.");
     }
+  }
+  if (action === "user-price-override-set") {
+    payload.user_id = String(data.user_id || "").trim();
+    payload.price_key = String(data.price_key || "").trim().toLowerCase();
+    payload.price_coins = Math.max(0, Number(data.price_coins || 0));
+    payload.duration_days = String(data.duration_days || "").trim() === "" ? null : Math.max(0, Number(data.duration_days));
+    payload.expires_at = String(data.expires_at || "").trim() ? new Date(data.expires_at).getTime() : null;
+    if (!payload.user_id || !payload.price_key) throw new Error("User ID and price key are required.");
+  }
+  if (action === "user-price-override-remove") {
+    payload.user_id = String(data.user_id || "").trim();
+    payload.price_key = String(data.price_key || "").trim().toLowerCase();
+    if (!payload.user_id || !payload.price_key) throw new Error("User ID and price key are required.");
   }
   if (action === "pricing-set") {
     payload.direct_call_coins = Math.max(0, Number(data.direct_call_coins || 0));
