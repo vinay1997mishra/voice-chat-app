@@ -358,6 +358,17 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_realtime_events (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        event_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_realtime_events_room_time
+        ON room_realtime_events(room_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS direct_messages (
         id TEXT PRIMARY KEY,
         from_user_id TEXT NOT NULL,
@@ -2700,6 +2711,79 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
     return { ok: true, online: true, room_id: roomId || null, last_seen: now };
+  }
+
+  recordRoomRealtimeEvent(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const roomId = String(input.room_id || "").trim();
+    const event = input.event && typeof input.event === "object"
+      ? input.event
+      : {};
+    const eventType = cleanText(event.type, 60);
+    if (!userId || !roomId || !eventType) {
+      throw new Error("room_id and event.type are required");
+    }
+    const allowedTypes = new Set([
+      "mic_state",
+      "seat_state",
+      "room_state",
+      "emote",
+    ]);
+    if (!allowedTypes.has(eventType)) {
+      throw new Error("Unsupported room realtime event");
+    }
+
+    const room = this.ctx.storage.sql.exec(
+      "SELECT id,closed FROM app_rooms WHERE id=? LIMIT 1",
+      roomId,
+    ).toArray()[0];
+    if (!room || Number(room.closed || 0) === 1) {
+      throw new Error("Room is unavailable");
+    }
+    const presence = this.ctx.storage.sql.exec(
+      "SELECT room_id,last_seen FROM app_user_presence WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!presence || String(presence.room_id || "") !== roomId ||
+        Date.now() - Number(presence.last_seen || 0) > 120000) {
+      throw new Error("You must be active inside this room");
+    }
+
+    this._enforceActionRate(userId, "room_realtime_event", 120, 60000, 60000);
+    const normalized = {
+      ...event,
+      type: eventType,
+      userId,
+    };
+    const eventJson = JSON.stringify(normalized);
+    if (eventJson.length > 4000) throw new Error("Room event is too large");
+
+    const id = "room-event-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO room_realtime_events(id,room_id,user_id,event_type,event_json,created_at) VALUES (?,?,?,?,?,?)",
+      id, roomId, userId, eventType, eventJson, now,
+    );
+    // Keep bounded history because these events are transient coordination data.
+    this.ctx.storage.sql.exec(
+      `DELETE FROM room_realtime_events
+        WHERE room_id=?
+          AND id NOT IN (
+            SELECT id FROM room_realtime_events
+             WHERE room_id=?
+             ORDER BY created_at DESC
+             LIMIT 500
+          )`,
+      roomId, roomId,
+    );
+    return {
+      ok: true,
+      id,
+      room_id: roomId,
+      user_id: userId,
+      event_type: eventType,
+      created_at: now,
+    };
   }
 
   clearPresence(userIdValue, roomIdValue, memberCountValue = null) {
