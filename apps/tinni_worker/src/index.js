@@ -1067,12 +1067,71 @@ export default {
     }
 
     if (url.pathname === "/app-config" && request.method === "GET") {
+      const ownerState = getAppDirectoryStore(env).ownerState();
+      const features = ownerState.features || {};
+      const gameConfig = ownerState.game_config || {};
       return json({
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
         facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
         email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+        remote_config: {
+          room_recommendation_enabled: true,
+          gift_effects_enabled: features.gifts !== false,
+          ktv_enabled: features.voice_rooms !== false,
+          games_enabled: features.games !== false && gameConfig.enabled !== false,
+          voice_rooms_enabled: features.voice_rooms !== false,
+          vip_enabled: features.vip !== false,
+          host_system_enabled: features.host_system !== false,
+          agency_system_enabled: features.agency_system !== false,
+          bd_system_enabled: features.bd_system !== false,
+          coin_seller_enabled: features.coin_seller !== false,
+          merchant_enabled: features.merchant !== false,
+          banners_enabled: features.banners !== false,
+          vehicle_entries_enabled: features.vehicle_entries !== false,
+          frames_enabled: features.frames !== false,
+        },
       });
+    }
+
+    if (url.pathname === "/telemetry/analytics" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(
+          await getAppDirectoryStore(env).recordClientAnalytics(
+            appSession.user.user_id,
+            body,
+          ),
+          201,
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to record analytics"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/telemetry/crash" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(
+          await getAppDirectoryStore(env).recordClientCrash(
+            appSession.user.user_id,
+            body,
+          ),
+          201,
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to record crash"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/app-auth/google" && request.method === "POST") {
