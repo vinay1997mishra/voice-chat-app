@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'app/tinni_app.dart';
@@ -19,12 +21,29 @@ Future<void> main() async {
   await persistence.restore(runtime);
 
   final state = TinniState(runtime: runtime);
+
+  final previousFlutterError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    state.crashReporter.record(details.exception, details.stack);
+    previousFlutterError?.call(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    state.crashReporter.record(error, stackTrace);
+    return false;
+  };
+
   final authPersistence = AuthPersistence();
   state.attachAuthPersistence(authPersistence);
   final restored = await authPersistence.restore(state.auth);
   if (restored && state.auth.current != null) {
     state.profile.loadFromAccount(state.auth.current!);
+    await state.push.register(state.auth.current!.userId);
   }
+
+  await state.refreshRemoteConfig();
+  state.analytics.event('app_start', <String, Object?>{
+    'auth_restored': restored,
+  });
 
   final bridge = AnamikaLinkBridge(
     connector: state.connector,
