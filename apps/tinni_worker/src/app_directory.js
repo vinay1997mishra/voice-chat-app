@@ -5300,7 +5300,7 @@ export class AppDirectoryStore extends DurableObject {
     return { id, user_id: userId, type, title, message, created_at: now };
   }
 
-  dispatchEventNotifications(nowValue = Date.now()) {
+  dispatchEventNotifications(nowValue = Date.now(), onlyUserIdValue = "") {
     const now = Number(nowValue || Date.now());
     const eventRows = this.ctx.storage.sql.exec(
       `SELECT id,kind,name,data_json,created_at,updated_at
@@ -5312,9 +5312,15 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray();
     if (!eventRows.length) return { ok: true, sent: 0 };
 
-    const users = this.ctx.storage.sql.exec(
-      "SELECT user_id,country_code FROM app_users ORDER BY created_at DESC",
-    ).toArray();
+    const onlyUserId = this._resolveOwnerUserId(onlyUserIdValue);
+    const users = onlyUserId
+      ? this.ctx.storage.sql.exec(
+          "SELECT user_id,country_code FROM app_users WHERE user_id=? LIMIT 1",
+          onlyUserId,
+        ).toArray()
+      : this.ctx.storage.sql.exec(
+          "SELECT user_id,country_code FROM app_users ORDER BY created_at DESC",
+        ).toArray();
     const dayStart = now - 24 * 60 * 60 * 1000;
     let sent = 0;
 
@@ -5401,8 +5407,8 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   listUserNotifications(userIdValue, limitValue = 200) {
-    this.dispatchEventNotifications(Date.now());
     const userId = this._resolveOwnerUserId(userIdValue);
+    this.dispatchEventNotifications(Date.now(), userId);
     const limit = Math.max(1, Math.min(300, Number(limitValue || 200)));
     return this.ctx.storage.sql.exec(
       "SELECT * FROM user_notifications WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
