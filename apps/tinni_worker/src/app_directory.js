@@ -3095,6 +3095,40 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  purchaseUniqueId(userIdValue, publicIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const publicId = String(publicIdValue || "").trim();
+    const offer = this.ctx.storage.sql.exec(
+      "SELECT * FROM owner_unique_ids WHERE public_id = ? AND enabled = 1 LIMIT 1", publicId,
+    ).toArray()[0];
+    if (!offer) throw new Error("Unique ID is unavailable");
+    if (offer.assigned_user_id) throw new Error("Unique ID is already assigned");
+    const taken = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+    if (taken) throw new Error("Unique ID is already in use");
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(offer.price_coins || 0));
+    const wallet = this.getWallet(userId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'unique_id_purchase',?,0,?,?,?)",
+        crypto.randomUUID(), userId, -price, "unique-id:" + publicId, publicId, now,
+      );
+    }
+    const previousId = userId;
+    const changed = this._changeUserId(previousId, publicId);
+    const durationDays = Math.max(0, Number(offer.duration_days || 0));
+    const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_unique_ids SET assigned_user_id = ?, updated_at = ? WHERE public_id = ?", publicId, now, publicId,
+    );
+    return { ok: true, user: changed, public_id: publicId, price_coins: price, duration_days: durationDays, expires_at: expiresAt, permanent: durationDays === 0, wallet: this.getWallet(publicId) };
+  }
+
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const frameId = String(frameIdValue || "").trim();
