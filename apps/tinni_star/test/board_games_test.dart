@@ -18,6 +18,18 @@ void main() {
       kind: GameKind.fruitParty,
     );
     expect(GameService.catalog, hasLength(8));
+    expect(
+      GameService.catalog.firstWhere((g) => g.kind == GameKind.ludo).requiresServerAuthority,
+      isFalse,
+    );
+    expect(
+      GameService.catalog.firstWhere((g) => g.kind == GameKind.uno).requiresServerAuthority,
+      isFalse,
+    );
+    expect(
+      GameService.catalog.firstWhere((g) => g.kind == GameKind.fruitJackpot).requiresServerAuthority,
+      isTrue,
+    );
     expect(session.state, GameSessionState.open);
     session.closeBetting();
     session.beginSettlement();
