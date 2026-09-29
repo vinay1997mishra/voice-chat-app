@@ -9,6 +9,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
+import '../effects/effect_overlay.dart';
 import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
@@ -5023,6 +5024,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
               _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
+            Positioned.fill(
+              child: EffectOverlay(
+                queue: widget.state.effects,
+                enabled: widget.state.roomControls.effectsEnabled,
+              ),
+            ),
             if (_fruitJackpotOpen)
               Positioned(
                 left: 4,
