@@ -205,17 +205,6 @@ class FruitPartyRemoteService extends ChangeNotifier {
     }
     if (fruit == null) return null;
 
-    final bonusFruits = <FruitPartyKind>[];
-    for (final item in _asList(row['bonus_fruits'])) {
-      final bonusMap = _asMap(item);
-      final key = bonusMap['key']?.toString();
-      for (final candidate in FruitPartyKind.values) {
-        if (candidate.name == key) {
-          bonusFruits.add(candidate);
-          break;
-        }
-      }
-    }
 
     return FruitPartyRoundResult(
       roundId: _asInt(row['round_id']),
@@ -227,8 +216,6 @@ class FruitPartyRemoteService extends ChangeNotifier {
         _asInt(row['settled_at']),
         isUtc: true,
       ),
-      specialKind: row['special_kind']?.toString(),
-      bonusFruits: bonusFruits,
     );
   }
 
