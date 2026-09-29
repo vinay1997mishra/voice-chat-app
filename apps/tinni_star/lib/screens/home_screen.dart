@@ -479,9 +479,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPartyPage() {
+    final selectedCountry =
+        countryFilter.trim().isEmpty ? null : countryFilter.trim();
     final ordered = popular
-        ? widget.state.discovery.recommend()
-        : widget.state.discovery.newRooms();
+        ? widget.state.discovery.recommend(country: selectedCountry)
+        : widget.state.discovery
+            .newRooms()
+            .where(
+              (room) =>
+                  selectedCountry == null || room.country == selectedCountry,
+            )
+            .toList();
     final topRooms = ordered.take(3).toList();
     final listRooms = ordered.skip(3).toList();
 
