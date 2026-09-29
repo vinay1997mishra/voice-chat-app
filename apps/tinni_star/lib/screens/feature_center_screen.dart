@@ -56,7 +56,7 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
     final state = widget.state;
     final modules = <_FeatureAction>[
       _FeatureAction(
-        'Wallet / Recharge',
+        'Wallet',
         Icons.account_balance_wallet_rounded,
         () => _open(RechargeScreen(state: state)),
       ),
