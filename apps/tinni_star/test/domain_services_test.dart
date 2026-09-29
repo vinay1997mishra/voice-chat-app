@@ -15,6 +15,7 @@ void main() {
 
   test('gift spends wallet and records transaction', () {
     final state = makeState();
+    state.wallet.coins = 10000; // explicit test fixture funding; production accounts start at 0.
     final before = state.wallet.coins;
     final tx = state.gifts.send(
       gift: GiftService.catalog.first,
@@ -64,6 +65,7 @@ void main() {
 
   test('store inventory rejects duplicate purchase', () {
     final state = makeState();
+    state.wallet.coins = 10000; // explicit test fixture funding; production accounts start at 0.
     const item = StoreItem(
       id: 'car-1',
       name: 'Star Car',
