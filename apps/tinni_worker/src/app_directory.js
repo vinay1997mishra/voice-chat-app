@@ -627,6 +627,18 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS owner_unique_ids (
+        public_id TEXT PRIMARY KEY,
+        price_coins INTEGER NOT NULL DEFAULT 0,
+        assigned_user_id TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_unique_ids_user
+        ON owner_unique_ids(assigned_user_id, updated_at DESC);
+
       CREATE TABLE IF NOT EXISTS user_inventory (
         user_id TEXT NOT NULL,
         item_id TEXT NOT NULL,
@@ -1473,6 +1485,28 @@ export class AppDirectoryStore extends DurableObject {
       case "vip-grant": return this._setUserControl(data.user_id, {
         vip_level: String(data.operation) === "remove" ? 0 : Math.max(1, Number(data.vip_level || 1)),
       });
+      case "unique-id-new": {
+        const publicId = String(data.public_id || "").trim();
+        if (!/^\\d{6,12}$/.test(publicId)) throw new Error("Unique ID must contain 6 to 12 digits");
+        const price = Math.max(0, Number(data.price_coins || 0));
+        const existingUser = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+        if (existingUser) throw new Error("Unique ID is already in use");
+        this.ctx.storage.sql.exec(
+          `INSERT INTO owner_unique_ids (public_id,price_coins,assigned_user_id,enabled,created_at,updated_at)
+           VALUES (?,?,NULL,1,?,?)
+           ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,enabled=1,updated_at=excluded.updated_at`,
+          publicId, price, Date.now(), Date.now(),
+        );
+        return { public_id: publicId, price_coins: price, enabled: true };
+      }
+      case "unique-id-price": {
+        const publicId = String(data.public_id || "").trim();
+        const price = Math.max(0, Number(data.price_coins || 0));
+        const row = this.ctx.storage.sql.exec("SELECT public_id FROM owner_unique_ids WHERE public_id = ? LIMIT 1", publicId).toArray()[0];
+        if (!row) throw new Error("Unique ID not found");
+        this.ctx.storage.sql.exec("UPDATE owner_unique_ids SET price_coins = ?, updated_at = ? WHERE public_id = ?", price, Date.now(), publicId);
+        return { public_id: publicId, price_coins: price };
+      }
       case "id-change": return this._changeUserId(data.user_id, data.new_id);
       case "room-ban": {
         const roomId = String(data.room_id || "").trim();
