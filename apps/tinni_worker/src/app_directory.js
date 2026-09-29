@@ -3,11 +3,9 @@ import { DurableObject } from "cloudflare:workers";
 const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
 const ROOM_THEME_DURATION_DAYS = new Set([7, 10, 15, 30]);
-const UNVERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 200000;
 const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
 const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
-const UNVERIFIED_RECEIVER_REWARD_PERCENT = 50;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
@@ -4171,9 +4169,7 @@ export class AppDirectoryStore extends DurableObject {
         ? "Your ID is Verified. You receive 80% = " +
           reward.toLocaleString("en-US") +
           " diamonds/min when you answer this call. "
-        : "Your ID is Unverified. You can answer this call and receive 50% = " +
-          reward.toLocaleString("en-US") +
-          " diamonds/min. Complete one-time verification to become eligible for the 80% verified rate. ";
+        : "Your ID is Unverified. You can answer this call, but paid-call receiver earnings stay at 0 until verification is approved. ";
     } else {
       text += verified
         ? "Your ID is Verified for the random-call pool. "
