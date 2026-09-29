@@ -1590,6 +1590,17 @@ export class AppDirectoryStore extends DurableObject {
         policies[String(data.key || "").trim()] = data.value;
         return this._setOwnerSetting("policies", policies);
       }
+      case "pricing-set": {
+        const policies = this.ownerState().policies;
+        policies.direct_call_coins = Math.max(0, Number(data.direct_call_coins || 0));
+        policies.random_call_coins = Math.max(0, Number(data.random_call_coins || 0));
+        policies.receiver_percent = Math.max(0, Math.min(100, Number(data.receiver_percent || 0)));
+        policies.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
+        policies.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
+        policies.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
+        policies.free_user_ids = Array.isArray(data.free_user_ids) ? data.free_user_ids.map(String) : [];
+        return this._setOwnerSetting("policies", policies);
+      }
       case "feature-set": {
         const features = this.ownerState().features;
         features[String(data.key || "").trim()] = data.enabled === true;
