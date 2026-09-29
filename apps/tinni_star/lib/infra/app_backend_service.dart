@@ -121,6 +121,26 @@ class AppBackendService {
     return _request('POST', '/unique-ids/purchase', token, body: {'public_id': publicId});
   }
 
+  Future<List<Map<String, dynamic>>> storeCatalog(String token, String kind, {String country = ''}) async {
+    final base = apiBase.replace(path: '/store/catalog');
+    final uri = base.replace(queryParameters: {'kind': kind, if (country.isNotEmpty) 'country': country});
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty ? <String, dynamic>{} : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to load store');
+    final raw = data['items'];
+    if (raw is! List) return const [];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> purchaseStoreItem(String token, String kind, String itemId, {String country = ''}) async {
+    return _request('POST', '/store/purchase', token, body: {'kind': kind, 'item_id': itemId, if (country.isNotEmpty) 'country': country});
+  }
+
   Future<List<Map<String, dynamic>>> frameCatalog(String token) async {
     final data = await _request('GET', '/frames/catalog', token);
     final raw = data['frames'];
