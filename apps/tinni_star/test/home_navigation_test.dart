@@ -112,7 +112,7 @@ void main() {
 
     expect(find.byKey(const Key('mine-cp-panel')), findsNothing);
     expect(find.text('Coins'), findsOneWidget);
-    expect(find.text('Diamonds'), findsOneWidget);
+    expect(find.text('Diamonds'), findsNothing);
   });
 
   testWidgets('party ranking controls open destinations', (tester) async {
