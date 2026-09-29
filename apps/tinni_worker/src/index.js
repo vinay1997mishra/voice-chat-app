@@ -2786,6 +2786,26 @@ export default {
       return json({ ok: true, user_id: requestedId, tags, medals });
     }
 
+    if (url.pathname === "/room-events" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(
+          await getAppDirectoryStore(env).recordRoomRealtimeEvent(
+            appSession.user.user_id,
+            body,
+          ),
+          201,
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send room event"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
