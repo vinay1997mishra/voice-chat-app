@@ -1223,6 +1223,8 @@ function openAction(action, preset = {}) {
       field("random_call_coins","Random call coins/min","number","500000") +
       field("receiver_percent","Verified receiver diamond %","number","80") +
       field("room_theme_coins","Default room theme coins (0 = free)","number","10000000") +
+      field("cp_connect_coins","CP connect coins (0 = free)","number","0") +
+      field("cp_disconnect_coins","CP disconnect coins (0 = free)","number","0") +
       field("frame_default_coins","Default frame coins (0 = free)","number","0") +
       field("vip_default_coins","Default VIP coins (0 = free)","number","0") +
       field("unique_id_purchase_coins","Unique ID purchase coins (0 = free)","number","0") +
@@ -1506,6 +1508,8 @@ async function handleAction(action, data) {
     payload.random_call_coins = Math.max(0, Number(data.random_call_coins || 0));
     payload.receiver_percent = Math.max(0, Math.min(100, Number(data.receiver_percent || 0)));
     payload.room_theme_coins = Math.max(0, Number(data.room_theme_coins || 0));
+  payload.cp_connect_coins = Math.max(0, Number(data.cp_connect_coins || 0));
+  payload.cp_disconnect_coins = Math.max(0, Number(data.cp_disconnect_coins || 0));
     payload.frame_default_coins = Math.max(0, Number(data.frame_default_coins || 0));
     payload.vip_default_coins = Math.max(0, Number(data.vip_default_coins || 0));
     payload.unique_id_purchase_coins = Math.max(0, Number(data.unique_id_purchase_coins || 0));
