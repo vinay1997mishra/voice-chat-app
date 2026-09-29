@@ -1853,6 +1853,20 @@ export default {
       }
     }
 
+    if (url.pathname === "/store/catalog" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const kind = String(url.searchParams.get("kind") || "");
+      return json({ ok: true, items: getAppDirectoryStore(env).purchasableCatalog(kind, url.searchParams.get("country") || "") });
+    }
+    if (url.pathname === "/store/purchase" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try { return json(getAppDirectoryStore(env).purchaseCatalogItem(appSession.user.user_id, body.kind, body.item_id, body.country || "")); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Unable to purchase item") }, 400); }
+    }
+
     if (url.pathname === "/frames/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -3780,7 +3794,7 @@ export default {
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create",
-        "entry-new":"assets.entries","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
+        "entry-new":"assets.entries","profile-card-new":"assets.frames","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
         "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
         "feature-set":"policies.edit","pricing-set":"policies.pricing",
       };
