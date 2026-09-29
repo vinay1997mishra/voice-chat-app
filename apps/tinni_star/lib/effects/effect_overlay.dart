@@ -166,7 +166,7 @@ class _BinaryEffectViewState extends State<_BinaryEffectView> {
     final lower = widget.asset.toLowerCase();
     if (lower.endsWith('.gif')) {
       return Image.network(widget.asset, fit: BoxFit.contain, gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => const SizedBox.shrink());
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink());
     }
     if (lower.endsWith('.svga')) {
       return SVGAEasyPlayer(resUrl: widget.asset, fit: BoxFit.contain);
