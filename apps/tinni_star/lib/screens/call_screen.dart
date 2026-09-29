@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
@@ -318,6 +319,7 @@ class ActiveCallScreen extends StatefulWidget {
 }
 
 class _ActiveCallScreenState extends State<ActiveCallScreen> {
+  static const MethodChannel _privacyChannel = MethodChannel('tinni.star/privacy');
   bool connecting = true;
   bool muted = false;
   bool ending = false;
@@ -331,6 +333,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   void initState() {
     super.initState();
     remoteState = widget.call.state;
+    if (widget.call.media == CallMedia.video) {
+      _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': true});
+    }
     _connect();
     statusTimer = Timer.periodic(
       const Duration(seconds: 2),
@@ -461,6 +466,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void dispose() {
     statusTimer?.cancel();
+    if (widget.call.media == CallMedia.video) {
+      _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': false});
+    }
     if (!ending) {
       widget.state.realtime.exitRoom();
     }
