@@ -4,8 +4,15 @@ import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/calls/call_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/rewards/reward_service.dart';
+import 'package:tinni_star/sharing/share_service.dart';
 
 import 'test_account.dart';
+
+class _FakeNativeShare implements NativeShareAdapter {
+  String? value;
+  @override
+  Future<void> share(String text) async => value = text;
+}
 
 void main() {
   TinniState makeState() => TinniState(
@@ -48,6 +55,15 @@ void main() {
       ),
       throwsStateError,
     );
+  });
+
+  test('sharing invokes native share adapter and keeps target history', () async {
+    final native = _FakeNativeShare();
+    final sharing = ShareService(native: native);
+    const payload = SharePayload(title: 'Join Tinni Star', link: 'https://example.test/r/123');
+    await sharing.share(ShareTarget.whatsapp, payload);
+    expect(native.value, 'Join Tinni Star https://example.test/r/123');
+    expect(sharing.history.single, startsWith('whatsapp:'));
   });
 
   test('profile mirrors the authenticated real account', () {
