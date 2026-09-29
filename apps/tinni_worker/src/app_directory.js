@@ -1487,7 +1487,7 @@ export class AppDirectoryStore extends DurableObject {
       });
       case "unique-id-new": {
         const publicId = String(data.public_id || "").trim();
-        if (!/^\\d{6,12}$/.test(publicId)) throw new Error("Unique ID must contain 6 to 12 digits");
+        if (!/^\\d{4,8}$/.test(publicId)) throw new Error("Unique ID must contain 4 to 8 digits");
         const price = Math.max(0, Number(data.price_coins || 0));
         const existingUser = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
         if (existingUser) throw new Error("Unique ID is already in use");
@@ -1497,7 +1497,7 @@ export class AppDirectoryStore extends DurableObject {
            ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,enabled=1,updated_at=excluded.updated_at`,
           publicId, price, Date.now(), Date.now(),
         );
-        return { public_id: publicId, price_coins: price, enabled: true };
+        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0, enabled: true };
       }
       case "unique-id-price": {
         const publicId = String(data.public_id || "").trim();
