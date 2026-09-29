@@ -1989,6 +1989,7 @@ export default {
           appSession.user.user_id,
           body.recipient_user_id,
           body.amount_coins,
+          body.wallet_type,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer coins") }, 400);
