@@ -209,7 +209,7 @@ class _StoreScreenState extends State<StoreScreen> {
   @override
   Widget build(BuildContext context) {
     final dynamicCatalog = <StoreItem>[
-      if (_remoteStore != null) ..._remoteStore!,
+      ...?_remoteStore,
       if (_remoteFrames != null && _remoteFrames!.isNotEmpty)
         ..._remoteFrames!
       else
