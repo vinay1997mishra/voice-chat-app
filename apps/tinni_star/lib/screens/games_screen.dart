@@ -8,7 +8,6 @@ import '../ui/royal_theme.dart';
 import 'fruit_jackpot_screen.dart';
 import 'fruit_party_screen.dart';
 import 'ludo_screen.dart';
-import 'uno_screen.dart';
 
 class GamesScreen extends StatelessWidget {
   const GamesScreen({
@@ -121,15 +120,6 @@ class GamesScreen extends StatelessWidget {
         () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const LudoScreen()),
-        ),
-      ),
-      (
-        'UNO',
-        Icons.style_rounded,
-        FeaturePalette.uno,
-        () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const UnoScreen()),
         ),
       ),
       (
