@@ -3436,7 +3436,7 @@ export class AppDirectoryStore extends DurableObject {
     }
     this.ctx.storage.sql.exec(
       "INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?, 'frame',?,?)",
-      userId, frameId, now, Math.max(0, Number(frame.data?.duration_days || 0)) > 0 ? now + Math.max(0, Number(frame.data?.duration_days || 0)) * 86400000 : null,
+      userId, frameId, now, (effective.duration_days ?? 0) > 0 ? now + (effective.duration_days ?? 0) * 86400000 : null,
     );
     return { ok: true, duplicate: false, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
   }
