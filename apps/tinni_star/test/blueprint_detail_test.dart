@@ -57,7 +57,7 @@ void main() {
     expect(features.tasks.keys, isNot(contains('gifts')));
   });
 
-  test('family received coins award EXP, wallet share and count once', () {
+  test('family received coins award EXP only and count once', () {
     final family = FamilyService()
       ..create(
         familyName: 'Tinni',
@@ -77,7 +77,7 @@ void main() {
       true,
     );
     expect(family.experience, 5000000);
-    expect(family.walletCoins, 50000);
+    expect(family.walletCoins, 0);
     expect(
       family.recordCoinsReceived(
         transactionId: 'rx-5000000',
