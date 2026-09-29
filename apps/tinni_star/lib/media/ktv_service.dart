@@ -115,10 +115,10 @@ class KtvService {
   Future<void> loadLocalSongs() async {
     if (_localLibraryLoaded) return;
     _localLibraryLoaded = true;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
-    if (raw == null || raw.trim().isEmpty) return;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefsKey);
+      if (raw == null || raw.trim().isEmpty) return;
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
       library.removeWhere((song) => song.local);
@@ -137,24 +137,29 @@ class KtvService {
       }
       await _persistLocalSongs();
     } catch (_) {
-      // Corrupt local metadata is ignored; files remain inside app storage.
+      // Tests or restricted environments may not expose platform storage.
+      // Music UI still remains usable; real devices persist app-private files.
     }
   }
 
   Future<void> _persistLocalSongs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rows = library
-        .where((song) => song.local && song.sourcePath != null)
-        .map(
-          (song) => <String, Object?>{
-            'id': song.id,
-            'title': song.title,
-            'singer': song.singer,
-            'source_path': song.sourcePath,
-          },
-        )
-        .toList(growable: false);
-    await prefs.setString(_prefsKey, jsonEncode(rows));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rows = library
+          .where((song) => song.local && song.sourcePath != null)
+          .map(
+            (song) => <String, Object?>{
+              'id': song.id,
+              'title': song.title,
+              'singer': song.singer,
+              'source_path': song.sourcePath,
+            },
+          )
+          .toList(growable: false);
+      await prefs.setString(_prefsKey, jsonEncode(rows));
+    } catch (_) {
+      // Persistence failure must not break room music playback.
+    }
   }
 
   Future<Song> importLocalSong({
