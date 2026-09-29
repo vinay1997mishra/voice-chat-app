@@ -125,6 +125,84 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> roomGameAction(
+    String token, {
+    required String roomId,
+    required String gameKey,
+    required String action,
+  }) {
+    return _request(
+      'POST',
+      '/room-games/action',
+      token,
+      body: {
+        'room_id': roomId,
+        'game_key': gameKey,
+        'action': action,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> ludoState(
+    String token, {
+    required String roomId,
+  }) async {
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final uri = apiBase.replace(
+      path: '/ludo/state',
+      queryParameters: {'room_id': roomId},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Ludo');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> ludoRoll(
+    String token, {
+    required String roomId,
+  }) {
+    return _request(
+      'POST',
+      '/ludo/roll',
+      token,
+      body: {'room_id': roomId},
+    );
+  }
+
+  Future<Map<String, dynamic>> ludoMove(
+    String token, {
+    required String roomId,
+    required int tokenIndex,
+  }) {
+    return _request(
+      'POST',
+      '/ludo/move',
+      token,
+      body: {'room_id': roomId, 'token_index': tokenIndex},
+    );
+  }
+
+  Future<Map<String, dynamic>> ludoReset(
+    String token, {
+    required String roomId,
+  }) {
+    return _request(
+      'POST',
+      '/ludo/reset',
+      token,
+      body: {'room_id': roomId},
+    );
+  }
+
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
@@ -248,15 +326,6 @@ class AppBackendService {
       withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
       canTransferSettlement: row['can_transfer_settlement'] == true,
     );
-  }
-
-  Future<RemoteWallet> applyRecharge(String token, {required String productId, required String purchaseToken, required bool verified}) async {
-    final data = await _request('POST', '/wallet/recharge', token, body: {
-      'product_id': productId, 'purchase_token': purchaseToken, 'verified': verified,
-    });
-    final row = _map(data['wallet']);
-    return RemoteWallet(coins: _asInt(row['coins']), diamonds: _asInt(row['diamonds']),
-      banned: row['banned'] == true, updatedAt: _asInt(row['updated_at']));
   }
 
   Future<List<Map<String, dynamic>>> uniqueIdCatalog(String token) async {
