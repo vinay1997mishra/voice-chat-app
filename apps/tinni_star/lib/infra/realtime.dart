@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 enum RtcConnectionState { idle, joining, joined, reconnecting, failed }
 
 abstract interface class RtcAdapter {
@@ -14,7 +17,7 @@ abstract interface class RtcAdapter {
 
 abstract interface class ImAdapter {
   bool get connected;
-  Future<void> connect(String userId);
+  Future<void> connect(String userId, {String? authToken});
   Future<void> joinRoom(String roomId);
   Future<void> leaveRoom(String roomId);
   Future<void> sendRoomEvent(String roomId, Map<String, Object?> event);
@@ -68,7 +71,7 @@ class LocalImAdapter implements ImAdapter {
   bool get connected => _connected;
 
   @override
-  Future<void> connect(String userId) async {
+  Future<void> connect(String userId, {String? authToken}) async {
     if (userId.isEmpty) throw StateError('userId is required');
     _connected = true;
   }
@@ -96,6 +99,97 @@ class LocalImAdapter implements ImAdapter {
   }
 }
 
+class BackendImAdapter implements ImAdapter {
+  BackendImAdapter({
+    Uri? apiBase,
+    HttpClient? httpClient,
+  })  : apiBase = apiBase ??
+            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
+        _httpClient = httpClient ?? HttpClient();
+
+  final Uri apiBase;
+  final HttpClient _httpClient;
+  final Set<String> joinedRooms = <String>{};
+  bool _connected = false;
+  String? _authToken;
+  String? _userId;
+
+  @override
+  bool get connected => _connected;
+
+  @override
+  Future<void> connect(String userId, {String? authToken}) async {
+    if (userId.trim().isEmpty) throw StateError('userId is required');
+    if (authToken == null || authToken.trim().isEmpty) {
+      throw StateError('Authenticated IM session is required');
+    }
+    _userId = userId;
+    _authToken = authToken;
+    _connected = true;
+  }
+
+  @override
+  Future<void> joinRoom(String roomId) async {
+    if (!_connected) throw StateError('IM is not connected');
+    if (roomId.trim().isEmpty) throw StateError('roomId is required');
+    joinedRooms.add(roomId);
+  }
+
+  @override
+  Future<void> leaveRoom(String roomId) async {
+    joinedRooms.remove(roomId);
+  }
+
+  @override
+  Future<void> sendRoomEvent(
+    String roomId,
+    Map<String, Object?> event,
+  ) async {
+    if (!_connected || !joinedRooms.contains(roomId)) {
+      throw StateError('IM room is not joined');
+    }
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      throw StateError('Authenticated IM session is required');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-events'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer ' + token,
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    request.write(
+      jsonEncode(<String, Object?>{
+        'room_id': roomId,
+        'event': <String, Object?>{
+          ...event,
+          'userId': event['userId'] ?? _userId,
+        },
+      }),
+    );
+    final response = await request.close();
+    final body = await utf8.decoder.bind(response).join();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Room event failed';
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map && decoded['error'] != null) {
+          message = decoded['error'].toString();
+        }
+      } catch (_) {}
+      throw StateError(message);
+    }
+  }
+
+  void dispose() {
+    _httpClient.close(force: true);
+  }
+}
+
 class RealtimeCoordinator {
   RealtimeCoordinator({required this.rtc, required this.im});
 
@@ -110,7 +204,7 @@ class RealtimeCoordinator {
     String? authToken,
   }) async {
     this.userId = userId;
-    await im.connect(userId);
+    await im.connect(userId, authToken: authToken);
     await im.joinRoom(roomId);
     try {
       await rtc.join(
