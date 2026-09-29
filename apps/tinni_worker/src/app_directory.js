@@ -386,6 +386,17 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_calls_caller
         ON app_calls(caller_id, state, updated_at DESC);
 
+      CREATE TABLE IF NOT EXISTS call_privacy_incidents (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        actor_user_id TEXT NOT NULL,
+        actor_name TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_call_privacy_incidents_call_time
+        ON call_privacy_incidents(call_id, created_at DESC);
+
 
       CREATE TABLE IF NOT EXISTS gift_transactions (
         id TEXT PRIMARY KEY,
@@ -4207,6 +4218,54 @@ export class AppDirectoryStore extends DurableObject {
       call.id,
     );
     return this.getCall(call.id);
+  }
+
+  reportCallPrivacyIncident(userIdValue, callIdValue, actionValue) {
+    const userId = String(userIdValue || "").trim();
+    const action = String(actionValue || "").trim().toLowerCase();
+    if (!["screenshot", "screen_recording"].includes(action)) {
+      throw new Error("Unsupported privacy incident");
+    }
+    const call = this.getCall(callIdValue);
+    if (!call) throw new Error("Call not found");
+    if (call.caller_id !== userId && call.receiver_id !== userId) {
+      throw new Error("Not a call participant");
+    }
+    if (call.state !== "accepted" || call.media !== "video") {
+      throw new Error("Privacy incident requires an active video call");
+    }
+    const actorName = userId === call.caller_id ? call.caller_name : call.receiver_name;
+    const now = Date.now();
+    const id = "privacy-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO call_privacy_incidents
+        (id, call_id, actor_user_id, actor_name, action, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id, call.id, userId, actorName, action, now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE app_calls SET media = 'voice', updated_at = ? WHERE id = ?",
+      now, call.id,
+    );
+    return this.getCall(call.id);
+  }
+
+  latestCallPrivacyIncident(callIdValue) {
+    const callId = String(callIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      `SELECT id, actor_user_id, actor_name, action, created_at
+         FROM call_privacy_incidents
+        WHERE call_id = ?
+        ORDER BY created_at DESC LIMIT 1`,
+      callId,
+    ).toArray()[0];
+    return row ? {
+      id: String(row.id),
+      actor_user_id: String(row.actor_user_id),
+      actor_name: String(row.actor_name),
+      action: String(row.action),
+      created_at: Number(row.created_at),
+    } : null;
   }
 
   endCall(userIdValue, callIdValue) {
