@@ -3174,6 +3174,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   inventoryState(userIdValue) {
+    this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
     const rows = this.ctx.storage.sql.exec(
       "SELECT item_id, item_kind, acquired_at, expires_at FROM user_inventory WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY acquired_at DESC",
@@ -3183,6 +3184,13 @@ export class AppDirectoryStore extends DurableObject {
       "SELECT equipped_frame_id, updated_at FROM user_equipment WHERE user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
+    if (equipment?.equipped_frame_id) {
+      const active = rows.some((row) => String(row.item_id) === String(equipment.equipped_frame_id));
+      if (!active) {
+        this.ctx.storage.sql.exec("UPDATE user_equipment SET equipped_frame_id = NULL, updated_at = ? WHERE user_id = ?", Date.now(), userId);
+        equipment.equipped_frame_id = null;
+      }
+    }
     return {
       owned: rows.map((row) => ({
         item_id: String(row.item_id),
@@ -3226,7 +3234,7 @@ export class AppDirectoryStore extends DurableObject {
     const durationDays = Math.max(0, Number(offer.duration_days || 0));
     const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
     this.ctx.storage.sql.exec(
-      "UPDATE owner_unique_ids SET assigned_user_id = ?, updated_at = ? WHERE public_id = ?", publicId, now, publicId,
+      "UPDATE owner_unique_ids SET assigned_user_id = ?, assigned_at = ?, expires_at = ?, previous_user_id = ?, updated_at = ? WHERE public_id = ?", publicId, now, expiresAt, previousId, now, publicId,
     );
     return { ok: true, user: changed, public_id: publicId, price_coins: price, duration_days: durationDays, expires_at: expiresAt, permanent: durationDays === 0, wallet: this.getWallet(publicId) };
   }
@@ -3304,6 +3312,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   equipFrame(userIdValue, frameIdValue) {
+    this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
     const frameId = frameIdValue == null ? "" : String(frameIdValue).trim();
     if (frameId) {
