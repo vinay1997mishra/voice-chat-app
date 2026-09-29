@@ -79,7 +79,13 @@ class _TinniShellState extends State<TinniShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => index = value),
+        onDestinationSelected: (value) {
+          const labels = <String>['party', 'discover', 'message', 'mine'];
+          widget.state.analytics.event('navigation_tab', <String, Object?>{
+            'tab': labels[value],
+          });
+          setState(() => index = value);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.groups_rounded, color: FeaturePalette.family),
