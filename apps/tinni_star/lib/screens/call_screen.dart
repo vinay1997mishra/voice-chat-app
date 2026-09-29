@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
+import '../infra/livekit_rtc.dart';
 import '../social/social.dart';
 import '../ui/royal_theme.dart';
 
@@ -75,13 +76,14 @@ class _CallScreenState extends State<CallScreen> {
     }
   }
 
-  Future<void> _startCall(SocialUser friend) async {
+  Future<void> _startCall(SocialUser friend, {CallMedia media = CallMedia.voice}) async {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
       final call = await widget.state.calls.startRemote(
         authToken: account.authToken,
         receiverId: friend.id,
+        media: media,
       );
       if (!mounted) return;
       await Navigator.push(
@@ -276,6 +278,18 @@ class _CallScreenState extends State<CallScreen> {
                             glow: 0.34,
                           ),
                         ),
+                        IconButton(
+                          key: Key('video-call-friend-' + friend.id),
+                          tooltip: 'Video call',
+                          onPressed: () => _startCall(friend, media: CallMedia.video),
+                          icon: const ShiningIcon(
+                            icon: Icons.videocam_rounded,
+                            color: FeaturePalette.social,
+                            size: 20,
+                            boxSize: 38,
+                            glow: 0.34,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -308,6 +322,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool muted = false;
   bool ending = false;
   bool micPublished = false;
+  bool cameraPublished = false;
   String? errorText;
   late CallState remoteState;
   Timer? statusTimer;
@@ -338,6 +353,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       if (remoteState == CallState.connected) {
         await widget.state.realtime.setMic(true);
         micPublished = true;
+        if (widget.call.media == CallMedia.video) {
+          final rtc = widget.state.realtime.rtc;
+          if (rtc is LiveKitRtcAdapter) {
+            await rtc.setCameraPublished(true);
+            cameraPublished = true;
+          }
+        }
       } else {
         await widget.state.realtime.setMic(false);
         micPublished = false;
@@ -372,6 +394,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         await widget.state.realtime.setMic(true);
         micPublished = true;
         muted = false;
+        if (widget.call.media == CallMedia.video && !cameraPublished) {
+          final rtc = widget.state.realtime.rtc;
+          if (rtc is LiveKitRtcAdapter) {
+            await rtc.setCameraPublished(true);
+            cameraPublished = true;
+          }
+        }
       }
 
       if (status.state == CallState.rejected ||
@@ -477,7 +506,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                           ? 'Connecting…'
                           : remoteState == CallState.ringing
                               ? 'Calling…'
-                              : 'Voice call connected'),
+                              : widget.call.media == CallMedia.video
+                                  ? 'Video call connected'
+                                  : 'Voice call connected'),
                   style: TextStyle(
                     color: errorText == null
                         ? RoyalPalette.muted
