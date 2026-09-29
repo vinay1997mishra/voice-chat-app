@@ -666,6 +666,18 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_owner_unique_ids_user
         ON owner_unique_ids(assigned_user_id, updated_at DESC);
 
+      CREATE TABLE IF NOT EXISTS owner_user_price_overrides (
+        user_id TEXT NOT NULL,
+        price_key TEXT NOT NULL,
+        price_coins INTEGER NOT NULL DEFAULT 0,
+        duration_days INTEGER,
+        expires_at INTEGER,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, price_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_user_price_overrides_expiry
+        ON owner_user_price_overrides(expires_at);
+
       CREATE TABLE IF NOT EXISTS user_inventory (
         user_id TEXT NOT NULL,
         item_id TEXT NOT NULL,
@@ -1134,6 +1146,73 @@ export class AppDirectoryStore extends DurableObject {
       name, JSON.stringify(data), enabled, Date.now(), id,
     );
     return this.ownerCatalog(String(current.kind)).find((item) => item.id === id);
+  }
+
+  userPriceOverrides(userIdValue = "") {
+    const userId = String(userIdValue || "").trim();
+    const now = Date.now();
+    const rows = userId
+      ? this.ctx.storage.sql.exec("SELECT * FROM owner_user_price_overrides WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY price_key", this._resolveOwnerUserId(userId), now).toArray()
+      : this.ctx.storage.sql.exec("SELECT * FROM owner_user_price_overrides WHERE expires_at IS NULL OR expires_at > ? ORDER BY updated_at DESC LIMIT 5000", now).toArray();
+    return rows.map((row) => ({
+      user_id: String(row.user_id), price_key: String(row.price_key),
+      price_coins: Math.max(0, Number(row.price_coins || 0)),
+      duration_days: row.duration_days == null ? null : Math.max(0, Number(row.duration_days)),
+      expires_at: row.expires_at == null ? null : Number(row.expires_at),
+      updated_at: Number(row.updated_at || 0),
+    }));
+  }
+
+  setUserPriceOverride(userIdValue, priceKeyValue, priceCoinsValue, durationDaysValue = null, expiresAtValue = null) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const priceKey = cleanText(priceKeyValue, 120).toLowerCase();
+    if (!userId || !priceKey) throw new Error("User ID and price key are required");
+    const exists = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId).toArray()[0];
+    if (!exists) throw new Error("User not found");
+    const price = Math.max(0, Number(priceCoinsValue || 0));
+    const durationDays = durationDaysValue === null || durationDaysValue === undefined || durationDaysValue === ""
+      ? null : Math.max(0, Number(durationDaysValue));
+    const expiresAt = expiresAtValue ? Number(expiresAtValue) : null;
+    if (expiresAt != null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) throw new Error("Override expiry must be in the future");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO owner_user_price_overrides (user_id,price_key,price_coins,duration_days,expires_at,updated_at)
+       VALUES (?,?,?,?,?,?)
+       ON CONFLICT(user_id,price_key) DO UPDATE SET price_coins=excluded.price_coins,
+         duration_days=excluded.duration_days,expires_at=excluded.expires_at,updated_at=excluded.updated_at`,
+      userId, priceKey, price, durationDays, expiresAt, Date.now(),
+    );
+    return this.userPriceOverrides(userId);
+  }
+
+  removeUserPriceOverride(userIdValue, priceKeyValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const priceKey = cleanText(priceKeyValue, 120).toLowerCase();
+    this.ctx.storage.sql.exec("DELETE FROM owner_user_price_overrides WHERE user_id = ? AND price_key = ?", userId, priceKey);
+    return this.userPriceOverrides(userId);
+  }
+
+  _effectivePrice(userIdValue, priceKeyValue, basePriceValue, baseDurationDaysValue = null) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const priceKey = cleanText(priceKeyValue, 120).toLowerCase();
+    const now = Date.now();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT price_coins,duration_days FROM owner_user_price_overrides WHERE user_id = ? AND price_key IN (?, '*') AND (expires_at IS NULL OR expires_at > ?) ORDER BY CASE WHEN price_key = ? THEN 0 ELSE 1 END LIMIT 1",
+      userId, priceKey, now, priceKey,
+    ).toArray()[0];
+    const policies = this.ownerState().policies;
+    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
+    if (!row) return {
+      price: freeIds.includes(userId) ? 0 : Math.max(0, Number(basePriceValue || 0)),
+      duration_days: baseDurationDaysValue == null ? null : Math.max(0, Number(baseDurationDaysValue)),
+      overridden: freeIds.includes(userId),
+    };
+    return {
+      price: Math.max(0, Number(row.price_coins || 0)),
+      duration_days: row.duration_days == null
+        ? (baseDurationDaysValue == null ? null : Math.max(0, Number(baseDurationDaysValue)))
+        : Math.max(0, Number(row.duration_days)),
+      overridden: true,
+    };
   }
 
   ownerState() {
@@ -1679,6 +1758,10 @@ export class AppDirectoryStore extends DurableObject {
         policies.free_user_ids = Array.isArray(data.free_user_ids) ? data.free_user_ids.map(String) : [];
         return this._setOwnerSetting("policies", policies);
       }
+      case "user-price-override-set":
+        return this.setUserPriceOverride(data.user_id, data.price_key, data.price_coins, data.duration_days, data.expires_at);
+      case "user-price-override-remove":
+        return this.removeUserPriceOverride(data.user_id, data.price_key);
       case "feature-set": {
         const features = this.ownerState().features;
         features[String(data.key || "").trim()] = data.enabled === true;
@@ -3313,9 +3396,8 @@ export class AppDirectoryStore extends DurableObject {
     if (!item) throw new Error("Item is unavailable");
     const existing = this.ctx.storage.sql.exec("SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1", userId, item.id).toArray()[0];
     if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
-    const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const price = freeIds.includes(userId) ? 0 : item.price_coins;
+    const effective = this._effectivePrice(userId, kind + ":" + item.id, item.price_coins, item.duration_days);
+    const price = effective.price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -3324,9 +3406,10 @@ export class AppDirectoryStore extends DurableObject {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,0,?,?,?)", crypto.randomUUID(), userId, kind + "_purchase", -price, kind + ":" + item.id, item.name, now);
     }
-    const expiresAt = item.duration_days > 0 ? now + item.duration_days * 86400000 : null;
+    const durationDays = effective.duration_days ?? item.duration_days;
+    const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
     this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?,?,?,?)", userId, item.id, kind, now, expiresAt);
-    return { ok: true, duplicate: false, price_coins: price, duration_days: item.duration_days, expires_at: expiresAt, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+    return { ok: true, duplicate: false, price_coins: price, duration_days: durationDays, expires_at: expiresAt, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
   }
 
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
@@ -3341,8 +3424,8 @@ export class AppDirectoryStore extends DurableObject {
     if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
     const wallet = this.getWallet(userId);
     const policies = this.ownerState().policies;
-    const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const price = freeIds.includes(userId) ? 0 : Math.max(0, Number(frame.price ?? policies.frame_default_coins ?? 0));
+    const effective = this._effectivePrice(userId, "frame:" + frameId, Math.max(0, Number(frame.price ?? policies.frame_default_coins ?? 0)), frame.data?.duration_days ?? 0);
+    const price = effective.price;
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
@@ -3409,8 +3492,10 @@ export class AppDirectoryStore extends DurableObject {
     const policies = this.ownerState().policies;
     const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
     const configuredPrice = Math.max(0, Number(item.data?.price ?? item.data?.coin_price ?? policies.vip_default_coins ?? 0));
-    const price = freeIds.includes(userId) ? 0 : configuredPrice;
-    const durationDays = Math.max(0, Number(item.data?.duration_days || item.data?.duration || 30));
+    const baseDurationDays = Math.max(0, Number(item.data?.duration_days || item.data?.duration || 30));
+    const effective = this._effectivePrice(userId, "vip:" + vipId, configuredPrice, baseDurationDays);
+    const price = effective.price;
+    const durationDays = effective.duration_days ?? baseDurationDays;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -3935,9 +4020,7 @@ export class AppDirectoryStore extends DurableObject {
       String(receiver?.gender || "").toLowerCase() === "female";
     const policies = this.ownerState().policies;
     const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const directCostPerMinute = freeIds.includes(callerId)
-      ? 0
-      : Math.max(0, Number(policies.direct_call_coins ?? VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE));
+    const directCostPerMinute = this._effectivePrice(callerId, "call:direct", Math.max(0, Number(policies.direct_call_coins ?? VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE))).price;
     const rewardPercent = Math.max(0, Math.min(100, Number(policies.receiver_percent ?? VERIFIED_RECEIVER_REWARD_PERCENT)));
     const receiverRewardPerMinute = receiverFemale && receiverVerification.verified
       ? Math.floor(directCostPerMinute * rewardPercent / 100)
@@ -4006,9 +4089,7 @@ export class AppDirectoryStore extends DurableObject {
 
     const policies = this.ownerState().policies;
     const freeIds = Array.isArray(policies.free_user_ids) ? policies.free_user_ids.map(String) : [];
-    const randomCostPerMinute = freeIds.includes(callerId)
-      ? 0
-      : Math.max(0, Number(policies.random_call_coins ?? RANDOM_CALL_COST_COINS_PER_MINUTE));
+    const randomCostPerMinute = this._effectivePrice(callerId, "call:random", Math.max(0, Number(policies.random_call_coins ?? RANDOM_CALL_COST_COINS_PER_MINUTE))).price;
     const rewardPercent = Math.max(0, Math.min(100, Number(policies.receiver_percent ?? VERIFIED_RECEIVER_REWARD_PERCENT)));
     const callerWallet = this.getWallet(callerId);
     if (callerWallet.coins < randomCostPerMinute) {
