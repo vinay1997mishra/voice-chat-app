@@ -13,8 +13,6 @@ class RemoteRoleWallet {
   final bool banned;
   final bool securityFrozen;
   final String freezeReason;
-  final RemoteRoleWallet? coinSellerWallet;
-  final RemoteRoleWallet? merchantWallet;
 }
 
 class RemoteWallet {
@@ -36,6 +34,7 @@ class RemoteWallet {
     this.coinSellerWallet,
     this.merchantWallet,
   });
+
   final int coins;
   final int diamonds;
   final bool banned;
@@ -50,6 +49,8 @@ class RemoteWallet {
   final bool canTransferSettlement;
   final bool securityFrozen;
   final String freezeReason;
+  final RemoteRoleWallet? coinSellerWallet;
+  final RemoteRoleWallet? merchantWallet;
 }
 
 class RemoteNotification {
