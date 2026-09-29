@@ -8,6 +8,7 @@ import 'recharge_screen.dart';
 import 'sharing_screen.dart';
 import 'store_screen.dart';
 import 'vip_screen.dart';
+import 'unique_id_store_screen.dart';
 
 class FeatureCenterScreen extends StatefulWidget {
   const FeatureCenterScreen({super.key, required this.state});
@@ -64,6 +65,11 @@ class _FeatureCenterScreenState extends State<FeatureCenterScreen> {
         'Store / Inventory',
         Icons.storefront_rounded,
         () => _open(StoreScreen(state: state)),
+      ),
+      _FeatureAction(
+        'Unique ID',
+        Icons.numbers_rounded,
+        () => _open(UniqueIdStoreScreen(state: state)),
       ),
       _FeatureAction(
         'VIP / Noble',
