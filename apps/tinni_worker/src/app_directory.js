@@ -1488,24 +1488,26 @@ export class AppDirectoryStore extends DurableObject {
       case "unique-id-new": {
         const publicId = String(data.public_id || "").trim();
         if (!/^\\d{4,8}$/.test(publicId)) throw new Error("Unique ID must contain 4 to 8 digits");
-        const price = Math.max(0, Number(data.price_coins || 0));
+        const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
+        const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
         const existingUser = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
         if (existingUser) throw new Error("Unique ID is already in use");
         this.ctx.storage.sql.exec(
-          `INSERT INTO owner_unique_ids (public_id,price_coins,assigned_user_id,enabled,created_at,updated_at)
-           VALUES (?,?,NULL,1,?,?)
-           ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,enabled=1,updated_at=excluded.updated_at`,
-          publicId, price, Date.now(), Date.now(),
+          `INSERT INTO owner_unique_ids (public_id,price_coins,duration_days,assigned_user_id,enabled,created_at,updated_at)
+           VALUES (?,?,?,NULL,1,?,?)
+           ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,duration_days=excluded.duration_days,enabled=1,updated_at=excluded.updated_at`,
+          publicId, price, durationDays, Date.now(), Date.now(),
         );
         return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0, enabled: true };
       }
       case "unique-id-price": {
         const publicId = String(data.public_id || "").trim();
-        const price = Math.max(0, Number(data.price_coins || 0));
+        const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
+        const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
         const row = this.ctx.storage.sql.exec("SELECT public_id FROM owner_unique_ids WHERE public_id = ? LIMIT 1", publicId).toArray()[0];
         if (!row) throw new Error("Unique ID not found");
-        this.ctx.storage.sql.exec("UPDATE owner_unique_ids SET price_coins = ?, updated_at = ? WHERE public_id = ?", price, Date.now(), publicId);
-        return { public_id: publicId, price_coins: price };
+        this.ctx.storage.sql.exec("UPDATE owner_unique_ids SET price_coins = ?, duration_days = ?, updated_at = ? WHERE public_id = ?", price, durationDays, Date.now(), publicId);
+        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0 };
       }
       case "id-change": return this._changeUserId(data.user_id, data.new_id);
       case "room-ban": {
