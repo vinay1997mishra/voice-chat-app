@@ -19,12 +19,17 @@ class LiveKitRtcAdapter implements RtcAdapter {
   Room? _room;
   RtcConnectionState _state = RtcConnectionState.idle;
   bool _publishing = false;
+  bool _publishingCamera = false;
 
   @override
   RtcConnectionState get state => _state;
 
   @override
   bool get publishingMic => _publishing;
+
+  bool get publishingCamera => _publishingCamera;
+
+  Room? get room => _room;
 
   @override
   Future<void> join(
@@ -66,6 +71,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
       await nextRoom.connect(serverUrl, token);
       _room = nextRoom;
       _publishing = false;
+      _publishingCamera = false;
       _state = RtcConnectionState.joined;
     } catch (error) {
       _state = RtcConnectionState.failed;
@@ -88,6 +94,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
     final oldRoom = _room;
     _room = null;
     _publishing = false;
+    _publishingCamera = false;
 
     if (oldRoom != null) {
       try {
@@ -114,6 +121,18 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
     await participant.setMicrophoneEnabled(enabled);
     _publishing = enabled;
+  }
+
+  Future<void> setCameraPublished(bool enabled) async {
+    if (_state != RtcConnectionState.joined || _room == null) {
+      throw StateError('RTC room is not joined');
+    }
+    final participant = _room!.localParticipant;
+    if (participant == null) {
+      throw StateError('LiveKit local participant is unavailable');
+    }
+    await participant.setCameraEnabled(enabled);
+    _publishingCamera = enabled;
   }
 
   Future<Map<String, dynamic>> _fetchCredentials({
