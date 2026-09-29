@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
+import '../infra/app_backend_service.dart';
 import '../core/seat_policy.dart';
 import '../ui/royal_theme.dart';
 
@@ -65,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool popular = true;
   String countryFilter = '';
   String countryFilterLabel = '';
+  final List<RemoteNotification> _notifications = <RemoteNotification>[];
 
   @override
   void initState() {
@@ -75,9 +77,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
+    _syncNotifications();
     _roomSyncTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) => _syncRooms(),
+      (_) {
+        _syncRooms();
+        _syncNotifications();
+      },
     );
   }
 
@@ -90,6 +96,131 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Keep the last real server snapshot while reconnecting.
     }
+  }
+
+  Future<void> _syncNotifications() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final values = await widget.state.backend.notifications(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        _notifications
+          ..clear()
+          ..addAll(values);
+      });
+    } catch (_) {
+      // Keep the last notification snapshot while reconnecting.
+    }
+  }
+
+  Future<void> _showNotifications() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    await _syncNotifications();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Notifications',
+                    style: TextStyle(
+                      color: RoyalPalette.gold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _notifications.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No notifications yet.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                        itemCount: _notifications.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, index) {
+                          final notice = _notifications[index];
+                          return RoyalPanel(
+                            accentColor: notice.read
+                                ? RoyalPalette.muted
+                                : FeaturePalette.message,
+                            onTap: () async {
+                              if (!notice.read) {
+                                await widget.state.backend.markNotificationRead(
+                                  account.authToken,
+                                  notice.id,
+                                );
+                                await _syncNotifications();
+                              }
+                            },
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: ShiningIcon(
+                                icon: notice.type.contains('call')
+                                    ? Icons.call_rounded
+                                    : notice.type.contains('message')
+                                        ? Icons.message_rounded
+                                        : notice.type.contains('coins') ||
+                                                notice.type.contains('commission')
+                                            ? Icons.account_balance_wallet_rounded
+                                            : notice.type.contains('online')
+                                                ? Icons.circle_notifications_rounded
+                                                : Icons.notifications_rounded,
+                                color: notice.read
+                                    ? RoyalPalette.muted
+                                    : FeaturePalette.message,
+                                size: 20,
+                                boxSize: 38,
+                                glow: notice.read ? 0.12 : 0.32,
+                              ),
+                              title: Text(
+                                notice.title,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              subtitle: Text(
+                                notice.message,
+                                style: const TextStyle(
+                                  color: RoyalPalette.muted,
+                                ),
+                              ),
+                              trailing: notice.read
+                                  ? null
+                                  : const Icon(
+                                      Icons.circle,
+                                      size: 9,
+                                      color: FeaturePalette.message,
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await _syncNotifications();
   }
 
   @override
@@ -263,6 +394,50 @@ class _HomeScreenState extends State<HomeScreen> {
                     boxSize: 36,
                     glow: 0.34,
                   ),
+                ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      key: const Key('home-notifications-button'),
+                      tooltip: 'Notifications',
+                      onPressed: _showNotifications,
+                      icon: const ShiningIcon(
+                        icon: Icons.notifications_rounded,
+                        color: FeaturePalette.message,
+                        size: 20,
+                        boxSize: 36,
+                        glow: 0.34,
+                      ),
+                    ),
+                    if (_notifications.where((item) => !item.read).isNotEmpty)
+                      Positioned(
+                        right: 3,
+                        top: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: FeaturePalette.safety,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _notifications
+                                .where((item) => !item.read)
+                                .length
+                                .clamp(1, 99)
+                                .toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 IconButton(
                   key: const Key('home-search-button'),
