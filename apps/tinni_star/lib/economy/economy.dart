@@ -15,7 +15,7 @@ class WalletEntry {
 }
 
 class WalletService {
-  WalletService({this.coins = 2000000, this.diamonds = 0});
+  WalletService({this.coins = 0, this.diamonds = 0});
 
   int coins;
   int diamonds;
@@ -27,6 +27,8 @@ class WalletService {
   int commissionUsdCents = 0;
   int withdrawableUsdCents = 0;
   bool canTransferSettlement = false;
+  bool securityFrozen = false;
+  String freezeReason = '';
   final List<WalletEntry> history = <WalletEntry>[];
 
   String get diamondUsdText =>
@@ -45,10 +47,12 @@ class WalletService {
     commissionUsdCents = remote.commissionUsdCents;
     withdrawableUsdCents = remote.withdrawableUsdCents;
     canTransferSettlement = remote.canTransferSettlement;
+    securityFrozen = remote.securityFrozen;
+    freezeReason = remote.freezeReason;
   }
 
   bool spendCoins(int amount, String label) {
-    if (amount <= 0 || coins < amount) return false;
+    if (securityFrozen || amount <= 0 || coins < amount) return false;
     coins -= amount;
     history.insert(
       0,
