@@ -2399,7 +2399,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         if (current != null)
                           IconButton(
                             tooltip: 'Next',
-                            onPressed: () {
+                            onPressed: () async {
                               await widget.state.ktv.playNext();
                               setSheetState(() {});
                             },
