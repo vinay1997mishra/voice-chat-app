@@ -15,6 +15,8 @@ class RemoteWallet {
     this.commissionUsdCents = 0,
     this.withdrawableUsdCents = 0,
     this.canTransferSettlement = false,
+    this.securityFrozen = false,
+    this.freezeReason = '',
   });
   final int coins;
   final int diamonds;
@@ -28,6 +30,8 @@ class RemoteWallet {
   final int commissionUsdCents;
   final int withdrawableUsdCents;
   final bool canTransferSettlement;
+  final bool securityFrozen;
+  final String freezeReason;
 }
 
 class RemoteNotification {
@@ -219,6 +223,8 @@ class AppBackendService {
       commissionUsdCents: _asInt(row['commission_usd_cents']),
       withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
       canTransferSettlement: row['can_transfer_settlement'] == true,
+      securityFrozen: row['security_frozen'] == true,
+      freezeReason: row['freeze_reason']?.toString() ?? '',
     );
   }
 
@@ -325,6 +331,8 @@ class AppBackendService {
       commissionUsdCents: _asInt(row['commission_usd_cents']),
       withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
       canTransferSettlement: row['can_transfer_settlement'] == true,
+      securityFrozen: row['security_frozen'] == true,
+      freezeReason: row['freeze_reason']?.toString() ?? '',
     );
   }
 
