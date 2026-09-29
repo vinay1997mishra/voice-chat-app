@@ -1,3 +1,5 @@
+import 'package:just_audio/just_audio.dart';
+
 class Song {
   const Song({
     required this.id,
@@ -28,6 +30,33 @@ class KtvQueueEntry {
 
 class KtvService {
   static const int maxLocalSongs = 300;
+
+  final AudioPlayer _player = AudioPlayer();
+  bool get isPlaying => _player.playing;
+
+  Future<void> playCurrent() async {
+    final song = current?.song;
+    final path = song?.sourcePath;
+    if (song == null || !song.local || path == null || path.isEmpty) return;
+    await _player.setFilePath(path);
+    await _player.play();
+  }
+
+  Future<void> pause() => _player.pause();
+  Future<void> resume() => _player.play();
+
+  Future<void> stopPlayback() async {
+    await _player.stop();
+  }
+
+  Future<KtvQueueEntry?> playNext() async {
+    await _player.stop();
+    final next = startNext();
+    if (next != null) await playCurrent();
+    return next;
+  }
+
+  Future<void> dispose() => _player.dispose();
 
   final List<Song> library = <Song>[
     const Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
