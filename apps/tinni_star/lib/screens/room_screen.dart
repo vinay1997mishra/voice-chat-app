@@ -755,12 +755,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final account = widget.state.auth.current;
     if (account == null) return null;
 
-    if (widget.state.wallet.coins < priceCoins) {
-      _snack('You need ' + priceCoins.toString() + ' coins to add a custom theme.');
-      return null;
-    }
-
-    final image = await ImagePicker().pickImage(
+     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: 72,
       maxWidth: 1440,
@@ -847,15 +842,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     nameController.dispose();
     if (name == null || !mounted) return null;
 
-    final paid = widget.state.wallet.spendCoins(
-      priceCoins,
-      'Custom room theme • ' + durationDays.toString() + ' days',
-    );
-    if (!paid) {
-      _snack('Not enough coins.');
-      return null;
-    }
-
     try {
       final theme = await widget.state.discovery.createRoomTheme(
         authToken: account.authToken,
@@ -863,13 +849,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         name: name,
         asset: asset,
         policyConfirmed: true,
+        durationDays: durationDays,
       );
+      try {
+        final remoteWallet = await widget.state.backend.wallet(account.authToken);
+        widget.state.wallet.applyRemote(remoteWallet);
+      } catch (_) {}
       if (mounted) {
         _snack('Theme added for ' + durationDays.toString() + ' days.');
       }
       return theme;
     } catch (error) {
-      widget.state.wallet.creditCoins(priceCoins, 'Custom room theme refund');
       _snack(error.toString().replaceFirst('Bad state: ', ''));
       return null;
     }
