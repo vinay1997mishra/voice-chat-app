@@ -272,6 +272,15 @@ User-facing wallets are separate from privileged treasury/inventory wallets.
 - All user-side purchases and paid actions use **Coins only**.
 - Diamonds are not a purchase currency for users.
 - Coins are used for VIP, gifts, frames, room themes/backgrounds, store/inventory items, game bets/paid game actions, CP/family paid items, entries/effects, and any other purchasable user feature unless the Owner Panel explicitly marks an item as free.
+- Gift receiving converts 1 gifted Coin into 1 Diamond for the receiver.
+- The Wallet shows the Diamond balance and, directly below it, the automatically calculated USD value.
+- Current settlement reference: 4,000,000 Diamonds = $1.70, so the displayed USD value is calculated from that rate.
+- Host, Agency and BD balances become transferable when the withdrawable USD value reaches at least $2.
+- A **Transfer** action is shown in the Wallet beside/under the Diamond balance.
+- Transfer opens a recipient search where the sender enters a User ID.
+- Only a valid **Coin Seller** or **Merchant** account may be selected as the transfer recipient.
+- Before transfer, the app must show the matched account identity/role and the amount for confirmation.
+- The transfer is server-authoritative and must be recorded in wallet/settlement history.
 
 The **Owner Treasury Wallet exists only in the separate Owner Web Panel**, not in the Android app.
 
