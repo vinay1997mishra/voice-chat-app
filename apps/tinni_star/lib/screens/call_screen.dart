@@ -326,6 +326,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool micPublished = false;
   bool cameraPublished = false;
   String? errorText;
+  Map<String, dynamic>? privacyIncident;
+  String? seenPrivacyIncidentId;
   late CallState remoteState;
   Timer? statusTimer;
   Timer? watermarkTimer;
@@ -336,6 +338,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     super.initState();
     remoteState = widget.call.state;
     if (widget.call.media == CallMedia.video) {
+      _privacyChannel.setMethodCallHandler(_handlePrivacyNativeEvent);
       _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': true});
     }
     _connect();
@@ -348,6 +351,26 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       const Duration(seconds: 2),
       (_) => _pollStatus(),
     );
+  }
+
+  Future<dynamic> _handlePrivacyNativeEvent(MethodCall call) async {
+    if (call.method != 'captureAttempt' || widget.call.media != CallMedia.video) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final args = call.arguments is Map ? Map<String, dynamic>.from(call.arguments as Map) : <String, dynamic>{};
+    final action = args['action']?.toString() ?? 'screenshot';
+    try {
+      await widget.state.calls.reportPrivacyIncident(
+        authToken: account.authToken,
+        callId: widget.call.id,
+        action: action,
+      );
+      final rtc = widget.state.realtime.rtc;
+      if (rtc is LiveKitRtcAdapter && cameraPublished) {
+        await rtc.setCameraPublished(false);
+        cameraPublished = false;
+      }
+    } catch (_) {}
   }
 
   Future<void> _connect() async {
@@ -396,17 +419,33 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
-      final status = await widget.state.calls.statusRemote(
+      final statusResult = await widget.state.calls.statusRemote(
         authToken: account.authToken,
         callId: widget.call.id,
       );
+      final status = statusResult.call;
+      final incident = statusResult.privacyIncident;
       if (!mounted) return;
+
+      if (status.media == CallMedia.voice && cameraPublished) {
+        final rtc = widget.state.realtime.rtc;
+        if (rtc is LiveKitRtcAdapter) await rtc.setCameraPublished(false);
+        cameraPublished = false;
+      }
+      if (incident != null) {
+        final incidentId = incident['id']?.toString();
+        final actorId = incident['actor_user_id']?.toString();
+        if (incidentId != null && incidentId != seenPrivacyIncidentId && actorId != account.userId) {
+          seenPrivacyIncidentId = incidentId;
+          setState(() => privacyIncident = incident);
+        }
+      }
 
       if (status.state == CallState.connected && !micPublished) {
         await widget.state.realtime.setMic(true);
         micPublished = true;
         muted = false;
-        if (widget.call.media == CallMedia.video && !cameraPublished) {
+        if (widget.call.media == CallMedia.video && status.media == CallMedia.video && !cameraPublished) {
           final rtc = widget.state.realtime.rtc;
           if (rtc is LiveKitRtcAdapter) {
             await rtc.setCameraPublished(true);
@@ -475,6 +514,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     statusTimer?.cancel();
     watermarkTimer?.cancel();
     if (widget.call.media == CallMedia.video) {
+      _privacyChannel.setMethodCallHandler(null);
       _privacyChannel.invokeMethod<void>('setSecureScreen', <String, Object?>{'enabled': false});
     }
     if (!ending) {
@@ -581,6 +621,40 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             ),
           ),
             ),
+            if (privacyIncident != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.82),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.gpp_bad_rounded, color: Colors.redAccent, size: 72),
+                        const SizedBox(height: 16),
+                        const Text('PRIVACY ALERT', style: TextStyle(color: Colors.redAccent, fontSize: 28, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 14),
+                        Text(
+                          (privacyIncident!['actor_name']?.toString() ?? 'User') +
+                              ' (ID ' + (privacyIncident!['actor_user_id']?.toString() ?? '') + ')',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          privacyIncident!['action']?.toString() == 'screen_recording'
+                              ? 'Screen recording attempt detected'
+                              : 'Screenshot attempt detected',
+                          style: const TextStyle(color: Colors.white, fontSize: 17),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text('Video disabled by system • Call is now audio only', textAlign: TextAlign.center, style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             if (widget.call.media == CallMedia.video)
               _VideoPrivacyWatermark(
                 userId: widget.state.auth.current?.userId ?? '',
