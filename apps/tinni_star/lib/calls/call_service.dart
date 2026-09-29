@@ -149,6 +149,12 @@ class CallSession {
   }
 }
 
+class CallStatusResult {
+  const CallStatusResult({required this.call, this.privacyIncident});
+  final CallSession call;
+  final Map<String, dynamic>? privacyIncident;
+}
+
 class CallService {
   CallService({
     Uri? apiBase,
@@ -261,7 +267,7 @@ class CallService {
     );
   }
 
-  Future<CallSession> statusRemote({
+  Future<CallStatusResult> statusRemote({
     required String authToken,
     required String callId,
   }) async {
@@ -273,7 +279,24 @@ class CallService {
     final raw = data['call'];
     if (raw is! Map) throw StateError('Server returned an invalid call');
     active = CallSession.fromJson(_stringMap(raw));
-    return active!;
+    final incidentRaw = data['privacy_incident'];
+    return CallStatusResult(
+      call: active!,
+      privacyIncident: incidentRaw is Map ? _stringMap(incidentRaw) : null,
+    );
+  }
+
+  Future<void> reportPrivacyIncident({
+    required String authToken,
+    required String callId,
+    required String action,
+  }) async {
+    await _request(
+      method: 'POST',
+      path: '/calls/privacy-incident',
+      authToken: authToken,
+      body: <String, Object?>{'call_id': callId, 'action': action},
+    );
   }
 
   Future<CallSession?> incomingRemote({
