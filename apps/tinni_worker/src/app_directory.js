@@ -369,6 +369,20 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
         ON direct_messages(from_user_id, to_user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS user_notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        source_user_id TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        read_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_notifications_user_time
+        ON user_notifications(user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_calls (
         id TEXT PRIMARY KEY,
         caller_id TEXT NOT NULL,
@@ -3200,6 +3214,13 @@ export class AppDirectoryStore extends DurableObject {
           "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'room_gift_owner_share',?,0,?,?,?)",
           crypto.randomUUID(), ownerId, share, reference, "10% daily Gift Box sending share", timestamp,
         );
+        this._notifyUser(
+          ownerId,
+          "room_commission",
+          "Room commission credited",
+          share.toLocaleString("en-US") + " coins added as 10% room gift commission.",
+          { metadata: { room_id: String(row.room_id), day_key: String(row.day_key), commission_coins: share } },
+        );
         credited += share;
       }
       this.ctx.storage.sql.exec(
@@ -4384,6 +4405,16 @@ export class AppDirectoryStore extends DurableObject {
       now,
       now,
     );
+    const caller = this.ctx.storage.sql.exec(
+      "SELECT display_name FROM app_users WHERE user_id=? LIMIT 1", callerId,
+    ).toArray()[0];
+    this._notifyUser(
+      receiverId,
+      "incoming_call",
+      "Incoming " + media + " call",
+      String(caller?.display_name || callerId) + " is calling you.",
+      { source_user_id: callerId, metadata: { call_id: id, media } },
+    );
     this._sendCallOfficialMessage(receiverId, {
       call_kind: "direct",
       verified: receiverVerification.verified === true,
@@ -4672,6 +4703,15 @@ export class AppDirectoryStore extends DurableObject {
     }
     if (call.state === "accepted") {
       this.settleCallBilling(call.id, Date.now());
+    } else if (call.state === "ringing") {
+      const otherId = call.caller_id === userId ? call.receiver_id : call.caller_id;
+      this._notifyUser(
+        otherId,
+        "missed_call",
+        "Missed call",
+        "You missed a " + String(call.media || "voice") + " call.",
+        { source_user_id: userId, metadata: { call_id: call.id } },
+      );
     }
     this.ctx.storage.sql.exec(
       "UPDATE app_calls SET state = 'ended', updated_at = ? WHERE id = ?",
@@ -4848,6 +4888,135 @@ export class AppDirectoryStore extends DurableObject {
     return threads;
   }
 
+  _notifyUser(userIdValue, typeValue, titleValue, messageValue, options = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return null;
+    const type = cleanText(typeValue, 60) || "general";
+    const title = cleanText(titleValue, 120) || "Tinni Star";
+    const message = cleanText(messageValue, 1000);
+    if (!message) return null;
+    const id = "notice-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_notifications(id,user_id,type,source_user_id,title,message,metadata_json,read_at,created_at) VALUES (?,?,?,?,?,?,?,NULL,?)",
+      id, userId, type,
+      options.source_user_id ? String(options.source_user_id) : null,
+      title, message, JSON.stringify(options.metadata || {}), now,
+    );
+    return { id, user_id: userId, type, title, message, created_at: now };
+  }
+
+  listUserNotifications(userIdValue, limitValue = 200) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const limit = Math.max(1, Math.min(300, Number(limitValue || 200)));
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM user_notifications WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+      userId, limit,
+    ).toArray().map((row) => {
+      let metadata = {};
+      try { metadata = JSON.parse(String(row.metadata_json || "{}")); } catch {}
+      return {
+        id: String(row.id), type: String(row.type),
+        source_user_id: row.source_user_id ? String(row.source_user_id) : null,
+        title: String(row.title), message: String(row.message), metadata,
+        read: row.read_at != null, read_at: row.read_at == null ? null : Number(row.read_at),
+        created_at: Number(row.created_at || 0),
+      };
+    });
+  }
+
+  markUserNotificationRead(userIdValue, notificationIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const id = String(notificationIdValue || "").trim();
+    if (!id) throw new Error("Notification ID is required");
+    this.ctx.storage.sql.exec(
+      "UPDATE user_notifications SET read_at=? WHERE id=? AND user_id=?",
+      Date.now(), id, userId,
+    );
+    return { ok: true };
+  }
+
+  notifyFollowersOnline(userIdValue, roomIdValue = "") {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const user = this.ctx.storage.sql.exec(
+      "SELECT display_name FROM app_users WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!user) return { notified: 0 };
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    const followers = this.ctx.storage.sql.exec(
+      "SELECT follower_id FROM app_follows WHERE target_id=?",
+      userId,
+    ).toArray();
+    let notified = 0;
+    for (const row of followers) {
+      const followerId = String(row.follower_id || "");
+      const recent = this.ctx.storage.sql.exec(
+        "SELECT id FROM user_notifications WHERE user_id=? AND type='followed_online' AND source_user_id=? AND created_at>=? LIMIT 1",
+        followerId, userId, cutoff,
+      ).toArray()[0];
+      if (recent) continue;
+      this._notifyUser(
+        followerId,
+        "followed_online",
+        "Now online",
+        String(user.display_name || userId) + " is online now.",
+        { source_user_id: userId, metadata: { room_id: String(roomIdValue || "") } },
+      );
+      notified += 1;
+    }
+    return { notified };
+  }
+
+  transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue) {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!senderId || !recipientId) throw new Error("Sender and recipient IDs are required");
+    if (senderId === recipientId) throw new Error("Cannot transfer coins to your own account");
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+
+    const seller = this.ctx.storage.sql.exec(
+      "SELECT wallet_type,balance,banned FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant') ORDER BY CASE wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END LIMIT 1",
+      senderId,
+    ).toArray()[0];
+    if (!seller || Number(seller.banned || 0) === 1) {
+      throw new Error("Active Coin Seller or Merchant wallet is required");
+    }
+    if (Number(seller.balance || 0) < amount) throw new Error("Seller wallet balance is not enough");
+    const recipient = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name FROM app_users WHERE user_id=? LIMIT 1", recipientId,
+    ).toArray()[0];
+    if (!recipient) throw new Error("Recipient not found");
+
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_wallets SET balance=balance-?,updated_at=? WHERE user_id=? AND wallet_type=?",
+      amount, now, senderId, seller.wallet_type,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO app_wallets(user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
+      recipientId, now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",
+      amount, now, recipientId,
+    );
+    const reference = "seller-transfer:" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'coin_seller_received',?,0,?,?,?)",
+      "wallet-" + crypto.randomUUID(), recipientId, amount, reference,
+      "Coins received from " + String(seller.wallet_type).replaceAll("_", " "), now,
+    );
+    this._notifyUser(
+      recipientId,
+      "coins_received",
+      "Coins received",
+      amount.toLocaleString("en-US") + " coins received from " + String(seller.wallet_type).replaceAll("_", " ") + ".",
+      { source_user_id: senderId, metadata: { amount_coins: amount, sender_role: String(seller.wallet_type) } },
+    );
+    return { ok: true, recipient_wallet: this.getWallet(recipientId), sender_balance: Number(seller.balance || 0) - amount };
+  }
+
   sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
     const fromUserId = String(fromUserIdValue || "").trim();
     const toUserId = String(toUserIdValue || "").trim();
@@ -4876,6 +5045,16 @@ export class AppDirectoryStore extends DurableObject {
       toUserId,
       text,
       now,
+    );
+    const sender = this.ctx.storage.sql.exec(
+      "SELECT display_name FROM app_users WHERE user_id=? LIMIT 1", fromUserId,
+    ).toArray()[0];
+    this._notifyUser(
+      toUserId,
+      "message",
+      String(sender?.display_name || fromUserId),
+      text,
+      { source_user_id: fromUserId, metadata: { message_id: id } },
     );
     return {
       id,
