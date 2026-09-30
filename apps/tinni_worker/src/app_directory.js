@@ -424,6 +424,16 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_user_feedback_user_time
         ON user_feedback(user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS user_task_claims (
+        user_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        reward_coins INTEGER NOT NULL DEFAULT 0,
+        claimed_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, task_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_task_claims_user
+        ON user_task_claims(user_id, claimed_at DESC);
+
       CREATE TABLE IF NOT EXISTS user_preferences (
         user_id TEXT PRIMARY KEY,
         message_voice INTEGER NOT NULL DEFAULT 1,
@@ -4354,6 +4364,60 @@ export class AppDirectoryStore extends DurableObject {
       memory.id, row.user_a, row.user_b, userId, text, memory.created_at,
     );
     return memory;
+  }
+
+  taskState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const user = this.ctx.storage.sql.exec(
+      "SELECT display_name,country_code,gender FROM app_users WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const followed = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE follower_id=?", userId,
+    ).toArray()[0]?.count || 0) > 0;
+    const family = Boolean(this.ctx.storage.sql.exec(
+      "SELECT user_id FROM family_members WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const gifted = Boolean(this.ctx.storage.sql.exec(
+      "SELECT id FROM gift_transactions WHERE sender_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const enteredRoom = Boolean(this.ctx.storage.sql.exec(
+      "SELECT room_id FROM app_recent_rooms WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const profileComplete = String(user.display_name || "").trim().length > 0 &&
+      String(user.country_code || "").trim().length > 0 &&
+      String(user.gender || "").trim().length > 0;
+    const definitions = [
+      { id:"profile_complete", title:"Complete your profile", reward_coins:100, completed:profileComplete },
+      { id:"follow_one", title:"Follow 1 user", reward_coins:100, completed:followed },
+      { id:"enter_room", title:"Enter a Party room", reward_coins:100, completed:enteredRoom },
+      { id:"send_gift", title:"Send your first gift", reward_coins:200, completed:gifted },
+      { id:"join_family", title:"Join a Family", reward_coins:300, completed:family },
+    ];
+    const claims = new Set(this.ctx.storage.sql.exec(
+      "SELECT task_id FROM user_task_claims WHERE user_id=?", userId,
+    ).toArray().map((row)=>String(row.task_id)));
+    return definitions.map((task)=>({ ...task, claimed:claims.has(task.id) }));
+  }
+
+  claimTask(userIdValue, taskIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const taskId = String(taskIdValue || "").trim();
+    const task = this.taskState(userId).find((item)=>item.id===taskId);
+    if (!task) throw new Error("Task not found");
+    if (!task.completed) throw new Error("Complete this task first");
+    if (task.claimed) throw new Error("Task reward already claimed");
+    const now = Date.now();
+    this._creditNormalWalletAuthorized(userId, task.reward_coins, "task_reward");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_task_claims(user_id,task_id,reward_coins,claimed_at) VALUES(?,?,?,?)",
+      userId,task.id,task.reward_coins,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'task_reward',?,0,?,?,?)",
+      crypto.randomUUID(),userId,task.reward_coins,"task:"+task.id,task.title,now,
+    );
+    return { ok:true, task:{...task,claimed:true}, tasks:this.taskState(userId), wallet:this.getWallet(userId) };
   }
 
   userPreferences(userIdValue) {
