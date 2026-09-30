@@ -1,3 +1,5 @@
+import '../effects/effect_queue.dart';
+
 enum RoomVisibility { publicRoom, privateRoom }
 
 enum JoinPolicy { open, approval, adminOnly, inviteOnly }
@@ -74,6 +76,16 @@ class RoomControlService {
   bool soundEnabled = true;
   bool effectsEnabled = true;
   bool noticesVisible = true;
+
+  // Self-scoped room-view effect preferences. These do not change the
+  // room owner's global configuration for other users.
+  bool giftEffectsEnabled = true;
+  bool luckyGiftEffectEnabled = true;
+  bool giftSoundEnabled = true;
+  bool giftFlyInEnabled = true;
+  bool carEffectsEnabled = true;
+  bool giftBubbleEnabled = true;
+  bool rocketDrawNoticeEnabled = true;
   bool publicScreenEnabled = false;
   bool groupPkEnabled = false;
   bool eventActive = false;
@@ -222,6 +234,58 @@ class RoomControlService {
   bool toggleSound() => soundEnabled = !soundEnabled;
   bool toggleEffects() => effectsEnabled = !effectsEnabled;
   bool toggleNotices() => noticesVisible = !noticesVisible;
+
+  bool toggleGiftEffects() => giftEffectsEnabled = !giftEffectsEnabled;
+  bool toggleLuckyGiftEffect() =>
+      luckyGiftEffectEnabled = !luckyGiftEffectEnabled;
+  bool toggleGiftSound() => giftSoundEnabled = !giftSoundEnabled;
+  bool toggleGiftFlyIn() => giftFlyInEnabled = !giftFlyInEnabled;
+  bool toggleCarEffects() => carEffectsEnabled = !carEffectsEnabled;
+  bool toggleGiftBubble() => giftBubbleEnabled = !giftBubbleEnabled;
+  bool toggleRocketDrawNotice() =>
+      rocketDrawNoticeEnabled = !rocketDrawNoticeEnabled;
+
+  bool shouldPlayEffect(EffectRequest request) {
+    if (!effectsEnabled) return false;
+
+    final signature =
+        (request.id + ' ' + request.asset).toLowerCase();
+
+    switch (request.kind) {
+      case EffectKind.gift:
+        if (signature.contains('lucky')) return luckyGiftEffectEnabled;
+        if (signature.contains('fly')) return giftFlyInEnabled;
+        if (signature.contains('bubble')) return giftBubbleEnabled;
+        return giftEffectsEnabled;
+      case EffectKind.entry:
+        if (signature.contains('car') ||
+            signature.contains('vehicle') ||
+            signature.contains('ride')) {
+          return carEffectsEnabled;
+        }
+        return true;
+      case EffectKind.rocket:
+        return rocketDrawNoticeEnabled;
+      case EffectKind.banner:
+        if (signature.contains('gift') && signature.contains('bubble')) {
+          return giftBubbleEnabled;
+        }
+        if (signature.contains('rocket')) {
+          return rocketDrawNoticeEnabled;
+        }
+        return noticesVisible;
+      case EffectKind.rank:
+        return noticesVisible;
+      case EffectKind.vip:
+      case EffectKind.cp:
+        return true;
+    }
+  }
+
+  bool shouldPlayGiftSound({bool lucky = false}) {
+    if (!soundEnabled || !giftSoundEnabled) return false;
+    return !lucky || luckyGiftEffectEnabled;
+  }
   bool togglePublicScreen() => publicScreenEnabled = !publicScreenEnabled;
   bool toggleGroupPk() => groupPkEnabled = !groupPkEnabled;
   bool toggleEvent() => eventActive = !eventActive;
