@@ -226,6 +226,32 @@ class AppBackendService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> blockedProfiles(String token) async {
+    final data = await _request('GET', '/social/blocked/details', token);
+    final raw = data['blocked'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> linkGoogleAccount(
+    String token, {
+    required String idToken,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/account/link/google',
+      token,
+      body: <String, dynamic>{'id_token': idToken},
+    );
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<void> logout(String token) async {
+    await _request('POST', '/app/logout', token, body: const <String, dynamic>{});
+  }
+
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
