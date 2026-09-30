@@ -413,6 +413,26 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_user_notifications_user_time
         ON user_notifications(user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS user_feedback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'submitted',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_feedback_user_time
+        ON user_feedback(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id TEXT PRIMARY KEY,
+        message_voice INTEGER NOT NULL DEFAULT 1,
+        message_vibration INTEGER NOT NULL DEFAULT 1,
+        room_floating_only INTEGER NOT NULL DEFAULT 0,
+        language TEXT NOT NULL DEFAULT 'English',
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS event_notification_dispatches (
         event_id TEXT NOT NULL,
         phase TEXT NOT NULL,
@@ -4316,6 +4336,72 @@ export class AppDirectoryStore extends DurableObject {
       memory.id, row.user_a, row.user_b, userId, text, memory.created_at,
     );
     return memory;
+  }
+
+  userPreferences(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM user_preferences WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    return {
+      message_voice: row ? Number(row.message_voice) === 1 : true,
+      message_vibration: row ? Number(row.message_vibration) === 1 : true,
+      room_floating_only: row ? Number(row.room_floating_only) === 1 : false,
+      language: row ? String(row.language || "English") : "English",
+    };
+  }
+
+  updateUserPreferences(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const current = this.userPreferences(userId);
+    const next = {
+      message_voice: input.message_voice === undefined ? current.message_voice : input.message_voice === true,
+      message_vibration: input.message_vibration === undefined ? current.message_vibration : input.message_vibration === true,
+      room_floating_only: input.room_floating_only === undefined ? current.room_floating_only : input.room_floating_only === true,
+      language: cleanText(input.language === undefined ? current.language : input.language, 40) || "English",
+    };
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO user_preferences
+        (user_id,message_voice,message_vibration,room_floating_only,language,updated_at)
+       VALUES (?,?,?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET
+        message_voice=excluded.message_voice,
+        message_vibration=excluded.message_vibration,
+        room_floating_only=excluded.room_floating_only,
+        language=excluded.language,
+        updated_at=excluded.updated_at`,
+      userId, next.message_voice ? 1 : 0, next.message_vibration ? 1 : 0,
+      next.room_floating_only ? 1 : 0, next.language, now,
+    );
+    return { ok: true, preferences: next };
+  }
+
+  submitUserFeedback(userIdValue, categoryValue, messageValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const category = cleanText(categoryValue || "General", 40) || "General";
+    const message = cleanText(messageValue, 2000);
+    if (message.length < 3) throw new Error("Feedback message is too short");
+    const row = { id: crypto.randomUUID(), user_id: userId, category, message, status: "submitted", created_at: Date.now() };
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_feedback (id,user_id,category,message,status,created_at) VALUES (?,?,?,?,?,?)",
+      row.id,row.user_id,row.category,row.message,row.status,row.created_at,
+    );
+    return { ok: true, feedback: row };
+  }
+
+  userFeedback(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT id,category,message,status,created_at FROM user_feedback WHERE user_id=? ORDER BY created_at DESC LIMIT 100", userId,
+    ).toArray().map((row)=>({id:String(row.id),category:String(row.category),message:String(row.message),status:String(row.status),created_at:Number(row.created_at)}));
+  }
+
+  accountIdentities(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT provider,subject,created_at FROM app_user_identities WHERE user_id=? ORDER BY created_at ASC", userId,
+    ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
   }
 
   walletTransactions(userIdValue) {
