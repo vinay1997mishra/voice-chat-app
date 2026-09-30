@@ -174,23 +174,267 @@ The gift panel contains a **horizontally swipeable recipient strip**.
   - other event-related reminders
 - Event/reward notification campaigns may send up to 15 event-related notifications per day per user when applicable.
 
-## 8. Mine (profile)
+## 8. Mine / Me (personal profile) — REFERENCE VIDEO LOCKED
 
-This is the user's personal profile screen, separate from Party > Mine.
+This is the user's **bottom-navigation personal Mine/Me page**. It is separate from **Party > Mine**, which remains the room-oriented area.
 
-Contains:
+### 8.1 Visual target
 
-- Profile identity
-- Public ID
-- VIP/Noble badges
-- Coins
-- Diamonds (Host-only; hidden for non-Hosts)
-- VIP
-- Gifts
-- Family
-- More/settings
+The supplied reference videos are the visual target for this page. The final Tinni Star implementation must match the reference flow as closely as practical, including:
 
-Games and CP are intentionally not placed in Mine. Games open only from the Room Game Panel, and CP opens from its dedicated CP entry/panel.
+- the same vertical information order;
+- compact top profile identity block;
+- card proportions and row heights;
+- icon placement;
+- spacing and grouping;
+- text hierarchy;
+- VIP / Wealth card placement;
+- list-chevron behavior;
+- light profile-page background treatment;
+- reference-style gold/yellow accent treatment.
+
+Do not replace the reference layout with an unrelated generic settings/profile design. Functional labels listed below stay exactly as written unless the user explicitly changes them.
+
+### 8.2 Top profile identity block
+
+The top area contains:
+
+- Profile DP/avatar, including equipped profile frame.
+- Display name.
+- Country flag.
+- Public **UID**.
+- User level badge.
+- Family tag + Family level when the user belongs to a Family.
+- Identity/VIP badge area where applicable.
+
+Below the identity row, show live account statistics:
+
+- **Follow** — real following count.
+- **Fans** — real follower count.
+- **Charm** — real lifetime received-gift value / Charm source.
+
+These values must come from account/backend data and must not be hard-coded demo numbers.
+
+### 8.3 Wallet / VIP / Wealth cards
+
+Immediately below the account stats:
+
+- **Wallet**
+  - shows the user's current normal-wallet Coin balance;
+  - opens the existing Wallet/Recharge surface;
+  - must not mint or fabricate coins locally.
+- **VIP**
+  - shows current VIP state/level;
+  - opens the real VIP page.
+- **Wealth level**
+  - shows the current Wealth level;
+  - opens a dedicated Wealth Level page;
+  - Wealth progress is based on the user's **real lifetime gift sending**;
+  - level thresholds are data-driven and configurable from the Owner Panel;
+  - the screen shows current level, lifetime sending and next configured threshold.
+
+Charm and Wealth are separate concepts:
+- **Wealth** = lifetime eligible gift sending.
+- **Charm** = lifetime eligible gift receiving.
+
+The backend is authoritative for both totals and resulting levels.
+
+### 8.4 Mine menu — exact order
+
+The Mine menu order is locked to:
+
+1. **Medal of Honor**
+2. **Custom Center**
+3. **Shop**
+4. **Props**
+5. **Reward Records**
+6. **Task**
+7. **Host data**
+8. **Family**
+9. **CP Nest**
+10. **Feedback**
+11. **Setting**
+
+Do not silently remove, rename, duplicate or reorder these entries.
+
+### 8.5 Medal of Honor
+
+- Opens a real Medal of Honor page.
+- Loads the user's active medals from backend/account identity data.
+- Shows medal name and visual identity.
+- Empty state is **No medals yet**, not a fake medal list.
+- Owner-created/configured medals remain data-driven.
+
+### 8.6 Custom Center
+
+- Opens the existing personalization/customization center.
+- This is the entry for profile/custom visual configuration supported by Tinni Star.
+- It must not be a dead or placeholder tile.
+
+### 8.7 Shop
+
+- Opens the real Tinni Star Store.
+- Store catalog remains data-driven.
+- Reference-video behavior to preserve:
+  - category-based browsing;
+  - item cards;
+  - item price;
+  - duration/permanent status;
+  - item preview;
+  - Purchase/Send behavior where that catalog type supports it.
+- Cosmetic/content catalog may include vehicle/entry effects, profile/card items, frames/rings, bubbles and future Owner Panel-configured catalog types.
+
+### 8.8 Props
+
+- Opens the user's owned Props/Inventory surface, not the Shop placeholder.
+- Loads actual owned entitlements/inventory.
+- Shows item name/type and owned state.
+- Equippable props such as frames support **Use / Using** state through backend inventory/equip authority.
+- Future prop types must use the same entitlement model rather than creating duplicate local-only inventories.
+
+### 8.9 Reward Records
+
+- Opens real reward/wallet history.
+- Reads server wallet/reward transactions.
+- Shows transaction title/note, date/time and Coin/Diamond delta.
+- Positive and negative records are visually distinguishable.
+- No fabricated local history may be shown.
+
+### 8.10 Task
+
+- Opens the real Task page.
+- Task completion is derived from server-visible account activity.
+- Task examples may include:
+  - Complete your profile;
+  - Follow 1 user;
+  - Enter a Party room;
+  - Send your first gift;
+  - Join a Family.
+- Completed tasks can claim the configured Coin reward once.
+- Claiming is server-authoritative, writes the reward transaction and updates the wallet.
+- A claimed task cannot be claimed again.
+- Task definitions/rewards should remain extensible and Owner Panel-configurable as the production task system expands.
+
+### 8.11 Host data
+
+**Host data** must be a real role/settlement page, not an information placeholder.
+
+It shows applicable real account data:
+
+- current role: Host / Agency / BD / Not enrolled;
+- Host Diamond balance where applicable;
+- Diamond reference value;
+- Agency/BD commission balance where applicable;
+- withdrawable/transferable settlement value;
+- settlement transfer action when the account is eligible;
+- settlement transfer history;
+- recipient ID / role / amount / timestamp for completed transfers.
+
+Host/Agency/BD eligibility, balances, conversion rules and settlement authority stay server-side.
+
+### 8.12 Family
+
+- Opens the existing Family surface.
+- If the user belongs to a Family, open the Family home.
+- If the user has no Family, open the Family discovery/ranking/join path.
+- Family tag/level on Mine must stay synchronized with the same Family account state.
+
+### 8.13 CP Nest
+
+- **CP Nest stays in Mine** as its own personal CP entry.
+- It opens the real CP panel/screen.
+- CP Request / Accept / Disconnect, CP Level, Intimacy, Memories and other personal CP functions live in the CP system.
+- Public CP Ranking/Events may still appear in Party/Home where defined.
+- Games do **not** move into Mine.
+
+### 8.14 Feedback
+
+- Opens a real Feedback page.
+- User can select a category and submit a text report/request.
+- Supported categories include General, Bug, Account, Room, Payment and Safety.
+- Submitted feedback is stored server-side with status and timestamp.
+- The user can view their own feedback history.
+- Privacy/contact requests may use this Feedback route until an official Tinni Star legal/support contact is configured.
+
+### 8.15 Setting — exact order
+
+**Setting** opens a dedicated page with this exact order:
+
+1. **Message notification**
+2. **Bind account**
+3. **Language settings**
+4. **About Tinni Star**
+5. **Feedback**
+6. **Blocklist**
+7. **Privacy statement**
+8. **Sign out**
+
+All entries must be actionable; this page must not contain dead placeholder rows.
+
+#### Message notification
+
+Persist account notification preferences for:
+
+- **Voice**
+- **Vibration**
+- **Only receive floating screen in the room**
+
+The preference must survive app restart/account reload and be available to the notification layer.
+
+#### Bind account
+
+- Shows identities already linked to the current Tinni account.
+- Google binding uses a verified Google ID token and must reject an identity already owned by another Tinni account.
+- Email binding uses:
+  - email/Gmail address;
+  - email OTP verification;
+  - a Tinni password of 8–128 characters;
+  - duplicate-account protection.
+- Binding adds a login identity to the **same Tinni user ID**; it must not silently create a second user.
+- Facebook must not be shown as an active binding option unless Facebook login is deliberately re-enabled in the product.
+
+#### Language settings
+
+- Saves the user's Tinni Star language preference to the account.
+- Supported choices currently include **English, Hindi and Urdu**.
+- The selected preference must be used by localized screens as translations are implemented; it is not a device-only temporary toggle.
+
+#### About Tinni Star
+
+Shows Tinni Star product identity and current app version/build information. The page describes Tinni Star as the social live voice-room app, not another product.
+
+#### Blocklist
+
+- Loads the user's real server-side blocked-user list.
+- Shows user identity.
+- **Move out / Unblock** removes that block through the backend.
+- Blocklist state must remain synchronized with messaging/room social safety behavior.
+
+#### Privacy statement
+
+Opens the real **Service Agreement & Privacy Policy** page described in the Privacy section of this blueprint. It must never be a blank placeholder.
+
+#### Sign out
+
+- Requires user confirmation.
+- Revokes/logs out the session when network is available.
+- Leaves/closes the active room session cleanly.
+- Unregisters push for the signed-out account.
+- Clears persisted local auth/profile state.
+- Returns to the Login screen and prevents the previous authenticated Mine page from remaining in the navigation stack.
+
+### 8.16 No-placeholder rule
+
+For the Mine/Me flow, these are not acceptable final behaviors:
+
+- No content yet for a function that is defined above;
+- generic snackbars in place of the actual feature;
+- a menu row that opens an unrelated page;
+- hard-coded Follow/Fans/Charm/Wealth data;
+- local-only fake reward/transaction history;
+- local-only wallet mutation.
+
+Every listed Mine entry must either open its real feature or show a truthful empty state backed by the real data source.
 
 ## 9. Games
 
