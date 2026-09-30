@@ -71,6 +71,12 @@ export class RoomPresenceStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_seat_mutes (
+        seat_index INTEGER PRIMARY KEY,
+        muted_by TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_seat_forces (
         user_id TEXT PRIMARY KEY,
         seat_index INTEGER,
@@ -295,6 +301,47 @@ export class RoomPresenceStore extends DurableObject {
     return this.ctx.storage.sql.exec("SELECT seat_index FROM room_seat_locks ORDER BY seat_index").toArray().map((row) => Number(row.seat_index));
   }
 
+  mutedSeats() {
+    return this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_seat_mutes ORDER BY seat_index",
+    ).toArray().map((row) => Number(row.seat_index));
+  }
+
+  setSeatMute(input) {
+    const seatIndex = Number(input?.seat_index);
+    const mutedBy = String(input?.muted_by || "").trim();
+    const muted = input?.muted === true;
+    if (!Number.isInteger(seatIndex) || seatIndex < 0) {
+      throw new Error("seat_index is required");
+    }
+    if (!mutedBy) throw new Error("muted_by is required");
+    if (muted) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_seat_mutes (seat_index, muted_by, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(seat_index) DO UPDATE SET
+           muted_by = excluded.muted_by,
+           updated_at = excluded.updated_at`,
+        seatIndex,
+        mutedBy,
+        Date.now(),
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_mutes WHERE seat_index = ?",
+        seatIndex,
+      );
+    }
+    return {
+      ok: true,
+      seat_index: seatIndex,
+      muted,
+      muted_seats: this.mutedSeats(),
+      locked_seats: this.lockedSeats(),
+      members: this._members(),
+    };
+  }
+
   setSeatLock(input) {
     const seatIndex = Number(input?.seat_index);
     const lockedBy = String(input?.locked_by || "").trim();
@@ -378,6 +425,7 @@ export class RoomPresenceStore extends DurableObject {
       mic_mode: this.micMode(),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
+      muted_seats: this.mutedSeats(),
       members: this._members(now),
     };
   }
@@ -642,6 +690,13 @@ export class RoomPresenceStore extends DurableObject {
     muteStatus(userIdValue, seatIndexValue = null) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return false;
+    if (seatIndexValue !== null && seatIndexValue !== undefined) {
+      const seatMuted = this.ctx.storage.sql.exec(
+        "SELECT seat_index FROM room_seat_mutes WHERE seat_index = ? LIMIT 1",
+        Number(seatIndexValue),
+      ).toArray()[0];
+      if (seatMuted) return true;
+    }
     const row = this.ctx.storage.sql.exec(
       "SELECT seat_index FROM room_mutes WHERE user_id = ? LIMIT 1",
       userId,
@@ -1053,6 +1108,8 @@ export class RoomPresenceStore extends DurableObject {
       mic_mode: this.micMode(),
       member_ttl_ms: MEMBER_TTL_MS,
       seat_requests: this.seatRequests(),
+      locked_seats: this.lockedSeats(),
+      muted_seats: this.mutedSeats(),
       members: this._members(now),
     };
   }

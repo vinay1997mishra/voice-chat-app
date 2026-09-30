@@ -99,6 +99,7 @@ class RoomPresenceService extends ChangeNotifier {
   RoomSeatInvite? pendingSeatInvite;
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
   final Set<int> lockedSeats = <int>{};
+  final Set<int> mutedSeats = <int>{};
   String? lastError;
 
   Future<void> join({
@@ -166,6 +167,7 @@ class RoomPresenceService extends ChangeNotifier {
       pendingSeatInvite = null;
       seatRequests.clear();
       lockedSeats.clear();
+      mutedSeats.clear();
       notifyListeners();
     }
   }
@@ -265,6 +267,39 @@ class RoomPresenceService extends ChangeNotifier {
       authToken,
       <String, Object>{'room_id': roomId, 'seat_index': seatIndex, 'locked': locked},
     );
+  }
+
+  Future<void> setSeatMute({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+    required bool muted,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-mute',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'seat_index': seatIndex,
+        'muted': muted,
+      },
+    );
+  }
+
+  Future<void> takeSeat({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/seat-take',
+      authToken,
+      <String, Object>{'room_id': roomId, 'seat_index': seatIndex},
+      applyResponse: false,
+    );
+    selfSeatForced = true;
+    selfForcedSeatIndex = _asInt(data['seat_index']);
+    notifyListeners();
   }
 
     Future<void> requestSeat({
@@ -591,6 +626,13 @@ class RoomPresenceService extends ChangeNotifier {
       lockedSeats
         ..clear()
         ..addAll(rawLocked is List ? rawLocked.map(_asInt) : const <int>[]);
+    }
+
+    if (data.containsKey('muted_seats')) {
+      final rawMuted = data['muted_seats'];
+      mutedSeats
+        ..clear()
+        ..addAll(rawMuted is List ? rawMuted.map(_asInt) : const <int>[]);
     }
 
     if (data.containsKey('seat_requests')) {

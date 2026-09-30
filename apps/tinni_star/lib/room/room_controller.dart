@@ -180,6 +180,15 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSeatLocked(int index, bool locked) {
+    if (index < 0 || index >= seats.length) return;
+    final seat = seats[index];
+    if (seat.occupied && locked) return;
+    if (seat.locked == locked) return;
+    seats[index] = seat.copyWith(locked: locked);
+    notifyListeners();
+  }
+
   void toggleSeatRoomMute(int index) {
     if (index < 0 || index >= seats.length) return;
     setSeatRoomMuted(index, !seats[index].roomMuted);

@@ -24,6 +24,8 @@ class ActiveRoomSession extends ChangeNotifier {
     this.equippedFrameIdProvider,
     this.equippedEntryIdProvider,
     this.equippedProfileCardIdProvider,
+    this.onRoomClosed,
+    this.onSeatForcedDown,
   });
 
   final FunctionPackRuntime runtime;
@@ -37,6 +39,8 @@ class ActiveRoomSession extends ChangeNotifier {
   final String? Function()? equippedFrameIdProvider;
   final String? Function()? equippedEntryIdProvider;
   final String? Function()? equippedProfileCardIdProvider;
+  final Future<void> Function()? onRoomClosed;
+  final Future<void> Function()? onSeatForcedDown;
 
   RoomSummary? room;
   RoomController? controller;
@@ -154,11 +158,18 @@ class ActiveRoomSession extends ChangeNotifier {
   Future<void> setMicFromController() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
-    if (presence.selfMicMuted && roomController.micState == MicState.live) {
+    final mySeat = roomController.mySeat;
+    final seatMuted = mySeat != null &&
+        mySeat >= 0 &&
+        mySeat < roomController.seats.length &&
+        roomController.seats[mySeat].roomMuted;
+    if ((presence.selfMicMuted || seatMuted) &&
+        roomController.micState == MicState.live) {
       roomController.forceMicMuted();
     }
     await realtime.setMic(
       !presence.selfMicMuted &&
+          !seatMuted &&
           !roomController.selfMuted &&
           roomController.micState == MicState.live,
     );
@@ -226,6 +237,49 @@ class ActiveRoomSession extends ChangeNotifier {
       targetUserId: targetUserId,
       banned: banned,
     );
+  }
+
+  Future<void> setSeatLock(int seatIndex, bool locked) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setSeatLock(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      locked: locked,
+    );
+  }
+
+  Future<void> setSeatMute(int seatIndex, bool muted) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setSeatMute(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      muted: muted,
+    );
+  }
+
+  Future<void> takeMySeat(int seatIndex) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.takeSeat(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+    );
+    await _applyForcedSeatChange();
+    await _enforceModerationMute();
   }
 
   Future<void> setRoomMicMode(String micMode) async {
@@ -370,6 +424,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   Future<void> close() async {
+    await onRoomClosed?.call();
     final oldRoomId = room?.id;
     final oldAuthToken = _activeAuthToken;
     final oldController = controller;
@@ -456,9 +511,15 @@ class ActiveRoomSession extends ChangeNotifier {
     final roomController = controller;
     if (roomController == null) return;
 
-    roomController.forceMySeat(presence.selfForcedSeatIndex);
+    final previousSeat = roomController.mySeat;
+    final forcedSeat = presence.selfForcedSeatIndex;
+    roomController.forceMySeat(forcedSeat);
     presence.selfSeatForced = false;
     presence.selfForcedSeatIndex = null;
+
+    if (previousSeat != null && forcedSeat == null) {
+      await onSeatForcedDown?.call();
+    }
 
     if (connected) {
       await realtime.setMic(false);
@@ -497,7 +558,20 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _onPresenceChanged() {
-    controller?.setInviteMode(presence.micMode != 'free');
+    final roomController = controller;
+    roomController?.setInviteMode(presence.micMode != 'free');
+    if (roomController != null) {
+      for (var index = 0; index < roomController.seats.length; index++) {
+        roomController.setSeatLocked(
+          index,
+          presence.lockedSeats.contains(index),
+        );
+        roomController.setSeatRoomMuted(
+          index,
+          presence.mutedSeats.contains(index),
+        );
+      }
+    }
     notifyListeners();
   }
 

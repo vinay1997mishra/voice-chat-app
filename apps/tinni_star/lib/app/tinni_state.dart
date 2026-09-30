@@ -135,6 +135,11 @@ class TinniState {
       equippedFrameIdProvider: () => inventory.equippedFrameId,
       equippedEntryIdProvider: () => inventory.equipped('entry'),
       equippedProfileCardIdProvider: () => inventory.equipped('profile_card'),
+      onRoomClosed: () => ktv.stopRoomPlayback(),
+      onSeatForcedDown: () async {
+        final userId = auth.current?.userId ?? '';
+        await ktv.stopForSeatDown(userId);
+      },
     );
   }
 

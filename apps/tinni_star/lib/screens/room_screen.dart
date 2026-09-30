@@ -871,6 +871,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _leaveSeatAndMute() async {
+    final userId = widget.state.auth.current?.userId ?? '';
+    await widget.state.ktv.stopForSeatDown(userId);
     controller.leaveSeat();
     await widget.state.roomSession.setMicFromController();
     if (mounted) setState(() {});
@@ -1438,6 +1440,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     if (action == 'exit') {
+      await widget.state.ktv.stopRoomPlayback();
       await session.close();
       if (!mounted) return;
       Navigator.pop(context);
@@ -2544,6 +2547,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final current = widget.state.ktv.current;
           final localSongCount = widget.state.ktv.localSongCount;
           final canAddLocalSong = widget.state.ktv.canAddLocalSong;
+          final onSeat = controller.mySeat != null;
           return SafeArea(
             key: const Key('room-music-panel'),
             child: SizedBox(
@@ -2614,10 +2618,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         if (current != null)
                           IconButton(
                             tooltip: 'Next',
-                            onPressed: () async {
-                              await widget.state.ktv.playNext();
-                              setSheetState(() {});
-                            },
+                            onPressed: onSeat
+                                ? () async {
+                                    await widget.state.ktv.playNext();
+                                    setSheetState(() {});
+                                  }
+                                : null,
                             icon: const Icon(Icons.skip_next_rounded),
                           ),
                       ],
@@ -2629,7 +2635,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const Key('room-add-music-button'),
-                        onPressed: canAddLocalSong
+                        onPressed: canAddLocalSong && onSeat
                             ? () async {
                           final file = await FilePicker.pickFile(
                             dialogTitle: 'Add Music',
@@ -2784,14 +2790,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     : const Icon(
                                         Icons.playlist_add_rounded,
                                       ),
-                                onTap: () async {
-                                  widget.state.ktv.addToQueue(song, account.userId);
-                                  if (widget.state.ktv.current == null) {
-                                    widget.state.ktv.startNext();
-                                    await widget.state.ktv.playCurrent();
-                                  }
-                                  setSheetState(() {});
-                                },
+                                onTap: onSeat
+                                    ? () async {
+                                        widget.state.ktv
+                                            .addToQueue(song, account.userId);
+                                        if (widget.state.ktv.current == null) {
+                                          widget.state.ktv.startNext();
+                                          await widget.state.ktv.playCurrent();
+                                        }
+                                        setSheetState(() {});
+                                      }
+                                    : () {
+                                        _snack(
+                                          'Join a room seat before playing music.',
+                                        );
+                                      },
                               );
                             },
                           ),
@@ -5701,14 +5714,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 glow: 0.30,
               ),
               title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatLock(index);
-                _snack(
-                  seat.locked
-                      ? 'Seat ${index + 1} unlocked.'
-                      : 'Seat ${index + 1} locked.',
-                );
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ${index + 1} locked.'
+                        : 'Seat ${index + 1} unlocked.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
               },
             ),
             ListTile(
@@ -5729,18 +5751,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
               onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatRoomMute(index);
-                if (controller.mySeat == index) {
-                  await widget.state.roomSession.setMicFromController();
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ${index + 1} muted.'
+                        : 'Seat ${index + 1} unmuted.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
                 }
-                _snack(
-                  seat.roomMuted
-                      ? 'Seat ${index + 1} unmuted.'
-                      : 'Seat ${index + 1} muted.',
-                );
               },
             ),
-            if (!seat.occupied && controller.mySeat == null)
+            if (!seat.occupied)
               ListTile(
                 key: const Key('seat-control-take'),
                 leading: const ShiningIcon(
@@ -5752,12 +5783,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 title: const Text('Take Seat'),
                 subtitle: const Text(
-                  'Owner/Admin can take the seat without Apply Mic.',
+                  'Owner/Admin can take this empty seat directly.',
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  final text = controller.managerTakeSeat(index);
-                  _snack(text);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ${index + 1}.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
                 },
               ),
             if (controller.mySeat == index)
@@ -5891,6 +5933,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
           if (occupied) {
             RoomPresenceMember? member = presenceMember;
             if (member == null) {
@@ -5912,7 +5958,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             }
           }
           if (_canModerateSeats) {
-            _showReferenceSeatControl(index);
+            _showSeatControls(index);
             return;
           }
           _handleUserSeatTap(index);

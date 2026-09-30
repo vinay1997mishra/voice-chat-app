@@ -72,7 +72,25 @@ class KtvService {
   Future<void> resume() => _audio.play();
 
   Future<void> stopPlayback() async {
-    await _audio.stop();
+    final player = _player;
+    if (player != null) await player.stop();
+  }
+
+  Future<void> stopForSeatDown(String userId) async {
+    final id = userId.trim();
+    if (id.isEmpty) return;
+    final currentBelongsToUser = current?.userId == id;
+    queue.removeWhere((entry) => entry.userId == id);
+    if (currentBelongsToUser) {
+      await stopPlayback();
+      current = null;
+    }
+  }
+
+  Future<void> stopRoomPlayback() async {
+    await stopPlayback();
+    current = null;
+    queue.clear();
   }
 
   Future<KtvQueueEntry?> playNext() async {
