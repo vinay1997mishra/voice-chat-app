@@ -1238,7 +1238,7 @@ class AboutTinniStarScreen extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              'Version 0.5.23 (43)',
+              'Version 0.5.23 (44)',
               style: TextStyle(color: _mineMuted),
             ),
             SizedBox(height: 18),
