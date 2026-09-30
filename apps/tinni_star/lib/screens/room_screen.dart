@@ -5810,10 +5810,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final isMySeat = controller.mySeat == index;
     final account = widget.state.auth.current;
     final occupied = seat.userName != null || presenceMember != null;
-    final displayName = presenceMember?.displayName ??
-        (isMySeat ? account?.displayName : null) ??
-        seat.userName ??
-        'Mic ${index + 1}';
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
     final emoteUntil = presenceMember?.seatEmoteUntil;
     final seatEmote = presenceMember?.seatEmote != null &&
             emoteUntil != null &&
@@ -6008,16 +6016,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
             SizedBox(height: compact ? 2 : 4),
-            Text(
-              occupied ? displayName : 'No.' + (index + 1).toString(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: RoyalPalette.cream,
-                fontSize: compact ? 7.5 : 9.5,
-                height: 1.0,
-                fontWeight: FontWeight.w700,
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 2),
