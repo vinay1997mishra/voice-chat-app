@@ -977,6 +977,48 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_family_join_requests_status
         ON family_join_requests(family_id, status, created_at);
 
+      CREATE TABLE IF NOT EXISTS family_daily_logins (
+        family_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        exp_awarded INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, user_id, day_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS family_received_coins (
+        id TEXT PRIMARY KEY,
+        family_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL,
+        receiver_user_id TEXT NOT NULL,
+        coins INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'family_wallet',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_received_coins_family_time
+        ON family_received_coins(family_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS family_wallet_transfers (
+        id TEXT PRIMARY KEY,
+        family_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL,
+        receiver_user_id TEXT NOT NULL,
+        coins INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_wallet_transfers_family_time
+        ON family_wallet_transfers(family_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS family_monthly_bonuses (
+        family_id TEXT NOT NULL,
+        month_key TEXT NOT NULL,
+        received_coins INTEGER NOT NULL DEFAULT 0,
+        bonus_basis_points INTEGER NOT NULL DEFAULT 0,
+        bonus_coins INTEGER NOT NULL DEFAULT 0,
+        settled_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, month_key)
+      );
+
       CREATE TABLE IF NOT EXISTS user_id_history (
         old_user_id TEXT PRIMARY KEY,
         new_user_id TEXT NOT NULL,
@@ -1017,7 +1059,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE user_equipment ADD COLUMN equipped_profile_card_id TEXT",
       "ALTER TABLE user_equipment ADD COLUMN equipped_ring_id TEXT",
       "ALTER TABLE user_equipment ADD COLUMN equipped_bubble_id TEXT",
-      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT"
+      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT",
+      "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1733,6 +1776,24 @@ export class AppDirectoryStore extends DurableObject {
       security_frozen: Number(guard?.security_frozen || 0) === 1,
       freeze_reason: String(guard?.freeze_reason || ""),
     };
+  }
+
+  _debitNormalWalletAuthorized(userIdValue, amountValue, sourceValue = "authorized_spend") {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    const guard = this._normalWalletGuard(userIdValue);
+    if (guard.security_frozen) throw new Error("Wallet is security-frozen. Owner unfreeze is required.");
+    if (guard.coins < amount) throw new Error("Wallet balance is not enough");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE wallet_coin_guards SET expected_coins=MAX(0,expected_coins-?),updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    return this._normalWalletGuard(guard.user_id);
   }
 
   _creditNormalWalletAuthorized(userIdValue, amountValue, sourceValue = "authorized_transfer") {
