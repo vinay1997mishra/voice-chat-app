@@ -1011,7 +1011,13 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public'",
       "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_rooms ADD COLUMN room_level INTEGER NOT NULL DEFAULT 1"
+      "ALTER TABLE app_rooms ADD COLUMN room_level INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_vehicle_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_entry_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_card_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_ring_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_bubble_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -4621,20 +4627,47 @@ export class AppDirectoryStore extends DurableObject {
   inventoryState(userIdValue) {
     this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
+    const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
       "SELECT item_id, item_kind, acquired_at, expires_at FROM user_inventory WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY acquired_at DESC",
-      userId, Date.now(),
+      userId, now,
     ).toArray();
     const equipment = this.ctx.storage.sql.exec(
-      "SELECT equipped_frame_id, updated_at FROM user_equipment WHERE user_id = ? LIMIT 1",
+      `SELECT equipped_frame_id,equipped_vehicle_id,equipped_entry_id,
+              equipped_profile_card_id,equipped_ring_id,equipped_bubble_id,
+              equipped_profile_background_id,updated_at
+         FROM user_equipment WHERE user_id = ? LIMIT 1`,
       userId,
-    ).toArray()[0];
-    if (equipment?.equipped_frame_id) {
-      const active = rows.some((row) => String(row.item_id) === String(equipment.equipped_frame_id));
-      if (!active) {
-        this.ctx.storage.sql.exec("UPDATE user_equipment SET equipped_frame_id = NULL, updated_at = ? WHERE user_id = ?", Date.now(), userId);
-        equipment.equipped_frame_id = null;
+    ).toArray()[0] || {};
+    const activeIds = new Set(rows.map((row) => String(row.item_id)));
+    const keys = [
+      "equipped_frame_id","equipped_vehicle_id","equipped_entry_id",
+      "equipped_profile_card_id","equipped_ring_id","equipped_bubble_id",
+      "equipped_profile_background_id",
+    ];
+    let changed = false;
+    for (const key of keys) {
+      if (equipment[key] && !activeIds.has(String(equipment[key]))) {
+        equipment[key] = null;
+        changed = true;
       }
+    }
+    if (changed) {
+      this.ctx.storage.sql.exec(
+        `UPDATE user_equipment SET
+          equipped_frame_id=?,equipped_vehicle_id=?,equipped_entry_id=?,
+          equipped_profile_card_id=?,equipped_ring_id=?,equipped_bubble_id=?,
+          equipped_profile_background_id=?,updated_at=?
+         WHERE user_id=?`,
+        equipment.equipped_frame_id || null,
+        equipment.equipped_vehicle_id || null,
+        equipment.equipped_entry_id || null,
+        equipment.equipped_profile_card_id || null,
+        equipment.equipped_ring_id || null,
+        equipment.equipped_bubble_id || null,
+        equipment.equipped_profile_background_id || null,
+        now,userId,
+      );
     }
     return {
       owned: rows.map((row) => ({
@@ -4643,10 +4676,14 @@ export class AppDirectoryStore extends DurableObject {
         acquired_at: Number(row.acquired_at),
         expires_at: row.expires_at == null ? null : Number(row.expires_at),
       })),
-      equipped_frame_id: equipment?.equipped_frame_id
-        ? String(equipment.equipped_frame_id)
-        : null,
-      updated_at: Number(equipment?.updated_at || 0),
+      equipped_frame_id: equipment.equipped_frame_id ? String(equipment.equipped_frame_id) : null,
+      equipped_vehicle_id: equipment.equipped_vehicle_id ? String(equipment.equipped_vehicle_id) : null,
+      equipped_entry_id: equipment.equipped_entry_id ? String(equipment.equipped_entry_id) : null,
+      equipped_profile_card_id: equipment.equipped_profile_card_id ? String(equipment.equipped_profile_card_id) : null,
+      equipped_ring_id: equipment.equipped_ring_id ? String(equipment.equipped_ring_id) : null,
+      equipped_bubble_id: equipment.equipped_bubble_id ? String(equipment.equipped_bubble_id) : null,
+      equipped_profile_background_id: equipment.equipped_profile_background_id ? String(equipment.equipped_profile_background_id) : null,
+      updated_at: Number(equipment.updated_at || 0),
     };
   }
 
@@ -4701,7 +4738,9 @@ export class AppDirectoryStore extends DurableObject {
   purchaseCatalogItem(userIdValue, kindValue, itemIdValue, countryCodeValue = "") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const kind = cleanText(kindValue, 40).toLowerCase();
-    if (!["entry","vehicle","profile_card"].includes(kind)) throw new Error("Unsupported purchasable item type");
+    if (!["entry","vehicle","profile_card","ring","bubble","profile_background"].includes(kind)) {
+      throw new Error("Unsupported purchasable item type");
+    }
     const item = this.purchasableCatalog(kind, countryCodeValue).find((v) => v.id === String(itemIdValue || "").trim());
     if (!item) throw new Error("Item is unavailable");
     const existing = this.ctx.storage.sql.exec("SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1", userId, item.id).toArray()[0];
@@ -4720,6 +4759,106 @@ export class AppDirectoryStore extends DurableObject {
     const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
     this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?,?,?,?)", userId, item.id, kind, now, expiresAt);
     return { ok: true, duplicate: false, price_coins: price, duration_days: durationDays, expires_at: expiresAt, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+  }
+
+  equipCatalogItem(userIdValue, kindValue, itemIdValue) {
+    this._ensureEconomyMigrations();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    const columns = {
+      vehicle: "equipped_vehicle_id",
+      entry: "equipped_entry_id",
+      profile_card: "equipped_profile_card_id",
+      ring: "equipped_ring_id",
+      bubble: "equipped_bubble_id",
+      profile_background: "equipped_profile_background_id",
+    };
+    const column = columns[kind];
+    if (!column) throw new Error("Unsupported equippable item type");
+    const itemId = itemIdValue == null ? "" : String(itemIdValue).trim();
+    if (itemId) {
+      const owned = this.ctx.storage.sql.exec(
+        "SELECT item_id FROM user_inventory WHERE user_id=? AND item_id=? AND item_kind=? AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
+        userId,itemId,kind,Date.now(),
+      ).toArray()[0];
+      if (!owned) throw new Error("Item is not owned or has expired");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO user_equipment(user_id,equipped_frame_id,updated_at) VALUES(?,NULL,?)",
+      userId,now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE user_equipment SET " + column + "=?, updated_at=? WHERE user_id=?",
+      itemId || null,now,userId,
+    );
+    return { ok:true, inventory:this.inventoryState(userId) };
+  }
+
+  sendCatalogItem(senderUserIdValue, recipientUserIdValue, kindValue, itemIdValue, countryCodeValue = "") {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
+    if (!recipientId || !this.getUserById(recipientId)) throw new Error("Recipient user not found");
+    if (String(senderId) === String(recipientId)) throw new Error("Use Buy for your own account");
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    if (!["entry","vehicle","profile_card","ring","bubble","profile_background","frame"].includes(kind)) {
+      throw new Error("Unsupported send item type");
+    }
+    const itemId = String(itemIdValue || "").trim();
+    const item = kind === "frame"
+      ? this.frameCatalog(countryCodeValue).find((v)=>v.id===itemId)
+      : this.purchasableCatalog(kind,countryCodeValue).find((v)=>v.id===itemId);
+    if (!item) throw new Error("Item is unavailable");
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT item_id FROM user_inventory WHERE user_id=? AND item_id=? AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
+      recipientId,itemId,Date.now(),
+    ).toArray()[0];
+    if (existing) throw new Error("Recipient already owns this item");
+
+    const basePrice = kind === "frame"
+      ? Math.max(0,Number(item.price ?? item.data?.price ?? item.data?.coin_price ?? 0))
+      : Math.max(0,Number(item.price_coins || 0));
+    const baseDuration = kind === "frame"
+      ? Math.max(0,Number(item.data?.duration_days || 0))
+      : Math.max(0,Number(item.duration_days || 0));
+    const effective = this._effectivePrice(senderId, kind + ":" + itemId, basePrice, baseDuration);
+    const price = effective.price;
+    const wallet = this.getWallet(senderId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
+        price,now,senderId,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,?,?,0,?,?,?)",
+        crypto.randomUUID(),senderId,"store_item_send",-price,
+        kind+":"+itemId,"Sent "+String(item.name||itemId)+" to "+recipientId,now,
+      );
+    }
+    const durationDays = effective.duration_days ?? baseDuration;
+    const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_inventory(user_id,item_id,item_kind,acquired_at,expires_at) VALUES(?,?,?,?,?)",
+      recipientId,itemId,kind,now,expiresAt,
+    );
+    this._createUserNotification(
+      recipientId,
+      "Store gift received",
+      "You received " + String(item.name || itemId) + " from ID " + senderId + ".",
+      "store_item_received",
+      senderId,
+    );
+    return {
+      ok:true,
+      recipient_user_id:recipientId,
+      price_coins:price,
+      duration_days:durationDays,
+      expires_at:expiresAt,
+      wallet:this.getWallet(senderId),
+    };
   }
 
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
