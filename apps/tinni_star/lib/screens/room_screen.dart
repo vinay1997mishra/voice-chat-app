@@ -3242,14 +3242,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ('neon-blue', 'Neon Blue'),
                               ('rose-glow', 'Rose Glow'),
                             ])
-                              RadioListTile<String>(
-                                value: entry.$1,
-                                groupValue: controls.seatThemeId,
+                              ListTile(
+                                key: Key('mic-theme-' + entry.$1),
+                                leading: Icon(
+                                  controls.seatThemeId == entry.$1
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                                  color: controls.seatThemeId == entry.$1
+                                      ? _seatThemeAccent
+                                      : RoyalPalette.muted,
+                                ),
                                 title: Text(entry.$2),
-                                onChanged: !_isRoomOwner
+                                enabled: _isRoomOwner,
+                                onTap: !_isRoomOwner
                                     ? null
-                                    : (value) async {
-                                        if (value == null) return;
+                                    : () async {
                                         final account =
                                             widget.state.auth.current;
                                         if (account == null) return;
@@ -3259,7 +3266,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                               .updateRoomRemote(
                                             authToken: account.authToken,
                                             roomId: widget.room.id,
-                                            seatThemeId: value,
+                                            seatThemeId: entry.$1,
                                           );
                                           controls.setSeatTheme(
                                             updated.seatThemeId,
