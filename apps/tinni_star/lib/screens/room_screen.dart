@@ -3654,26 +3654,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       if (mounted) setState(() {});
                                     },
                             ),
-                            ListTile(
-                              leading: Icon(
-                                controls.settings.visibility ==
-                                        RoomVisibility.publicRoom
-                                    ? Icons.lock_open_rounded
-                                    : Icons.lock_rounded,
-                              ),
-                              title: Text(
-                                controls.settings.visibility ==
-                                        RoomVisibility.publicRoom
-                                    ? 'Room Open'
-                                    : 'Room Locked',
-                              ),
-                              onTap: !_isRoomOwner
-                                  ? null
-                                  : () async {
-                                      await _toggleRoomLock();
-                                      setSheetState(() {});
-                                    },
-                            ),
                           ],
                         ),
                       ],
@@ -4724,9 +4704,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final noticeController =
         TextEditingController(text: _roomAnnouncement);
     var pendingPhoto = _roomPhotoDataUrl;
-    var wantsPrivate =
-        widget.state.roomControls.settings.visibility ==
-            RoomVisibility.privateRoom;
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -4742,44 +4719,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               } catch (_) {
                 pendingPhotoProvider = null;
               }
-            }
-
-            Widget lockChoice({
-              required String label,
-              required bool selected,
-              required VoidCallback onTap,
-            }) {
-              return InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: onTap,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        selected
-                            ? Icons.radio_button_checked_rounded
-                            : Icons.radio_button_off_rounded,
-                        color: selected
-                            ? const Color(0xFF9F2DFF)
-                            : RoyalPalette.muted,
-                        size: 21,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: selected
-                              ? RoyalPalette.cream
-                              : RoyalPalette.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
             }
 
             return Scaffold(
@@ -4883,32 +4822,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       counterStyle: TextStyle(color: RoyalPalette.muted),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text(
-                        'Room Lock',
-                        style: TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const Spacer(),
-                      lockChoice(
-                        label: 'Public',
-                        selected: !wantsPrivate,
-                        onTap: () =>
-                            setPageState(() => wantsPrivate = false),
-                      ),
-                      const SizedBox(width: 6),
-                      lockChoice(
-                        label: 'Private',
-                        selected: wantsPrivate,
-                        onTap: () =>
-                            setPageState(() => wantsPrivate = true),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 18),
                   ListTile(
                     key: const Key('reference-room-block-list'),
@@ -4967,13 +4880,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         _roomPhotoOverride = updated.photoDataUrl;
                         _roomAnnouncementOverride =
                             updated.announcement;
-
-                        final currentlyPrivate =
-                            widget.state.roomControls.settings.visibility ==
-                                RoomVisibility.privateRoom;
-                        if (wantsPrivate != currentlyPrivate) {
-                          await _toggleRoomLock();
-                        }
 
                         if (mounted) setState(() {});
                         if (pageContext.mounted) {
@@ -5035,25 +4941,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                ),
-                SwitchListTile(
-                  title: Text(
-                    settings.visibility == RoomVisibility.publicRoom
-                        ? 'Room Open'
-                        : 'Room Locked',
-                  ),
-                  subtitle: Text(
-                    settings.visibility == RoomVisibility.publicRoom
-                        ? 'Turn off and set a password to lock the room.'
-                        : 'Turn on to open the room and reset wrong-password attempts.',
-                  ),
-                  value: settings.visibility == RoomVisibility.publicRoom,
-                  onChanged: (_) async {
-                    await _toggleRoomLock();
-                    if (context.mounted) {
-                      setSheetState(() {});
-                    }
-                  },
                 ),
                 ListTile(
                   leading: const Icon(Icons.event_seat_rounded),
