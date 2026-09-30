@@ -60,7 +60,10 @@ class SeatLayoutSpec {
   }
 
   double preferredHeight(double seatDiameter) {
-    final rowHeight = seatDiameter + (seatDiameter < 44 ? 16 : 22);
+    // Keep enough vertical room for the reference seat stack:
+    // avatar/lock + No.X/name + heart pill + optional tags/medals.
+    final rowLabelSpace = seatDiameter < 44 ? 34.0 : 44.0;
+    final rowHeight = seatDiameter + rowLabelSpace;
     return rowHeight * rows;
   }
 }
