@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../activities/activity_service.dart';
 import '../activities/rank_features.dart';
 import '../auth/auth_service.dart';
@@ -132,6 +134,28 @@ class TinniState {
       },
       equippedFrameIdProvider: () => inventory.equippedFrameId,
     );
+  }
+
+  final ValueNotifier<String> languagePreference =
+      ValueNotifier<String>('English');
+
+  void setLanguagePreference(String value) {
+    final normalized = value.trim();
+    languagePreference.value =
+        const {'English', 'Hindi', 'Urdu'}.contains(normalized)
+            ? normalized
+            : 'English';
+  }
+
+  Future<void> refreshAccountPreferences() async {
+    final account = auth.current;
+    if (account == null) return;
+    try {
+      final preferences = await backend.accountPreferences(account.authToken);
+      setLanguagePreference(
+        preferences['language']?.toString() ?? 'English',
+      );
+    } catch (_) {}
   }
 
   final FunctionPackRuntime runtime;
