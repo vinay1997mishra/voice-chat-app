@@ -96,7 +96,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-power-button')));
@@ -151,7 +151,7 @@ void main() {
       await tester.tap(tool);
       await tester.pumpAndSettle();
       expect(find.byKey(panelKey), findsOneWidget);
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
     }
 
@@ -197,7 +197,7 @@ void main() {
       find.byKey(Key('remove-music-' + removableSong.id)),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await expectToolOpens(
       'room-tool-room-type',
@@ -223,7 +223,7 @@ void main() {
       find.byType(TextField).last,
     );
     expect(passwordField.maxLength, 5);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
@@ -251,7 +251,7 @@ void main() {
       state.roomControls.giftEffectsEnabled,
       isNot(originalGiftEffects),
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
   });
 
@@ -326,7 +326,7 @@ void main() {
       find.byKey(const Key('room-rank-self-row')),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     state.roomSession.controller!.managerTakeSeat(1);
@@ -381,7 +381,7 @@ void main() {
       find.byKey(const Key('game-center-fruit-party')),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -389,7 +389,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-rocket-panel')), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-title-button')));
@@ -418,7 +418,7 @@ void main() {
     );
     expect(find.text('Administrator'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-title-button')));
