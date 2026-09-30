@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -44,10 +45,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _seatInviteDialogOpen = false;
   bool _fruitJackpotOpen = false;
   bool _fruitPartyOpen = false;
+  String? _roomTitleOverride;
+  String? _roomPhotoOverride;
+  String? _roomAnnouncementOverride;
   Timer? _ribbonTimer;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
   RoomController get controller => widget.state.roomSession.controller!;
+
+  RoomSummary get _roomSnapshot {
+    for (final room in widget.state.discovery.rooms) {
+      if (room.id == widget.room.id) return room;
+    }
+    return widget.room;
+  }
+
+  String get _roomTitle => _roomTitleOverride ?? _roomSnapshot.title;
+  String? get _roomPhotoDataUrl =>
+      _roomPhotoOverride ?? _roomSnapshot.photoDataUrl;
+  String get _roomAnnouncement =>
+      _roomAnnouncementOverride ?? _roomSnapshot.announcement;
+
+  ImageProvider? get _roomPhotoProvider {
+    final value = _roomPhotoDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
