@@ -3465,8 +3465,13 @@ export class AppDirectoryStore extends DurableObject {
          GROUP BY g.sender_id, u.display_name, u.avatar_data_url
          ORDER BY sending DESC, g.sender_id ASC LIMIT 100`, roomId, start,
     ).toArray();
+    const lifetimeRow = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(total_cost), 0) AS total FROM gift_transactions WHERE room_id = ?",
+      roomId,
+    ).toArray()[0];
     return {
       ok: true, room_id: roomId, period,
+      lifetime_total: Math.max(0, Number(lifetimeRow?.total || 0)),
       ranking: rows.map((row, index) => ({
         rank: index + 1, user_id: String(row.sender_id),
         name: String(row.display_name || row.sender_id),
