@@ -96,7 +96,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-power-button')));
@@ -151,7 +151,7 @@ void main() {
       await tester.tap(tool);
       await tester.pumpAndSettle();
       expect(find.byKey(panelKey), findsOneWidget);
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
     }
 
@@ -177,6 +177,9 @@ void main() {
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
     final removableSong = state.ktv.addLocalSong(
       fileName: 'Wrong Song.mp3',
       sourcePath: '/phone/Music/Wrong Song.mp3',
@@ -194,7 +197,7 @@ void main() {
       find.byKey(Key('remove-music-' + removableSong.id)),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await expectToolOpens(
       'room-tool-room-type',
@@ -220,7 +223,7 @@ void main() {
       find.byType(TextField).last,
     );
     expect(passwordField.maxLength, 5);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
@@ -233,13 +236,6 @@ void main() {
     expect(find.byKey(const Key('effect-gift-effects')), findsOneWidget);
     expect(find.byKey(const Key('effect-lucky-gift')), findsOneWidget);
     expect(find.byKey(const Key('effect-gift-sound')), findsOneWidget);
-    expect(find.byKey(const Key('effect-gift-fly-in')), findsOneWidget);
-    expect(find.byKey(const Key('effect-car-effects')), findsOneWidget);
-    expect(find.byKey(const Key('effect-gift-bubble')), findsOneWidget);
-    expect(
-      find.byKey(const Key('effect-rocket-draw-notice')),
-      findsOneWidget,
-    );
 
     final originalGiftEffects = state.roomControls.giftEffectsEnabled;
     await tester.tap(find.byKey(const Key('effect-gift-effects')));
@@ -248,7 +244,18 @@ void main() {
       state.roomControls.giftEffectsEnabled,
       isNot(originalGiftEffects),
     );
-    await tester.pageBack();
+
+    final effectsList = find.byType(ListView).last;
+    await tester.drag(effectsList, const Offset(0, -360));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('effect-gift-fly-in')), findsOneWidget);
+    expect(find.byKey(const Key('effect-car-effects')), findsOneWidget);
+    expect(find.byKey(const Key('effect-gift-bubble')), findsOneWidget);
+    expect(
+      find.byKey(const Key('effect-rocket-draw-notice')),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
   });
 
@@ -316,14 +323,14 @@ void main() {
       find.byKey(const Key('reference-room-rank-panel')),
       findsOneWidget,
     );
-    expect(find.text('Daily'), findsOneWidget);
-    expect(find.text('Weekly'), findsOneWidget);
-    expect(find.text('Monthly'), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-day')), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-week')), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-month')), findsOneWidget);
     expect(
       find.byKey(const Key('room-rank-self-row')),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     state.roomSession.controller!.managerTakeSeat(1);
@@ -378,7 +385,7 @@ void main() {
       find.byKey(const Key('game-center-fruit-party')),
       findsOneWidget,
     );
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -386,7 +393,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-rocket-panel')), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-title-button')));
@@ -415,7 +422,7 @@ void main() {
     );
     expect(find.text('Administrator'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-title-button')));
@@ -440,6 +447,8 @@ void main() {
     expect(find.text('Room Lock'), findsNothing);
     expect(find.text('Public'), findsNothing);
     expect(find.text('Private'), findsNothing);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('reference-room-setup-save')),
       findsOneWidget,
@@ -485,21 +494,6 @@ void main() {
     expect(find.byKey(const Key('room-type-panel')), findsOneWidget);
     expect(find.text('Cover'), findsOneWidget);
 
-    await tester.tap(find.text('Cover'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-type-cover')), findsOneWidget);
-    expect(find.byKey(const Key('room-type-cover-open')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('room-type-cover-open')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('room-tool-room-type')));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Setting'));
     await tester.pumpAndSettle();
     expect(
@@ -508,6 +502,15 @@ void main() {
     );
     expect(find.text('Free mic'), findsOneWidget);
     expect(find.text('Only managers can speak'), findsOneWidget);
+
+    await tester.tap(find.text('Cover'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-type-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-type-cover-open')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-type-cover-open')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
   });
 
 }
