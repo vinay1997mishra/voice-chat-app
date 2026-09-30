@@ -407,6 +407,9 @@ void main() {
       find.byKey(const Key('reference-room-block-list')),
       findsOneWidget,
     );
+    expect(find.text('Room Lock'), findsNothing);
+    expect(find.text('Public'), findsNothing);
+    expect(find.text('Private'), findsNothing);
     expect(
       find.byKey(const Key('reference-room-setup-save')),
       findsOneWidget,
