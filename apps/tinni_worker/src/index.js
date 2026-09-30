@@ -2188,6 +2188,38 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to purchase item") }, 400); }
     }
 
+    if (url.pathname === "/store/equip" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).equipCatalogItem(
+          appSession.user.user_id,
+          body.kind,
+          body.item_id,
+        ));
+      } catch (error) {
+        return json({ ok:false,error:String(error?.message || "Unable to equip item") },400);
+      }
+    }
+
+    if (url.pathname === "/store/send" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).sendCatalogItem(
+          appSession.user.user_id,
+          body.recipient_user_id,
+          body.kind,
+          body.item_id,
+          appSession.user.country_code || "",
+        ),201);
+      } catch (error) {
+        return json({ ok:false,error:String(error?.message || "Unable to send item") },400);
+      }
+    }
+
     if (url.pathname === "/frames/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
