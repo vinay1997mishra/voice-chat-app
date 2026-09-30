@@ -42,19 +42,26 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Ensure premium effects R2 bucket
+        id: r2
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker
         shell: bash
         run: |
-          set -o pipefail
+          set +e
           npx wrangler r2 bucket create tinni-star-effects 2>&1 | tee /tmp/tinni-r2-create.log
           status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ] && ! grep -qi "already exists" /tmp/tinni-r2-create.log; then
+          set -e
+          if [ "$status" -eq 0 ] || grep -qi "already exists" /tmp/tinni-r2-create.log; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif grep -qi "enable R2" /tmp/tinni-r2-create.log; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "R2 is not enabled on this Cloudflare account; deploying Worker without the optional media binding."
+          else
             exit "$status"
           fi
 
       - name: Upload premium effects manifest to R2
-        if: steps.creds.outputs.ready == 'true'
+        if: steps.creds.outputs.ready == 'true' && steps.r2.outputs.ready == 'true'
         working-directory: apps/tinni_worker
         run: |
           npx wrangler r2 object put tinni-star-effects/premium/manifest.json \
@@ -64,4 +71,21 @@ jobs:
       - name: Deploy Worker and Owner Panel
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker
-        run: npx wrangler deploy
+        shell: bash
+        run: |
+          if [ "${{ steps.r2.outputs.ready }}" = "true" ]; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path("wrangler.jsonc")
+          data = json.loads(source.read_text())
+          data["r2_buckets"] = [{
+              "binding": "EFFECT_MEDIA",
+              "bucket_name": "tinni-star-effects",
+          }]
+          Path("wrangler.r2.json").write_text(json.dumps(data, indent=2) + "\n")
+          PY
+            npx wrangler deploy --config wrangler.r2.json
+          else
+            npx wrangler deploy
+          fi
