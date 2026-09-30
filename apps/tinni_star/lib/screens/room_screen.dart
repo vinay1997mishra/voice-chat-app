@@ -102,24 +102,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _primeRoomSendingSummary() {
+  Future<Map<String, dynamic>> _loadRoomSendingSummary() async {
     final account = widget.state.auth.current;
-    if (account == null) return;
-    _roomSendingSummaryFuture = widget.state.discovery.roomGiftRanking(
-      authToken: account.authToken,
-      roomId: widget.room.id,
-      period: 'day',
-    );
+    if (account == null) {
+      return <String, dynamic>{
+        'lifetime_total': 0,
+        'ranking': const <Map<String, dynamic>>[],
+      };
+    }
+    try {
+      return await widget.state.discovery.roomGiftRanking(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        period: 'day',
+      );
+    } catch (_) {
+      // Keep the room UI usable if the ranking endpoint is temporarily
+      // unavailable. The next scheduled refresh will try again.
+      return <String, dynamic>{
+        'lifetime_total': 0,
+        'ranking': const <Map<String, dynamic>>[],
+      };
+    }
+  }
+
+  void _primeRoomSendingSummary() {
+    _roomSendingSummaryFuture = _loadRoomSendingSummary();
   }
 
   void _refreshRoomSendingSummary() {
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    final next = widget.state.discovery.roomGiftRanking(
-      authToken: account.authToken,
-      roomId: widget.room.id,
-      period: 'day',
-    );
+    final next = _loadRoomSendingSummary();
     if (!mounted) {
       _roomSendingSummaryFuture = next;
       return;
