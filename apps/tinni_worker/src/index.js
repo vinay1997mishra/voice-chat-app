@@ -3695,6 +3695,8 @@ export default {
         host_tag: body.host_tag,
         agency_name: body.agency_name,
         equipped_frame_id: body.equipped_frame_id,
+        equipped_entry_id: body.equipped_entry_id,
+        equipped_profile_card_id: body.equipped_profile_card_id,
         owner_tags: Array.isArray(user.tags) ? user.tags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
