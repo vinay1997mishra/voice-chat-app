@@ -185,6 +185,36 @@ void main() {
       'room-tool-moderation',
       const Key('room-moderation-panel'),
     );
+    await expectToolOpens(
+      'room-tool-effects',
+      const Key('room-effects-panel'),
+    );
+
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('room-tool-effects')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('effect-gift-effects')), findsOneWidget);
+    expect(find.byKey(const Key('effect-lucky-gift')), findsOneWidget);
+    expect(find.byKey(const Key('effect-gift-sound')), findsOneWidget);
+    expect(find.byKey(const Key('effect-gift-fly-in')), findsOneWidget);
+    expect(find.byKey(const Key('effect-car-effects')), findsOneWidget);
+    expect(find.byKey(const Key('effect-gift-bubble')), findsOneWidget);
+    expect(
+      find.byKey(const Key('effect-rocket-draw-notice')),
+      findsOneWidget,
+    );
+
+    final originalGiftEffects = state.roomControls.giftEffectsEnabled;
+    await tester.tap(find.byKey(const Key('effect-gift-effects')));
+    await tester.pumpAndSettle();
+    expect(
+      state.roomControls.giftEffectsEnabled,
+      isNot(originalGiftEffects),
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
   });
 
 }
