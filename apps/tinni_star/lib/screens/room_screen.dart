@@ -855,21 +855,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  Future<void> _toggleSelfMute() async {
-    if (controller.mySeat == null) {
-      _snack('Join a seat before using self mute.');
-      return;
-    }
-    final muted = !controller.selfMuted;
-    try {
-      await widget.state.roomSession.setSelfMute(muted);
-      if (mounted) setState(() {});
-      _snack(muted ? 'Self mute on.' : 'Self mute off.');
-    } catch (error) {
-      _snack(error.toString().replaceFirst('Bad state: ', ''));
-    }
-  }
-
   Future<void> _leaveSeatAndMute() async {
     final userId = widget.state.auth.current?.userId ?? '';
     await widget.state.ktv.stopForSeatDown(userId);
