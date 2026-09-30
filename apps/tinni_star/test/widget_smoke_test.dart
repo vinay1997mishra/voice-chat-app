@@ -175,6 +175,7 @@ void main() {
     expect(find.byKey(const Key('room-tool-launch-event')), findsNothing);
     expect(find.byKey(const Key('room-tool-stop-event')), findsNothing);
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
     await tester.tap(find.byKey(const Key('room-tool-cover')));
     await tester.pumpAndSettle();
@@ -412,6 +413,54 @@ void main() {
       find.byKey(const Key('reference-room-setup-save')),
       findsOneWidget,
     );
+  });
+
+
+  testWidgets('room settings live only inside Room Type Setting', (tester) async {
+    final state = TinniState(
+      runtime: FunctionPackRuntime(
+        signatureVerifier: const DevelopmentSignatureVerifier(),
+      ),
+    );
+    final account = attachTestAccount(state);
+    state.discovery.rooms.add(
+      RoomSummary(
+        id: account.userId,
+        title: 'Settings Room',
+        country: account.countryCode,
+        countryName: account.countryName,
+        flagEmoji: account.flagEmoji,
+        online: 1,
+        seatCount: 15,
+        createdAt: DateTime.now(),
+        ownerId: account.userId,
+        ownerName: account.displayName,
+      ),
+    );
+
+    await tester.pumpWidget(TinniStarApp(state: state));
+    await tester.pumpAndSettle();
+    final roomCard = find.byKey(Key('room-card-' + account.userId));
+    await tester.ensureVisible(roomCard);
+    await tester.tap(roomCard);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-tool-settings')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('room-tool-room-type')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-type-panel')), findsOneWidget);
+
+    await tester.tap(find.text('Setting'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('room-type-setting-seats')),
+      findsOneWidget,
+    );
+    expect(find.text('Free mic'), findsOneWidget);
+    expect(find.text('Only managers can speak'), findsOneWidget);
   });
 
 }
