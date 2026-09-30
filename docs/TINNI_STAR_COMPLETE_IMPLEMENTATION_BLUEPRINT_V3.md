@@ -780,6 +780,7 @@ Lock / Unlock:
 - Uses the existing owner-only password room flow.
 - Password is exactly 5 numeric digits; any 00000–99999 value is valid, and the existing failed-attempt rules remain unchanged.
 - VIP is **not required** to set or use a room password; any room owner can lock their own room with an exact 5-digit password.
+- Room lock is exposed **only** from the 4-box `Lock / Unlock` tile; duplicate lock controls are removed from Room Type, Room Setup, and legacy Room Settings.
 
 Top room bar:
 - Share icon is visible beside the existing room actions.
@@ -846,7 +847,7 @@ Tinni Star must match the approved reference interaction for these room surfaces
 - Editable room DP, Room Name and Notice.
 - Room Name max 24 characters.
 - Notice max 24 characters.
-- Room Lock shows Public / Private choice and uses Tinni's exact 5-digit numeric password/private-room behavior.
+- Room Setup does **not** contain Room Lock / Public / Private controls.
 - `Block List` opens the room blacklist.
 - `Save` persists supported room fields through the backend.
 
