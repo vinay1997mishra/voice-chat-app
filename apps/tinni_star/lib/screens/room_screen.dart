@@ -1626,6 +1626,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _setRoomAdminById({
+    required String userId,
+    required String displayName,
+    required bool enabled,
+  }) async {
+    try {
+      await widget.state.roomSession.setRoomAdmin(
+        userId,
+        enabled: enabled,
+      );
+      _snack(
+        enabled
+            ? displayName + ' is now a room admin.'
+            : displayName + ' removed from room admin.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      rethrow;
+    }
+  }
+
   Future<void> _toggleRoomAdmin(
     RoomPresenceMember member,
     bool enabled,
@@ -4992,59 +5013,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showReferenceRoomMembers() {
     final room = _roomSnapshot;
     final ownerId = room.ownerId ?? room.id;
-    final members = widget.state.roomSession.liveMembers;
-    final admins = members
-        .where((member) => member.userId == ownerId || member.isAdmin)
-        .toList(growable: false);
-    final regularMembers = members
-        .where((member) => member.userId != ownerId && !member.isAdmin)
-        .toList(growable: false);
-
-    Widget memberTile(RoomPresenceMember member, {required bool admin}) {
-      ImageProvider? avatar;
-      final data = member.avatarDataUrl;
-      if (data != null && data.startsWith('data:image/')) {
-        try {
-          avatar = MemoryImage(base64Decode(data.split(',').last));
-        } catch (_) {
-          avatar = null;
-        }
-      }
-      return ListTile(
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFF171019),
-          backgroundImage: avatar,
-          child: avatar == null
-              ? Text(
-                  member.displayName.isEmpty
-                      ? '?'
-                      : member.displayName.characters.first.toUpperCase(),
-                  style: const TextStyle(color: RoyalPalette.cream),
-                )
-              : null,
-        ),
-        title: Text(
-          member.displayName,
-          style: const TextStyle(
-            color: RoyalPalette.cream,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          'ID ' + member.userId,
-          style: const TextStyle(color: RoyalPalette.muted),
-        ),
-        trailing: admin
-            ? Text(
-                member.userId == ownerId ? 'Owner' : 'Admin',
-                style: const TextStyle(
-                  color: Color(0xFFFFD45A),
-                  fontWeight: FontWeight.w800,
-                ),
-              )
-            : null,
-      );
-    }
+    final searchController = TextEditingController();
+    Map<String, dynamic>? searchedUser;
+    var searchBusy = false;
+    String? searchError;
 
     showModalBottomSheet<void>(
       context: context,
@@ -5055,103 +5027,444 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
       builder: (sheetContext) => DefaultTabController(
         length: 2,
-        child: SafeArea(
-          key: const Key('reference-room-members-panel'),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * 0.44,
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                const Text(
-                  'Room Members',
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final members = widget.state.roomSession.liveMembers;
+            final admins = members
+                .where(
+                  (member) =>
+                      member.userId == ownerId || member.isAdmin,
+                )
+                .toList(growable: false);
+            final regularMembers = members
+                .where(
+                  (member) =>
+                      member.userId != ownerId && !member.isAdmin,
+                )
+                .toList(growable: false);
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) return null;
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Future<void> searchById() async {
+              final query = searchController.text.trim();
+              if (query.isEmpty) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError = 'Enter a user ID.';
+                });
+                return;
+              }
+              if (!RegExp(
+                r'^(?:\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})$',
+              ).hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchBusy = false;
+                  searchError =
+                      result == null ? 'User ID not found.' : null;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = null;
+                  searchBusy = false;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+              Widget? trailing;
+
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
                   style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' + member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key('room-member-add-admin-' + member.userId),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
                     color: RoyalPalette.cream,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 10),
-                const TabBar(
-                  indicatorColor: Color(0xFFB52DFF),
-                  labelColor: RoyalPalette.cream,
-                  unselectedLabelColor: RoyalPalette.muted,
-                  tabs: [
-                    Tab(text: 'Administrator'),
-                    Tab(text: 'Members'),
-                  ],
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(color: RoyalPalette.muted),
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      admins.isEmpty
-                          ? ListView(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        const Color(0xFF171019),
-                                    backgroundImage: _roomPhotoProvider,
-                                    child: _roomPhotoProvider == null
-                                        ? const Icon(
-                                            Icons.person_rounded,
-                                            color: RoyalPalette.cream,
-                                          )
-                                        : null,
-                                  ),
-                                  title: Text(
-                                    room.ownerName ?? 'Room Owner',
-                                    style: const TextStyle(
-                                      color: RoyalPalette.cream,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'ID ' + ownerId,
-                                    style: const TextStyle(
-                                      color: RoyalPalette.muted,
-                                    ),
-                                  ),
-                                  trailing: const Text(
-                                    'Owner',
-                                    style: TextStyle(
-                                      color: Color(0xFFFFD45A),
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ListView(
-                              children: [
-                                for (final member in admins)
-                                  memberTile(member, admin: true),
-                              ],
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(color: RoyalPalette.muted),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchResultCard() {
+              if (searchBusy) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (searchedUser == null) {
+                return searchError == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+                        child: Text(
+                          searchError!,
+                          style: const TextStyle(
+                            color: Color(0xFFFF8A80),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+              }
+
+              final user = searchedUser!;
+              final userId = user['user_id']?.toString() ?? '';
+              final rawName = user['display_name']?.toString().trim() ?? '';
+              final displayName = rawName.isEmpty ? userId : rawName;
+              final avatar = avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final isAdminResult = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFB52DFF)),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
                             ),
-                      regularMembers.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No members',
-                                style: TextStyle(
-                                  color: RoyalPalette.muted,
-                                ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(color: RoyalPalette.muted),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : isAdminResult
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
                               ),
                             )
-                          : ListView(
-                              children: [
-                                for (final member in regularMembers)
-                                  memberTile(member, admin: false),
-                              ],
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
                             ),
-                    ],
-                  ),
                 ),
-              ],
-            ),
-          ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive) ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.text,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[A-Za-z0-9_]'),
+                                      ),
+                                      LengthLimitingTextInputFormatter(20),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search number ID / Name ID',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon:
+                                          const Icon(Icons.search_rounded),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchResultCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
-    );
+    ).whenComplete(searchController.dispose);
   }
+
 
   Future<void> _showReferenceRoomSetup() async {
     if (!_isRoomOwner) {
