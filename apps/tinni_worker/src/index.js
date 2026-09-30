@@ -1931,6 +1931,48 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/account/preferences" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, preferences: await getAppDirectoryStore(env).userPreferences(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/account/preferences" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).updateUserPreferences(appSession.user.user_id, body));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update preferences") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/identities" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, identities: await getAppDirectoryStore(env).accountIdentities(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/feedback" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, feedback: await getAppDirectoryStore(env).userFeedback(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/feedback" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).submitUserFeedback(
+          appSession.user.user_id, body.category, body.message,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to submit feedback") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
