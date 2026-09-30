@@ -6366,6 +6366,226 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
             SizedBox(
+              key: const Key('room-live-users'),
+              height: 126,
+              child: session.liveMembers.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Waiting for users…',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: session.liveMembers.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 9),
+                      itemBuilder: (_, index) {
+                        final member = session.liveMembers[index];
+                        final isMe =
+                            member.userId == widget.state.auth.current?.userId;
+                        final initial = member.displayName.trim().isEmpty
+                            ? '?'
+                            : member.displayName.trim().characters.first;
+                        ImageProvider? avatar;
+                        final avatarData = member.avatarDataUrl;
+                        if (avatarData != null &&
+                            avatarData.startsWith('data:image/')) {
+                          try {
+                            avatar = MemoryImage(
+                              base64Decode(avatarData.split(',').last),
+                            );
+                          } catch (_) {
+                            avatar = null;
+                          }
+                        }
+                        return Container(
+                          width: 104,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: RoyalPalette.panel.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isMe
+                                  ? FeaturePalette.family
+                                  : FeaturePalette.social
+                                      .withValues(alpha: 0.65),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (isMe
+                                        ? FeaturePalette.family
+                                        : FeaturePalette.social)
+                                    .withValues(alpha: 0.18),
+                                blurRadius: 9,
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                key: Key('room-live-user-dp-' + member.userId),
+                                onTap: () => _showUserProfile(member),
+                                child: CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: RoyalPalette.panel2,
+                                  backgroundImage: avatar,
+                                  child: avatar == null
+                                      ? Text(
+                                          initial.toUpperCase(),
+                                          style: TextStyle(
+                                            color: isMe
+                                                ? FeaturePalette.family
+                                                : FeaturePalette.social,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                (member.flagEmoji.isEmpty
+                                        ? ''
+                                        : member.flagEmoji + ' ') +
+                                    (isMe ? 'You' : member.displayName),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                'ID ' + member.userId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 7.5,
+                                ),
+                              ),
+                              if (member.ownerTags.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                SizedBox(
+                                  height: 15,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final tag in member.ownerTags)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-tag-' +
+                                                member.userId +
+                                                '-' +
+                                                tag.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            tag.name,
+                                            style: TextStyle(
+                                              color: _ownerTagColor(
+                                                tag.colorHex,
+                                              ),
+                                              fontSize: 6,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (member.ownerMedals.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                SizedBox(
+                                  height: 15,
+                                  width: 94,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final medal in member.ownerMedals)
+                                        Container(
+                                          key: Key(
+                                            'live-owner-medal-' +
+                                                member.userId +
+                                                '-' +
+                                                medal.name,
+                                          ),
+                                          margin:
+                                              const EdgeInsets.only(right: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: _ownerTagColor(
+                                                medal.colorHex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.workspace_premium_rounded,
+                                                size: 7,
+                                                color: _ownerTagColor(
+                                                  medal.colorHex,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 1),
+                                              Text(
+                                                medal.name,
+                                                style: TextStyle(
+                                                  color: _ownerTagColor(
+                                                    medal.colorHex,
+                                                  ),
+                                                  fontSize: 6,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
               key: const Key('tinni-seat-grid'),
               height: seatAreaHeight,
               child: Padding(
