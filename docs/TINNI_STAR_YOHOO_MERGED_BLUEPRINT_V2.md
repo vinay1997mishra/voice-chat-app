@@ -782,6 +782,58 @@ Tinni-specific extra room tools may remain after these primary reference-style e
 - The floating Game icon uses the same purple/pink controller visual family as the reference video, while the rest of the room keeps Tinni Star branding.
 
 
+
+### Reference room seat / floating game / room-info interaction — LOCKED
+
+Tinni Star must match the approved reference interaction for these room surfaces while keeping Tinni's own seat-count and game rules.
+
+**Seat visual**
+- Unlocked empty seat: circular double-ring mic seat with purple glow and a white seat/chair symbol.
+- Locked empty seat: the circular mic seat is replaced by a standalone gold lock icon.
+- Under each seat show `No.<seat number>` for empty seats; occupied seats show the user's display name.
+- Under the name/number show the small purple heart-count pill.
+- Occupied seats show the user's DP/frame in the circular seat.
+- Existing Tinni mute state remains functional; muted seats may additionally show the small red mic-off badge.
+- Tinni seat capacities remain 8–42 and the approved row-distribution rule is unchanged.
+
+**Seat tap**
+- Owner/Admin normal tap on a seat opens the reference-style bottom panel with:
+  - `Mic up`
+  - `Lock mic`
+  - `Confirm`
+- Long press keeps the advanced Tinni seat controls so existing moderation functions are not removed.
+
+**Floating Game + Rocket**
+- Game remains outside the room 4-box.
+- Right-side floating stack shows a small Rocket icon above a short progress indicator and the purple/pink Game controller below it.
+- Game controller opens `Game Center`.
+- Game Center shows a room/profile progress card, coin balance, an `All Games` grid, and Tinni's Fruit Jackpot / Fruit Party entries.
+- Rocket opens the reference-style rocket event panel with a large rocket, milestone row, 0–100% progress area, rewards grid, Record/Help affordances, reset timer and close control.
+- The floating stack hides while a Tinni game panel is actively open.
+
+**Room-name tap**
+- Tapping the room name opens the reference-style room info sheet showing:
+  - room DP
+  - room name
+  - room ID
+  - owner-only Room Setup button
+  - Members count and entry
+  - Notice
+  - owner DP/name/ID
+  - copy-owner-ID action
+  - owner country flag where available
+- Members opens `Room Members` with `Administrator` and `Members` tabs.
+
+**Room Setup**
+- Owner-only full page titled `Room Setup`.
+- Editable room DP, Room Name and Notice.
+- Room Name max 24 characters.
+- Notice max 24 characters.
+- Room Lock shows Public / Private choice and preserves Tinni's existing 5–7 digit password/private-room behavior.
+- `Block List` opens the room blacklist.
+- `Save` persists supported room fields through the backend.
+
+
 ## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
 
 - VIP levels.
