@@ -5042,7 +5042,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 return;
               }
               if (!RegExp(
-                r'^(?:\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})
+                r'^(?:\\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})\$' + '',
+              ).hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
               if (account == null) return;
               setSheetState(() {
                 searchBusy = true;
