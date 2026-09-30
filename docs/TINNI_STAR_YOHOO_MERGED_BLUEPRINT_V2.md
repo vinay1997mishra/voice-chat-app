@@ -1104,3 +1104,33 @@ Still video-dependent:
 - exact remaining Room Settings option list. Owner/Admin/Normal User permission boundary is now substantially locked; personal Block/Unblock is separated from room Kickout moderation, and Effects settings are confirmed as per-user only.
 - exact dialogs/animations.
 - exact state transitions visible to users.
+
+
+### Current room 4-box contents — LOCKED
+
+The room 4-box must contain these active entries only:
+- Room Type
+- Cover
+- Music
+- Blacklist
+- Effects
+- Lock / Unlock
+- Lucky Bag
+- Sound On / Off
+- Seat Requests (only when invite mode and owner/admin context allows it)
+- Lucky Number
+- Group PK
+- Public Screen / Screen On
+- Settings
+- Report
+
+The following older 4-box entries are removed and must not be re-added as duplicate tiles:
+- Gift
+- Feedback
+- Moderation
+- Friends Mode / Event Mode
+- Launch Event / Stop Event
+- separate Room Theme
+
+Game / Rocket stay outside the 4-box.
+
