@@ -3943,27 +3943,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required double seatDiameter,
   }) {
     final range = spec.rangeForRow(row);
+    final rowSeatCount = range.$2 - range.$1;
     final seatWidth = (seatDiameter + (seatDiameter < 44 ? 8 : 16))
         .clamp(38.0, 78.0)
         .toDouble();
     return Row(
       key: Key('seat-row-' + row.toString()),
-      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        for (var column = 0; column < spec.columns; column++)
-          Expanded(
-            child: Align(
-              alignment: Alignment.center,
-              child: column < (range.$2 - range.$1)
-                  ? SizedBox(
-                      width: seatWidth,
-                      child: _buildSeat(
-                        index: range.$1 + column,
-                        seatDiameter: seatDiameter,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
+        for (var offset = 0; offset < rowSeatCount; offset++)
+          SizedBox(
+            width: seatWidth,
+            child: _buildSeat(
+              index: range.$1 + offset,
+              seatDiameter: seatDiameter,
             ),
           ),
       ],
