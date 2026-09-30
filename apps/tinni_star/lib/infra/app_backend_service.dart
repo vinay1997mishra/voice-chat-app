@@ -327,6 +327,171 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> familyState(String token) async {
+    return _request('GET', '/family', token);
+  }
+
+  Future<List<Map<String, dynamic>>> familyList(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/family/list');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Families');
+    }
+    final raw = data['families'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createFamily(
+    String token, {
+    required String name,
+    required String tag,
+  }) async {
+    return _request(
+      'POST',
+      '/family/create',
+      token,
+      body: <String, dynamic>{'name': name.trim(), 'tag': tag.trim()},
+    );
+  }
+
+  Future<void> requestFamilyJoin(
+    String token, {
+    required String familyId,
+  }) async {
+    await _request(
+      'POST',
+      '/family/join-request',
+      token,
+      body: <String, dynamic>{'family_id': familyId},
+    );
+  }
+
+  Future<void> resolveFamilyJoin(
+    String token, {
+    required String userId,
+    required bool approve,
+  }) async {
+    await _request(
+      'POST',
+      '/family/join-request/resolve',
+      token,
+      body: <String, dynamic>{'user_id': userId, 'approve': approve},
+    );
+  }
+
+  Future<void> setFamilyAdmin(
+    String token, {
+    required String userId,
+    required bool admin,
+  }) async {
+    await _request(
+      'POST',
+      '/family/admin',
+      token,
+      body: <String, dynamic>{'user_id': userId, 'admin': admin},
+    );
+  }
+
+  Future<void> removeFamilyMember(
+    String token, {
+    required String userId,
+  }) async {
+    await _request(
+      'POST',
+      '/family/member/remove',
+      token,
+      body: <String, dynamic>{'user_id': userId},
+    );
+  }
+
+  Future<void> leaveFamily(String token) async {
+    await _request(
+      'POST',
+      '/family/leave',
+      token,
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> familyCheckIn(String token) async {
+    return _request(
+      'POST',
+      '/family/check-in',
+      token,
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<void> updateFamilyNotice(
+    String token, {
+    required String notice,
+  }) async {
+    await _request(
+      'POST',
+      '/family/notice',
+      token,
+      body: <String, dynamic>{'notice': notice},
+    );
+  }
+
+  Future<Map<String, dynamic>> sendFamilyCoins(
+    String token, {
+    required String receiverUserId,
+    required int coins,
+  }) async {
+    return _request(
+      'POST',
+      '/family/wallet/send',
+      token,
+      body: <String, dynamic>{
+        'receiver_user_id': receiverUserId,
+        'coins': coins,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> familyWalletTransfers(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/family/wallet/transfers');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load Family Wallet',
+      );
+    }
+    final raw = data['transfers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> accountStats(String token) async {
     final data = await _request('GET', '/account/stats', token);
     return _map(data['stats']);
