@@ -28,37 +28,47 @@ void main() {
     }
   });
 
-  test('seats are balanced top-down across the selected row count', () {
+  test('upper rows stay equal and the last two rows share the remainder', () {
     expect(SeatLayoutSpec.forCount(8).rowLengths, [4, 4]);
     expect(SeatLayoutSpec.forCount(9).rowLengths, [5, 4]);
     expect(SeatLayoutSpec.forCount(10).rowLengths, [5, 5]);
 
     expect(SeatLayoutSpec.forCount(11).rowLengths, [4, 4, 3]);
     expect(SeatLayoutSpec.forCount(12).rowLengths, [4, 4, 4]);
+    expect(SeatLayoutSpec.forCount(13).rowLengths, [5, 4, 4]);
     expect(SeatLayoutSpec.forCount(15).rowLengths, [5, 5, 5]);
 
     expect(SeatLayoutSpec.forCount(16).rowLengths, [4, 4, 4, 4]);
-    expect(SeatLayoutSpec.forCount(17).rowLengths, [5, 4, 4, 4]);
+    expect(SeatLayoutSpec.forCount(17).rowLengths, [5, 5, 4, 3]);
     expect(SeatLayoutSpec.forCount(18).rowLengths, [5, 5, 4, 4]);
+    expect(SeatLayoutSpec.forCount(21).rowLengths, [6, 6, 5, 4]);
     expect(SeatLayoutSpec.forCount(24).rowLengths, [6, 6, 6, 6]);
 
     expect(SeatLayoutSpec.forCount(25).rowLengths, [5, 5, 5, 5, 5]);
+    expect(SeatLayoutSpec.forCount(26).rowLengths, [6, 6, 6, 4, 4]);
+    expect(SeatLayoutSpec.forCount(27).rowLengths, [6, 6, 6, 5, 4]);
     expect(SeatLayoutSpec.forCount(30).rowLengths, [6, 6, 6, 6, 6]);
 
-    expect(SeatLayoutSpec.forCount(31).rowLengths, [6, 5, 5, 5, 5, 5]);
-    expect(SeatLayoutSpec.forCount(32).rowLengths, [6, 6, 5, 5, 5, 5]);
+    expect(SeatLayoutSpec.forCount(31).rowLengths, [6, 6, 6, 6, 4, 3]);
+    expect(SeatLayoutSpec.forCount(32).rowLengths, [6, 6, 6, 6, 4, 4]);
+    expect(SeatLayoutSpec.forCount(33).rowLengths, [6, 6, 6, 6, 5, 4]);
     expect(SeatLayoutSpec.forCount(36).rowLengths, [6, 6, 6, 6, 6, 6]);
-    expect(SeatLayoutSpec.forCount(37).rowLengths, [7, 6, 6, 6, 6, 6]);
+    expect(SeatLayoutSpec.forCount(37).rowLengths, [7, 7, 7, 7, 5, 4]);
     expect(SeatLayoutSpec.forCount(42).rowLengths, [7, 7, 7, 7, 7, 7]);
   });
 
-  test('every supported layout has row difference at most one', () {
+  test('every layout preserves the requested total seat count', () {
     for (var count = 8; count <= 42; count++) {
       final lengths = SeatLayoutSpec.forCount(count).rowLengths;
       expect(lengths.reduce((a, b) => a + b), count);
-      final min = lengths.reduce((a, b) => a < b ? a : b);
-      final max = lengths.reduce((a, b) => a > b ? a : b);
-      expect(max - min, lessThanOrEqualTo(1), reason: 'seat count $count');
+      if (lengths.length > 2) {
+        final upper = lengths.take(lengths.length - 2).toList();
+        expect(
+          upper.every((value) => value == upper.first),
+          true,
+          reason: 'upper rows must match for seat count $count',
+        );
+      }
     }
   });
 
