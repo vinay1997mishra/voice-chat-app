@@ -4,6 +4,7 @@ import '../app/tinni_state.dart';
 import '../economy/economy.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
+import '../ui/premium_effects.dart';
 import 'unique_id_store_screen.dart';
 
 class StoreScreen extends StatefulWidget {
@@ -354,7 +355,12 @@ class _StoreScreenState extends State<StoreScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.assetUrl.startsWith('http'))
+              if (PremiumEffectStyle.isPremiumId(item.id))
+                PremiumEffectPreview(
+                  effectId: item.id,
+                  title: item.name,
+                )
+              else if (item.assetUrl.startsWith('http'))
                 ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: Image.network(
@@ -643,13 +649,20 @@ class _StoreScreenState extends State<StoreScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    ShiningIcon(
-                                      icon: _iconFor(item),
-                                      color: FeaturePalette.store,
-                                      size: 28,
-                                      boxSize: 52,
-                                      glow: 0.34,
-                                    ),
+                                    if (PremiumEffectStyle.isPremiumId(item.id))
+                                      PremiumEffectThumbnail(
+                                        effectId: item.id,
+                                        title: item.name,
+                                        size: 52,
+                                      )
+                                    else
+                                      ShiningIcon(
+                                        icon: _iconFor(item),
+                                        color: FeaturePalette.store,
+                                        size: 28,
+                                        boxSize: 52,
+                                        glow: 0.34,
+                                      ),
                                     const SizedBox(height: 8),
                                     Text(
                                       item.name,

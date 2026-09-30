@@ -23,6 +23,7 @@ import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import '../ui/animated_avatar_frame.dart';
+import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
@@ -52,6 +53,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
+  final Set<String> _seenEntranceKeys = <String>{};
+  final List<RoomPresenceMember> _entranceQueue = <RoomPresenceMember>[];
+  RoomPresenceMember? _activeEntrance;
+  final DateTime _screenOpenedAtUtc = DateTime.now().toUtc();
   RoomController get controller => widget.state.roomSession.controller!;
 
   RoomSummary get _roomSnapshot {
@@ -696,7 +701,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _scheduleEmoteExpiry();
     _syncMyAdminRole();
     _maybeShowSeatInvite();
+    _syncEntranceQueue();
     setState(() {});
+  }
+
+  void _syncEntranceQueue() {
+    final currentUserId = widget.state.auth.current?.userId;
+    for (final member in widget.state.roomSession.liveMembers) {
+      final entryId = member.equippedEntryId;
+      if (entryId == null || entryId.isEmpty) continue;
+      final key =
+          member.userId + ':' + member.joinedAt.millisecondsSinceEpoch.toString();
+      if (!_seenEntranceKeys.add(key)) continue;
+      final isCurrentUser = member.userId == currentUserId;
+      final isNewJoin = member.joinedAt.toUtc().isAfter(
+            _screenOpenedAtUtc.subtract(const Duration(seconds: 4)),
+          );
+      if (isCurrentUser || isNewJoin) {
+        _entranceQueue.add(member);
+      }
+    }
+    if (_activeEntrance == null && _entranceQueue.isNotEmpty) {
+      _activeEntrance = _entranceQueue.removeAt(0);
+    }
+  }
+
+  void _finishPremiumEntrance() {
+    if (!mounted) return;
+    setState(() {
+      _activeEntrance =
+          _entranceQueue.isEmpty ? null : _entranceQueue.removeAt(0);
+    });
   }
 
   void _syncMyAdminRole() {
@@ -6911,6 +6946,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 shouldPlay: widget.state.roomControls.shouldPlayEffect,
               ),
             ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
             if (!_fruitJackpotOpen && !_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),

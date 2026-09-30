@@ -42,6 +42,8 @@ class RoomPresenceMember {
     this.hostTag,
     this.agencyName,
     this.equippedFrameId,
+    this.equippedEntryId,
+    this.equippedProfileCardId,
     this.ownerTags = const <OwnerTag>[],
     this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
@@ -61,6 +63,8 @@ class RoomPresenceMember {
   final String? hostTag;
   final String? agencyName;
   final String? equippedFrameId;
+  final String? equippedEntryId;
+  final String? equippedProfileCardId;
   final List<OwnerTag> ownerTags;
   final List<OwnerTag> ownerMedals;
   final int? seatIndex;
@@ -105,6 +109,8 @@ class RoomPresenceService extends ChangeNotifier {
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
   }) =>
       _post(
         '/room-presence/join',
@@ -115,6 +121,8 @@ class RoomPresenceService extends ChangeNotifier {
         hostTag: hostTag,
         agencyName: agencyName,
         equippedFrameId: equippedFrameId,
+        equippedEntryId: equippedEntryId,
+        equippedProfileCardId: equippedProfileCardId,
       );
 
   Future<void> heartbeat({
@@ -125,6 +133,8 @@ class RoomPresenceService extends ChangeNotifier {
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
   }) =>
       _post(
         '/room-presence/heartbeat',
@@ -135,6 +145,8 @@ class RoomPresenceService extends ChangeNotifier {
         hostTag: hostTag,
         agencyName: agencyName,
         equippedFrameId: equippedFrameId,
+        equippedEntryId: equippedEntryId,
+        equippedProfileCardId: equippedProfileCardId,
       );
 
   Future<void> leave({
@@ -498,6 +510,8 @@ class RoomPresenceService extends ChangeNotifier {
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
   }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
@@ -514,6 +528,8 @@ class RoomPresenceService extends ChangeNotifier {
           'host_tag': hostTag,
           'agency_name': agencyName,
           'equipped_frame_id': equippedFrameId,
+          'equipped_entry_id': equippedEntryId,
+          'equipped_profile_card_id': equippedProfileCardId,
         }),
       );
       final response = await request.close();
@@ -615,6 +631,8 @@ class RoomPresenceService extends ChangeNotifier {
                 hostTag: row['host_tag']?.toString(),
                 agencyName: row['agency_name']?.toString(),
                 equippedFrameId: row['equipped_frame_id']?.toString(),
+                equippedEntryId: row['equipped_entry_id']?.toString(),
+                equippedProfileCardId: row['equipped_profile_card_id']?.toString(),
                 ownerTags: row['owner_tags'] is List
                     ? (row['owner_tags'] as List)
                         .whereType<Map>()

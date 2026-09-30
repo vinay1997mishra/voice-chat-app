@@ -22,6 +22,8 @@ class ActiveRoomSession extends ChangeNotifier {
     this.hostTagProvider,
     this.agencyNameProvider,
     this.equippedFrameIdProvider,
+    this.equippedEntryIdProvider,
+    this.equippedProfileCardIdProvider,
   });
 
   final FunctionPackRuntime runtime;
@@ -33,6 +35,8 @@ class ActiveRoomSession extends ChangeNotifier {
   final String? Function()? hostTagProvider;
   final String? Function()? agencyNameProvider;
   final String? Function()? equippedFrameIdProvider;
+  final String? Function()? equippedEntryIdProvider;
+  final String? Function()? equippedProfileCardIdProvider;
 
   RoomSummary? room;
   RoomController? controller;
@@ -76,6 +80,8 @@ class ActiveRoomSession extends ChangeNotifier {
   String? get _hostTag => hostTagProvider?.call();
   String? get _agencyName => agencyNameProvider?.call();
   String? get _equippedFrameId => equippedFrameIdProvider?.call();
+  String? get _equippedEntryId => equippedEntryIdProvider?.call();
+  String? get _equippedProfileCardId => equippedProfileCardIdProvider?.call();
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -328,6 +334,8 @@ class ActiveRoomSession extends ChangeNotifier {
       hostTag: _hostTag,
       agencyName: _agencyName,
       equippedFrameId: _equippedFrameId,
+      equippedEntryId: _equippedEntryId,
+      equippedProfileCardId: _equippedProfileCardId,
     );
     await presence.setEmote(
       roomId: roomId,
@@ -401,6 +409,9 @@ class ActiveRoomSession extends ChangeNotifier {
         familyTag: _familyTag,
         hostTag: _hostTag,
         agencyName: _agencyName,
+        equippedFrameId: _equippedFrameId,
+        equippedEntryId: _equippedEntryId,
+        equippedProfileCardId: _equippedProfileCardId,
       );
       await _applyForcedSeatChange();
       await _enforceModerationMute();
@@ -424,6 +435,8 @@ class ActiveRoomSession extends ChangeNotifier {
           hostTag: _hostTag,
           agencyName: _agencyName,
           equippedFrameId: _equippedFrameId,
+          equippedEntryId: _equippedEntryId,
+          equippedProfileCardId: _equippedProfileCardId,
         );
         await _applyForcedSeatChange();
         await _enforceModerationMute();

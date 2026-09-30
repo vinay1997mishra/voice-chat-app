@@ -8,6 +8,7 @@ import '../identity/owner_tag.dart';
 import '../i18n/tinni_localization.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/animated_avatar_frame.dart';
+import '../ui/premium_effects.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
 import 'custom_center_screen.dart';
@@ -551,7 +552,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
-                child: Row(
+                child: PremiumProfileCardShell(
+                    effectId: profileCardId,
+                    child: Row(
                   children: [
                   Container(
                     padding: EdgeInsets.all(ringId == null ? 0 : 3),
@@ -700,6 +703,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
+                  ),
               ),
               const SizedBox(height: 14),
               Row(

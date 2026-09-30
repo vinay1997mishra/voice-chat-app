@@ -133,6 +133,8 @@ class TinniState {
         return roomControls.agencyNameFor(userId);
       },
       equippedFrameIdProvider: () => inventory.equippedFrameId,
+      equippedEntryIdProvider: () => inventory.equipped('entry'),
+      equippedProfileCardIdProvider: () => inventory.equipped('profile_card'),
     );
   }
 
