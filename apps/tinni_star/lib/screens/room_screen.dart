@@ -3616,7 +3616,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   : () {
                                       Navigator.pop(sheetContext);
                                       Future<void>.delayed(
-                                        Duration.zero,
+                                        const Duration(milliseconds: 220),
                                         () {
                                           if (mounted) {
                                             _openRoomThemeSelector();
@@ -4103,8 +4103,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  tool.$3();
-                  if (mounted) setState(() {});
+                  Future<void>.delayed(
+                    const Duration(milliseconds: 220),
+                    () {
+                      if (!mounted) return;
+                      tool.$3();
+                      setState(() {});
+                    },
+                  );
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -4654,9 +4660,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         tooltip: 'Room Setup',
                         onPressed: () {
                           Navigator.pop(sheetContext);
-                          Future<void>.delayed(Duration.zero, () {
-                            if (mounted) _showReferenceRoomSetup();
-                          });
+                          Future<void>.delayed(
+                            const Duration(milliseconds: 220),
+                            () {
+                              if (mounted) _showReferenceRoomSetup();
+                            },
+                          );
                         },
                         icon: const Icon(
                           Icons.settings_outlined,
@@ -4702,9 +4711,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  Future<void>.delayed(Duration.zero, () {
-                    if (mounted) _showReferenceRoomMembers();
-                  });
+                  Future<void>.delayed(
+                    const Duration(milliseconds: 220),
+                    () {
+                      if (mounted) _showReferenceRoomMembers();
+                    },
+                  );
                 },
               ),
               const Divider(color: Color(0x334C3759)),
