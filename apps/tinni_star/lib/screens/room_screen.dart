@@ -3580,9 +3580,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
+        'Music',
+        Icons.music_note_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomMusic();
+          });
+        },
+      ),
+      (
         'Blacklist',
         Icons.person_off_rounded,
         _showRoomBlacklist,
+      ),
+      (
+        'Effects',
+        Icons.auto_awesome_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomEffects();
+          });
+        },
       ),
       (
         'Feedback',
@@ -3610,15 +3628,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Music',
-        Icons.music_note_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _showRoomMusic();
-          });
-        },
-      ),
-      (
         'Lucky Bag',
         Icons.shopping_bag_rounded,
         () {
@@ -3642,15 +3651,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         () {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomModerationCenter();
-          });
-        },
-      ),
-      (
-        'Effects',
-        Icons.auto_awesome_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _showRoomEffects();
           });
         },
       ),
