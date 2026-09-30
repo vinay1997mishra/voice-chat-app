@@ -7,16 +7,22 @@ class FamilyMember {
     required this.userId,
     required this.name,
     required this.role,
+    this.avatarDataUrl,
+    this.receivedCoins = 0,
   });
 
   final String userId;
   final String name;
   final FamilyRole role;
+  final String? avatarDataUrl;
+  final int receivedCoins;
 
   FamilyMember withRole(FamilyRole role) => FamilyMember(
         userId: userId,
         name: name,
         role: role,
+        avatarDataUrl: avatarDataUrl,
+        receivedCoins: receivedCoins,
       );
 }
 
@@ -66,6 +72,76 @@ class FamilyService {
   List<FamilyMember> get deputies => members
       .where((member) => member.role == FamilyRole.deputyHead)
       .toList();
+
+  void clearRemote() {
+    name = null;
+    tag = null;
+    notice = '';
+    level = 1;
+    experience = 0;
+    walletCoins = 0;
+    members.clear();
+    pendingJoinRequests.clear();
+  }
+
+  void applyRemote(Map<String, dynamic> payload) {
+    final rawFamily = payload['family'];
+    if (rawFamily is! Map) {
+      clearRemote();
+      return;
+    }
+    final family = Map<String, dynamic>.from(rawFamily);
+    name = family['name']?.toString();
+    tag = family['tag']?.toString();
+    notice = family['notice']?.toString() ?? '';
+    experience = (family['experience'] as num?)?.toInt() ?? 0;
+    level = (family['level'] as num?)?.toInt() ?? 1;
+    walletCoins = (family['wallet_coins'] as num?)?.toInt() ?? 0;
+
+    final rawMembers = payload['members'];
+    members
+      ..clear()
+      ..addAll(
+        rawMembers is List
+            ? rawMembers.whereType<Map>().map((raw) {
+                final row = Map<String, dynamic>.from(raw);
+                final roleName = row['role']?.toString().toLowerCase() ?? '';
+                final role = roleName == 'leader'
+                    ? FamilyRole.head
+                    : roleName == 'admin'
+                        ? FamilyRole.deputyHead
+                        : FamilyRole.member;
+                return FamilyMember(
+                  userId: row['user_id']?.toString() ?? '',
+                  name: row['display_name']?.toString() ??
+                      row['user_id']?.toString() ??
+                      'Member',
+                  role: role,
+                  avatarDataUrl: row['avatar_data_url']?.toString(),
+                  receivedCoins:
+                      (row['received_coins'] as num?)?.toInt() ?? 0,
+                );
+              }).where((member) => member.userId.isNotEmpty)
+            : const <FamilyMember>[],
+      );
+
+    final rawRequests = payload['join_requests'];
+    pendingJoinRequests
+      ..clear()
+      ..addAll(
+        rawRequests is List
+            ? rawRequests.whereType<Map>().map((raw) {
+                final row = Map<String, dynamic>.from(raw);
+                return FamilyJoinRequest(
+                  userId: row['user_id']?.toString() ?? '',
+                  name: row['display_name']?.toString() ??
+                      row['user_id']?.toString() ??
+                      'User',
+                );
+              }).where((request) => request.userId.isNotEmpty)
+            : const <FamilyJoinRequest>[],
+      );
+  }
 
   void create({
     required String familyName,
