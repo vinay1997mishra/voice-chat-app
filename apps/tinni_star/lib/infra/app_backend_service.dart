@@ -724,8 +724,23 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty ? <String, dynamic>{} : _map(jsonDecode(text));
-    if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to load store');
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        final body = text.trim();
+        if (body.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable (1101). Please retry.',
+          );
+        }
+        throw StateError('Store server returned an invalid response.');
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load store');
+    }
     final raw = data['items'];
     if (raw is! List) return const [];
     return raw.map(_map).toList(growable: false);
@@ -833,7 +848,20 @@ class AppBackendService {
     }
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty ? <String, dynamic>{} : _map(jsonDecode(text));
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        final body = text.trim();
+        if (body.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable (1101). Please pull to retry.',
+          );
+        }
+        throw StateError('Tinni Star server returned an invalid response.');
+      }
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Server request failed');
     }
