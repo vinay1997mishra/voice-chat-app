@@ -145,6 +145,56 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
     ).then((_) => _load());
   }
 
+  Future<void> _showJoinList() async {
+    if (widget.state.family.exists) {
+      _openMyFamily();
+      return;
+    }
+    if (families.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No Family is available to join yet.')),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+          children: [
+            const GoldSectionTitle('Choose a Family'),
+            const SizedBox(height: 8),
+            for (final family in families)
+              ListTile(
+                leading: const Icon(
+                  Icons.groups_rounded,
+                  color: FeaturePalette.family,
+                ),
+                title: Text(
+                  family['name']?.toString() ?? 'Family',
+                  style: const TextStyle(color: RoyalPalette.cream),
+                ),
+                subtitle: Text(
+                  family['tag']?.toString() ?? '',
+                  style: const TextStyle(color: RoyalPalette.muted),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: FeaturePalette.family,
+                ),
+                onTap: () => Navigator.pop(sheetContext, family),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) _openFamily(selected);
+  }
+
+
   String _compact(int value) {
     if (value >= 1000000000) {
       return (value / 1000000000).toStringAsFixed(1) + 'B';
@@ -323,16 +373,17 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
                 ),
               ),
             ),
-            if (widget.state.family.exists) ...[
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.tonal(
-                  key: const Key('family-ranking-open-button'),
-                  onPressed: _openMyFamily,
-                  child: const Text('Open'),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.tonal(
+                key: const Key('family-ranking-join-button'),
+                onPressed:
+                    widget.state.family.exists ? _openMyFamily : _showJoinList,
+                child: Text(
+                  widget.state.family.exists ? 'Open' : 'Join',
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),
