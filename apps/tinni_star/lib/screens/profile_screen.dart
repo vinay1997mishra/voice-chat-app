@@ -16,6 +16,7 @@ import 'vip_screen.dart';
 import 'store_screen.dart';
 import 'recharge_screen.dart';
 import 'cp_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -828,18 +829,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-setting'),
                   icon: Icons.settings_rounded,
                   label: 'Setting',
-                  onTap: () => _openMineInfoPage(
-                    'Setting',
-                    items: const [
-                      'Message notification',
-                      'Bind account',
-                      'Language settings',
-                      'About Tinni Star',
-                      'Feedback',
-                      'Blocklist',
-                      'Privacy statement',
-                      'Sign out',
-                    ],
+                  onTap: () => _openMineScreen(
+                    TinniSettingsScreen(state: widget.state),
                   ),
                 ),
               ]),
