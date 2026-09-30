@@ -177,6 +177,9 @@ void main() {
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
     final removableSong = state.ktv.addLocalSong(
       fileName: 'Wrong Song.mp3',
       sourcePath: '/phone/Music/Wrong Song.mp3',
@@ -316,9 +319,9 @@ void main() {
       find.byKey(const Key('reference-room-rank-panel')),
       findsOneWidget,
     );
-    expect(find.text('Daily'), findsOneWidget);
-    expect(find.text('Weekly'), findsOneWidget);
-    expect(find.text('Monthly'), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-day')), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-week')), findsOneWidget);
+    expect(find.byKey(const Key('room-rank-tab-month')), findsOneWidget);
     expect(
       find.byKey(const Key('room-rank-self-row')),
       findsOneWidget,
@@ -493,7 +496,7 @@ void main() {
     await tester.tap(find.byKey(const Key('room-type-cover-open')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
