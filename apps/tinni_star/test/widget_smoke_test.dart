@@ -164,7 +164,8 @@ void main() {
     expect(find.byKey(const Key('room-tool-cover')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-room-theme')), findsNothing);
     expect(find.byKey(const Key('room-tool-music')), findsOneWidget);
-    expect(find.byKey(const Key('room-tool-blacklist')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-blacklist')), findsNothing);
+    expect(find.byKey(const Key('room-tool-seat-requests')), findsNothing);
     expect(find.byKey(const Key('room-tool-effects')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-feedback')), findsNothing);
     expect(find.byKey(const Key('room-tool-gift')), findsNothing);
@@ -205,10 +206,6 @@ void main() {
     await expectToolOpens(
       'room-tool-room-type',
       const Key('room-type-panel'),
-    );
-    await expectToolOpens(
-      'room-tool-blacklist',
-      const Key('room-blacklist-panel'),
     );
     await expectToolOpens(
       'room-tool-lucky-bag',
