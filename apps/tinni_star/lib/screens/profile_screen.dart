@@ -465,6 +465,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : const <String, dynamic>{};
     final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
     final vipLevel = widget.state.identity.vip.level;
+    final profileBackgroundId =
+        widget.state.inventory.equipped('profile_background');
+    final profileBackgroundAsset = profileBackgroundId == null
+        ? ''
+        : widget.state.inventory.ownedDetails[profileBackgroundId]
+                    ?['asset_url']
+                ?.toString() ??
+            '';
+    final profileBackground =
+        _mineAvatarProvider(profileBackgroundAsset);
+    final ringId = widget.state.inventory.equipped('ring');
+    final profileCardId = widget.state.inventory.equipped('profile_card');
 
     return Scaffold(
       key: const Key('reference-mine-screen'),
@@ -472,8 +484,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         bottom: false,
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
@@ -484,17 +496,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
               stops: [0.0, 0.20, 0.36, 1.0],
             ),
+            image: profileBackground == null
+                ? null
+                : DecorationImage(
+                    image: profileBackground,
+                    fit: BoxFit.cover,
+                    opacity: 0.24,
+                  ),
           ),
           child: ListView(
             key: const Key('reference-mine-list'),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
             children: [
-              Row(
-                children: [
-                  AnimatedAvatarFrame(
-                    size: 66,
-                    frameId: widget.state.inventory.equippedFrameId,
-                    child: CircleAvatar(
+              Container(
+                key: const Key('profile-active-card'),
+                padding: EdgeInsets.all(profileCardId == null ? 0 : 9),
+                decoration: profileCardId == null
+                    ? null
+                    : BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0x33FFC928),
+                            Color(0x22FFFFFF),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFFFC928),
+                        ),
+                      ),
+                child: Row(
+                  children: [
+                  Container(
+                    padding: EdgeInsets.all(ringId == null ? 0 : 3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: ringId == null
+                          ? null
+                          : Border.all(
+                              color: const Color(0xFFFFC928),
+                              width: 2.4,
+                            ),
+                      boxShadow: ringId == null
+                          ? null
+                          : const [
+                              BoxShadow(
+                                color: Color(0x66FFC928),
+                                blurRadius: 12,
+                              ),
+                            ],
+                    ),
+                    child: AnimatedAvatarFrame(
+                      size: 66,
+                      frameId: widget.state.inventory.equippedFrameId,
+                      child: CircleAvatar(
                       radius: 33,
                       backgroundColor: const Color(0xFF0F6F6D),
                       backgroundImage: avatar,
@@ -514,6 +569,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             )
                           : null,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -612,6 +668,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -706,7 +765,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          const Text(
+                          Text(
                             tinniText(language, 'wallet'),
                             style: TextStyle(
                               color: Colors.white,
