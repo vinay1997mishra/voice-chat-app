@@ -1587,6 +1587,27 @@ export default {
       return json({ ok: true });
     }
 
+    if (url.pathname === "/account/link/google" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const google = await verifyGoogleIdToken(body.id_token, env);
+        if (!google.sub) throw new Error("Google account identity is incomplete");
+        const store = getAppDirectoryStore(env);
+        await store.linkIdentity(appSession.user.user_id, "google", google.sub);
+        return json({
+          ok: true,
+          identities: await store.accountIdentities(appSession.user.user_id),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to bind Google account"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/app/me" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2451,6 +2472,17 @@ export default {
       return json({
         ok: true,
         blocked: await getAppDirectoryStore(env).listBlocked(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
+    if (url.pathname === "/social/blocked/details" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        blocked: await getAppDirectoryStore(env).listBlockedProfiles(
           appSession.user.user_id,
         ),
       });
