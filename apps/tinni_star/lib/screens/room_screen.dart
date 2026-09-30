@@ -855,21 +855,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  Future<void> _toggleSelfMute() async {
-    if (controller.mySeat == null) {
-      _snack('Join a seat before using self mute.');
-      return;
-    }
-    final muted = !controller.selfMuted;
-    try {
-      await widget.state.roomSession.setSelfMute(muted);
-      if (mounted) setState(() {});
-      _snack(muted ? 'Self mute on.' : 'Self mute off.');
-    } catch (error) {
-      _snack(error.toString().replaceFirst('Bad state: ', ''));
-    }
-  }
-
   Future<void> _leaveSeatAndMute() async {
     final userId = widget.state.auth.current?.userId ?? '';
     await widget.state.ktv.stopForSeatDown(userId);
@@ -5044,7 +5029,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 .toList(growable: false);
 
             ImageProvider? avatarFor(String? data) {
-              if (data == null || !data.startsWith('data:image/')) return null;
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
               try {
                 return MemoryImage(base64Decode(data.split(',').last));
               } catch (_) {
@@ -5072,7 +5059,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 return;
               }
               final account = widget.state.auth.current;
-              if (account == null) return;
+              if (account == null) {
+                return;
+              }
 
               setSheetState(() {
                 searchBusy = true;
@@ -6741,7 +6730,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
                       ImageProvider? avatarFor(String? data) {
                         if (data == null ||
-                            !data.startsWith('data:image/')) return null;
+                            !data.startsWith('data:image/')) {
+                          return null;
+                        }
                         try {
                           return MemoryImage(
                             base64Decode(data.split(',').last),
