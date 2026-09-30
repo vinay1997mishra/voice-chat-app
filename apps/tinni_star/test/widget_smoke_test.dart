@@ -162,12 +162,21 @@ void main() {
     expect(find.text('Seat Controls'), findsNothing);
     expect(find.byKey(const Key('room-tool-room-type')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-room-theme')), findsNothing);
     expect(find.byKey(const Key('room-tool-music')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-blacklist')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-effects')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-feedback')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
+    await tester.tap(find.byKey(const Key('room-tool-cover')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('room-tool-gift')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
