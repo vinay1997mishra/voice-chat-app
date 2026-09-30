@@ -6757,8 +6757,8 @@ export class AppDirectoryStore extends DurableObject {
     const nextGeneration = Number(oldLock?.generation || 0) + 1;
 
     if (locked) {
-      if (!/^\\d{5,7}$/.test(password)) {
-        throw new Error("Room password must be 5 to 7 digits");
+      if (!/^\\d{5}$/.test(password)) {
+        throw new Error("Room password must be exactly 5 digits");
       }
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const hash = await deriveSecret(password, salt, 120000);
