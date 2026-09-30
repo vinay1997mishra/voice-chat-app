@@ -3604,6 +3604,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           key: const Key('room-type-setting'),
                           padding: const EdgeInsets.all(12),
                           children: [
+                            ListTile(
+                              key: const Key('room-type-setting-seats'),
+                              leading: const Icon(Icons.event_seat_rounded),
+                              title: const Text('Room Seats'),
+                              subtitle: Text(
+                                controller.seats.length.toString() + ' seats',
+                              ),
+                              trailing:
+                                  const Icon(Icons.chevron_right_rounded),
+                              onTap: _showSeatCountSelector,
+                            ),
                             SwitchListTile(
                               title: const Text('Free mic'),
                               subtitle: const Text(
@@ -3960,7 +3971,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _snack(enabled ? 'Public screen enabled.' : 'Public screen disabled.');
         },
       ),
-      ('Settings', Icons.settings_rounded, _showRoomSettings),
       (
         'Report',
         Icons.report_rounded,
@@ -4840,83 +4850,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     nameController.dispose();
     noticeController.dispose();
-  }
-
-  void _showRoomSettings() {
-    final controls = widget.state.roomControls;
-    if (!_isRoomOwner) {
-      _showSeatCountSelector();
-      return;
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          final settings = controls.settings;
-          return SafeArea(
-            child: ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(12),
-              children: [
-                const ListTile(
-                  title: Text(
-                    'Room Settings',
-                    style: TextStyle(
-                      color: FeaturePalette.discover,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.event_seat_rounded),
-                  title: const Text('Room Seats'),
-                  subtitle: Text(controller.seats.length.toString() + ' seats'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _showSeatCountSelector,
-                ),
-                SwitchListTile(
-                  title: const Text('Free mic'),
-                  subtitle: const Text(
-                    'When off, users send a mic request and wait for approval.',
-                  ),
-                  value: controller.inviteMode == false,
-                  onChanged: (value) async {
-                    try {
-                      await widget.state.roomSession.setRoomMicMode(
-                        value ? 'free' : 'apply',
-                      );
-                      controls.settings = controls.settings.copyWith(
-                        micMode: value ? MicMode.free : MicMode.apply,
-                      );
-                      if (context.mounted) {
-                        setSheetState(() {});
-                      }
-                      if (mounted) setState(() {});
-                    } catch (error) {
-                      _snack(
-                        error.toString().replaceFirst('Bad state: ', ''),
-                      );
-                    }
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text('Only managers can speak'),
-                  value: settings.onlyManagersCanSpeak,
-                  onChanged: (value) {
-                    controls.settings = settings.copyWith(onlyManagersCanSpeak: value);
-                    setSheetState(() {});
-                    setState(() {});
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
   }
 
   Future<void> _showLuckyNumberDialog() async {
