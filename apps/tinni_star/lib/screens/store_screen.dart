@@ -7,8 +7,13 @@ import '../ui/royal_theme.dart';
 import 'unique_id_store_screen.dart';
 
 class StoreScreen extends StatefulWidget {
-  const StoreScreen({super.key, required this.state});
+  const StoreScreen({
+    super.key,
+    required this.state,
+    this.initialKind,
+  });
   final TinniState state;
+  final String? initialKind;
 
   @override
   State<StoreScreen> createState() => _StoreScreenState();
@@ -50,6 +55,13 @@ class _StoreScreenState extends State<StoreScreen> {
   @override
   void initState() {
     super.initState();
+    final initialKind = widget.initialKind;
+    if (initialKind != null) {
+      final index = _categories.indexWhere((item) => item.kind == initialKind);
+      if (index >= 0 && _categories[index].kind != 'unique_id') {
+        _categoryIndex = index;
+      }
+    }
     _loadAll();
   }
 
