@@ -613,3 +613,16 @@ Shine rule:
 - Service Agreement must cover account responsibility, rooms/chat/calls, virtual items/balances, purchases/refunds, safety/moderation, service availability, privacy-policy linkage, agreement updates and support contact.
 - Do not publish invented legal contact information. Until an official legal/support email is configured, privacy/contact requests route through **Mine → Feedback**.
 - Current policy effective date: **30 September 2026**. Any material future policy change must update the displayed effective date and the policy text.
+
+
+### Family reference coin-scale rule — LOCKED
+
+- The supplied Family reference uses a smaller coin denomination than Tinni Star.
+- **20,000 reference coins = 2,000,000 Tinni coins.**
+- Therefore every **coin-based Family progression / Family level / contribution target** copied from that reference is converted at **100×** into Tinni Star coins.
+- Example conversions: 20K → 2M, 50K → 5M, 100K → 10M, 500K → 50M, 1M → 100M.
+- The 100× conversion applies only to coin-denominated Family values. It does **not** multiply percentages, member limits, role counts, dates, durations or other non-coin values.
+- If a source screenshot value is not legible, do not invent it. Keep the last explicitly locked Tinni threshold until the exact reference value is confirmed.
+- Family Wallet transfer rule remains: **sender gets no Family EXP; receiver gives the Family 1 EXP per 1 Tinni coin received**.
+- Daily Family check-in also adds the configured Family EXP once per day.
+- Monthly Family Wallet bonus remains **L1 1.00% + 0.25 percentage point per level**, capped by the locked Family level rules.
