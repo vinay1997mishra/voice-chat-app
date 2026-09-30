@@ -10,10 +10,12 @@ class EffectOverlay extends StatefulWidget {
     super.key,
     required this.queue,
     required this.enabled,
+    this.shouldPlay,
   });
 
   final EffectQueue queue;
   final bool enabled;
+  final bool Function(EffectRequest request)? shouldPlay;
 
   @override
   State<EffectOverlay> createState() => _EffectOverlayState();
@@ -36,8 +38,17 @@ class _EffectOverlayState extends State<EffectOverlay> {
 
   void _pump() {
     if (!widget.enabled || current != null) return;
-    final next = widget.queue.takeNext();
-    if (next == null) return;
+
+    EffectRequest? next;
+    while (true) {
+      final candidate = widget.queue.takeNext();
+      if (candidate == null) return;
+      if (widget.shouldPlay?.call(candidate) ?? true) {
+        next = candidate;
+        break;
+      }
+    }
+
     current = next;
     Future<void>.delayed(const Duration(seconds: 3), () {
       if (!mounted) return;
@@ -49,7 +60,11 @@ class _EffectOverlayState extends State<EffectOverlay> {
   @override
   Widget build(BuildContext context) {
     final effect = current;
-    if (!widget.enabled || effect == null) return const SizedBox.shrink();
+    if (!widget.enabled ||
+        effect == null ||
+        !(widget.shouldPlay?.call(effect) ?? true)) {
+      return const SizedBox.shrink();
+    }
     final icon = switch (effect.kind) {
       EffectKind.gift => Icons.card_giftcard_rounded,
       EffectKind.entry => Icons.login_rounded,
