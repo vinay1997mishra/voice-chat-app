@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 enum ShareTarget {
@@ -23,6 +24,10 @@ abstract interface class NativeShareAdapter {
   Future<void> share(String text);
 }
 
+abstract interface class ClipboardAdapter {
+  Future<void> copy(String text);
+}
+
 class SharePlusAdapter implements NativeShareAdapter {
   const SharePlusAdapter();
 
@@ -34,11 +39,26 @@ class SharePlusAdapter implements NativeShareAdapter {
   }
 }
 
+class SystemClipboardAdapter implements ClipboardAdapter {
+  const SystemClipboardAdapter();
+
+  @override
+  Future<void> copy(String text) async {
+    final value = text.trim();
+    if (value.isEmpty) throw StateError('Share link is empty');
+    await Clipboard.setData(ClipboardData(text: value));
+  }
+}
+
 class ShareService {
-  ShareService({NativeShareAdapter? native})
-      : native = native ?? const SharePlusAdapter();
+  ShareService({
+    NativeShareAdapter? native,
+    ClipboardAdapter? clipboard,
+  })  : native = native ?? const SharePlusAdapter(),
+        clipboard = clipboard ?? const SystemClipboardAdapter();
 
   final NativeShareAdapter native;
+  final ClipboardAdapter clipboard;
   final List<String> history = <String>[];
 
   String prepare(ShareTarget target, SharePayload payload) {
@@ -49,6 +69,11 @@ class ShareService {
 
   Future<void> share(ShareTarget target, SharePayload payload) async {
     prepare(target, payload);
+    if (target == ShareTarget.copyLink) {
+      await clipboard.copy(payload.link);
+      return;
+    }
+
     // Android's native share sheet is used deliberately instead of brittle
     // undocumented deep links. Installed supported apps appear as targets.
     await native.share(payload.text);
