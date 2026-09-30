@@ -4876,7 +4876,12 @@ export class AppDirectoryStore extends DurableObject {
   sendCatalogItem(senderUserIdValue, recipientUserIdValue, kindValue, itemIdValue, countryCodeValue = "") {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
-    if (!recipientId || !this.getUserById(recipientId)) throw new Error("Recipient user not found");
+    const recipientExists = recipientId
+      ? this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", recipientId,
+        ).toArray()[0]
+      : null;
+    if (!recipientExists) throw new Error("Recipient user not found");
     if (String(senderId) === String(recipientId)) throw new Error("Use Buy for your own account");
     const kind = cleanText(kindValue, 40).toLowerCase();
     if (!["entry","vehicle","profile_card","ring","bubble","profile_background","frame"].includes(kind)) {
@@ -7360,6 +7365,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _familyMembership(userIdValue) {
+    this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return null;
     return this.ctx.storage.sql.exec(
@@ -7452,6 +7458,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   familyList(limitValue = 100) {
+    this._ensureEconomyMigrations();
     const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
     return this.ctx.storage.sql.exec(
       `SELECT f.id,f.name,f.tag,f.notice,f.leader_user_id,f.experience,f.wallet_coins,
@@ -7478,8 +7485,14 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   familyCreate(userIdValue, nameValue, tagValue) {
+    this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
-    if (!userId || !this.getUserById(userId)) throw new Error("User not found");
+    const userExists = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", userId,
+        ).toArray()[0]
+      : null;
+    if (!userExists) throw new Error("User not found");
     if (this._familyMembership(userId)) throw new Error("Already in a family");
     const name = cleanText(nameValue, 40);
     const tag = cleanText(tagValue, 12).toUpperCase();
