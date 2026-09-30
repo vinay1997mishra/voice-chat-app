@@ -9,7 +9,7 @@ import '../infra/app_backend_service.dart';
 import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
-import 'feature_center_screen.dart';
+import 'custom_center_screen.dart';
 import 'vip_screen.dart';
 import 'store_screen.dart';
 import 'recharge_screen.dart';
@@ -759,7 +759,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.design_services_rounded,
                   label: 'Custom Center',
                   onTap: () => _openMineScreen(
-                    FeatureCenterScreen(state: widget.state),
+                    CustomCenterScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
