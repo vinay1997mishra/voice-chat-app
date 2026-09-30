@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
+import 'mine_function_screens.dart';
 
 class TinniSettingsScreen extends StatelessWidget {
   const TinniSettingsScreen({super.key, required this.state});
@@ -60,31 +61,67 @@ class TinniSettingsScreen extends StatelessWidget {
             context,
             key: const Key('setting-message-notification'),
             title: 'Message notification',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MessageNotificationScreen(state: state),
+              ),
+            ),
           ),
           _row(
             context,
             key: const Key('setting-bind-account'),
             title: 'Bind account',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BindAccountScreen(state: state),
+              ),
+            ),
           ),
           _row(
             context,
             key: const Key('setting-language'),
             title: 'Language settings',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LanguageSettingsScreen(state: state),
+              ),
+            ),
           ),
           _row(
             context,
             key: const Key('setting-about'),
             title: 'About Tinni Star',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AboutTinniStarScreen(),
+              ),
+            ),
           ),
           _row(
             context,
             key: const Key('setting-feedback'),
             title: 'Feedback',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FeedbackScreen(state: state),
+              ),
+            ),
           ),
           _row(
             context,
             key: const Key('setting-blocklist'),
             title: 'Blocklist',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BlocklistScreen(state: state),
+              ),
+            ),
           ),
           _row(
             context,
@@ -105,6 +142,7 @@ class TinniSettingsScreen extends StatelessWidget {
             context,
             key: const Key('setting-sign-out'),
             title: 'Sign out',
+            onTap: () => SignOutAction.run(context, state),
           ),
         ],
       ),
