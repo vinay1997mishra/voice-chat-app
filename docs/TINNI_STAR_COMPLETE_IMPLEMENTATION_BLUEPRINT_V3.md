@@ -762,8 +762,9 @@ Mic Theme built-in choices:
 - Rose Glow
 
 Cover:
-- Owner selects a room cover image from the device.
-- The image is validated and stored through the room settings backend.
+- `Cover` is the **single 4-box entry** for room background/theme selection.
+- It opens the Room Cover / Theme selector, including built-in and eligible custom/panel themes.
+- The older separate `Room Theme` 4-box tile is removed to avoid duplication.
 
 Blacklist:
 - Opens the room blacklist list.
