@@ -4707,7 +4707,12 @@ export class AppDirectoryStore extends DurableObject {
     const userId = this._resolveOwnerUserId(userIdValue);
     const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
-      "SELECT item_id, item_kind, acquired_at, expires_at FROM user_inventory WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY acquired_at DESC",
+      `SELECT ui.item_id,ui.item_kind,ui.acquired_at,ui.expires_at,
+              oc.name AS catalog_name,oc.data_json AS catalog_data_json
+         FROM user_inventory ui
+         LEFT JOIN owner_catalog oc ON oc.id=ui.item_id
+        WHERE ui.user_id=? AND (ui.expires_at IS NULL OR ui.expires_at>?)
+        ORDER BY ui.acquired_at DESC`,
       userId, now,
     ).toArray();
     const equipment = this.ctx.storage.sql.exec(
@@ -4748,12 +4753,18 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
     return {
-      owned: rows.map((row) => ({
-        item_id: String(row.item_id),
-        item_kind: String(row.item_kind),
-        acquired_at: Number(row.acquired_at),
-        expires_at: row.expires_at == null ? null : Number(row.expires_at),
-      })),
+      owned: rows.map((row) => {
+        let data = {};
+        try { data = JSON.parse(String(row.catalog_data_json || "{}")); } catch {}
+        return {
+          item_id: String(row.item_id),
+          item_kind: String(row.item_kind),
+          name: String(row.catalog_name || row.item_id),
+          asset_url: String(data.asset_url || ""),
+          acquired_at: Number(row.acquired_at),
+          expires_at: row.expires_at == null ? null : Number(row.expires_at),
+        };
+      }),
       equipped_frame_id: equipment.equipped_frame_id ? String(equipment.equipped_frame_id) : null,
       equipped_vehicle_id: equipment.equipped_vehicle_id ? String(equipment.equipped_vehicle_id) : null,
       equipped_entry_id: equipment.equipped_entry_id ? String(equipment.equipped_entry_id) : null,
