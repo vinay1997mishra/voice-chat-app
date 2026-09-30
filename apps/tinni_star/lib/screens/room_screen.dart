@@ -2590,10 +2590,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _snack('Please sign in to use room music.');
       return;
     }
-    if (controller.mySeat == null) {
-      _snack('Join a room seat before playing music.');
-      return;
-    }
     unawaited(widget.state.ktv.loadLocalSongs());
 
     showModalBottomSheet<void>(
@@ -2607,6 +2603,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final current = widget.state.ktv.current;
           final localSongCount = widget.state.ktv.localSongCount;
           final canAddLocalSong = widget.state.ktv.canAddLocalSong;
+          final onSeat = controller.mySeat != null;
           return SafeArea(
             key: const Key('room-music-panel'),
             child: SizedBox(
@@ -2677,10 +2674,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         if (current != null)
                           IconButton(
                             tooltip: 'Next',
-                            onPressed: () async {
-                              await widget.state.ktv.playNext();
-                              setSheetState(() {});
-                            },
+                            onPressed: onSeat
+                                ? () async {
+                                    await widget.state.ktv.playNext();
+                                    setSheetState(() {});
+                                  }
+                                : null,
                             icon: const Icon(Icons.skip_next_rounded),
                           ),
                       ],
@@ -2692,7 +2691,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const Key('room-add-music-button'),
-                        onPressed: canAddLocalSong
+                        onPressed: canAddLocalSong && onSeat
                             ? () async {
                           final file = await FilePicker.pickFile(
                             dialogTitle: 'Add Music',
@@ -2847,14 +2846,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     : const Icon(
                                         Icons.playlist_add_rounded,
                                       ),
-                                onTap: () async {
-                                  widget.state.ktv.addToQueue(song, account.userId);
-                                  if (widget.state.ktv.current == null) {
-                                    widget.state.ktv.startNext();
-                                    await widget.state.ktv.playCurrent();
-                                  }
-                                  setSheetState(() {});
-                                },
+                                onTap: onSeat
+                                    ? () async {
+                                        widget.state.ktv
+                                            .addToQueue(song, account.userId);
+                                        if (widget.state.ktv.current == null) {
+                                          widget.state.ktv.startNext();
+                                          await widget.state.ktv.playCurrent();
+                                        }
+                                        setSheetState(() {});
+                                      }
+                                    : () {
+                                        _snack(
+                                          'Join a room seat before playing music.',
+                                        );
+                                      },
                               );
                             },
                           ),
@@ -5307,9 +5313,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             )
                           : FilledButton(
-                              key: const Key(
-                                'room-admin-search-add-button',
-                              ),
+                              key: const Key('room-admin-search-add-button'),
                               onPressed: () async {
                                 try {
                                   await _setRoomAdminById(
@@ -5375,9 +5379,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   padding:
                                       const EdgeInsets.fromLTRB(12, 12, 12, 4),
                                   child: TextField(
-                                    key: const Key(
-                                      'room-admin-id-search-field',
-                                    ),
+                                    key: const Key('room-admin-id-search-field'),
                                     controller: searchController,
                                     keyboardType: TextInputType.text,
                                     inputFormatters: <TextInputFormatter>[
@@ -5399,9 +5401,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       prefixIcon:
                                           const Icon(Icons.search_rounded),
                                       suffixIcon: IconButton(
-                                        key: const Key(
-                                          'room-admin-id-search-button',
-                                        ),
+                                        key: const Key('room-admin-id-search-button'),
                                         onPressed:
                                             searchBusy ? null : searchById,
                                         icon: const Icon(
@@ -6779,43 +6779,61 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                               color:
                                                   const Color(0xFFFFD45A),
                                             ),
-                                            child: CircleAvatar(
-                                              key: Key(
-                                                'room-top-member-dp-' +
-                                                    (visible[i]['id'] ??
-                                                        i.toString()),
+                                            child: GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () {
+                                                final memberId =
+                                                    visible[i]['id'];
+                                                if (memberId == null) {
+                                                  return;
+                                                }
+                                                for (final member in live) {
+                                                  if (member.userId ==
+                                                      memberId) {
+                                                    _showUserProfile(member);
+                                                    break;
+                                                  }
+                                                }
+                                              },
+                                              child: CircleAvatar(
+                                                key: Key(
+                                                  'room-top-member-dp-' +
+                                                      (visible[i]['id'] ??
+                                                          i.toString()),
+                                                ),
+                                                radius: 11,
+                                                backgroundColor:
+                                                    const Color(0xFF171019),
+                                                backgroundImage: avatarFor(
+                                                  visible[i]['avatar'],
+                                                ),
+                                                child: avatarFor(
+                                                          visible[i]['avatar'],
+                                                        ) ==
+                                                        null
+                                                    ? Text(
+                                                        ((visible[i]['name'] ??
+                                                                        '?')
+                                                                    .trim()
+                                                                    .isEmpty
+                                                                ? '?'
+                                                                : (visible[i][
+                                                                            'name'] ??
+                                                                        '?')
+                                                                    .trim()
+                                                                    .characters
+                                                                    .first)
+                                                            .toUpperCase(),
+                                                        style:
+                                                            const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w900,
+                                                        ),
+                                                      )
+                                                    : null,
                                               ),
-                                              radius: 11,
-                                              backgroundColor:
-                                                  const Color(0xFF171019),
-                                              backgroundImage:
-                                                  avatarFor(visible[i]['avatar']),
-                                              child: avatarFor(
-                                                        visible[i]['avatar'],
-                                                      ) ==
-                                                      null
-                                                  ? Text(
-                                                      ((visible[i]['name'] ??
-                                                                      '?')
-                                                                  .trim()
-                                                                  .isEmpty
-                                                              ? '?'
-                                                              : (visible[i][
-                                                                          'name'] ??
-                                                                      '?')
-                                                                  .trim()
-                                                                  .characters
-                                                                  .first)
-                                                          .toUpperCase(),
-                                                      style:
-                                                          const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                      ),
-                                                    )
-                                                  : null,
                                             ),
                                           ),
                                         ),
@@ -6831,9 +6849,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               const SizedBox(width: 5),
                               Text(
                                 memberCount.toString(),
-                                key: const Key(
-                                  'room-online-member-count',
-                                ),
+                                key: const Key('room-online-member-count'),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
