@@ -2465,6 +2465,53 @@ export class AppDirectoryStore extends DurableObject {
     return this.getUserById(userId);
   }
 
+  async bindEmailIdentity(userIdValue, requestIdValue, otpValue, passwordValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId || !(await this.getUserById(userId))) throw new Error("User not found");
+    const password = String(passwordValue || "");
+    if (password.length < 8 || password.length > 128) {
+      throw new Error("Tinni password must be 8 to 128 characters");
+    }
+    const verified = await this.verifyEmailOtp(requestIdValue, otpValue);
+    const email = String(verified.email || "").trim().toLowerCase();
+    if (!email) throw new Error("Verified email is required");
+
+    const linked = await this.getUserByProvider("email", email);
+    if (linked && String(linked.user_id) !== String(userId)) {
+      throw new Error("This email is already linked to another Tinni account");
+    }
+    const credential = this.ctx.storage.sql.exec(
+      "SELECT user_id,auth_version FROM email_password_credentials WHERE email=? LIMIT 1",
+      email,
+    ).toArray()[0];
+    if (credential && String(credential.user_id) !== String(userId)) {
+      throw new Error("This email is already used by another Tinni account");
+    }
+
+    await this.linkIdentity(userId, "email", email);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    const nextVersion = Math.max(1, Number(credential?.auth_version || 0) + 1);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO email_password_credentials
+        (email,user_id,password_salt,password_hash,auth_version,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(email) DO UPDATE SET
+         user_id=excluded.user_id,
+         password_salt=excluded.password_salt,
+         password_hash=excluded.password_hash,
+         auth_version=excluded.auth_version,
+         updated_at=excluded.updated_at`,
+      email,userId,toBase64Url(salt),toBase64Url(hash),nextVersion,now,now,
+    );
+    return {
+      ok:true,
+      email,
+      identities:this.accountIdentities(userId),
+    };
+  }
+
   async getUserByGoogleSub(googleSubValue) {
     return this.getUserByProvider("google", googleSubValue);
   }
