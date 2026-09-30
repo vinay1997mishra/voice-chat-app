@@ -176,12 +176,20 @@ class StoreItem {
     required this.name,
     required this.price,
     required this.type,
+    this.kind = '',
+    this.durationDays = 0,
+    this.assetUrl = '',
   });
 
   final String id;
   final String name;
   final int price;
   final String type;
+  final String kind;
+  final int durationDays;
+  final String assetUrl;
+
+  bool get permanent => durationDays <= 0;
 }
 
 class InventoryService {
