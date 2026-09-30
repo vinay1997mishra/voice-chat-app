@@ -3490,7 +3490,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => DefaultTabController(
-        length: 3,
+        length: 4,
         child: StatefulBuilder(
           builder: (sheetContext, setSheetState) => SafeArea(
             key: const Key('room-type-panel'),
@@ -3509,8 +3509,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   const TabBar(
+                    isScrollable: true,
                     tabs: [
                       Tab(text: 'Mic Types'),
+                      Tab(text: 'Cover'),
                       Tab(text: 'Mic Theme'),
                       Tab(text: 'Setting'),
                     ],
@@ -3535,6 +3537,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 Navigator.pop(sheetContext);
                                 _showSeatCountSelector();
                               },
+                            ),
+                          ],
+                        ),
+                        ListView(
+                          key: const Key('room-type-cover'),
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            ListTile(
+                              key: const Key('room-type-cover-open'),
+                              leading: const Icon(Icons.image_rounded),
+                              title: const Text('Room Cover / Theme'),
+                              subtitle: const Text(
+                                'Change the room background or theme.',
+                              ),
+                              trailing:
+                                  const Icon(Icons.chevron_right_rounded),
+                              enabled: _isRoomOwner,
+                              onTap: !_isRoomOwner
+                                  ? null
+                                  : () {
+                                      Navigator.pop(sheetContext);
+                                      Future<void>.delayed(
+                                        Duration.zero,
+                                        () {
+                                          if (mounted) {
+                                            _openRoomThemeSelector();
+                                          }
+                                        },
+                                      );
+                                    },
                             ),
                           ],
                         ),
@@ -3880,15 +3912,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         'Room Type',
         Icons.dashboard_customize_rounded,
         _showRoomTypePanel,
-      ),
-      (
-        'Cover',
-        Icons.image_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _openRoomThemeSelector();
-          });
-        },
       ),
       (
         'Music',
