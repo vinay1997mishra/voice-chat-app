@@ -570,6 +570,40 @@ class AppBackendService {
     return _request('POST', '/store/purchase', token, body: {'kind': kind, 'item_id': itemId, if (country.isNotEmpty) 'country': country});
   }
 
+  Future<Map<String, dynamic>> equipStoreItem(
+    String token, {
+    required String kind,
+    String? itemId,
+  }) async {
+    return _request(
+      'POST',
+      '/store/equip',
+      token,
+      body: <String, dynamic>{
+        'kind': kind,
+        'item_id': itemId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> sendStoreItem(
+    String token, {
+    required String recipientUserId,
+    required String kind,
+    required String itemId,
+  }) async {
+    return _request(
+      'POST',
+      '/store/send',
+      token,
+      body: <String, dynamic>{
+        'recipient_user_id': recipientUserId,
+        'kind': kind,
+        'item_id': itemId,
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> frameCatalog(String token) async {
     final data = await _request('GET', '/frames/catalog', token);
     final raw = data['frames'];
