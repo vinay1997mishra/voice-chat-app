@@ -226,6 +226,51 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>?> searchUserById(
+    String token,
+    String userId,
+  ) async {
+    final id = userId.trim();
+    if (id.isEmpty) return null;
+    if (token.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+    final uri = apiBase.replace(
+      path: '/users/search',
+      queryParameters: <String, String>{'q': id},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $token',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        throw StateError(
+          'Tinni Star server returned an invalid user search response.',
+        );
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to search user',
+      );
+    }
+    final raw = data['users'];
+    if (raw is! List) return null;
+    for (final value in raw) {
+      final row = _map(value);
+      if (row['user_id']?.toString() == id) return row;
+    }
+    return null;
+  }
+
   Future<List<Map<String, dynamic>>> blockedProfiles(String token) async {
     final data = await _request('GET', '/social/blocked/details', token);
     final raw = data['blocked'];

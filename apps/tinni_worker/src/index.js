@@ -3202,9 +3202,15 @@ export default {
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
       }
-      const targetIsMember = await getAppDirectoryStore(env).isRoomMember(roomId, targetUserId);
-      if (!targetIsMember) {
-        return json({ ok: false, error: "Only a room member can become Room Admin" }, 400);
+      const targetMatches = await getAppDirectoryStore(env).searchUsers(
+        targetUserId,
+        5,
+      );
+      const targetUser = targetMatches.find(
+        (item) => String(item.user_id || "") === targetUserId,
+      );
+      if (!targetUser) {
+        return json({ ok: false, error: "User ID not found" }, 404);
       }
       return json(await store.setManager(targetUserId, Boolean(body.enabled)));
     }

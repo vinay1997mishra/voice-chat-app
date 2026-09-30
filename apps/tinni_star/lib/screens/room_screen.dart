@@ -1610,6 +1610,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _setRoomAdminById({
+    required String userId,
+    required String displayName,
+    required bool enabled,
+  }) async {
+    try {
+      await widget.state.roomSession.setRoomAdmin(
+        userId,
+        enabled: enabled,
+      );
+      _snack(
+        enabled
+            ? displayName + ' is now a room admin.'
+            : displayName + ' removed from room admin.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      rethrow;
+    }
+  }
+
   Future<void> _toggleRoomAdmin(
     RoomPresenceMember member,
     bool enabled,
@@ -4980,6 +5001,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showReferenceRoomMembers() {
     final room = _roomSnapshot;
     final ownerId = room.ownerId ?? room.id;
+    final searchController = TextEditingController();
 
     showModalBottomSheet<void>(
       context: context,
@@ -5006,21 +5028,71 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 )
                 .toList(growable: false);
 
+            Map<String, dynamic>? searchedUser;
+            bool searchBusy = false;
+            String? searchError;
+
+            Future<void> searchById() async {
+              final query = searchController.text.trim();
+              if (query.isEmpty) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError = 'Enter a user ID.';
+                });
+                return;
+              }
+              if (!RegExp(r'^\d+$').hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError = 'User ID must contain numbers only.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchError = result == null ? 'User ID not found.' : null;
+                  searchBusy = false;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchBusy = false;
+                  searchedUser = null;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
             Widget memberTile(
               RoomPresenceMember member, {
               required bool admin,
             }) {
-              ImageProvider? avatar;
-              final data = member.avatarDataUrl;
-              if (data != null && data.startsWith('data:image/')) {
-                try {
-                  avatar =
-                      MemoryImage(base64Decode(data.split(',').last));
-                } catch (_) {
-                  avatar = null;
-                }
-              }
-
+              final avatar = avatarFor(member.avatarDataUrl);
               final isOwnerMember = member.userId == ownerId;
 
               Widget? trailing;
@@ -5156,13 +5228,130 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               );
             }
 
+            Widget searchedUserCard() {
+              final user = searchedUser;
+              if (user == null) {
+                if (searchBusy) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (searchError != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    child: Text(
+                      searchError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8A80),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+
+              final userId = user['user_id']?.toString() ?? '';
+              final displayName =
+                  user['display_name']?.toString().trim().isNotEmpty == true
+                      ? user['display_name'].toString()
+                      : userId;
+              final avatar =
+                  avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final liveAdmin = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB52DFF),
+                  ),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                    ),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : liveAdmin
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
+                            ),
+                ),
+              );
+            }
+
             final ownerIsLive =
                 admins.any((member) => member.userId == ownerId);
 
             return SafeArea(
               key: const Key('reference-room-members-panel'),
               child: SizedBox(
-                height: MediaQuery.sizeOf(sheetContext).height * 0.44,
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
                 child: Column(
                   children: [
                     const SizedBox(height: 12),
@@ -5195,24 +5384,81 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 memberTile(member, admin: true),
                             ],
                           ),
-                          regularMembers.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                    'No members',
-                                    style: TextStyle(
-                                      color: RoyalPalette.muted,
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(12),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Search user ID to make Admin',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
                                     ),
                                   ),
-                                )
-                              : ListView(
-                                  children: [
-                                    for (final member in regularMembers)
-                                      memberTile(
-                                        member,
-                                        admin: false,
-                                      ),
-                                  ],
                                 ),
+                                searchedUserCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member
+                                              in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -5223,7 +5469,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           },
         ),
       ),
-    );
+    ).whenComplete(searchController.dispose);
   }
 
   Future<void> _showReferenceRoomSetup() async {
