@@ -985,10 +985,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           builder: (pageContext, setPageState) {
             final themes = <_RoomThemeChoice>[...builtIns, ...remoteChoices];
             return Scaffold(
+              key: const Key('room-cover-theme-page'),
               backgroundColor: RoyalPalette.nearBlack,
               appBar: AppBar(
                 title: const Text(
-                  'Room Theme',
+                  'Room Cover / Theme',
                   style: TextStyle(
                     color: FeaturePalette.moments,
                     fontWeight: FontWeight.w900,
@@ -3874,7 +3875,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         Icons.image_rounded,
         () {
           Future<void>.delayed(Duration.zero, () {
-            if (mounted) _changeRoomCover();
+            if (mounted) _openRoomThemeSelector();
           });
         },
       ),
@@ -3980,14 +3981,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _snack(active ? 'Room event launched.' : 'Room event stopped.');
         },
       ),
-      if (_isRoomOwner)
-        (
-          'Room Theme',
-          Icons.checkroom_rounded,
-          () {
-            _openRoomThemeSelector();
-          },
-        ),
       if (_canModerateSeats && controller.inviteMode)
         (
           widget.state.roomSession.seatRequests.isEmpty
