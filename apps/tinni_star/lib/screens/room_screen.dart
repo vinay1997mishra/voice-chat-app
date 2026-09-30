@@ -2957,15 +2957,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             children: [
               const Row(
                 children: [
-                  ShiningIcon(
-                    icon: Icons.sports_esports_rounded,
-                    color: Colors.white,
-                    size: 28,
-                    boxSize: 48,
-                    glow: 0.45,
-                  ),
+                  _ReferenceGameLogo(size: 48),
                   SizedBox(width: 10),
-                  Text('Game Panel', style: TextStyle(color: RoyalPalette.gold, fontSize: 20, fontWeight: FontWeight.w900)),
+                  Text(
+                    'Game Center',
+                    style: TextStyle(
+                      color: RoyalPalette.gold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -3640,15 +3641,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         () {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomLuckyBag();
-          });
-        },
-      ),
-      (
-        'Game',
-        Icons.sports_esports_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _showGamePanel();
           });
         },
       ),
@@ -5555,6 +5547,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 shouldPlay: widget.state.roomControls.shouldPlayEffect,
               ),
             ),
+            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+              Positioned(
+                key: const Key('room-game-floating-position'),
+                right: 8,
+                bottom: 138,
+                child: Semantics(
+                  button: true,
+                  label: 'Game Center',
+                  child: InkResponse(
+                    key: const Key('room-game-floating-button'),
+                    radius: 32,
+                    onTap: _showGamePanel,
+                    child: const _ReferenceGameLogo(size: 54),
+                  ),
+                ),
+              ),
             if (_fruitJackpotOpen)
               Positioned(
                 left: 4,
@@ -5582,6 +5590,56 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceGameLogo extends StatelessWidget {
+  const _ReferenceGameLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x665D3BFF),
+              blurRadius: 18,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Color(0x55FF4FD8),
+              blurRadius: 11,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFFF7CF2),
+                Color(0xFFB56CFF),
+                Color(0xFF6F7BFF),
+              ],
+            ).createShader(bounds),
+            child: Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.78,
+              color: Colors.white,
+            ),
+          ),
         ),
       ),
     );
