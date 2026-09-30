@@ -220,6 +220,20 @@ void main() {
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
+    final lockTool = find.byKey(const Key('room-tool-lock'));
+    await tester.ensureVisible(lockTool);
+    await tester.tap(lockTool);
+    await tester.pumpAndSettle();
+    expect(find.text('Exactly 5 digits'), findsOneWidget);
+    final passwordField = tester.widget<TextField>(
+      find.byType(TextField).last,
+    );
+    expect(passwordField.maxLength, 5);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('room-tool-effects')));
     await tester.pumpAndSettle();
 
