@@ -4413,6 +4413,55 @@ export class AppDirectoryStore extends DurableObject {
     return memory;
   }
 
+  profileStats(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId || !this.getUserById(userId)) throw new Error("User not found");
+
+    const following = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE follower_id=?", userId,
+    ).toArray()[0]?.count || 0);
+    const followers = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE target_id=?", userId,
+    ).toArray()[0]?.count || 0);
+    const sent = Number(this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(total_cost),0) AS total FROM gift_transactions WHERE sender_id=?", userId,
+    ).toArray()[0]?.total || 0);
+    const received = Number(this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(total_cost),0) AS total FROM gift_transactions WHERE receiver_id=?", userId,
+    ).toArray()[0]?.total || 0);
+
+    const levelFor = (settingKey, points) => {
+      const row = this.ctx.storage.sql.exec(
+        "SELECT value_json FROM owner_settings WHERE key=? LIMIT 1", settingKey,
+      ).toArray()[0];
+      let thresholds = [];
+      try {
+        const parsed = JSON.parse(String(row?.value_json || "[]"));
+        thresholds = Array.isArray(parsed)
+          ? parsed.map((value)=>Math.max(0,Number(value||0))).filter(Number.isFinite)
+          : [];
+      } catch {}
+      thresholds.sort((a,b)=>a-b);
+      let level = 0;
+      for (const threshold of thresholds) {
+        if (points >= threshold) level += 1;
+        else break;
+      }
+      const next = level < thresholds.length ? thresholds[level] : null;
+      return { level, next_threshold: next, thresholds };
+    };
+
+    return {
+      user_id:userId,
+      following_count:following,
+      followers_count:followers,
+      lifetime_sent_coins:Math.max(0,sent),
+      lifetime_received_coins:Math.max(0,received),
+      wealth:levelFor("wealth_level_thresholds", Math.max(0,sent)),
+      charm:levelFor("charm_level_thresholds", Math.max(0,received)),
+    };
+  }
+
   taskState(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const user = this.ctx.storage.sql.exec(
