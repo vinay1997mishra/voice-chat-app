@@ -22,6 +22,7 @@ class RoomSummary {
     this.ownerFlagEmoji,
     this.themeId = 'royal-dark',
     this.themeAsset,
+    this.seatThemeId = 'royal-gold',
   });
 
   final String id;
@@ -43,6 +44,7 @@ class RoomSummary {
   final String? ownerFlagEmoji;
   final String themeId;
   final String? themeAsset;
+  final String seatThemeId;
 
   bool createdWithin(
     Duration age, {
@@ -74,6 +76,7 @@ class RoomSummary {
     String? ownerFlagEmoji,
     String? themeId,
     String? themeAsset,
+    String? seatThemeId,
   }) =>
       RoomSummary(
         id: id,
@@ -96,6 +99,7 @@ class RoomSummary {
         ownerFlagEmoji: ownerFlagEmoji ?? this.ownerFlagEmoji,
         themeId: themeId ?? this.themeId,
         themeAsset: themeAsset ?? this.themeAsset,
+        seatThemeId: seatThemeId ?? this.seatThemeId,
       );
 }
 
@@ -260,6 +264,7 @@ class DiscoveryService {
     String? privacy,
     bool? closed,
     String? photoDataUrl,
+    String? seatThemeId,
   }) async {
     if (authToken.trim().isEmpty) throw StateError('Login session is required');
     final request = await _httpClient.patchUrl(apiBase.replace(path: '/rooms/settings'));
@@ -277,6 +282,7 @@ class DiscoveryService {
     if (privacy != null) body['privacy'] = privacy;
     if (closed != null) body['closed'] = closed;
     if (photoDataUrl != null) body['photo_data_url'] = photoDataUrl;
+    if (seatThemeId != null) body['seat_theme_id'] = seatThemeId;
     request.write(jsonEncode(body));
     final response = await request.close();
     final data = await _readJson(response);
@@ -661,6 +667,7 @@ class DiscoveryService {
       ownerFlagEmoji: row['owner_flag_emoji']?.toString(),
       themeId: row['theme_id']?.toString() ?? 'royal-dark',
       themeAsset: row['theme_asset']?.toString(),
+      seatThemeId: row['seat_theme_id']?.toString() ?? 'royal-gold',
     );
   }
 
