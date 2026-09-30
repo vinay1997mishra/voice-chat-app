@@ -201,6 +201,7 @@ class _MedalOfHonorScreenState extends State<MedalOfHonorScreen> {
                     ),
                 ],
               ),
+        ),
       ),
     );
   }
@@ -330,6 +331,7 @@ class _RewardRecordsScreenState extends State<RewardRecordsScreen> {
                       );
                     },
                   ),
+        ),
       ),
     );
   }
@@ -430,7 +432,8 @@ class _TaskScreenState extends State<TaskScreen> {
         elevation: 0,
         title: const Text('Task'),
       ),
-      body: RefreshIndicator(
+      body: _MineSubpageBackground(
+        child: RefreshIndicator(
         onRefresh: _load,
         child: loading
             ? const Center(child: CircularProgressIndicator(color: _mineText))
@@ -1801,7 +1804,8 @@ class _HostDataScreenState extends State<HostDataScreen> {
         elevation: 0,
         title: const Text('Host data'),
       ),
-      body: RefreshIndicator(
+      body: _MineSubpageBackground(
+        child: RefreshIndicator(
         onRefresh: _load,
         child: loading
             ? const Center(child: CircularProgressIndicator(color: _mineText))
