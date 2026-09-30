@@ -1147,6 +1147,14 @@ export class AppDirectoryStore extends DurableObject {
     }
   }
 
+  _ensureEconomyMigrations() {
+    // The Durable Object constructor already creates the economy/family
+    // tables and applies additive migrations before any RPC method runs.
+    // Feature methods call this guard defensively; keep it as an idempotent
+    // compatibility hook so those calls never crash the Worker.
+    return true;
+  }
+
   _nextUserId() {
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const values = new Uint32Array(1);
