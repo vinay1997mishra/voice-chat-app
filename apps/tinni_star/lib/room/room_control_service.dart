@@ -93,6 +93,7 @@ class RoomControlService {
   int? luckyNumber;
   String themeId = 'royal-dark';
   String? customThemeAsset;
+  String seatThemeId = 'royal-gold';
   String roomMode = 'friends';
 
   void configureForRoom(String ownerUserId) {
@@ -312,6 +313,20 @@ class RoomControlService {
     'night-blue',
     'rose-gold',
   ];
+
+  static const List<String> availableSeatThemes = <String>[
+    'royal-gold',
+    'neon-blue',
+    'rose-glow',
+  ];
+
+  String setSeatTheme(String value) {
+    if (!availableSeatThemes.contains(value)) {
+      throw ArgumentError.value(value, 'value', 'Unknown mic theme');
+    }
+    seatThemeId = value;
+    return seatThemeId;
+  }
 
   String setTheme(String value) {
     if (!availableThemes.contains(value)) {
