@@ -778,7 +778,7 @@ Feedback:
 
 Lock / Unlock:
 - Uses the existing owner-only password room flow.
-- Password remains 5–7 digits and the existing failed-attempt rules remain unchanged.
+- Password is exactly 5 numeric digits; any 00000–99999 value is valid, and the existing failed-attempt rules remain unchanged.
 
 Top room bar:
 - Share icon is visible beside the existing room actions.
@@ -845,7 +845,7 @@ Tinni Star must match the approved reference interaction for these room surfaces
 - Editable room DP, Room Name and Notice.
 - Room Name max 24 characters.
 - Notice max 24 characters.
-- Room Lock shows Public / Private choice and preserves Tinni's existing 5–7 digit password/private-room behavior.
+- Room Lock shows Public / Private choice and uses Tinni's exact 5-digit numeric password/private-room behavior.
 - `Block List` opens the room blacklist.
 - `Save` persists supported room fields through the backend.
 
