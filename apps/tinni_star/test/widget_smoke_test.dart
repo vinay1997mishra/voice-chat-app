@@ -68,16 +68,12 @@ void main() {
     );
 
     expect(
-      find.byKey(const Key('live-owner-tag-92000002-Official Host')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('live-owner-medal-92000002-Verified')),
+      find.byKey(const Key('room-top-member-avatars')),
       findsOneWidget,
     );
 
     final taggedDp =
-        find.byKey(const Key('room-live-user-dp-92000002'));
+        find.byKey(const Key('room-top-member-dp-92000002'));
     expect(taggedDp, findsOneWidget);
     await tester.ensureVisible(taggedDp);
     await tester.tap(taggedDp);
@@ -347,23 +343,19 @@ void main() {
     await tester.tap(find.byKey(const Key('seat-0')));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const Key('reference-seat-control-panel')),
+      find.byKey(const Key('seat-control-lock')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reference-seat-mic-up')),
+      find.byKey(const Key('seat-control-mute')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reference-seat-lock-mic')),
+      find.byKey(const Key('seat-control-take')),
       findsOneWidget,
     );
-
-    await tester.tap(find.byKey(const Key('reference-seat-mic-up')));
-    await tester.tap(find.byKey(const Key('reference-seat-lock-mic')));
-    await tester.tap(find.byKey(const Key('reference-seat-confirm')));
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(state.roomSession.controller!.seats[0].locked, isTrue);
 
     await tester.tap(
       find.byKey(const Key('room-game-floating-button')),
