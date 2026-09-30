@@ -494,21 +494,6 @@ void main() {
     expect(find.byKey(const Key('room-type-panel')), findsOneWidget);
     expect(find.text('Cover'), findsOneWidget);
 
-    await tester.tap(find.text('Cover'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-type-cover')), findsOneWidget);
-    expect(find.byKey(const Key('room-type-cover-open')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('room-type-cover-open')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('room-tool-room-type')));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Setting'));
     await tester.pumpAndSettle();
     expect(
@@ -517,6 +502,15 @@ void main() {
     );
     expect(find.text('Free mic'), findsOneWidget);
     expect(find.text('Only managers can speak'), findsOneWidget);
+
+    await tester.tap(find.text('Cover'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-type-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-type-cover-open')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-type-cover-open')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
   });
 
 }
