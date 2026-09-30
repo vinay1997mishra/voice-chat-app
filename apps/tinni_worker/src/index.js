@@ -1989,6 +1989,15 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/account/stats" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false, error:"Unauthorized" }, 401);
+      return json({
+        ok:true,
+        stats: await getAppDirectoryStore(env).profileStats(appSession.user.user_id),
+      });
+    }
+
     if (url.pathname === "/tasks" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
