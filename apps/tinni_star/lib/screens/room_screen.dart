@@ -5697,63 +5697,104 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               presenceMember!,
                               seatIndexHint: index,
                             ),
-                    child: AnimatedAvatarFrame(
-                      size: seatDiameter,
-                      frameId: presenceMember?.equippedFrameId,
-                      child: Container(
-                    width: seatDiameter,
-                    height: seatDiameter,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF10161C),
-                      image: avatar == null
-                          ? null
-                          : DecorationImage(
-                              image: avatar,
-                              fit: BoxFit.cover,
+                    child: seat.locked && !occupied
+                        ? Center(
+                            child: Icon(
+                              Icons.lock_rounded,
+                              color: const Color(0xFFFFD76A),
+                              size: seatDiameter * 0.48,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x66FFD76A),
+                                  blurRadius: 10,
+                                ),
+                              ],
                             ),
-                      border: Border.all(
-                        color: _seatThemeAccent.withValues(
-                          alpha: occupied ? 1 : 0.78,
-                        ),
-                        width: occupied ? 3 : 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _seatThemeAccent.withValues(
-                            alpha: occupied ? 0.34 : 0.18,
-                          ),
-                          blurRadius: compact ? 6 : 12,
-                        ),
-                      ],
-                    ),
-                    child: avatar != null
-                        ? null
-                        : Center(
-                            child: seat.locked && !occupied
-                                ? Icon(
-                                    Icons.lock_rounded,
-                                    color: FeaturePalette.safety,
-                                    size: seatDiameter * 0.42,
-                                  )
-                                : occupied
-                                    ? Text(
-                                        displayName.characters.first,
-                                        style: TextStyle(
-                                          color: FeaturePalette.social,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: seatDiameter * 0.34,
+                          )
+                        : AnimatedAvatarFrame(
+                            size: seatDiameter,
+                            frameId: presenceMember?.equippedFrameId,
+                            child: Container(
+                              width: seatDiameter,
+                              height: seatDiameter,
+                              padding: EdgeInsets.all(
+                                compact ? 2.4 : 3.2,
+                              ),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0x22000000),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  width: compact ? 1.1 : 1.5,
+                                ),
+                                boxShadow: const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x775D39FF),
+                                    blurRadius: 12,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0x221A0C33),
+                                  image: avatar == null
+                                      ? null
+                                      : DecorationImage(
+                                          image: avatar,
+                                          fit: BoxFit.cover,
                                         ),
-                                      )
-                                    : Icon(
-                                        Icons.star_rounded,
-                                        color: _seatThemeAccent,
-                                        size: seatDiameter * 0.42,
+                                  border: Border.all(
+                                    color: const Color(0x99D9C8FF),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: avatar != null
+                                    ? null
+                                    : Center(
+                                        child: occupied
+                                            ? Text(
+                                                displayName.characters.first,
+                                                style: TextStyle(
+                                                  color:
+                                                      RoyalPalette.cream,
+                                                  fontWeight:
+                                                      FontWeight.w900,
+                                                  fontSize:
+                                                      seatDiameter * 0.32,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.weekend_rounded,
+                                                color: const Color(
+                                                  0xFFF3EAFF,
+                                                ),
+                                                size:
+                                                    seatDiameter * 0.44,
+                                              ),
                                       ),
+                              ),
+                            ),
                           ),
+                  if (seat.roomMuted)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: compact ? 14 : 18,
+                        height: compact ? 14 : 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE73D4F),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.mic_off_rounded,
+                          size: compact ? 9 : 12,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-                    ),
-                  ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
                     IgnorePointer(
                       child: Text(
@@ -5770,19 +5811,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             SizedBox(height: compact ? 2 : 4),
             Text(
-              occupied
-                  ? displayName
-                  : seat.roomMuted
-                      ? 'Muted'
-                      : 'Mic ' + (index + 1).toString(),
+              occupied ? displayName : 'No.' + (index + 1).toString(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: occupied ? RoyalPalette.cream : RoyalPalette.muted,
+                color: RoyalPalette.cream,
                 fontSize: compact ? 7.5 : 9.5,
                 height: 1.0,
-                fontWeight: occupied ? FontWeight.w800 : FontWeight.w500,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              key: Key('seat-heart-' + index.toString()),
+              height: compact ? 9 : 11,
+              constraints: BoxConstraints(
+                minWidth: compact ? 28 : 34,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8D72B8).withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '💜0',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFFE9DFFF),
+                  fontSize: compact ? 5.5 : 7,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             if (occupied &&
