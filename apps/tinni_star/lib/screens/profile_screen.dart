@@ -28,12 +28,24 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final List<OwnerTag> _ownerTags = <OwnerTag>[];
   final List<OwnerTag> _ownerMedals = <OwnerTag>[];
+  Map<String, dynamic> _accountStats = const <String, dynamic>{};
 
   @override
   void initState() {
     super.initState();
     _loadOwnerTags();
     _loadEconomyState();
+    _loadAccountStats();
+  }
+
+  Future<void> _loadAccountStats() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final stats = await widget.state.backend.accountStats(account.authToken);
+      if (!mounted) return;
+      setState(() => _accountStats = stats);
+    } catch (_) {}
   }
 
   Future<void> _loadEconomyState() async {
@@ -487,7 +499,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final avatar = _mineAvatarProvider(account.avatarDataUrl);
-    final followCount = widget.state.social.following.length;
+    final followCount = (_accountStats['following_count'] as num?)?.toInt() ??
+        widget.state.social.following.length;
+    final fansCount = (_accountStats['followers_count'] as num?)?.toInt() ?? 0;
+    final charmPoints =
+        (_accountStats['lifetime_received_coins'] as num?)?.toInt() ?? 0;
+    final wealth = _accountStats['wealth'] is Map
+        ? Map<String, dynamic>.from(_accountStats['wealth'] as Map)
+        : const <String, dynamic>{};
+    final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
     final vipLevel = widget.state.identity.vip.level;
 
     return Scaffold(
@@ -644,9 +664,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Follow',
                   ),
                   const _MineCountDivider(),
-                  const _MineCountStat(value: '0', label: 'Fans'),
+                  _MineCountStat(value: fansCount.toString(), label: 'Fans'),
                   const _MineCountDivider(),
-                  const _MineCountStat(value: '0', label: 'Charm'),
+                  _MineCountStat(value: charmPoints.toString(), label: 'Charm'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -761,10 +781,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _mineStatusCard(
                     key: const Key('mine-wealth-level-card'),
                     title: 'Wealth level',
-                    subtitle: 'LV.0',
+                    subtitle: 'LV.' + wealthLevel.toString(),
                     colors: const [Color(0xFF24B85B), Color(0xFF087A38)],
                     icon: Icons.diamond_rounded,
-                    onTap: () => _openMineInfoPage('Wealth level'),
+                    onTap: () => _openMineScreen(
+                      WealthLevelScreen(state: widget.state),
+                    ),
                   ),
                 ],
               ),
@@ -825,20 +847,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-host-data'),
                   icon: Icons.monitor_heart_rounded,
                   label: 'Host data',
-                  onTap: () {
-                    if (widget.state.wallet.canTransferSettlement) {
-                      _showSettlementTransfer();
-                    } else {
-                      _openMineInfoPage(
-                        'Host data',
-                        items: const [
-                          'Host data',
-                          'Settlement',
-                          'Earnings',
-                        ],
-                      );
-                    }
-                  },
+                  onTap: () => _openMineScreen(
+                    HostDataScreen(
+                      state: widget.state,
+                      onTransfer: _showSettlementTransfer,
+                    ),
+                  ),
                 ),
               ]),
               const SizedBox(height: 9),
