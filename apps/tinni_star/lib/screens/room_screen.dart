@@ -3903,11 +3903,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Feedback',
-        Icons.feedback_rounded,
-        _showRoomFeedback,
-      ),
-      (
         controls.settings.visibility == RoomVisibility.publicRoom
             ? 'Lock'
             : 'Unlock',
@@ -3916,15 +3911,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : Icons.lock_open_rounded,
         () {
           _toggleRoomLock();
-        },
-      ),
-      (
-        'Gift',
-        Icons.card_giftcard_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _showGiftSheet();
-          });
         },
       ),
       (
@@ -3937,48 +3923,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Moderation',
-        Icons.shield_rounded,
-        () {
-          Future<void>.delayed(Duration.zero, () {
-            if (mounted) _showRoomModerationCenter();
-          });
-        },
-      ),
-      (
         controls.soundEnabled ? 'Sound On' : 'Sound Off',
         controls.soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
         () {
           final enabled = controls.toggleSound();
           _snack('Room sound ${enabled ? "enabled" : "muted"}.');
-        },
-      ),
-      (
-        controls.roomMode == 'friends' ? 'Friends Mode' : 'Event Mode',
-        Icons.meeting_room_rounded,
-        () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can change room mode.');
-            return;
-          }
-          final mode = controls.toggleRoomMode();
-          widget.state.discovery.editRoom(
-            widget.room.id,
-            partyMode: mode == 'event' ? 'Event hosting mode' : 'Friends-making Party',
-          );
-          _snack(mode == 'event' ? 'Event hosting mode enabled.' : 'Friends-making Party mode enabled.');
-        },
-      ),
-      (
-        controls.eventActive ? 'Stop Event' : 'Launch Event',
-        Icons.celebration_rounded,
-        () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can launch events.');
-            return;
-          }
-          final active = controls.toggleEvent();
-          _snack(active ? 'Room event launched.' : 'Room event stopped.');
         },
       ),
       if (_canModerateSeats && controller.inviteMode)
