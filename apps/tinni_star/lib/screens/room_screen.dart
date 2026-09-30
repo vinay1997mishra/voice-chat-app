@@ -236,7 +236,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 autofocus: true,
                 obscureText: true,
                 maxLength: 5,
-                inputFormatters: const <TextInputFormatter>[
+                inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly,
                 ],
                 keyboardType: TextInputType.number,
@@ -306,7 +306,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 autofocus: true,
                 obscureText: true,
                 maxLength: 5,
-                inputFormatters: const <TextInputFormatter>[
+                inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly,
                 ],
                 keyboardType: TextInputType.number,
@@ -2900,6 +2900,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  // ignore: unused_element
   void _showRoomModerationCenter() {
     final currentUserId = widget.state.auth.current?.userId;
     final members = widget.state.roomSession.liveMembers
@@ -3380,6 +3381,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  // ignore: unused_element
   Future<void> _changeRoomCover() async {
     if (!_isRoomOwner) {
       _snack('Only the room owner can change the room cover.');
@@ -3489,6 +3491,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  // ignore: unused_element
   void _showRoomFeedback() {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final isOwnRoom = ownerId == widget.state.auth.current?.userId;
@@ -5273,6 +5276,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  // ignore: unused_element
   void _showSeatRequests() {
     if (!_canModerateSeats) {
       _snack('Only the room owner or room admin can review seat requests.');
