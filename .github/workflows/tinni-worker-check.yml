@@ -2,7 +2,7 @@ name: Tinni Worker Check
 
 on:
   push:
-    branches: [main]
+    branches: [main, build/tinni-star-0.5.23-41]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
