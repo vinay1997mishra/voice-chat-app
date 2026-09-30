@@ -2975,6 +2975,173 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _showRoomEffects() {
+    final controls = widget.state.roomControls;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          Widget effectSwitch({
+            required Key key,
+            required String title,
+            required String subtitle,
+            required IconData icon,
+            required bool value,
+            required bool Function() toggle,
+          }) {
+            return SwitchListTile(
+              key: key,
+              value: value,
+              activeThumbColor: RoyalPalette.gold,
+              secondary: ShiningIcon(
+                icon: icon,
+                color: const Color(0xFFFF4FA3),
+                size: 20,
+                boxSize: 38,
+                glow: 0.34,
+              ),
+              title: Text(
+                title,
+                style: const TextStyle(
+                  color: RoyalPalette.cream,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: Text(
+                subtitle,
+                style: const TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 11,
+                ),
+              ),
+              onChanged: (_) {
+                toggle();
+                setSheetState(() {});
+                if (mounted) setState(() {});
+              },
+            );
+          }
+
+          return SafeArea(
+            key: const Key('room-effects-panel'),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Row(
+                      children: [
+                        ShiningIcon(
+                          icon: Icons.auto_awesome_rounded,
+                          color: Color(0xFFFF4FA3),
+                          size: 24,
+                          boxSize: 44,
+                          glow: 0.42,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Effects',
+                            style: TextStyle(
+                              color: RoyalPalette.gold,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Choose exactly which room effects you want to see or hear.',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 18),
+                      children: [
+                        effectSwitch(
+                          key: const Key('effect-gift-effects'),
+                          title: 'Gift Effects',
+                          subtitle: 'Gift animation and full-screen gift effects.',
+                          icon: Icons.card_giftcard_rounded,
+                          value: controls.giftEffectsEnabled,
+                          toggle: controls.toggleGiftEffects,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-lucky-gift'),
+                          title: 'Lucky Gift Effect',
+                          subtitle: 'Special Lucky Gift animation and celebration.',
+                          icon: Icons.auto_awesome_rounded,
+                          value: controls.luckyGiftEffectEnabled,
+                          toggle: controls.toggleLuckyGiftEffect,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-gift-sound'),
+                          title: 'Gift Sound',
+                          subtitle: 'Sound played with supported gift effects.',
+                          icon: Icons.volume_up_rounded,
+                          value: controls.giftSoundEnabled,
+                          toggle: controls.toggleGiftSound,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-gift-fly-in'),
+                          title: 'Gift Fly-in',
+                          subtitle: 'Gift entry/fly-in animation in the room.',
+                          icon: Icons.flight_takeoff_rounded,
+                          value: controls.giftFlyInEnabled,
+                          toggle: controls.toggleGiftFlyIn,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-car-effects'),
+                          title: 'Car Effects',
+                          subtitle: 'Vehicle/car room-entry animations.',
+                          icon: Icons.directions_car_filled_rounded,
+                          value: controls.carEffectsEnabled,
+                          toggle: controls.toggleCarEffects,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-gift-bubble'),
+                          title: 'Gift Bubble',
+                          subtitle: 'Gift bubble/pop-up notices in the room.',
+                          icon: Icons.chat_bubble_rounded,
+                          value: controls.giftBubbleEnabled,
+                          toggle: controls.toggleGiftBubble,
+                        ),
+                        effectSwitch(
+                          key: const Key('effect-rocket-draw-notice'),
+                          title: 'Rocket Draw Notice',
+                          subtitle: 'Rocket draw/result notices and rocket effects.',
+                          icon: Icons.rocket_launch_rounded,
+                          value: controls.rocketDrawNoticeEnabled,
+                          toggle: controls.toggleRocketDrawNotice,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
@@ -3020,6 +3187,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         () {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomModerationCenter();
+          });
+        },
+      ),
+      (
+        'Effects',
+        Icons.auto_awesome_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showRoomEffects();
           });
         },
       ),
@@ -4933,6 +5109,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: EffectOverlay(
                 queue: widget.state.effects,
                 enabled: widget.state.roomControls.effectsEnabled,
+                shouldPlay: widget.state.roomControls.shouldPlayEffect,
               ),
             ),
             if (_fruitJackpotOpen)
