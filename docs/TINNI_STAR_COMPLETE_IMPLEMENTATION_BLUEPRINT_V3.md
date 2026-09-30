@@ -2506,3 +2506,13 @@ Game / Rocket stay outside the 4-box.
 - Only the room owner can change the room cover/theme.
 - The old standalone `Cover` and old standalone `Room Theme` 4-box entries must not return.
 
+
+
+### Public Screen typing rule — LOCKED
+
+- `Public Screen ON`: every user in the room can use the typing/chat area, unless that individual ID is chat-banned by room moderation.
+- `Public Screen OFF`: only the **Room Owner** and **Room Admins** can type/send in the room typing area.
+- Normal users, seated users, hosts/family roles, and audience users do not gain typing permission while Public Screen is off unless they are also Room Owner/Admin.
+- When Public Screen is off for a normal user, the typing field is disabled and shows `Owner/Admin only`.
+- The existing per-user chat-ban remains stronger than Public Screen permission: a chat-banned Owner/Admin cannot type until the ban is removed.
+
