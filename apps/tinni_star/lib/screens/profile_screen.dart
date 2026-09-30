@@ -7,7 +7,6 @@ import '../app/tinni_state.dart';
 import '../community/family_service.dart';
 import '../identity/owner_tag.dart';
 import '../infra/app_backend_service.dart';
-import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
 import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
@@ -780,14 +779,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-host-data'),
                   icon: Icons.monitor_heart_rounded,
                   label: 'Host data',
-                  onTap: () => _openMineInfoPage(
-                    'Host data',
-                    items: const [
-                      'Host data',
-                      'Settlement',
-                      'Earnings',
-                    ],
-                  ),
+                  onTap: () {
+                    if (widget.state.wallet.canTransferSettlement) {
+                      _showSettlementTransfer();
+                    } else {
+                      _openMineInfoPage(
+                        'Host data',
+                        items: const [
+                          'Host data',
+                          'Settlement',
+                          'Earnings',
+                        ],
+                      );
+                    }
+                  },
                 ),
               ]),
               const SizedBox(height: 9),
@@ -893,238 +898,3 @@ class _MineCountDivider extends StatelessWidget {
 }
 
 
-class _OwnerTagBadge extends StatelessWidget {
-  const _OwnerTagBadge({
-    required this.tag,
-    this.medal = false,
-  });
-
-  final OwnerTag tag;
-  final bool medal;
-
-  Color get _color {
-    final value = int.tryParse(tag.colorHex.replaceFirst('#', ''), radix: 16);
-    return Color(0xFF000000 | (value ?? 0xFFD54F));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _color;
-    return Container(
-      key: Key(
-        (medal ? 'profile-owner-medal-' : 'profile-owner-tag-') + tag.name,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.28),
-            blurRadius: 8,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (medal) ...[
-            Icon(
-              Icons.workspace_premium_rounded,
-              size: 12,
-              color: color,
-            ),
-            const SizedBox(width: 3),
-          ],
-          Text(
-            tag.name,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FamilyTagBadge extends StatelessWidget {
-  const _FamilyTagBadge({required this.state});
-
-  final TinniState state;
-
-  Color get _color {
-    switch (state.family.visualTier) {
-      case FamilyVisualTier.emerald:
-        return const Color(0xFF0E8A62);
-      case FamilyVisualTier.sapphire:
-        return const Color(0xFF155FA8);
-      case FamilyVisualTier.amethyst:
-        return const Color(0xFF833FB0);
-      case FamilyVisualTier.royalGold:
-        return const Color(0xFFD49B14);
-      case FamilyVisualTier.bronze:
-        return const Color(0xFF7A5515);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const Key('profile-family-tag'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_color.withValues(alpha: 0.68), _color],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color.withValues(alpha: 0.95)),
-        boxShadow: [
-          BoxShadow(
-            color: _color.withValues(alpha: 0.35),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Text(
-        (state.family.tag ?? 'Family') + ' • ' + state.family.levelLabel,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 9,
-        ),
-      ),
-    );
-  }
-}
-
-class _GoldBadge extends StatelessWidget {
-  const _GoldBadge(this.text, {required this.color});
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.30),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w800,
-          fontSize: 10,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoyalPanel(
-      gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(color: RoyalPalette.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MineTile extends StatelessWidget {
-  const _MineTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoyalPanel(
-      padding: const EdgeInsets.all(8),
-      gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.15),
-              border: Border.all(
-                color: color.withValues(alpha: 0.75),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.32),
-                  blurRadius: 12,
-                ),
-              ],
-            ),
-            child: ShiningIcon(
-              icon: icon,
-              color: color,
-              size: 24,
-              boxSize: 42,
-              glow: 0.34,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
