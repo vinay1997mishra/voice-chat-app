@@ -2454,7 +2454,6 @@ Shine rule:
 
 The room 4-box must contain these active entries only:
 - Room Type
-- Cover
 - Music
 - Blacklist
 - Effects
@@ -2492,4 +2491,18 @@ Game / Rocket stay outside the 4-box.
   - Only managers can speak
 - The old standalone Room Settings sheet is removed.
 - Room Type keeps its Mic Types and Mic Theme tabs; the Setting tab is the single settings surface.
+
+
+
+### Room Type Cover placement — LOCKED
+
+- `Cover` is not a separate 4-box tile.
+- `Room Type` contains four tabs:
+  - Mic Types
+  - Cover
+  - Mic Theme
+  - Setting
+- `Room Type → Cover` opens the existing `Room Cover / Theme` selector.
+- Only the room owner can change the room cover/theme.
+- The old standalone `Cover` and old standalone `Room Theme` 4-box entries must not return.
 
