@@ -1478,6 +1478,372 @@ class _PropsScreenState extends State<PropsScreen> {
   }
 }
 
+class WealthLevelScreen extends StatefulWidget {
+  const WealthLevelScreen({super.key, required this.state});
+  final TinniState state;
+
+  @override
+  State<WealthLevelScreen> createState() => _WealthLevelScreenState();
+}
+
+class _WealthLevelScreenState extends State<WealthLevelScreen> {
+  bool loading = true;
+  String? error;
+  Map<String, dynamic> stats = const <String, dynamic>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final value = await widget.state.backend.accountStats(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        stats = value;
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  String _compact(int value) {
+    if (value >= 1000000000) {
+      return (value / 1000000000).toStringAsFixed(1) + 'B';
+    }
+    if (value >= 1000000) {
+      return (value / 1000000).toStringAsFixed(1) + 'M';
+    }
+    if (value >= 1000) {
+      return (value / 1000).toStringAsFixed(1) + 'K';
+    }
+    return value.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wealth = stats['wealth'] is Map
+        ? Map<String, dynamic>.from(stats['wealth'] as Map)
+        : const <String, dynamic>{};
+    final level = (wealth['level'] as num?)?.toInt() ?? 0;
+    final sent = (stats['lifetime_sent_coins'] as num?)?.toInt() ?? 0;
+    final next = (wealth['next_threshold'] as num?)?.toInt();
+
+    return Scaffold(
+      key: const Key('wealth-level-screen'),
+      backgroundColor: _mineBg,
+      appBar: AppBar(
+        backgroundColor: _mineBg,
+        foregroundColor: _mineText,
+        elevation: 0,
+        title: const Text('Wealth level'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2ECF67), Color(0xFF0D7F3D)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.diamond_rounded,
+                          color: Colors.white,
+                          size: 44,
+                        ),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'LV.' + level.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              'Lifetime sending: ' + _compact(sent) + ' coins',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Card(
+                    color: Colors.white,
+                    child: ListTile(
+                      title: const Text('Next level'),
+                      subtitle: Text(
+                        next == null
+                            ? 'Highest configured level reached'
+                            : _compact(next) + ' lifetime sending coins required',
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: Text(
+                      'Wealth level follows the level thresholds configured by the Tinni Star Owner Panel. '
+                      'Sending total is calculated from real gift transactions.',
+                      style: TextStyle(color: _mineMuted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class HostDataScreen extends StatefulWidget {
+  const HostDataScreen({
+    super.key,
+    required this.state,
+    this.onTransfer,
+  });
+
+  final TinniState state;
+  final Future<void> Function()? onTransfer;
+
+  @override
+  State<HostDataScreen> createState() => _HostDataScreenState();
+}
+
+class _HostDataScreenState extends State<HostDataScreen> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> transfers = const <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.wallet(account.authToken),
+        widget.state.backend.settlementTransfers(account.authToken),
+      ]);
+      widget.state.wallet.applyRemote(results[0]);
+      if (!mounted) return;
+      setState(() {
+        transfers = List<Map<String, dynamic>>.from(results[1] as List);
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  String _usd(int cents) => '\
+  const SignOutAction._();
+
+  static Future<void> run(BuildContext context, TinniState state) async {
+    final account = state.auth.current;
+    if (account == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out'),
+        content: const Text('Sign out from this Tinni Star account?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await state.backend.logout(account.authToken);
+    } catch (_) {
+      // Local sign-out still proceeds if the network is temporarily unavailable.
+    }
+    await state.roomSession.close();
+    await state.push.unregister();
+    await state.authPersistence?.clear();
+    state.profile.clear();
+    state.auth.forcedLogout();
+
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => LoginScreen(state: state)),
+      (_) => false,
+    );
+  }
+}
+ + (cents / 100).toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context) {
+    final wallet = widget.state.wallet;
+    final roleText = wallet.isHost
+        ? 'Host'
+        : wallet.isAgency
+            ? 'Agency'
+            : wallet.isBd
+                ? 'BD'
+                : 'Not enrolled';
+
+    return Scaffold(
+      key: const Key('host-data-screen'),
+      backgroundColor: _mineBg,
+      appBar: AppBar(
+        backgroundColor: _mineBg,
+        foregroundColor: _mineText,
+        elevation: 0,
+        title: const Text('Host data'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
+                  Card(
+                    color: Colors.white,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.badge_rounded),
+                          title: const Text('Role'),
+                          trailing: Text(
+                            roleText,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          title: const Text('Host diamonds'),
+                          trailing: Text(wallet.diamonds.toString()),
+                        ),
+                        ListTile(
+                          title: const Text('Diamond value'),
+                          trailing: Text(_usd(wallet.diamondUsdCents)),
+                        ),
+                        ListTile(
+                          title: const Text('Commission balance'),
+                          trailing: Text(_usd(wallet.commissionUsdCents)),
+                        ),
+                        ListTile(
+                          title: const Text('Withdrawable / transferable'),
+                          trailing: Text(
+                            _usd(wallet.withdrawableUsdCents),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (wallet.canTransferSettlement && widget.onTransfer != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: FilledButton.icon(
+                        key: const Key('host-data-transfer'),
+                        onPressed: () async {
+                          await widget.onTransfer!();
+                          await _load();
+                        },
+                        icon: const Icon(Icons.send_rounded),
+                        label: const Text('Transfer settlement'),
+                      ),
+                    ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Settlement transfer history',
+                    style: TextStyle(
+                      color: _mineText,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (transfers.isEmpty)
+                    const Card(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                          child: Text(
+                            'No settlement transfers yet',
+                            style: TextStyle(color: _mineMuted),
+                          ),
+                        ),
+                      ),
+                    ),
+                  for (final row in transfers)
+                    Card(
+                      color: Colors.white,
+                      child: ListTile(
+                        leading: const Icon(Icons.payments_rounded),
+                        title: Text(
+                          _usd((row['usd_cents'] as num?)?.toInt() ?? 0),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(
+                          'To ID ' +
+                              (row['recipient_user_id']?.toString() ?? '') +
+                              ' • ' +
+                              (row['recipient_role']
+                                      ?.toString()
+                                      .replaceAll('_', ' ') ??
+                                  '') +
+                              '\n' +
+                              _dateText(row['created_at']),
+                        ),
+                        isThreeLine: true,
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
 class SignOutAction {
   const SignOutAction._();
 
