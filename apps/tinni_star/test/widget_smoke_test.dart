@@ -247,4 +247,156 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+
+  testWidgets(
+      'reference room seats game rocket and room info surfaces',
+      (tester) async {
+    final state = TinniState(
+      runtime: FunctionPackRuntime(
+        signatureVerifier: const DevelopmentSignatureVerifier(),
+      ),
+    );
+    final account = attachTestAccount(state);
+    state.discovery.rooms.add(
+      RoomSummary(
+        id: account.userId,
+        title: 'Reference Room',
+        country: account.countryCode,
+        countryName: account.countryName,
+        flagEmoji: account.flagEmoji,
+        online: 1,
+        seatCount: 15,
+        createdAt: DateTime.now(),
+        ownerId: account.userId,
+        ownerName: account.displayName,
+        ownerAvatarDataUrl: account.avatarDataUrl,
+        ownerFlagEmoji: account.flagEmoji,
+        announcement: 'Welcome notice',
+      ),
+    );
+
+    await tester.pumpWidget(TinniStarApp(state: state));
+    await tester.pumpAndSettle();
+
+    final roomCard = find.byKey(Key('room-card-' + account.userId));
+    await tester.ensureVisible(roomCard);
+    await tester.tap(roomCard);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('seat-heart-0')), findsOneWidget);
+    expect(
+      find.byKey(const Key('room-game-floating-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-rocket-floating-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('seat-0')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('reference-seat-control-panel')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-seat-mic-up')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-seat-lock-mic')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('reference-seat-mic-up')));
+    await tester.tap(find.byKey(const Key('reference-seat-lock-mic')));
+    await tester.tap(find.byKey(const Key('reference-seat-confirm')));
+    await tester.pumpAndSettle();
+    expect(state.roomSession.controller!.seats[0].locked, isTrue);
+
+    await tester.tap(
+      find.byKey(const Key('room-game-floating-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('room-game-center-panel')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-game-center-profile-card')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('game-center-fruit-jackpot')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('game-center-fruit-party')),
+      findsOneWidget,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('room-rocket-floating-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-rocket-panel')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-title-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('reference-room-info-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('Welcome notice'), findsOneWidget);
+    expect(
+      find.byKey(const Key('reference-room-members-row')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-room-setup-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('reference-room-members-row')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('reference-room-members-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Administrator'), findsOneWidget);
+    expect(find.text('Members'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-title-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('reference-room-setup-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Room Setup'), findsOneWidget);
+    expect(
+      find.byKey(const Key('reference-room-name-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-room-notice-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-room-block-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-room-setup-save')),
+      findsOneWidget,
+    );
+  });
+
 }
