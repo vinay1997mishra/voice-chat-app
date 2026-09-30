@@ -252,6 +252,48 @@ class AppBackendService {
     await _request('POST', '/app/logout', token, body: const <String, dynamic>{});
   }
 
+  Future<Map<String, dynamic>> userTagsAndMedals(
+    String token,
+    String userId,
+  ) async {
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final uri = apiBase.replace(
+      path: '/app-user/tags',
+      queryParameters: <String, String>{'user_id': userId},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load medals');
+    }
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> tasks(String token) async {
+    final data = await _request('GET', '/tasks', token);
+    final raw = data['tasks'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> claimTask(
+    String token,
+    String taskId,
+  ) async {
+    return _request(
+      'POST',
+      '/tasks/claim',
+      token,
+      body: <String, dynamic>{'task_id': taskId},
+    );
+  }
+
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
