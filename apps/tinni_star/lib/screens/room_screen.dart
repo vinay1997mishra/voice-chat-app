@@ -442,6 +442,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _currentRoomRole == RoomRole.owner ||
       _currentRoomRole == RoomRole.admin;
 
+  bool get _canTypeInRoom {
+    final userId = widget.state.auth.current?.userId;
+    if (userId == null) return false;
+    return widget.state.roomControls.canTypeInRoom(userId);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
@@ -3991,7 +3997,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             return;
           }
           final enabled = controls.togglePublicScreen();
-          _snack(enabled ? 'Public screen enabled.' : 'Public screen disabled.');
+          if (!enabled && !_canTypeInRoom) {
+            chat.clear();
+          }
+          _snack(
+            enabled
+                ? 'Public Screen on: everyone can type.'
+                : 'Public Screen off: only room owner/admin can type.',
+          );
         },
       ),
       (
@@ -6266,14 +6279,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     SizedBox(
                       width: MediaQuery.sizeOf(context).width * 0.28,
                       child: TextField(
+                        key: const Key('room-chat-field'),
                         controller: chat,
                         enabled:
-                            !widget.state.roomSession.moderationChatBanned,
+                            !widget.state.roomSession.moderationChatBanned &&
+                            _canTypeInRoom,
                         decoration: InputDecoration(
                           hintText:
                               widget.state.roomSession.moderationChatBanned
                                   ? 'Chat banned'
-                                  : 'Chat',
+                                  : !_canTypeInRoom
+                                      ? 'Owner/Admin only'
+                                      : 'Chat',
                           isDense: true,
                           contentPadding:
                               const EdgeInsets.fromLTRB(10, 10, 8, 10),
@@ -6283,7 +6300,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             _snack('Room owner/admin has chat banned this ID.');
                             return;
                           }
-                          controller.sendMessage(chat.text);
+                          if (!_canTypeInRoom) {
+                            _snack(
+                              'Public Screen is off. Only room owner/admin can type.',
+                            );
+                            return;
+                          }
+                          final value = chat.text.trim();
+                          if (value.isEmpty) return;
+                          controller.sendMessage(value);
                           chat.clear();
                         },
                       ),
