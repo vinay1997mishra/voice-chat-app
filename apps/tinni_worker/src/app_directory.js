@@ -2329,15 +2329,32 @@ export class AppDirectoryStore extends DurableObject {
         starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
-      case "entry-new": return this.ownerCatalogCreate("entry", data.name, {
-        asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
-        order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
-        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
-        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
-      });
+      case "vehicle-new":
+      case "entry-new":
+      case "ring-new":
+      case "bubble-new":
+      case "profile-background-new": {
+        const kindByAction = {
+          "vehicle-new": "vehicle",
+          "entry-new": "entry",
+          "ring-new": "ring",
+          "bubble-new": "bubble",
+          "profile-background-new": "profile_background",
+        };
+        return this.ownerCatalogCreate(kindByAction[action], data.name, {
+          asset_url: String(data.asset_url || ""),
+          price: Math.max(0, Number(data.price || data.coin_price || 0)),
+          duration_days: Math.max(0, Number(data.duration_days || 0)),
+          order: Number(data.order || 0),
+          countries: Array.isArray(data.countries) ? data.countries : [],
+          starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+          ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
+        });
+      }
       case "frame-new": return this.ownerCatalogCreate("frame", data.name, {
         asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
         price: Math.max(0, Number(data.price || data.coin_price || 0)),
+        duration_days: Math.max(0, Number(data.duration_days || 0)),
         order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
         starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
