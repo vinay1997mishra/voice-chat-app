@@ -717,6 +717,28 @@ Important:
 - Personal effect filtering must not alter gift payment, gift delivery, room state, rank, VIP state, or other users' rendering.
 - This is a presentation preference only.
 
+
+### Room 4-box Effects panel — LOCKED
+
+The room 4-box / grid tools panel includes an **Effects** entry.
+Opening Effects shows independent self-scoped toggles for:
+- Gift Effects
+- Lucky Gift Effect
+- Gift Sound
+- Gift Fly-in
+- Car Effects
+- Gift Bubble
+- Rocket Draw Notice
+
+Rules:
+- Each option can be enabled/disabled independently.
+- These controls affect only the current user's room-view/audio experience; they do not silently change another user's settings.
+- The existing master Block Effects / Allow Effects control remains available as the overall visual-effect master switch.
+- Hide Notice / Show Notice remains available as the general room-notice master switch.
+- Gift, Lucky Gift, car/vehicle entry, gift bubble, and rocket effect playback must respect the corresponding toggle when their effect event is identified.
+- Gift sound playback must respect Gift Sound and the room sound master control.
+
+
 ## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
 
 - VIP levels.
