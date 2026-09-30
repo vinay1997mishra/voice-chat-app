@@ -4315,103 +4315,689 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showRoomIdentityCard() {
     final account = widget.state.auth.current;
     if (account == null) return;
-    var refreshKey = 0;
+    final room = _roomSnapshot;
+    final ownerId = room.ownerId ?? room.id;
+    final ownerName = room.ownerName ??
+        (ownerId == account.userId ? account.displayName : 'Room Owner');
+    final ownerAvatarValue = room.ownerAvatarDataUrl ??
+        (ownerId == account.userId ? account.avatarDataUrl : null);
+
+    ImageProvider? ownerAvatar;
+    if (ownerAvatarValue != null &&
+        ownerAvatarValue.startsWith('data:image/')) {
+      try {
+        ownerAvatar = MemoryImage(
+          base64Decode(ownerAvatarValue.split(',').last),
+        );
+      } catch (_) {
+        ownerAvatar = null;
+      }
+    }
+
+    final liveMembers = widget.state.roomSession.liveMembers;
+    final memberCount = liveMembers.isEmpty ? 1 : liveMembers.length;
+
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => FutureBuilder<List<Map<String, dynamic>>>(
-          key: ValueKey<int>(refreshKey),
-          future: Future.wait(<Future<Map<String, dynamic>>>[
-            widget.state.discovery.roomFollow(authToken: account.authToken, roomId: widget.room.id),
-            widget.state.discovery.roomMembership(authToken: account.authToken, roomId: widget.room.id),
-          ]),
-          builder: (context, snapshot) {
-            final follow = snapshot.data?.elementAtOrNull(0) ?? const <String, dynamic>{};
-            final membership = snapshot.data?.elementAtOrNull(1) ?? const <String, dynamic>{};
-            final following = follow['following'] == true;
-            final member = membership['is_member'] == true;
-            final present = (follow['present_follower_count'] as num? ?? 0).toInt();
-            final followers = (follow['follower_count'] as num? ?? 0).toInt();
-            final memberCount = (membership['member_count'] as num? ?? 0).toInt();
-            final memberLimit = membership['member_limit'];
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: const Color(0xFF241033),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        key: const Key('reference-room-info-sheet'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  radius: 29,
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.meeting_room_rounded,
+                          color: RoyalPalette.gold,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  _roomTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '🏅 ' + widget.room.id,
+                    style: const TextStyle(
+                      color: Color(0xFFFFD45A),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                trailing: _isRoomOwner
+                    ? IconButton(
+                        key: const Key('reference-room-setup-button'),
+                        tooltip: 'Room Setup',
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          Future<void>.delayed(Duration.zero, () {
+                            if (mounted) _showReferenceRoomSetup();
+                          });
+                        },
+                        icon: const Icon(
+                          Icons.settings_outlined,
+                          color: RoyalPalette.cream,
+                          size: 30,
+                        ),
+                      )
+                    : null,
+              ),
+              const Divider(color: Color(0x334C3759)),
+              ListTile(
+                key: const Key('reference-room-members-row'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Members:' + memberCount.toString(),
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: CircleAvatar(
+                      radius: 17,
+                      backgroundColor: const Color(0xFF171019),
+                      backgroundImage: ownerAvatar,
+                      child: ownerAvatar == null
+                          ? const Icon(
+                              Icons.person_rounded,
+                              color: RoyalPalette.cream,
+                              size: 17,
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: RoyalPalette.cream,
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Future<void>.delayed(Duration.zero, () {
+                    if (mounted) _showReferenceRoomMembers();
+                  });
+                },
+              ),
+              const Divider(color: Color(0x334C3759)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Notice',
+                  style: TextStyle(
+                    color: RoyalPalette.cream.withValues(alpha: 0.94),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _roomAnnouncement.isEmpty
+                      ? 'No notice'
+                      : _roomAnnouncement,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: ownerAvatar,
+                  child: ownerAvatar == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  ownerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Row(
                   children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: RoyalPalette.panel2,
-                        child: const Icon(Icons.meeting_room_rounded, color: RoyalPalette.gold),
-                      ),
-                      title: Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
-                      subtitle: Text(
-                        'Room ID: ' + widget.room.id + '  •  ' + present.toString() + '/' + followers.toString() + ' followers present',
-                        style: const TextStyle(color: RoyalPalette.muted),
-                      ),
-                    ),
                     Text(
-                      'Members ' + memberCount.toString() + (memberLimit == null ? '' : '/' + memberLimit.toString()) +
-                          ' • Room Lv.' + (membership['room_level']?.toString() ?? '1'),
-                      style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w800),
+                      '🏅 ' + ownerId,
+                      style: const TextStyle(
+                        color: Color(0xFFFFD45A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              try {
-                                await widget.state.discovery.setRoomFollow(
-                                  authToken: account.authToken,
-                                  roomId: widget.room.id,
-                                  following: !following,
-                                );
-                                setSheetState(() => refreshKey++);
-                              } catch (error) {
-                                _snack(error.toString().replaceFirst('Bad state: ', ''));
-                              }
-                            },
-                            icon: Icon(following ? Icons.favorite_rounded : Icons.favorite_border_rounded),
-                            label: Text(following ? 'Unfollow' : 'Follow'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: (!following && !member)
-                                ? null
-                                : () async {
-                                    try {
-                                      await widget.state.discovery.setRoomMembership(
-                                        authToken: account.authToken,
-                                        roomId: widget.room.id,
-                                        member: !member,
-                                      );
-                                      setSheetState(() => refreshKey++);
-                                    } catch (error) {
-                                      _snack(error.toString().replaceFirst('Bad state: ', ''));
-                                    }
-                                  },
-                            icon: Icon(member ? Icons.person_remove_rounded : Icons.person_add_rounded),
-                            label: Text(member ? 'Leave Member' : 'Become Member'),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    IconButton(
+                      key: const Key('reference-room-copy-owner-id'),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: ownerId),
+                        );
+                        _snack('Copied successfully.');
+                      },
+                      icon: const Icon(
+                        Icons.copy_rounded,
+                        size: 16,
+                        color: RoyalPalette.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      room.ownerFlagEmoji ?? account.flagEmoji,
+                      style: const TextStyle(fontSize: 15),
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReferenceRoomMembers() {
+    final room = _roomSnapshot;
+    final ownerId = room.ownerId ?? room.id;
+    final members = widget.state.roomSession.liveMembers;
+    final admins = members
+        .where((member) => member.userId == ownerId || member.isAdmin)
+        .toList(growable: false);
+    final regularMembers = members
+        .where((member) => member.userId != ownerId && !member.isAdmin)
+        .toList(growable: false);
+
+    Widget memberTile(RoomPresenceMember member, {required bool admin}) {
+      ImageProvider? avatar;
+      final data = member.avatarDataUrl;
+      if (data != null && data.startsWith('data:image/')) {
+        try {
+          avatar = MemoryImage(base64Decode(data.split(',').last));
+        } catch (_) {
+          avatar = null;
+        }
+      }
+      return ListTile(
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF171019),
+          backgroundImage: avatar,
+          child: avatar == null
+              ? Text(
+                  member.displayName.isEmpty
+                      ? '?'
+                      : member.displayName.characters.first.toUpperCase(),
+                  style: const TextStyle(color: RoyalPalette.cream),
+                )
+              : null,
+        ),
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: RoyalPalette.cream,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          'ID ' + member.userId,
+          style: const TextStyle(color: RoyalPalette.muted),
+        ),
+        trailing: admin
+            ? Text(
+                member.userId == ownerId ? 'Owner' : 'Admin',
+                style: const TextStyle(
+                  color: Color(0xFFFFD45A),
+                  fontWeight: FontWeight.w800,
+                ),
+              )
+            : null,
+      );
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF241033),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => DefaultTabController(
+        length: 2,
+        child: SafeArea(
+          key: const Key('reference-room-members-panel'),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.44,
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                const Text(
+                  'Room Members',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const TabBar(
+                  indicatorColor: Color(0xFFB52DFF),
+                  labelColor: RoyalPalette.cream,
+                  unselectedLabelColor: RoyalPalette.muted,
+                  tabs: [
+                    Tab(text: 'Administrator'),
+                    Tab(text: 'Members'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      admins.isEmpty
+                          ? ListView(
+                              children: [
+                                ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        const Color(0xFF171019),
+                                    backgroundImage: _roomPhotoProvider,
+                                    child: _roomPhotoProvider == null
+                                        ? const Icon(
+                                            Icons.person_rounded,
+                                            color: RoyalPalette.cream,
+                                          )
+                                        : null,
+                                  ),
+                                  title: Text(
+                                    room.ownerName ?? 'Room Owner',
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'ID ' + ownerId,
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                    ),
+                                  ),
+                                  trailing: const Text(
+                                    'Owner',
+                                    style: TextStyle(
+                                      color: Color(0xFFFFD45A),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView(
+                              children: [
+                                for (final member in admins)
+                                  memberTile(member, admin: true),
+                              ],
+                            ),
+                      regularMembers.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No members',
+                                style: TextStyle(
+                                  color: RoyalPalette.muted,
+                                ),
+                              ),
+                            )
+                          : ListView(
+                              children: [
+                                for (final member in regularMembers)
+                                  memberTile(member, admin: false),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showReferenceRoomSetup() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can open Room Setup.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final nameController = TextEditingController(text: _roomTitle);
+    final noticeController =
+        TextEditingController(text: _roomAnnouncement);
+    var pendingPhoto = _roomPhotoDataUrl;
+    var wantsPrivate =
+        widget.state.roomControls.settings.visibility ==
+            RoomVisibility.privateRoom;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            ImageProvider? pendingPhotoProvider;
+            if (pendingPhoto != null &&
+                pendingPhoto!.startsWith('data:image/')) {
+              try {
+                pendingPhotoProvider = MemoryImage(
+                  base64Decode(pendingPhoto!.split(',').last),
+                );
+              } catch (_) {
+                pendingPhotoProvider = null;
+              }
+            }
+
+            Widget lockChoice({
+              required String label,
+              required bool selected,
+              required VoidCallback onTap,
+            }) {
+              return InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: onTap,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        selected
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_off_rounded,
+                        color: selected
+                            ? const Color(0xFF9F2DFF)
+                            : RoyalPalette.muted,
+                        size: 21,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: selected
+                              ? RoyalPalette.cream
+                              : RoyalPalette.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D062C),
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF1D062C),
+                title: const Text(
+                  'Room Setup',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                children: [
+                  Center(
+                    child: GestureDetector(
+                      key: const Key('reference-room-setup-photo'),
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 68,
+                          maxWidth: 900,
+                          maxHeight: 900,
+                        );
+                        if (image == null) return;
+                        final bytes = await image.readAsBytes();
+                        final mime =
+                            image.mimeType?.startsWith('image/') == true
+                                ? image.mimeType!
+                                : 'image/jpeg';
+                        final dataUrl = 'data:' +
+                            mime +
+                            ';base64,' +
+                            base64Encode(bytes);
+                        if (dataUrl.length > 450000) {
+                          _snack(
+                            'Room cover is too large. Choose a smaller image.',
+                          );
+                          return;
+                        }
+                        setPageState(() {
+                          pendingPhoto = dataUrl;
+                        });
+                      },
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: const Color(0xFF171019),
+                        backgroundImage: pendingPhotoProvider,
+                        child: pendingPhotoProvider == null
+                            ? const Icon(
+                                Icons.add_a_photo_rounded,
+                                color: RoyalPalette.cream,
+                                size: 28,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Room Name',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-name-field'),
+                    controller: nameController,
+                    maxLength: 24,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Notice',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-notice-field'),
+                    controller: noticeController,
+                    maxLength: 24,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text(
+                        'Room Lock',
+                        style: TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const Spacer(),
+                      lockChoice(
+                        label: 'Public',
+                        selected: !wantsPrivate,
+                        onTap: () =>
+                            setPageState(() => wantsPrivate = false),
+                      ),
+                      const SizedBox(width: 6),
+                      lockChoice(
+                        label: 'Private',
+                        selected: wantsPrivate,
+                        onTap: () =>
+                            setPageState(() => wantsPrivate = true),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    key: const Key('reference-room-block-list'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: const Color(0xFF2A2330),
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      color: RoyalPalette.cream,
+                    ),
+                    title: const Text(
+                      'Block List',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.muted,
+                    ),
+                    onTap: () => _showRoomBlacklist(pageContext),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton(
+                    key: const Key('reference-room-setup-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B08FF),
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 15),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final notice = noticeController.text.trim();
+                      if (name.isEmpty) {
+                        _snack('Room name is required.');
+                        return;
+                      }
+
+                      try {
+                        final photoChanged =
+                            pendingPhoto != _roomPhotoDataUrl;
+                        final updated =
+                            await widget.state.discovery.updateRoomRemote(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          title: name,
+                          announcement: notice,
+                          photoDataUrl:
+                              photoChanged ? pendingPhoto : null,
+                        );
+                        _roomTitleOverride = updated.title;
+                        _roomPhotoOverride = updated.photoDataUrl;
+                        _roomAnnouncementOverride =
+                            updated.announcement;
+
+                        final currentlyPrivate =
+                            widget.state.roomControls.settings.visibility ==
+                                RoomVisibility.privateRoom;
+                        if (wantsPrivate != currentlyPrivate) {
+                          await _toggleRoomLock();
+                        }
+
+                        if (mounted) setState(() {});
+                        if (pageContext.mounted) {
+                          Navigator.pop(pageContext);
+                        }
+                        _snack('Room setup saved.');
+                      } catch (error) {
+                        _snack(
+                          error
+                              .toString()
+                              .replaceFirst('Bad state: ', ''),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
           },
         ),
       ),
     );
+
+    nameController.dispose();
+    noticeController.dispose();
   }
 
   void _showRoomSettings() {
