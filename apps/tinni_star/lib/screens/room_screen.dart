@@ -5976,6 +5976,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         appBar: AppBar(
           backgroundColor: _roomBackgroundColor,
           title: InkWell(
+            key: const Key('room-title-button'),
             onTap: _showRoomIdentityCard,
             borderRadius: BorderRadius.circular(10),
             child: Column(
