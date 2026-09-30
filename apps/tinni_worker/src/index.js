@@ -1952,6 +1952,25 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/tasks" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, tasks: await getAppDirectoryStore(env).taskState(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/tasks/claim" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).claimTask(
+          appSession.user.user_id, body.task_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to claim task") }, 400);
+      }
+    }
+
     if (url.pathname === "/account/preferences" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
