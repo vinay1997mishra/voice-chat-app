@@ -160,6 +160,7 @@ function rowToRoom(row) {
     photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
     theme_id: row.theme_id ? String(row.theme_id) : "royal-dark",
     theme_asset: row.theme_asset ? String(row.theme_asset) : null,
+    seat_theme_id: row.seat_theme_id ? String(row.seat_theme_id) : "royal-gold",
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
     owner_name: row.owner_name ? String(row.owner_name) : null,
@@ -277,6 +278,7 @@ export class AppDirectoryStore extends DurableObject {
         photo_data_url TEXT,
         theme_id TEXT NOT NULL DEFAULT 'royal-dark',
         theme_asset TEXT,
+        seat_theme_id TEXT NOT NULL DEFAULT 'royal-gold',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -957,6 +959,7 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
       "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
+      "ALTER TABLE app_rooms ADD COLUMN seat_theme_id TEXT NOT NULL DEFAULT 'royal-gold'",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
@@ -6683,14 +6686,18 @@ export class AppDirectoryStore extends DurableObject {
     const privacy = input.privacy === undefined ? String(room.privacy || "public") : String(input.privacy || "").trim().toLowerCase();
     const closed = input.closed === undefined ? Number(room.closed || 0) === 1 : input.closed === true;
     const photoDataUrl = input.photo_data_url === undefined ? room.photo_data_url : (input.photo_data_url ? String(input.photo_data_url) : null);
+    const seatThemeId = input.seat_theme_id === undefined
+      ? String(room.seat_theme_id || "royal-gold")
+      : String(input.seat_theme_id || "").trim();
     if (!title) throw new Error("Room name is required");
     if (!Number.isInteger(seatCount) || ![8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42].includes(seatCount)) throw new Error("Room capacity must be 8-42 seats");
     if (!["public", "private", "invite"].includes(privacy)) throw new Error("privacy must be public, private or invite");
     if (photoDataUrl && (photoDataUrl.length > MAX_AVATAR_DATA_LENGTH || !photoDataUrl.startsWith("data:image/"))) throw new Error("Room photo is invalid");
+    if (!["royal-gold", "neon-blue", "rose-glow"].includes(seatThemeId)) throw new Error("Mic theme is invalid");
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      `UPDATE app_rooms SET title = ?, announcement = ?, category = ?, country_code = ?, country_name = ?, flag_emoji = ?, seat_count = ?, party_mode = ?, privacy = ?, closed = ?, photo_data_url = ?, updated_at = ? WHERE id = ?`,
-      title, announcement, category, countryCode, countryName, flagEmoji, seatCount, partyMode, privacy, closed ? 1 : 0, photoDataUrl, now, roomId,
+      `UPDATE app_rooms SET title = ?, announcement = ?, category = ?, country_code = ?, country_name = ?, flag_emoji = ?, seat_count = ?, party_mode = ?, privacy = ?, closed = ?, photo_data_url = ?, seat_theme_id = ?, updated_at = ? WHERE id = ?`,
+      title, announcement, category, countryCode, countryName, flagEmoji, seatCount, partyMode, privacy, closed ? 1 : 0, photoDataUrl, seatThemeId, now, roomId,
     );
     const updated = this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name, u.avatar_data_url AS owner_avatar_data_url, u.flag_emoji AS owner_flag_emoji FROM app_rooms r JOIN app_users u ON u.user_id = r.owner_id WHERE r.id = ? LIMIT 1`, roomId,
