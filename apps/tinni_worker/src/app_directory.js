@@ -4954,6 +4954,11 @@ export class AppDirectoryStore extends DurableObject {
   purchaseUniqueId(userIdValue, publicIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const requestedId = String(publicIdValue || "").trim();
+    if (!/^\d{4,8}$/.test(requestedId)) {
+      throw new Error(
+        "Name ID cannot be purchased or claimed by a user; only the Owner Master Panel can assign it",
+      );
+    }
     const offer = this.ctx.storage.sql.exec(
       "SELECT * FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) AND enabled = 1 LIMIT 1",
       requestedId,

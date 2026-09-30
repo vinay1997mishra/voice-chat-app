@@ -2270,11 +2270,19 @@ export default {
       const rows = getAppDirectoryStore(env).ctx.storage.sql.exec(
         "SELECT public_id,price_coins,duration_days,assigned_user_id,enabled,updated_at FROM owner_unique_ids WHERE enabled = 1 ORDER BY LENGTH(public_id), public_id"
       ).toArray();
-      return json({ ok: true, unique_ids: rows.map((row) => ({
-        public_id: String(row.public_id), price_coins: Number(row.price_coins || 0),
-        duration_days: Number(row.duration_days || 0), permanent: Number(row.duration_days || 0) === 0,
-        available: !row.assigned_user_id, updated_at: Number(row.updated_at || 0),
-      })) });
+      return json({
+        ok: true,
+        unique_ids: rows
+          .filter((row) => /^\d{4,8}$/.test(String(row.public_id || "")))
+          .map((row) => ({
+            public_id: String(row.public_id),
+            price_coins: Number(row.price_coins || 0),
+            duration_days: Number(row.duration_days || 0),
+            permanent: Number(row.duration_days || 0) === 0,
+            available: !row.assigned_user_id,
+            updated_at: Number(row.updated_at || 0),
+          })),
+      });
     }
 
     if (url.pathname === "/unique-ids/purchase" && request.method === "POST") {
@@ -4364,6 +4372,19 @@ export default {
 
     if (url.pathname === "/api/owner/action" && request.method === "POST") {
       const body = await request.json().catch(() => ({}));
+      const actionName = String(body.action || "");
+      const actionData = body.data && typeof body.data === "object" ? body.data : {};
+      const requestedNameId =
+        (actionName === "id-change" &&
+          /[A-Za-z_]/.test(String(actionData.new_id || ""))) ||
+        ((actionName === "unique-id-new" || actionName === "unique-id-price") &&
+          /[A-Za-z_]/.test(String(actionData.public_id || "")));
+      if (requestedNameId && !ownerOnly(session)) {
+        return json({
+          ok: false,
+          error: "Name ID can only be created or assigned from the Owner Master Panel",
+        }, 403);
+      }
       const actionPermissions = {
         "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
