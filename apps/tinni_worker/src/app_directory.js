@@ -4844,12 +4844,12 @@ export class AppDirectoryStore extends DurableObject {
       "INSERT INTO user_inventory(user_id,item_id,item_kind,acquired_at,expires_at) VALUES(?,?,?,?,?)",
       recipientId,itemId,kind,now,expiresAt,
     );
-    this._createUserNotification(
+    this._notifyUser(
       recipientId,
+      "store_item_received",
       "Store gift received",
       "You received " + String(item.name || itemId) + " from ID " + senderId + ".",
-      "store_item_received",
-      senderId,
+      { source_user_id: senderId, metadata: { item_id:itemId, item_kind:kind } },
     );
     return {
       ok:true,
