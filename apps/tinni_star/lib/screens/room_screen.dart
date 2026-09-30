@@ -218,130 +218,120 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     String? errorText,
     int? attemptsRemaining,
   }) async {
-    final passwordController = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Room Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Enter the password to join this locked room.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordController,
-                autofocus: true,
-                obscureText: true,
-                maxLength: 5,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (value) {
-                  if (RegExp(r'^\d{5}$').hasMatch(value)) {
-                    Navigator.pop(dialogContext, value);
-                  }
-                },
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  helperText: 'Exactly 5 digits',
-                  errorText: errorText,
-                ),
-              ),
-              if (attemptsRemaining != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Attempts remaining: $attemptsRemaining',
-                  style: const TextStyle(
-                    color: RoyalPalette.muted,
-                    fontSize: 11,
-                  ),
-                ),
+    var passwordValue = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Room Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter the password to join this locked room.'),
+            const SizedBox(height: 12),
+            TextField(
+              autofocus: true,
+              obscureText: true,
+              maxLength: 5,
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.digitsOnly,
               ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = passwordController.text;
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              onChanged: (value) => passwordValue = value,
+              onSubmitted: (value) {
                 if (RegExp(r'^\d{5}$').hasMatch(value)) {
                   Navigator.pop(dialogContext, value);
                 }
               },
-              child: const Text('Enter'),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: 'Exactly 5 digits',
+                errorText: errorText,
+              ),
             ),
+            if (attemptsRemaining != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Attempts remaining: $attemptsRemaining',
+                style: const TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 11,
+                ),
+              ),
+            ],
           ],
         ),
-      );
-    } finally {
-      passwordController.dispose();
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (RegExp(r'^\d{5}$').hasMatch(passwordValue)) {
+                Navigator.pop(dialogContext, passwordValue);
+              }
+            },
+            child: const Text('Enter'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _promptNewRoomPassword() async {
-    final passwordController = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Lock Room'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Set a password. Users will need it to enter this room.',
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordController,
-                autofocus: true,
-                obscureText: true,
-                maxLength: 5,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Room password',
-                  helperText: 'Exactly 5 digits',
-                ),
-                onSubmitted: (value) {
-                  if (RegExp(r'^\d{5}$').hasMatch(value)) {
-                    Navigator.pop(dialogContext, value);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+    var passwordValue = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Lock Room'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set a password. Users will need it to enter this room.',
             ),
-            FilledButton(
-              onPressed: () {
-                final value = passwordController.text;
-                if (!RegExp(r'^\d{5}$').hasMatch(value)) return;
-                Navigator.pop(dialogContext, value);
+            const SizedBox(height: 12),
+            TextField(
+              autofocus: true,
+              obscureText: true,
+              maxLength: 5,
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              onChanged: (value) => passwordValue = value,
+              decoration: const InputDecoration(
+                labelText: 'Room password',
+                helperText: 'Exactly 5 digits',
+              ),
+              onSubmitted: (value) {
+                if (RegExp(r'^\d{5}$').hasMatch(value)) {
+                  Navigator.pop(dialogContext, value);
+                }
               },
-              child: const Text('Lock'),
             ),
           ],
         ),
-      );
-    } finally {
-      passwordController.dispose();
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!RegExp(r'^\d{5}$').hasMatch(passwordValue)) return;
+              Navigator.pop(dialogContext, passwordValue);
+            },
+            child: const Text('Lock'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleRoomLock() async {
