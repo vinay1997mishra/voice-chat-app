@@ -2449,3 +2449,33 @@ Shine rule:
 - A feature's glow must match its semantic color rather than falling back to generic gold.
 - Reusable `FeaturePalette`, `ShiningIcon`, and semantic `RoyalPanel.accentColor` treatments are the implementation baseline for future modules.
 - Gold remains appropriate for brand headings, royal framing, premium rank/crown contexts and the black/gold page shell.
+
+
+### Current room 4-box contents — LOCKED
+
+The room 4-box must contain these active entries only:
+- Room Type
+- Cover
+- Music
+- Blacklist
+- Effects
+- Lock / Unlock
+- Lucky Bag
+- Sound On / Off
+- Seat Requests (only when invite mode and owner/admin context allows it)
+- Lucky Number
+- Group PK
+- Public Screen / Screen On
+- Settings
+- Report
+
+The following older 4-box entries are removed and must not be re-added as duplicate tiles:
+- Gift
+- Feedback
+- Moderation
+- Friends Mode / Event Mode
+- Launch Event / Stop Event
+- separate Room Theme
+
+Game / Rocket stay outside the 4-box.
+
