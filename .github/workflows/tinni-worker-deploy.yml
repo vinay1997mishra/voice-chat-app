@@ -41,6 +41,26 @@ jobs:
         working-directory: apps/tinni_worker
         run: npm install --no-audit --no-fund
 
+      - name: Ensure premium effects R2 bucket
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: apps/tinni_worker
+        shell: bash
+        run: |
+          set -o pipefail
+          npx wrangler r2 bucket create tinni-star-effects 2>&1 | tee /tmp/tinni-r2-create.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ] && ! grep -qi "already exists" /tmp/tinni-r2-create.log; then
+            exit "$status"
+          fi
+
+      - name: Upload premium effects manifest to R2
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: apps/tinni_worker
+        run: |
+          npx wrangler r2 object put tinni-star-effects/premium/manifest.json \
+            --file assets/premium_effects_manifest.json \
+            --content-type application/json
+
       - name: Deploy Worker and Owner Panel
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker

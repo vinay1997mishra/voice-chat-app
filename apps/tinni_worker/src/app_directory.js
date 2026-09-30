@@ -1145,6 +1145,65 @@ export class AppDirectoryStore extends DurableObject {
         Date.now(),
       );
     }
+    const premiumEffects = [
+      ["frame","frame-royal-gold","Royal Gold",1],
+      ["frame","frame-pink-heart","Pink Heart",2],
+      ["frame","frame-crystal-star","Crystal Star",3],
+      ["frame","frame-crown-queen","Crown Queen",4],
+      ["frame","frame-rose-garden","Rose Garden",5],
+      ["frame","frame-angel-wings","Angel Wings",6],
+      ["frame","frame-diamond-ice-vip","Diamond Ice VIP",7],
+      ["frame","frame-flame-king-vip","Flame King VIP",8],
+      ["frame","frame-india-pride","India Pride",9],
+      ["frame","frame-winner-trophy","Winner Trophy",10],
+
+      ["profile_card","profile-card-royal-gold","Royal Gold Card",1],
+      ["profile_card","profile-card-pink-heart","Pink Heart Card",2],
+      ["profile_card","profile-card-crystal-star","Crystal Star Card",3],
+      ["profile_card","profile-card-vip-queen","VIP Queen Card",4],
+      ["profile_card","profile-card-family-leader","Family Leader Card",5],
+      ["profile_card","profile-card-host","Host Card",6],
+      ["profile_card","profile-card-agency","Agency Card",7],
+      ["profile_card","profile-card-india-pride","India Pride Card",8],
+      ["profile_card","profile-card-birthday","Birthday Card",9],
+      ["profile_card","profile-card-winner","Winner Card",10],
+
+      ["entry","entry-golden-sports-car","Golden Sports Car",1],
+      ["entry","entry-angel-wings","Angel Wings",2],
+      ["entry","entry-rose-love-castle","Rose Love Castle",3],
+      ["entry","entry-royal-lion","Royal Lion",4],
+      ["entry","entry-luxury-yacht","Luxury Yacht",5],
+      ["entry","entry-princess-castle","Princess Castle",6],
+      ["entry","entry-phoenix-fire","Phoenix Fire",7],
+      ["entry","entry-diamond-ice","Diamond Ice",8],
+      ["entry","entry-rocket-star","Rocket Star",9],
+      ["entry","entry-winner-trophy","Winner Trophy",10],
+    ];
+    for (const [kind,id,name,order] of premiumEffects) {
+      const r2Key = "premium/" + kind + "/" + id + ".webp";
+      this.ctx.storage.sql.exec(
+        `INSERT OR IGNORE INTO owner_catalog
+          (id, kind, name, data_json, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+        id,
+        kind,
+        name,
+        JSON.stringify({
+          coin_price: 0,
+          duration_days: 0,
+          order,
+          effect_style: id,
+          effect_version: 1,
+          r2_key: r2Key,
+          asset_url: "https://tinni-star-api.mishrajii7991.workers.dev/media/" + r2Key,
+          preview_mode: "procedural_4d",
+          test_release: true,
+        }),
+        Date.now(),
+        Date.now(),
+      );
+    }
+
   }
 
   _ensureEconomyMigrations() {

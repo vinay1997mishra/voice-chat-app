@@ -9,6 +9,12 @@
   "vars": {
     "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev"
   },
+  "r2_buckets": [
+    {
+      "binding": "EFFECT_MEDIA",
+      "bucket_name": "tinni-star-effects"
+    }
+  ],
   "assets": {
     "directory": "../tinni_owner_panel",
     "binding": "ASSETS",

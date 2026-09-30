@@ -1094,6 +1094,23 @@ export default {
       });
     }
 
+    if (url.pathname.startsWith("/media/") && request.method === "GET") {
+      if (!env.EFFECT_MEDIA) {
+        return new Response("Media storage is not configured", { status: 503 });
+      }
+      const key = decodeURIComponent(url.pathname.slice("/media/".length));
+      if (!key || key.includes("..")) {
+        return new Response("Invalid media key", { status: 400 });
+      }
+      const object = await env.EFFECT_MEDIA.get(key);
+      if (!object) return new Response("Not found", { status: 404 });
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      headers.set("cache-control", "public, max-age=604800, immutable");
+      return new Response(object.body, { headers });
+    }
+
     if (url.pathname === "/telemetry/analytics" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
