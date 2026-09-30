@@ -26,7 +26,6 @@ import '../ui/animated_avatar_frame.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
-import 'ranking_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -4196,80 +4195,330 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final account = widget.state.auth.current;
     if (account == null) return;
     var period = 'day';
+
+    String periodLabel(String value) {
+      switch (value) {
+        case 'week':
+          return 'Weekly';
+        case 'month':
+          return 'Monthly';
+        default:
+          return 'Daily';
+      }
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * 0.72,
-            child: Column(
-              children: [
-                const Text('Room Sending Ranking', style: TextStyle(color: RoyalPalette.gold, fontSize: 20, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 10),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'day', label: Text('Day')),
-                    ButtonSegment(value: 'week', label: Text('Week')),
-                    ButtonSegment(value: 'month', label: Text('Month')),
-                  ],
-                  selected: <String>{period},
-                  onSelectionChanged: (value) => setSheetState(() => period = value.first),
+        builder: (sheetContext, setSheetState) {
+          final currentUserId = account.userId;
+          final currentName = account.displayName;
+          ImageProvider? currentAvatar;
+          final avatarData = account.avatarDataUrl;
+          if (avatarData != null && avatarData.startsWith('data:image/')) {
+            try {
+              currentAvatar =
+                  MemoryImage(base64Decode(avatarData.split(',').last));
+            } catch (_) {
+              currentAvatar = null;
+            }
+          }
+
+          return FractionallySizedBox(
+            heightFactor: 0.58,
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              key: const Key('reference-room-rank-panel'),
+              decoration: const BoxDecoration(
+                color: Color(0xFF211034),
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(18),
                 ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: FutureBuilder<Map<String, dynamic>>(
-                    future: widget.state.discovery.roomGiftRanking(
-                      authToken: account.authToken,
-                      roomId: widget.room.id,
-                      period: period,
-                    ),
-                    builder: (context, snapshot) {
-                      final raw = snapshot.data?['ranking'];
-                      final rows = raw is List ? raw.whereType<Map>().toList() : const <Map>[];
-                      if (snapshot.connectionState == ConnectionState.waiting && rows.isEmpty) {
-                        return const Center(child: CircularProgressIndicator(color: RoyalPalette.gold));
-                      }
-                      if (rows.isEmpty) return const Center(child: Text('No sending yet.', style: TextStyle(color: RoyalPalette.muted)));
-                      return ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
-                        itemCount: rows.length,
-                        itemBuilder: (context, index) {
-                          final row = rows[index];
-                          final rank = (row['rank'] as num? ?? index + 1).toInt();
-                          final name = row['name']?.toString() ?? 'User';
-                          final userId = row['user_id']?.toString() ?? '';
-                          final sending = (row['sending'] as num? ?? 0).toInt();
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: rank <= 3 ? RoyalPalette.deepGold : RoyalPalette.panel2,
-                              child: Text(rank.toString(), style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 52,
+                      child: Row(
+                        children: [
+                          for (final entry in const <(String, String)>[
+                            ('day', 'Daily'),
+                            ('week', 'Weekly'),
+                            ('month', 'Monthly'),
+                          ])
+                            Expanded(
+                              child: InkWell(
+                                key: Key(
+                                  'room-rank-tab-' + entry.$1,
+                                ),
+                                onTap: () => setSheetState(
+                                  () => period = entry.$1,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    entry.$2,
+                                    style: TextStyle(
+                                      color: period == entry.$1
+                                          ? Colors.white
+                                          : const Color(0xFF8B789D),
+                                      fontSize: 13,
+                                      fontWeight: period == entry.$1
+                                          ? FontWeight.w900
+                                          : FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                            title: Text(name, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w800)),
-                            subtitle: Text('ID ' + userId, style: const TextStyle(color: RoyalPalette.muted)),
-                            trailing: Text(sending.toString(), style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900)),
-                            onTap: () {
-                              for (final member in widget.state.roomSession.liveMembers) {
-                                if (member.userId == userId) {
-                                  Navigator.pop(sheetContext);
-                                  _openFullRoomProfile(member);
-                                  return;
-                                }
-                              }
-                              _snack('User ID: ' + userId);
+                        ],
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      color: Color(0x332F1D45),
+                    ),
+                    Expanded(
+                      child: FutureBuilder<Map<String, dynamic>>(
+                        future: widget.state.discovery.roomGiftRanking(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          period: period,
+                        ),
+                        builder: (context, snapshot) {
+                          final raw = snapshot.data?['ranking'];
+                          final rows = raw is List
+                              ? raw.whereType<Map>().toList()
+                              : const <Map>[];
+                          if (snapshot.connectionState ==
+                                  ConnectionState.waiting &&
+                              rows.isEmpty) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF9A57FF),
+                              ),
+                            );
+                          }
+                          if (rows.isEmpty) {
+                            return Center(
+                              child: Text(
+                                'No contributors yet',
+                                key: const Key(
+                                  'room-rank-empty',
+                                ),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.separated(
+                            padding:
+                                const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                            itemCount: rows.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 4),
+                            itemBuilder: (context, index) {
+                              final row = rows[index];
+                              final rank =
+                                  (row['rank'] as num? ?? index + 1).toInt();
+                              final name =
+                                  row['name']?.toString() ?? 'User';
+                              final userId =
+                                  row['user_id']?.toString() ?? '';
+                              final sending =
+                                  (row['sending'] as num? ?? 0).toInt();
+                              return Container(
+                                key: Key(
+                                  'room-rank-row-' +
+                                      userId +
+                                      '-' +
+                                      rank.toString(),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 3,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      child: Text(
+                                        rank.toString(),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: rank <= 3
+                                              ? const Color(0xFFFFD35C)
+                                              : const Color(0xFF8E7A9D),
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor:
+                                          const Color(0xFF120A1B),
+                                      child: Text(
+                                        name.isEmpty
+                                            ? '?'
+                                            : name.characters.first
+                                                .toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                          Text(
+                                            'ID: ' + userId,
+                                            style: const TextStyle(
+                                              color: Color(0xFF8E7A9D),
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.monetization_on_rounded,
+                                      size: 15,
+                                      color: Color(0xFFFFC83D),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      sending.toString(),
+                                      style: const TextStyle(
+                                        color: Color(0xFFFFC83D),
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
                             },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    Container(
+                      key: const Key('room-rank-self-row'),
+                      height: 58,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF190C28),
+                        border: Border(
+                          top: BorderSide(
+                            color: Color(0x333D2852),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 24,
+                            child: Text(
+                              '99',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Color(0xFF8E7A9D),
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFF120A1B),
+                            backgroundImage: currentAvatar,
+                            child: currentAvatar == null
+                                ? Text(
+                                    currentName.isEmpty
+                                        ? '?'
+                                        : currentName.characters.first
+                                            .toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  currentName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  'ID: ' + currentUserId,
+                                  style: const TextStyle(
+                                    color: Color(0xFF8E7A9D),
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            periodLabel(period),
+                            style: const TextStyle(
+                              color: Color(0xFF8E7A9D),
+                              fontSize: 9,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(
+                            Icons.monetization_on_rounded,
+                            size: 16,
+                            color: Color(0xFFFFC83D),
+                          ),
+                          const SizedBox(width: 3),
+                          const Text(
+                            '0',
+                            style: TextStyle(
+                              color: Color(0xFFFFC83D),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -5570,7 +5819,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                     ),
-                  if (seat.roomMuted)
+                  if (seat.roomMuted ||
+                      (controller.mySeat == index && controller.selfMuted) ||
+                      (presenceMember?.micMuted ?? false))
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -5767,62 +6018,68 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         backgroundColor: _roomBackgroundColor,
         appBar: AppBar(
           backgroundColor: _roomBackgroundColor,
+          titleSpacing: 8,
           title: InkWell(
             key: const Key('room-title-button'),
             onTap: _showRoomIdentityCard,
-            borderRadius: BorderRadius.circular(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_roomTitle, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
-                Text(
-                  'ID ' +
-                      widget.room.id +
-                      ' • ' +
-                      (widget.state.roomControls.roomMode == 'event'
-                          ? 'Event hosting mode'
-                          : 'Friends-making Party') +
-                      (session.connected ? ' • Connected' : ' • Connecting'),
-                  style: const TextStyle(fontSize: 10, color: RoyalPalette.muted),
-                ),
-              ],
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              key: const Key('reference-room-title-pill'),
+              constraints: const BoxConstraints(maxWidth: 238),
+              padding: const EdgeInsets.fromLTRB(5, 4, 12, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF100A19),
+                    backgroundImage: _roomPhotoProvider,
+                    child: _roomPhotoProvider == null
+                        ? const Icon(
+                            Icons.meeting_room_rounded,
+                            color: Color(0xFFD7C7FF),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _roomTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '🏅 ' + widget.room.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            IconButton(
-              key: const Key('room-sending-ranking-button'),
-              tooltip: 'Room sending',
-              onPressed: _showSendingRanking,
-              icon: const ShiningIcon(
-                icon: Icons.local_fire_department_rounded,
-                color: Color(0xFFFF8A3D),
-                size: 20,
-                boxSize: 36,
-                glow: 0.40,
-              ),
-            ),
-            IconButton(
-              key: const Key('room-rank-hall-button'),
-              tooltip: 'Rank / Hall',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => RankingScreen(
-                      state: widget.state,
-                      initialTab: 0,
-                    ),
-                  ),
-                );
-              },
-              icon: const ShiningIcon(
-                icon: Icons.leaderboard_rounded,
-                color: FeaturePalette.rank,
-                size: 20,
-                boxSize: 36,
-                glow: 0.34,
-              ),
-            ),
             IconButton(
               key: const Key('room-share-button'),
               tooltip: 'Share room',
@@ -5913,50 +6170,80 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
               child: Row(
                 children: [
-                  Chip(
-                    backgroundColor: (controller.inviteMode
-                            ? FeaturePalette.family
-                            : FeaturePalette.music)
-                        .withValues(alpha: 0.14),
-                    side: BorderSide(
-                      color: controller.inviteMode
-                          ? FeaturePalette.family
-                          : FeaturePalette.music,
-                    ),
-                    label: Text(
-                      controller.inviteMode ? 'Apply Mic' : 'Free Mic',
-                      style: TextStyle(
-                        color: controller.inviteMode
-                            ? FeaturePalette.family
-                            : FeaturePalette.music,
-                        fontWeight: FontWeight.w800,
+                  InkWell(
+                    key: const Key('room-rank-hall-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showSendingRanking,
+                    child: Container(
+                      key: const Key('reference-room-rank-pill'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Chip(
-                    backgroundColor:
-                        FeaturePalette.discover.withValues(alpha: 0.14),
-                    side: const BorderSide(
-                      color: FeaturePalette.discover,
-                    ),
-                    label: Text(
-                      controller.seats.length.toString() + ' seats',
-                      style: const TextStyle(
-                        color: FeaturePalette.discover,
-                        fontWeight: FontWeight.w800,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFC83D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Ranking',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '🪙 ' + widget.state.wallet.coins.toString(),
-                    style: const TextStyle(
-                      color: FeaturePalette.wallet,
-                      fontWeight: FontWeight.w900,
+                  InkWell(
+                    key: const Key('room-online-members-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showReferenceRoomMembers,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.group_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.state.roomSession.liveMembers.length
+                                .toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -6364,7 +6651,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                     IconButton(
                       key: const Key('room-self-mute-button'),
-                      tooltip: controller.selfMuted ? 'Self mute off' : 'Self mute on',
+                      tooltip: controller.selfMuted ? 'Unmute self' : 'Mute self',
                       iconSize: 28,
                       padding: const EdgeInsets.all(9),
                       constraints: const BoxConstraints(minWidth: 46, minHeight: 46),
