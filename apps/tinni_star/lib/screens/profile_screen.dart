@@ -17,6 +17,7 @@ import 'store_screen.dart';
 import 'recharge_screen.dart';
 import 'cp_screen.dart';
 import 'privacy_policy_screen.dart';
+import 'mine_function_screens.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -729,12 +730,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-medal-of-honor'),
                   icon: Icons.hexagon_rounded,
                   label: 'Medal of Honor',
-                  onTap: () => _openMineInfoPage(
-                    'Medal of Honor',
-                    items: [
-                      ..._ownerMedals.map((item) => item.name),
-                      if (_ownerMedals.isEmpty) 'No medals yet',
-                    ],
+                  onTap: () => _openMineScreen(
+                    MedalOfHonorScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
@@ -758,14 +755,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.auto_awesome_rounded,
                   label: 'Props',
                   onTap: () => _openMineScreen(
-                    StoreScreen(state: widget.state),
+                    PropsScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
                   key: const Key('mine-reward-records'),
                   icon: Icons.receipt_long_rounded,
                   label: 'Reward Records',
-                  onTap: () => _openMineInfoPage('Reward Records'),
+                  onTap: () => _openMineScreen(
+                    RewardRecordsScreen(state: widget.state),
+                  ),
                 ),
               ]),
               const SizedBox(height: 9),
@@ -774,7 +773,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-task'),
                   icon: Icons.task_alt_rounded,
                   label: 'Task',
-                  onTap: () => _openMineInfoPage('Task'),
+                  onTap: () => _openMineScreen(
+                    TaskScreen(state: widget.state),
+                  ),
                 ),
                 _mineMenuRow(
                   key: const Key('mine-host-data'),
@@ -823,7 +824,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   key: const Key('mine-feedback'),
                   icon: Icons.chat_bubble_rounded,
                   label: 'Feedback',
-                  onTap: () => _openMineInfoPage('Feedback'),
+                  onTap: () => _openMineScreen(
+                    FeedbackScreen(state: widget.state),
+                  ),
                 ),
                 _mineMenuRow(
                   key: const Key('mine-setting'),
