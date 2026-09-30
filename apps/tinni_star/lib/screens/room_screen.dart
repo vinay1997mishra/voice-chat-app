@@ -2972,46 +2972,322 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showGamePanel() {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: RoyalPalette.nearBlack,
+      backgroundColor: const Color(0xFF241033),
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Row(
-                children: [
-                  _ReferenceGameLogo(size: 48),
-                  SizedBox(width: 10),
-                  Text(
+        key: const Key('room-game-center-panel'),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.58,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: Text(
                     'Game Center',
                     style: TextStyle(
-                      color: RoyalPalette.gold,
-                      fontSize: 20,
+                      color: RoyalPalette.cream,
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  key: const Key('room-game-center-profile-card'),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF34233E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF6E4B7D),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 25,
+                        backgroundColor: const Color(0xFF151018),
+                        backgroundImage: _roomPhotoProvider,
+                        child: _roomPhotoProvider == null
+                            ? Text(
+                                _roomTitle.isEmpty
+                                    ? '?'
+                                    : _roomTitle.characters.first.toUpperCase(),
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _roomTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: RoyalPalette.cream,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: const LinearProgressIndicator(
+                                value: 0.15,
+                                minHeight: 6,
+                                backgroundColor: Color(0xFF1A1320),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFFFB62E),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Room Lv.' +
+                                  _roomSnapshot.roomLevel.toString() +
+                                  ' • Play Tinni games',
+                              style: const TextStyle(
+                                color: RoyalPalette.muted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '🪙 ' + widget.state.wallet.coins.toString(),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'All Games',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: GridView.count(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    childAspectRatio: 0.82,
+                    children: [
+                      _ReferenceGameTile(
+                        key: const Key('game-center-fruit-jackpot'),
+                        label: 'Fruit Jackpot',
+                        icon: Icons.casino_rounded,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          setState(() {
+                            _fruitJackpotOpen = true;
+                            _fruitPartyOpen = false;
+                          });
+                        },
+                      ),
+                      _ReferenceGameTile(
+                        key: const Key('game-center-fruit-party'),
+                        label: 'Fruit Party',
+                        icon: Icons.local_activity_rounded,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          setState(() {
+                            _fruitPartyOpen = true;
+                            _fruitJackpotOpen = false;
+                          });
+                        },
+                      ),
+                      const _ReferenceGameTile(
+                        label: 'New Game',
+                        icon: Icons.auto_awesome_rounded,
+                      ),
+                      const _ReferenceGameTile(
+                        label: 'Coming Soon',
+                        icon: Icons.lock_clock_rounded,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRocketPanel() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.76,
+        child: Container(
+          key: const Key('room-rocket-panel'),
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: <Color>[
+                Color(0xFF24134A),
+                Color(0xFF5A24A8),
+                Color(0xFF3A176E),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0xFFB779FF),
+              width: 1.1,
+            ),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Color(0x665D3BFF),
+                blurRadius: 24,
               ),
-              const SizedBox(height: 14),
-              ListTile(
-                leading: const Icon(Icons.casino_rounded, color: FeaturePalette.fruitJackpot),
-                title: const Text('Fruit Jackpot'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  setState(() { _fruitJackpotOpen = true; _fruitPartyOpen = false; });
-                },
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.help_outline_rounded,
+                      color: RoyalPalette.cream,
+                      size: 18,
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {},
+                      child: const Text(
+                        'Record',
+                        style: TextStyle(color: RoyalPalette.cream),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-rocket-close'),
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: RoyalPalette.cream,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.local_activity_rounded, color: FeaturePalette.fruitParty),
-                title: const Text('Fruit Party'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  setState(() { _fruitPartyOpen = true; _fruitJackpotOpen = false; });
-                },
+              const Expanded(
+                flex: 5,
+                child: Center(
+                  child: _ReferenceRocketLogo(size: 122),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: const <Widget>[
+                    Icon(Icons.local_fire_department_rounded,
+                        color: Color(0xFFFFE05D), size: 21),
+                    Icon(Icons.star_rounded,
+                        color: Color(0xFFFFE05D), size: 17),
+                    Icon(Icons.star_rounded,
+                        color: Color(0xFFFFE05D), size: 17),
+                    Icon(Icons.star_rounded,
+                        color: Color(0xFFFFE05D), size: 17),
+                    Icon(Icons.star_rounded,
+                        color: Color(0xFFFFE05D), size: 17),
+                    Icon(Icons.star_rounded,
+                        color: Color(0xFFFFE05D), size: 17),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: const LinearProgressIndicator(
+                    value: 0,
+                    minHeight: 12,
+                    backgroundColor: Color(0xFF241B2C),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFFFFD45A),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '0%',
+                style: TextStyle(
+                  color: Color(0xFFFFD45A),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                flex: 3,
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9A63E8).withValues(alpha: 0.42),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: GridView.count(
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    children: const <Widget>[
+                      _RocketReward(icon: Icons.rocket_launch_rounded),
+                      _RocketReward(icon: Icons.directions_car_filled_rounded),
+                      _RocketReward(icon: Icons.monetization_on_rounded),
+                      _RocketReward(icon: Icons.circle_outlined),
+                      _RocketReward(icon: Icons.workspace_premium_rounded),
+                      _RocketReward(icon: Icons.auto_awesome_rounded),
+                    ],
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Reset 14:27:49',
+                  style: TextStyle(
+                    color: Color(0xFFFFE05D),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           ),
