@@ -576,7 +576,7 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
                                   ),
                                   Text(
                                     key: const Key('family-level-tag'),
-                                    familyTag + ' • Family Lv.' + level.toString(),
+                                    familyTag + ' • Family Level ' + level.toString(),
                                     style: const TextStyle(
                                       color: FeaturePalette.family,
                                       fontWeight: FontWeight.w800,
