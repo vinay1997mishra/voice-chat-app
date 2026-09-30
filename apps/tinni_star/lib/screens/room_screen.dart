@@ -3347,10 +3347,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _showRoomBlacklist() {
+  void _showRoomBlacklist([BuildContext? hostContext]) {
     final controls = widget.state.roomControls;
     showModalBottomSheet<void>(
-      context: context,
+      context: hostContext ?? context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => StatefulBuilder(
