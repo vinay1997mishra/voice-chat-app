@@ -602,6 +602,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ],
                         ),
+                        if (widget.state.family.exists) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            key: const Key('profile-family-tag'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD665),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              (widget.state.family.tag ?? 'FM') +
+                                  ' • ' +
+                                  widget.state.family.levelLabel,
+                              style: const TextStyle(
+                                color: Color(0xFF6E5200),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -660,6 +684,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: Color(0xFFFFF0A4),
                       ),
                       const SizedBox(width: 10),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Coins',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            widget.state.wallet.coins.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
                       const Spacer(),
                       Column(
                         mainAxisAlignment: MainAxisAlignment.center,
