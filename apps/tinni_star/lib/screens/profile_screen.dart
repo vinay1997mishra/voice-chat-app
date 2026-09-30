@@ -304,52 +304,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  void _openMineInfoPage(String title, {List<String> items = const <String>[]}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: const Color(0xFFFFFBF4),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFFFFFBF4),
-            foregroundColor: const Color(0xFF3E372C),
-            elevation: 0,
-            title: Text(title),
-          ),
-          body: items.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No content yet',
-                    style: TextStyle(color: Color(0xFF8D877E)),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const Divider(
-                    height: 1,
-                    indent: 16,
-                    endIndent: 16,
-                    color: Color(0xFFEDE6D9),
-                  ),
-                  itemBuilder: (_, index) => ListTile(
-                    title: Text(
-                      items[index],
-                      style: const TextStyle(
-                        color: Color(0xFF4B463F),
-                        fontSize: 14,
-                      ),
-                    ),
-                    trailing: const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xFFB2ADA4),
-                    ),
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
 
   Widget _mineMenuRow({
     required Key key,
