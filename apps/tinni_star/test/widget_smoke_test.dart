@@ -161,7 +161,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Seat Controls'), findsNothing);
     expect(find.byKey(const Key('room-tool-room-type')), findsOneWidget);
-    expect(find.byKey(const Key('room-tool-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-cover')), findsNothing);
     expect(find.byKey(const Key('room-tool-room-theme')), findsNothing);
     expect(find.byKey(const Key('room-tool-music')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-blacklist')), findsNothing);
@@ -177,14 +177,6 @@ void main() {
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
-    await tester.tap(find.byKey(const Key('room-tool-cover')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
-    await tester.pumpAndSettle();
     final removableSong = state.ktv.addLocalSong(
       fileName: 'Wrong Song.mp3',
       sourcePath: '/phone/Music/Wrong Song.mp3',
@@ -452,7 +444,23 @@ void main() {
     await tester.tap(find.byKey(const Key('room-tool-room-type')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-type-panel')), findsOneWidget);
+    expect(find.text('Cover'), findsOneWidget);
 
+    await tester.tap(find.text('Cover'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-type-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-type-cover-open')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('room-type-cover-open')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('room-tools-grid-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('room-tool-room-type')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Setting'));
     await tester.pumpAndSettle();
     expect(
