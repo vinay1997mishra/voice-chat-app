@@ -218,38 +218,42 @@ Room UI must not use RTC alone as permanent room-state truth.
 ## 9. Seat row policy — LOCKED
 
 Selectable seat count:
-8, 9, 10,
-12–18,
-19–28,
-29–35,
-36–42.
-11 is skipped.
+- Every whole-number seat count from 8 through 42 is supported.
 
 Row-count rule:
 - 8–10 seats → 2 rows.
-- 12–18 seats → 3 rows.
-- 19–28 seats → 4 rows.
-- 29–35 seats → 5 rows.
-- 36–42 seats → 6 rows.
+- 11–15 seats → 3 rows.
+- 16–24 seats → 4 rows.
+- 25–30 seats → 5 rows.
+- 31–42 seats → 6 rows.
 
 Distribution:
-- Seats are balanced across rows.
-- Row-size difference should be at most 1.
+- Seats are balanced across the selected number of rows.
+- Extra seats are added from the top row downward, one row at a time.
+- Row-size difference is at most 1.
 - Examples:
   - 8 = 4+4
   - 9 = 5+4
   - 10 = 5+5
+  - 11 = 4+4+3
   - 12 = 4+4+4
-  - 18 = 6+6+6
-  - 19 = 5+5+5+4
-  - 28 = 7+7+7+7
-  - 29 = 6+6+6+6+5
-  - 35 = 7×5
-  - 36 = 6×6
-  - 42 = 7×6
+  - 15 = 5+5+5
+  - 16 = 4+4+4+4
+  - 17 = 5+4+4+4
+  - 18 = 5+5+4+4
+  - 24 = 6+6+6+6
+  - 25 = 5+5+5+5+5
+  - 30 = 6+6+6+6+6
+  - 31 = 6+5+5+5+5+5
+  - 32 = 6+6+5+5+5+5
+  - 36 = 6+6+6+6+6+6
+  - 37 = 7+6+6+6+6+6
+  - 42 = 7+7+7+7+7+7
 
 Visual rule:
-- Every row uses the full available width from left edge to right edge.
+- Each row spans the same usable horizontal width, with a small clean margin on the left and right.
+- The first and last seat of each row define matching left/right visual corners.
+- A row with fewer seats uses larger spacing between those seats so its left/right corners still match the row above.
 - Lower seat counts use larger seat circles/frames.
 - Higher seat counts use smaller seat circles/frames.
 - Chat area must remain usable below seats.
