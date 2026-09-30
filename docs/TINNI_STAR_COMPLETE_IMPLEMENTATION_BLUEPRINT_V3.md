@@ -562,7 +562,6 @@ Setting screen includes:
 - Language settings
 - About
 - Feedback
-- Blacklist
 - Privacy statement
 - Sign out
 
@@ -2462,7 +2461,6 @@ The room 4-box must contain these active entries only:
 - Lock / Unlock
 - Lucky Bag
 - Sound On / Off
-- Seat Requests (only when invite mode and owner/admin context allows it)
 - Lucky Number
 - Group PK
 - Public Screen / Screen On
@@ -2470,6 +2468,8 @@ The room 4-box must contain these active entries only:
 - Report
 
 The following older 4-box entries are removed and must not be re-added as duplicate tiles:
+- Blacklist
+- Seat Requests / invite-mode request tile
 - Gift
 - Feedback
 - Moderation
@@ -2479,3 +2479,5 @@ The following older 4-box entries are removed and must not be re-added as duplic
 
 Game / Rocket stay outside the 4-box.
 
+
+- Seat invitation logic may remain in the room, but it is not a 4-box tile.
