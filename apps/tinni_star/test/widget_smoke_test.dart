@@ -166,7 +166,13 @@ void main() {
     expect(find.byKey(const Key('room-tool-music')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-blacklist')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-effects')), findsOneWidget);
-    expect(find.byKey(const Key('room-tool-feedback')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-feedback')), findsNothing);
+    expect(find.byKey(const Key('room-tool-gift')), findsNothing);
+    expect(find.byKey(const Key('room-tool-moderation')), findsNothing);
+    expect(find.byKey(const Key('room-tool-friends-mode')), findsNothing);
+    expect(find.byKey(const Key('room-tool-event-mode')), findsNothing);
+    expect(find.byKey(const Key('room-tool-launch-event')), findsNothing);
+    expect(find.byKey(const Key('room-tool-stop-event')), findsNothing);
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
     await tester.tap(find.byKey(const Key('room-tool-cover')));
@@ -176,12 +182,6 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('room-tool-gift')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
-    expect(find.byKey(const Key('room-custom-gift-button')), findsOneWidget);
-    await tester.pageBack();
     await tester.pumpAndSettle();
     final removableSong = state.ktv.addLocalSong(
       fileName: 'Wrong Song.mp3',
@@ -211,16 +211,8 @@ void main() {
       const Key('room-blacklist-panel'),
     );
     await expectToolOpens(
-      'room-tool-feedback',
-      const Key('room-feedback-panel'),
-    );
-    await expectToolOpens(
       'room-tool-lucky-bag',
       const Key('room-lucky-bag-panel'),
-    );
-    await expectToolOpens(
-      'room-tool-moderation',
-      const Key('room-moderation-panel'),
     );
     await expectToolOpens(
       'room-tool-effects',
