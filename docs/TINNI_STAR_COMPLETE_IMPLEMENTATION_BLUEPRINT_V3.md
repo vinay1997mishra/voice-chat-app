@@ -779,6 +779,7 @@ Feedback:
 Lock / Unlock:
 - Uses the existing owner-only password room flow.
 - Password is exactly 5 numeric digits; any 00000–99999 value is valid, and the existing failed-attempt rules remain unchanged.
+- VIP is **not required** to set or use a room password; any room owner can lock their own room with an exact 5-digit password.
 
 Top room bar:
 - Share icon is visible beside the existing room actions.
