@@ -1,7 +1,7 @@
 name: tinni_star
 description: Modular social voice-room app with Anamika connector and safe Function Pack runtime.
 publish_to: 'none'
-version: 0.5.20+38
+version: 0.5.21+39
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
