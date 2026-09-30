@@ -1119,7 +1119,6 @@ The room 4-box must contain these active entries only:
 - Lucky Number
 - Group PK
 - Public Screen / Screen On
-- Settings
 - Report
 
 The following older 4-box entries are removed and must not be re-added as duplicate tiles:
@@ -1136,3 +1135,16 @@ Game / Rocket stay outside the 4-box.
 
 
 - Seat invitation logic may remain in the room, but it is not a 4-box tile.
+
+
+### Room Settings single-entry rule — LOCKED
+
+- There is **no separate Settings tile** in the room 4-box.
+- All room setting controls live in **Room Type → Setting**.
+- Room Type → Setting contains:
+  - Room Seats
+  - Free mic
+  - Only managers can speak
+- The old standalone Room Settings sheet is removed.
+- Room Type keeps its Mic Types and Mic Theme tabs; the Setting tab is the single settings surface.
+
