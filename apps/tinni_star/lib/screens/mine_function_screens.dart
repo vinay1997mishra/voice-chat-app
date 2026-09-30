@@ -1669,50 +1669,7 @@ class _HostDataScreenState extends State<HostDataScreen> {
     }
   }
 
-  String _usd(int cents) => '\
-  const SignOutAction._();
-
-  static Future<void> run(BuildContext context, TinniState state) async {
-    final account = state.auth.current;
-    if (account == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out'),
-        content: const Text('Sign out from this Tinni Star account?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await state.backend.logout(account.authToken);
-    } catch (_) {
-      // Local sign-out still proceeds if the network is temporarily unavailable.
-    }
-    await state.roomSession.close();
-    await state.push.unregister();
-    await state.authPersistence?.clear();
-    state.profile.clear();
-    state.auth.forcedLogout();
-
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => LoginScreen(state: state)),
-      (_) => false,
-    );
-  }
-}
- + (cents / 100).toStringAsFixed(2);
+  String _usd(int cents) => '\$' + (cents / 100).toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
