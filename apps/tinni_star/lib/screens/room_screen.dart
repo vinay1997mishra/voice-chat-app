@@ -5778,6 +5778,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+                    ),
                   if (seat.roomMuted)
                     Positioned(
                       right: 0,
