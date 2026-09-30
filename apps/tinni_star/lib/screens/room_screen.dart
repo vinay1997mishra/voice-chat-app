@@ -1397,6 +1397,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  ImageProvider? _roomAvatarProvider(String? value) {
+    final source = value?.trim() ?? '';
+    if (source.isEmpty) return null;
+    if (source.startsWith('data:image/')) {
+      try {
+        return MemoryImage(base64Decode(source.split(',').last));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (source.startsWith('https://') || source.startsWith('http://')) {
+      return NetworkImage(source);
+    }
+    return null;
+  }
+
   Color _ownerTagColor(String colorHex) {
     final value = int.tryParse(
       colorHex.replaceFirst('#', ''),
@@ -5776,24 +5792,40 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       }
     }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
     final occupied = seat.userName != null || presenceMember != null;
-    final displayName =
-        presenceMember?.displayName ?? seat.userName ?? 'Mic ${index + 1}';
+    final displayName = presenceMember?.displayName ??
+        (isMySeat ? account?.displayName : null) ??
+        seat.userName ??
+        'Mic ${index + 1}';
     final emoteUntil = presenceMember?.seatEmoteUntil;
     final seatEmote = presenceMember?.seatEmote != null &&
             emoteUntil != null &&
             emoteUntil.isAfter(DateTime.now())
         ? presenceMember!.seatEmote
         : null;
-    ImageProvider? avatar;
-    final avatarData = presenceMember?.avatarDataUrl;
-    if (avatarData != null && avatarData.startsWith('data:image/')) {
-      try {
-        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
-      } catch (_) {
-        avatar = null;
-      }
-    }
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
         .clamp(38.0, 78.0)
