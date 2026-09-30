@@ -142,16 +142,27 @@ void main() {
     Future<void> expectToolOpens(String toolKey, Key panelKey) async {
       await tester.tap(find.byKey(const Key('room-tools-grid-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(Key(toolKey)));
+      final tool = find.byKey(Key(toolKey));
+      await tester.ensureVisible(tool);
+      await tester.tap(tool);
       await tester.pumpAndSettle();
       expect(find.byKey(panelKey), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
     }
 
+    expect(find.byKey(const Key('room-share-button')), findsOneWidget);
+
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
     expect(find.text('Seat Controls'), findsNothing);
+    expect(find.byKey(const Key('room-tool-room-type')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-cover')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-music')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-blacklist')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-effects')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-feedback')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
     await tester.tap(find.byKey(const Key('room-tool-gift')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
@@ -178,6 +189,18 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     await expectToolOpens(
+      'room-tool-room-type',
+      const Key('room-type-panel'),
+    );
+    await expectToolOpens(
+      'room-tool-blacklist',
+      const Key('room-blacklist-panel'),
+    );
+    await expectToolOpens(
+      'room-tool-feedback',
+      const Key('room-feedback-panel'),
+    );
+    await expectToolOpens(
       'room-tool-lucky-bag',
       const Key('room-lucky-bag-panel'),
     );
@@ -195,6 +218,8 @@ void main() {
     await tester.tap(find.byKey(const Key('room-tool-effects')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('effect-master-effects')), findsOneWidget);
+    expect(find.byKey(const Key('effect-master-notices')), findsOneWidget);
     expect(find.byKey(const Key('effect-gift-effects')), findsOneWidget);
     expect(find.byKey(const Key('effect-lucky-gift')), findsOneWidget);
     expect(find.byKey(const Key('effect-gift-sound')), findsOneWidget);
