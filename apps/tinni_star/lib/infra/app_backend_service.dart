@@ -233,6 +233,39 @@ class AppBackendService {
     return raw.map(_map).toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> startEmailAccountLink(
+    String token, {
+    required String email,
+  }) async {
+    return _request(
+      'POST',
+      '/account/link/email/start',
+      token,
+      body: <String, dynamic>{'email': email.trim()},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> verifyEmailAccountLink(
+    String token, {
+    required String requestId,
+    required String otp,
+    required String password,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/account/link/email/verify',
+      token,
+      body: <String, dynamic>{
+        'request_id': requestId,
+        'otp': otp.trim(),
+        'password': password,
+      },
+    );
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
   Future<List<Map<String, dynamic>>> linkGoogleAccount(
     String token, {
     required String idToken,
