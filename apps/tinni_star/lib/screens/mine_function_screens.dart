@@ -493,6 +493,7 @@ class _TaskScreenState extends State<TaskScreen> {
                     ),
                 ],
               ),
+        ),
       ),
     );
   }
@@ -1497,7 +1498,8 @@ class _PropsScreenState extends State<PropsScreen> {
         elevation: 0,
         title: const Text('Props'),
       ),
-      body: RefreshIndicator(
+      body: _MineSubpageBackground(
+        child: RefreshIndicator(
         onRefresh: _load,
         child: loading
             ? const Center(child: CircularProgressIndicator(color: _mineText))
