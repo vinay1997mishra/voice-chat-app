@@ -1494,6 +1494,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return byName < 0 ? null : byName;
   }
 
+  bool _adminCanControlSeatOccupant(RoomPresenceMember member) {
+    if (_isRoomOwner) return true;
+    final ownerId = _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    if (member.userId == ownerId) return false;
+    if (member.isAdmin) return false;
+    return _currentRoomRole == RoomRole.admin;
+  }
+
+  RoomPresenceMember? _memberOnSeat(int seatIndex) {
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == seatIndex) return member;
+    }
+    final mappedUserId = widget.state.roomControls.seatUsers[seatIndex];
+    if (mappedUserId != null) {
+      for (final member in widget.state.roomSession.liveMembers) {
+        if (member.userId == mappedUserId) return member;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _moveMemberSeatDown(RoomPresenceMember member) async {
+    try {
+      await widget.state.roomSession.moveUserToAudience(member.userId);
+      _snack(member.displayName + ' moved to audience.');
+      if (mounted) setState(() {});
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
   Future<void> _setUserSeatMute(
     RoomPresenceMember member,
     int seatIndex,
@@ -1656,7 +1687,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             hint: seatIndexHint,
           );
           final micMuted = currentMember.micMuted;
-          final canModerate = !isSelf && _canModerateSeats;
+          final ownerId =
+              _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+          final targetIsOwner = currentMember.userId == ownerId;
+          final canModerate = !isSelf &&
+              _canModerateSeats &&
+              !targetIsOwner &&
+              (_isRoomOwner || !currentMember.isAdmin);
           final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.44;
 
           ImageProvider? avatar;
@@ -1948,6 +1985,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   }
                                 },
                               ),
+                            if (canModerate && seatIndex != null)
+                              _ProfileAction(
+                                icon: Icons.airline_seat_recline_normal_rounded,
+                                label: 'Seat down',
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _moveMemberSeatDown(currentMember);
+                                },
+                              ),
+
                             if (canModerate)
                               _ProfileAction(
                                 icon: currentMember.chatBanned
@@ -5678,6 +5725,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -5785,6 +5845,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       error.toString().replaceFirst('Bad state: ', ''),
                     );
                   }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle: Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
                 },
               ),
             if (controller.mySeat == index)

@@ -301,6 +301,16 @@ export class RoomPresenceStore extends DurableObject {
     return this.ctx.storage.sql.exec("SELECT seat_index FROM room_seat_locks ORDER BY seat_index").toArray().map((row) => Number(row.seat_index));
   }
 
+  userIdAtSeat(seatIndexValue) {
+    const seatIndex = Number(seatIndexValue);
+    if (!Number.isInteger(seatIndex) || seatIndex < 0) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE seat_index = ? LIMIT 1",
+      seatIndex,
+    ).toArray()[0];
+    return row?.user_id ? String(row.user_id) : null;
+  }
+
   mutedSeats() {
     return this.ctx.storage.sql.exec(
       "SELECT seat_index FROM room_seat_mutes ORDER BY seat_index",

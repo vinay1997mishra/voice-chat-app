@@ -3271,7 +3271,17 @@ export default {
       const actorId = String(appSession.user.user_id);
       const isManager = await store.isManager(actorId);
       const isMember = await store.isMember(actorId);
-      if (String(room.owner_id) !== actorId && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can lock seats" }, 403);
+      const actorIsOwner = String(room.owner_id) === actorId;
+      if (!actorIsOwner && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can lock seats" }, 403);
+      const occupantId = await store.userIdAtSeat(seatIndex);
+      if (!actorIsOwner && occupantId) {
+        if (occupantId === String(room.owner_id)) {
+          return json({ ok: false, error: "Room admins cannot lock the owner seat" }, 403);
+        }
+        if (await store.isManager(occupantId)) {
+          return json({ ok: false, error: "Room admins cannot lock another admin seat" }, 403);
+        }
+      }
       try { return json(await store.setSeatLock({ seat_index: seatIndex, locked_by: actorId, locked: body.locked === true })); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to update seat lock") }, 400); }
     }
@@ -3292,8 +3302,18 @@ export default {
       const actorId = String(appSession.user.user_id);
       const isManager = await store.isManager(actorId);
       const isMember = await store.isMember(actorId);
-      if (String(room.owner_id) !== actorId && !(isManager && isMember)) {
+      const actorIsOwner = String(room.owner_id) === actorId;
+      if (!actorIsOwner && !(isManager && isMember)) {
         return json({ ok: false, error: "Only room owner/admin can mute seats" }, 403);
+      }
+      const occupantId = await store.userIdAtSeat(seatIndex);
+      if (!actorIsOwner && occupantId) {
+        if (occupantId === String(room.owner_id)) {
+          return json({ ok: false, error: "Room admins cannot mute the owner seat" }, 403);
+        }
+        if (await store.isManager(occupantId)) {
+          return json({ ok: false, error: "Room admins cannot mute another admin seat" }, 403);
+        }
       }
       try {
         return json(await store.setSeatMute({
