@@ -514,21 +514,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final amount = (ribbon['amount'] as num?)?.toInt() ?? 0;
     String amountText;
     if (amount >= 1000000) {
-      amountText = (amount / 1000000).toStringAsFixed(amount % 1000000 == 0 ? 0 : 1) + 'M';
+      amountText = (amount / 1000000)
+              .toStringAsFixed(amount % 1000000 == 0 ? 0 : 1) +
+          'M';
     } else {
-      amountText = (amount / 100000).toStringAsFixed(amount % 100000 == 0 ? 0 : 1) + 'L';
+      amountText = (amount / 100000)
+              .toStringAsFixed(amount % 100000 == 0 ? 0 : 1) +
+          'L';
     }
-    final game = (ribbon['game_key']?.toString() ?? 'Game').replaceAll('_', ' ');
-    final background = isLp ? const Color(0xFF650812) : const Color(0xFF090909);
-    final message = isLp ? name + ' opened ' + amountText + ' LP' : name + ' WIN ' + amountText + ' • ' + game;
+    final game =
+        (ribbon['game_key']?.toString() ?? 'Game').replaceAll('_', ' ');
+    final headline = isLp ? 'LUCKY POUCH' : 'BIG WIN';
+    final message = isLp
+        ? name + ' opened ' + amountText + ' LP'
+        : name + ' WIN ' + amountText + ' • ' + game;
+
     return Positioned(
-      left: 0,
-      right: 0,
-      top: 6.0 + lane * 48.0,
-      height: 42,
+      left: 10,
+      right: 10,
+      top: 6.0 + lane * 52.0,
+      height: 46,
       child: TweenAnimationBuilder<double>(
         key: ValueKey<String>(id),
-        tween: Tween<double>(begin: 1.15, end: -1.15),
+        tween: Tween<double>(begin: 1.08, end: -1.08),
         duration: const Duration(seconds: 8),
         onEnd: () => _finishRibbon(id),
         builder: (context, value, child) => FractionalTranslation(
@@ -536,39 +544,90 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: child,
         ),
         child: GestureDetector(
+          key: Key('country-ribbon-' + id),
           onTap: () => _enterRibbonRoom(ribbon),
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(21),
-              border: Border.all(color: RoyalPalette.gold, width: 1.2),
-              boxShadow: const [BoxShadow(color: Color(0x66FFD45A), blurRadius: 10)],
+              gradient: LinearGradient(
+                colors: isLp
+                    ? const <Color>[
+                        Color(0xFF5D0711),
+                        Color(0xFF9A151E),
+                        Color(0xFF41040A),
+                      ]
+                    : const <Color>[
+                        Color(0xFF050505),
+                        Color(0xFF17100A),
+                        Color(0xFF050505),
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(23),
+              border: Border.all(
+                color: const Color(0xFFFFD45A),
+                width: 1.3,
+              ),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(
+                  color: Color(0x88FFD45A),
+                  blurRadius: 11,
+                ),
+              ],
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: RoyalPalette.panel2,
-                  child: Text(name.isEmpty ? '?' : name.characters.first.toUpperCase()),
+                const SizedBox(width: 8),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1C0E22),
+                    border: Border.all(
+                      color: const Color(0xFFFFD45A),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    isLp
+                        ? Icons.shopping_bag_rounded
+                        : Icons.sports_esports_rounded,
+                    color: const Color(0xFFFFD45A),
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 8),
+                SizedBox(
+                  width: 82,
+                  child: Text(
+                    headline,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    style: const TextStyle(
+                      color: Color(0xFFFFD45A),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: Text(
                     message,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: RoyalPalette.gold, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                _roomActionLogo(
-                  label: isLp ? 'LP' : 'Game',
-                  icon: isLp
-                      ? Icons.shopping_bag_rounded
-                      : Icons.sports_esports_rounded,
-                  size: 32,
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFFFFD45A),
+                  size: 18,
                 ),
+                const SizedBox(width: 6),
               ],
             ),
           ),
@@ -5826,6 +5885,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       right: 0,
                       bottom: 0,
                       child: Container(
+                        key: Key(
+                          'seat-muted-indicator-' + index.toString(),
+                        ),
                         width: compact ? 14 : 18,
                         height: compact ? 14 : 18,
                         decoration: const BoxDecoration(
