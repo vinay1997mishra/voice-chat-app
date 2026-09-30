@@ -3889,11 +3889,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        'Blacklist',
-        Icons.person_off_rounded,
-        _showRoomBlacklist,
-      ),
-      (
         'Effects',
         Icons.auto_awesome_rounded,
         () {
@@ -3930,15 +3925,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _snack('Room sound ${enabled ? "enabled" : "muted"}.');
         },
       ),
-      if (_canModerateSeats && controller.inviteMode)
-        (
-          widget.state.roomSession.seatRequests.isEmpty
-              ? 'Seat Requests'
-              : 'Requests ' +
-                  widget.state.roomSession.seatRequests.length.toString(),
-          Icons.how_to_reg_rounded,
-          _showSeatRequests,
-        ),
       (
         controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
         Icons.confirmation_number_rounded,
