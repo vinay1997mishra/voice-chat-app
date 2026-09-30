@@ -3298,7 +3298,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<void> _shareRoom() async {
     final text = 'Join my Tinni Star room: ' +
-        widget.room.title +
+        _roomTitle +
         '\nRoom ID: ' +
         widget.room.id;
     try {
@@ -3335,11 +3335,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     try {
-      await widget.state.discovery.updateRoomRemote(
+      final updated = await widget.state.discovery.updateRoomRemote(
         authToken: account.authToken,
         roomId: widget.room.id,
         photoDataUrl: dataUrl,
       );
+      _roomPhotoOverride = updated.photoDataUrl;
       _snack('Room cover updated.');
       if (mounted) setState(() {});
     } catch (error) {
@@ -5935,7 +5936,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final activeController = session.controller;
     if (activeController == null || session.room?.id != widget.room.id) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.room.title)),
+        appBar: AppBar(title: Text(_roomTitle)),
         body: const Center(
           child: CircularProgressIndicator(
             color: FeaturePalette.social,
@@ -5980,7 +5981,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.room.title, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
+                Text(_roomTitle, style: const TextStyle(color: RoyalPalette.cream, fontWeight: FontWeight.w900)),
                 Text(
                   'ID ' +
                       widget.room.id +
@@ -6650,15 +6651,44 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 key: const Key('room-game-floating-position'),
                 right: 8,
                 bottom: 138,
-                child: Semantics(
-                  button: true,
-                  label: 'Game Center',
-                  child: InkResponse(
-                    key: const Key('room-game-floating-button'),
-                    radius: 32,
-                    onTap: _showGamePanel,
-                    child: const _ReferenceGameLogo(size: 54),
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Rocket',
+                      child: InkResponse(
+                        key: const Key('room-rocket-floating-button'),
+                        radius: 24,
+                        onTap: _showRocketPanel,
+                        child: const _ReferenceRocketLogo(size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1430),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: const Color(0xFF7E67D9),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Semantics(
+                      button: true,
+                      label: 'Game Center',
+                      child: InkResponse(
+                        key: const Key('room-game-floating-button'),
+                        radius: 32,
+                        onTap: _showGamePanel,
+                        child: const _ReferenceGameLogo(size: 54),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             if (_fruitJackpotOpen)
@@ -6739,6 +6769,150 @@ class _ReferenceGameLogo extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReferenceRocketLogo extends StatelessWidget {
+  const _ReferenceRocketLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.86,
+            color: const Color(0xFFFF63E6),
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xFF6B5CFF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: size * 0.22,
+              height: size * 0.22,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD45A),
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x88FFD45A),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferenceGameTile extends StatelessWidget {
+  const _ReferenceGameTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: enabled
+                      ? const <Color>[
+                          Color(0xFF6E38B9),
+                          Color(0xFF2B123E),
+                        ]
+                      : const <Color>[
+                          Color(0xFF3A3240),
+                          Color(0xFF211C24),
+                        ],
+                ),
+                border: Border.all(
+                  color: enabled
+                      ? const Color(0xFFC56CFF)
+                      : const Color(0xFF5B505F),
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? const Color(0xFFFFD45A)
+                      : RoyalPalette.muted,
+                  size: 30,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  enabled ? RoyalPalette.cream : RoyalPalette.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RocketReward extends StatelessWidget {
+  const _RocketReward({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6E3EB3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFCCA7FF),
+          width: 0.8,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: const Color(0xFFFFD45A),
+        size: 27,
       ),
     );
   }
