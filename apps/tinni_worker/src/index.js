@@ -1716,6 +1716,92 @@ export default {
       });
     }
 
+    if (url.pathname === "/family/list" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      return json({
+        ok:true,
+        families: await getAppDirectoryStore(env).familyList(
+          url.searchParams.get("limit") || 100,
+        ),
+      });
+    }
+
+    if (url.pathname === "/family/create" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).familyCreate(
+          appSession.user.user_id,body.name,body.tag,
+        );
+        return json(result,201);
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to create Family")},400);
+      }
+    }
+
+    if (url.pathname === "/family/notice" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyUpdateNotice(
+          appSession.user.user_id,body.notice,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to update Family notice")},400);
+      }
+    }
+
+    if (url.pathname === "/family/leave" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      try {
+        return json(await getAppDirectoryStore(env).familyLeave(
+          appSession.user.user_id,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to leave Family")},400);
+      }
+    }
+
+    if (url.pathname === "/family/check-in" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      try {
+        return json(await getAppDirectoryStore(env).familyCheckIn(
+          appSession.user.user_id,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to check in")},400);
+      }
+    }
+
+    if (url.pathname === "/family/wallet/send" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyTransferCoins(
+          appSession.user.user_id,body.receiver_user_id,body.coins,
+        ),201);
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to send Family coins")},400);
+      }
+    }
+
+    if (url.pathname === "/family/wallet/transfers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      return json({
+        ok:true,
+        transfers: await getAppDirectoryStore(env).familyWalletTransfers(
+          appSession.user.user_id,url.searchParams.get("limit") || 100,
+        ),
+      });
+    }
+
     if (url.pathname === "/family" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
