@@ -2245,14 +2245,31 @@ export class AppDirectoryStore extends DurableObject {
     const oldId = this._resolveOwnerUserId(oldIdValue);
     const newId = String(newIdValue || "").trim();
     if (!oldId || !newId) throw new Error("Current and new user ID are required");
-    if (!/^\d{4,8}$/.test(newId)) throw new Error("New public ID must contain 4 to 8 digits");
-    if (oldId === newId) return this.ownerSearchUsers(newId, 1)[0];
+    const numericId = /^\d{4,8}$/.test(newId);
+    const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(newId);
+    if (!numericId && !nameId) {
+      throw new Error(
+        "Public ID must be 4 to 8 digits or a 3 to 20 character Name ID using letters, numbers and underscore",
+      );
+    }
+    if (nameId) {
+      const approved = this.ctx.storage.sql.exec(
+        "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) AND enabled = 1 LIMIT 1",
+        newId,
+      ).toArray()[0];
+      if (!approved) {
+        throw new Error("Name ID must be added from Owner Panel first");
+      }
+    }
+    if (oldId.toLowerCase() === newId.toLowerCase()) {
+      return this.ownerSearchUsers(oldId, 1)[0];
+    }
     const user = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", oldId,
     ).toArray()[0];
     if (!user) throw new Error("User not found");
     const taken = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", newId,
+      "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1", newId,
     ).toArray()[0];
     if (taken) throw new Error("New public ID is already in use");
 
@@ -2332,28 +2349,64 @@ export class AppDirectoryStore extends DurableObject {
         vip_level: String(data.operation) === "remove" ? 0 : Math.max(1, Number(data.vip_level || 1)),
       });
       case "unique-id-new": {
-        const publicId = String(data.public_id || "").trim();
-        if (!/^\\d{4,8}$/.test(publicId)) throw new Error("Unique ID must contain 4 to 8 digits");
+        const requestedId = String(data.public_id || "").trim();
+        const numericId = /^\\d{4,8}$/.test(requestedId);
+        const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(requestedId);
+        if (!numericId && !nameId) {
+          throw new Error(
+            "Unique ID must be 4 to 8 digits or a 3 to 20 character Name ID using letters, numbers and underscore",
+          );
+        }
         const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
         const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
-        const existingUser = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+        const existingUser = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
         if (existingUser) throw new Error("Unique ID is already in use");
+        const existingOffer = this.ctx.storage.sql.exec(
+          "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
+        const publicId = existingOffer ? String(existingOffer.public_id) : requestedId;
         this.ctx.storage.sql.exec(
           `INSERT INTO owner_unique_ids (public_id,price_coins,duration_days,assigned_user_id,enabled,created_at,updated_at)
            VALUES (?,?,?,NULL,1,?,?)
            ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,duration_days=excluded.duration_days,enabled=1,updated_at=excluded.updated_at`,
           publicId, price, durationDays, Date.now(), Date.now(),
         );
-        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0, enabled: true };
+        return {
+          public_id: publicId,
+          id_type: nameId ? "name" : "number",
+          price_coins: price,
+          duration_days: durationDays,
+          permanent: durationDays === 0,
+          enabled: true,
+        };
       }
       case "unique-id-price": {
-        const publicId = String(data.public_id || "").trim();
+        const requestedId = String(data.public_id || "").trim();
         const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
         const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
-        const row = this.ctx.storage.sql.exec("SELECT public_id FROM owner_unique_ids WHERE public_id = ? LIMIT 1", publicId).toArray()[0];
+        const row = this.ctx.storage.sql.exec(
+          "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
         if (!row) throw new Error("Unique ID not found");
-        this.ctx.storage.sql.exec("UPDATE owner_unique_ids SET price_coins = ?, duration_days = ?, updated_at = ? WHERE public_id = ?", price, durationDays, Date.now(), publicId);
-        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0 };
+        const publicId = String(row.public_id);
+        this.ctx.storage.sql.exec(
+          "UPDATE owner_unique_ids SET price_coins = ?, duration_days = ?, updated_at = ? WHERE public_id = ?",
+          price,
+          durationDays,
+          Date.now(),
+          publicId,
+        );
+        return {
+          public_id: publicId,
+          price_coins: price,
+          duration_days: durationDays,
+          permanent: durationDays === 0,
+        };
       }
       case "id-change": return this._changeUserId(data.user_id, data.new_id);
       case "room-ban": {
@@ -3171,6 +3224,61 @@ export class AppDirectoryStore extends DurableObject {
       roomId,
     ).toArray()[0];
     return row ? rowToRoom(row) : null;
+  }
+
+  findUserByExactPublicId(publicIdValue) {
+    const raw = String(publicIdValue || "").trim();
+    if (!raw) return null;
+    const direct = this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+              u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+              p.room_id AS active_room_id, p.last_seen
+         FROM app_users u
+         LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+        WHERE LOWER(u.user_id) = LOWER(?)
+        LIMIT 1`,
+      raw,
+    ).toArray()[0];
+
+    let row = direct;
+    if (!row) {
+      const history = this.ctx.storage.sql.exec(
+        "SELECT new_user_id FROM user_id_history WHERE LOWER(old_user_id) = LOWER(?) LIMIT 1",
+        raw,
+      ).toArray()[0];
+      if (history) {
+        row = this.ctx.storage.sql.exec(
+          `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+                  u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+                  p.room_id AS active_room_id, p.last_seen
+             FROM app_users u
+             LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+            WHERE u.user_id = ?
+            LIMIT 1`,
+          String(history.new_user_id),
+        ).toArray()[0];
+      }
+    }
+    if (!row) return null;
+    const now = Date.now();
+    const onlineCutoff = now - 90000;
+    return {
+      user_id: String(row.user_id),
+      display_name: String(row.display_name),
+      signature: String(row.signature || ""),
+      country_code: String(row.country_code || ""),
+      country_name: String(row.country_name || ""),
+      flag_emoji: String(row.flag_emoji || ""),
+      gender: String(row.gender || ""),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      online: row.last_seen != null && Number(row.last_seen) >= onlineCutoff,
+      active_room_id:
+        row.last_seen != null &&
+        Number(row.last_seen) >= onlineCutoff &&
+        row.active_room_id
+          ? String(row.active_room_id)
+          : null,
+    };
   }
 
   searchUsers(queryValue, limitValue = 30) {
@@ -4845,13 +4953,18 @@ export class AppDirectoryStore extends DurableObject {
 
   purchaseUniqueId(userIdValue, publicIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
-    const publicId = String(publicIdValue || "").trim();
+    const requestedId = String(publicIdValue || "").trim();
     const offer = this.ctx.storage.sql.exec(
-      "SELECT * FROM owner_unique_ids WHERE public_id = ? AND enabled = 1 LIMIT 1", publicId,
+      "SELECT * FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) AND enabled = 1 LIMIT 1",
+      requestedId,
     ).toArray()[0];
     if (!offer) throw new Error("Unique ID is unavailable");
+    const publicId = String(offer.public_id);
     if (offer.assigned_user_id) throw new Error("Unique ID is already assigned");
-    const taken = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+    const taken = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1",
+      publicId,
+    ).toArray()[0];
     if (taken) throw new Error("Unique ID is already in use");
     const effective = this._effectivePrice(userId, "unique_id:" + publicId, Math.max(0, Number(offer.price_coins || 0)), Math.max(0, Number(offer.duration_days || 0)));
     const price = effective.price;

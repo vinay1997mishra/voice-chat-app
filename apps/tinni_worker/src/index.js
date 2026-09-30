@@ -1694,6 +1694,17 @@ export default {
       });
     }
 
+    if (url.pathname === "/users/exact-id" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const id = String(url.searchParams.get("id") || "").trim();
+      if (!id) return json({ ok: true, user: null });
+      return json({
+        ok: true,
+        user: await getAppDirectoryStore(env).findUserByExactPublicId(id),
+      });
+    }
+
     if (url.pathname === "/users/search" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);

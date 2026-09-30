@@ -236,8 +236,8 @@ class AppBackendService {
       throw StateError('Login session is required');
     }
     final uri = apiBase.replace(
-      path: '/users/search',
-      queryParameters: <String, String>{'q': id},
+      path: '/users/exact-id',
+      queryParameters: <String, String>{'id': id},
     );
     final request = await _httpClient.getUrl(uri);
     request.headers.set(
@@ -262,13 +262,8 @@ class AppBackendService {
         data['error']?.toString() ?? 'Unable to search user',
       );
     }
-    final raw = data['users'];
-    if (raw is! List) return null;
-    for (final value in raw) {
-      final row = _map(value);
-      if (row['user_id']?.toString() == id) return row;
-    }
-    return null;
+    final row = _map(data['user']);
+    return row.isEmpty ? null : row;
   }
 
   Future<List<Map<String, dynamic>>> blockedProfiles(String token) async {
