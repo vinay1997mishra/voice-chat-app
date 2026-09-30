@@ -354,6 +354,12 @@ class RoomControlService {
     return themeId;
   }
 
+  bool canTypeInRoom(String userId) {
+    if (publicScreenEnabled) return true;
+    final role = roles[userId];
+    return role == RoomRole.owner || role == RoomRole.admin;
+  }
+
   bool canSpeak(String userId) {
     if (micBans.contains(userId)) return false;
     if (settings.onlyManagersCanSpeak) {
