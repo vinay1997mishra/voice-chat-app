@@ -1587,6 +1587,43 @@ export default {
       return json({ ok: true });
     }
 
+    if (url.pathname === "/account/link/email/start" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+        return json({ ok: false, error: "Email OTP service is not configured yet" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const pending = await getAppDirectoryStore(env).startEmailOtp(body.email);
+        await sendEmailOtp(pending.email, pending.otp, env);
+        return json({
+          ok:true,
+          request_id:pending.request_id,
+          email:pending.email,
+          expires_at:pending.expires_at,
+        }, 201);
+      } catch (error) {
+        return json({ ok:false, error:String(error?.message || "Unable to send email OTP") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/link/email/verify" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false, error:"Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).bindEmailIdentity(
+          appSession.user.user_id,
+          body.request_id,
+          body.otp,
+          body.password,
+        ));
+      } catch (error) {
+        return json({ ok:false, error:String(error?.message || "Unable to bind email") }, 400);
+      }
+    }
+
     if (url.pathname === "/account/link/google" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
