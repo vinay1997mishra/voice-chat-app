@@ -7309,10 +7309,61 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-    _familyMembership(userIdValue) {
-    const userId = String(userIdValue || "").trim();
+  _familyLevelThresholds() {
+    const policies = this.ownerState().policies || {};
+    const configured = Array.isArray(policies.family_level_thresholds)
+      ? policies.family_level_thresholds
+          .map((value) => Math.max(0, Math.floor(Number(value || 0))))
+          .filter(Number.isSafeInteger)
+      : [];
+    if (configured.length >= 2 && configured[0] === 0) return configured;
+    // Tinni Star family thresholds currently locked by product rules.
+    return [
+      0,
+      50000000,
+      240000000,
+      580000000,
+      970000000,
+      1300000000,
+      1800000000,
+      2500000000,
+      3500000000,
+      6000000000,
+      15000000000,
+    ];
+  }
+
+  _familyLevelInfo(experienceValue) {
+    const experience = Math.max(0, Math.floor(Number(experienceValue || 0)));
+    const thresholds = this._familyLevelThresholds();
+    let level = 1;
+    for (let index = 1; index < thresholds.length; index += 1) {
+      if (experience >= thresholds[index]) level = index + 1;
+      else break;
+    }
+    const currentThreshold = thresholds[Math.max(0, level - 1)] || 0;
+    const nextThreshold = level < thresholds.length ? thresholds[level] : null;
+    const span = nextThreshold == null ? 0 : Math.max(1, nextThreshold - currentThreshold);
+    const progress = nextThreshold == null
+      ? 1
+      : Math.max(0, Math.min(1, (experience - currentThreshold) / span));
+    const bonusBasisPoints = 100 + Math.max(0, Math.min(10, level - 1)) * 25;
+    return {
+      level,
+      experience,
+      current_threshold: currentThreshold,
+      next_threshold: nextThreshold,
+      progress,
+      monthly_bonus_basis_points: bonusBasisPoints,
+      monthly_bonus_percent: bonusBasisPoints / 100,
+    };
+  }
+
+  _familyMembership(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return null;
     return this.ctx.storage.sql.exec(
-      `SELECT fm.family_id, fm.user_id, fm.role, f.name, f.tag,
+      `SELECT fm.family_id, fm.user_id, fm.role, f.name, f.tag, f.notice,
               f.leader_user_id, f.experience, f.wallet_coins
          FROM family_members fm
          JOIN families f ON f.id = fm.family_id
@@ -7331,19 +7382,162 @@ export class AppDirectoryStore extends DurableObject {
     );
   }
 
+  _familyPreviousIndiaMonthWindow(timestampValue = Date.now()) {
+    const shifted = new Date(Number(timestampValue) + 19800000);
+    const year = shifted.getUTCFullYear();
+    const month = shifted.getUTCMonth();
+    const currentStartShifted = Date.UTC(year, month, 1);
+    const previousStartShifted = Date.UTC(year, month - 1, 1);
+    const previous = new Date(previousStartShifted);
+    const monthKey =
+      previous.getUTCFullYear().toString().padStart(4, "0") + "-" +
+      (previous.getUTCMonth() + 1).toString().padStart(2, "0");
+    return {
+      month_key: monthKey,
+      start_at: previousStartShifted - 19800000,
+      end_at: currentStartShifted - 19800000,
+    };
+  }
+
+  _settleFamilyMonthlyBonus(familyIdValue, timestampValue = Date.now()) {
+    const familyId = String(familyIdValue || "").trim();
+    if (!familyId) return null;
+    const window = this._familyPreviousIndiaMonthWindow(timestampValue);
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT * FROM family_monthly_bonuses WHERE family_id=? AND month_key=? LIMIT 1",
+      familyId, window.month_key,
+    ).toArray()[0];
+    if (existing) {
+      return {
+        month_key: String(existing.month_key),
+        received_coins: Number(existing.received_coins || 0),
+        bonus_basis_points: Number(existing.bonus_basis_points || 0),
+        bonus_coins: Number(existing.bonus_coins || 0),
+        settled_at: Number(existing.settled_at || 0),
+      };
+    }
+
+    const family = this.ctx.storage.sql.exec(
+      "SELECT experience FROM families WHERE id=? LIMIT 1", familyId,
+    ).toArray()[0];
+    if (!family) return null;
+    const received = Number(this.ctx.storage.sql.exec(
+      `SELECT COALESCE(SUM(coins),0) AS total
+         FROM family_received_coins
+        WHERE family_id=? AND created_at>=? AND created_at<?`,
+      familyId, window.start_at, window.end_at,
+    ).toArray()[0]?.total || 0);
+    const level = this._familyLevelInfo(family.experience);
+    const bonus = Math.floor(received * level.monthly_bonus_basis_points / 10000);
+    const now = Number(timestampValue || Date.now());
+    this.ctx.storage.sql.exec(
+      `INSERT INTO family_monthly_bonuses
+        (family_id,month_key,received_coins,bonus_basis_points,bonus_coins,settled_at)
+       VALUES(?,?,?,?,?,?)`,
+      familyId,window.month_key,received,level.monthly_bonus_basis_points,bonus,now,
+    );
+    if (bonus > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE families SET wallet_coins=wallet_coins+?,updated_at=? WHERE id=?",
+        bonus,now,familyId,
+      );
+    }
+    return {
+      month_key: window.month_key,
+      received_coins: received,
+      bonus_basis_points: level.monthly_bonus_basis_points,
+      bonus_coins: bonus,
+      settled_at: now,
+    };
+  }
+
+  familyList(limitValue = 100) {
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT f.id,f.name,f.tag,f.notice,f.leader_user_id,f.experience,f.wallet_coins,
+              f.created_at,f.updated_at,
+              COUNT(fm.user_id) AS member_count
+         FROM families f
+         LEFT JOIN family_members fm ON fm.family_id=f.id
+        GROUP BY f.id
+        ORDER BY f.experience DESC, member_count DESC, f.created_at ASC
+        LIMIT ?`, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      tag: String(row.tag),
+      notice: String(row.notice || ""),
+      leader_user_id: String(row.leader_user_id),
+      experience: Number(row.experience || 0),
+      wallet_coins: Number(row.wallet_coins || 0),
+      member_count: Number(row.member_count || 0),
+      level: this._familyLevelInfo(row.experience),
+      created_at: Number(row.created_at || 0),
+      updated_at: Number(row.updated_at || 0),
+    }));
+  }
+
+  familyCreate(userIdValue, nameValue, tagValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId || !this.getUserById(userId)) throw new Error("User not found");
+    if (this._familyMembership(userId)) throw new Error("Already in a family");
+    const name = cleanText(nameValue, 40);
+    const tag = cleanText(tagValue, 12).toUpperCase();
+    if (name.length < 2) throw new Error("Family name is too short");
+    if (tag.length < 2) throw new Error("Family tag is too short");
+    const duplicate = this.ctx.storage.sql.exec(
+      "SELECT id FROM families WHERE LOWER(name)=LOWER(?) OR UPPER(tag)=UPPER(?) LIMIT 1",
+      name,tag,
+    ).toArray()[0];
+    if (duplicate) throw new Error("Family name or tag is already in use");
+    const now = Date.now();
+    const familyId = "family-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO families
+        (id,name,tag,leader_user_id,experience,wallet_coins,created_at,updated_at,notice)
+       VALUES(?,?,?,?,0,0,?,?,?)`,
+      familyId,name,tag,userId,now,now,"Welcome to " + name + " ❤️",
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_members(family_id,user_id,role,joined_at) VALUES(?,?,'leader',?)",
+      familyId,userId,now,
+    );
+    return { ok:true, family_id:familyId };
+  }
+
   async familyState(userIdValue) {
     const membership = this._familyMembership(userIdValue);
-    if (!membership) return { family: null, members: [], join_requests: [] };
+    if (!membership) {
+      return {
+        family: null,
+        members: [],
+        join_requests: [],
+        available_families: this.familyList(100),
+      };
+    }
     const familyId = String(membership.family_id);
+    const settledBonus = this._settleFamilyMonthlyBonus(familyId, Date.now());
+    const fresh = this._familyMembership(userIdValue) || membership;
     const members = this.ctx.storage.sql.exec(
-      `SELECT fm.user_id, fm.role, fm.joined_at, u.display_name, u.avatar_data_url
+      `SELECT fm.user_id, fm.role, fm.joined_at, u.display_name, u.avatar_data_url,
+              COALESCE(SUM(rc.coins),0) AS received_coins
          FROM family_members fm
          JOIN app_users u ON u.user_id = fm.user_id
+         LEFT JOIN family_received_coins rc
+           ON rc.family_id=fm.family_id AND rc.receiver_user_id=fm.user_id
         WHERE fm.family_id = ?
+        GROUP BY fm.family_id,fm.user_id
         ORDER BY CASE fm.role WHEN 'leader' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-                 fm.joined_at`,
+                 received_coins DESC, fm.joined_at`,
       familyId,
-    ).toArray();
+    ).toArray().map((row)=>({
+      user_id:String(row.user_id),
+      role:String(row.role),
+      joined_at:Number(row.joined_at || 0),
+      display_name:String(row.display_name || row.user_id),
+      avatar_data_url:row.avatar_data_url ? String(row.avatar_data_url) : null,
+      received_coins:Number(row.received_coins || 0),
+    }));
     const requests = this._familyCanReview(userIdValue, familyId)
       ? this.ctx.storage.sql.exec(
           `SELECT r.user_id, r.created_at, u.display_name, u.avatar_data_url
@@ -7354,15 +7548,21 @@ export class AppDirectoryStore extends DurableObject {
           familyId,
         ).toArray()
       : [];
+    const level = this._familyLevelInfo(fresh.experience);
     return {
       family: {
         id: familyId,
-        name: String(membership.name),
-        tag: String(membership.tag),
-        leader_user_id: String(membership.leader_user_id),
-        experience: Number(membership.experience || 0),
-        wallet_coins: Number(membership.wallet_coins || 0),
-        my_role: String(membership.role),
+        name: String(fresh.name),
+        tag: String(fresh.tag),
+        notice: String(fresh.notice || ""),
+        leader_user_id: String(fresh.leader_user_id),
+        experience: Number(fresh.experience || 0),
+        wallet_coins: Number(fresh.wallet_coins || 0),
+        my_role: String(fresh.role),
+        ...level,
+        reference_coin_scale: 100,
+        reference_20000_tinni_coins: 2000000,
+        last_month_bonus: settledBonus,
       },
       members,
       join_requests: requests,
@@ -7370,12 +7570,11 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async familyRequestJoin(userIdValue, familyIdValue) {
-    const userId = String(userIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
     const familyId = String(familyIdValue || "").trim();
     if (this._familyMembership(userId)) throw new Error("Already in a family");
     const family = this.ctx.storage.sql.exec(
-      "SELECT id FROM families WHERE id = ? LIMIT 1",
-      familyId,
+      "SELECT id FROM families WHERE id = ? LIMIT 1", familyId,
     ).toArray()[0];
     if (!family) throw new Error("Family not found");
     const now = Date.now();
@@ -7395,7 +7594,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!actor || !this._familyCanReview(actorUserIdValue, actor.family_id)) {
       throw new Error("Family admin permission required");
     }
-    const targetUserId = String(targetUserIdValue || "").trim();
+    const targetUserId = this._resolveOwnerUserId(targetUserIdValue);
     const request = this.ctx.storage.sql.exec(
       `SELECT user_id FROM family_join_requests
         WHERE family_id = ? AND user_id = ? AND status = 'pending' LIMIT 1`,
@@ -7459,6 +7658,137 @@ export class AppDirectoryStore extends DurableObject {
       actor.family_id, target.user_id,
     );
     return { ok: true };
+  }
+
+  familyLeave(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const membership = this._familyMembership(userId);
+    if (!membership) return { ok:true };
+    if (String(membership.role) === "leader") {
+      throw new Error("Family Leader cannot leave before transferring or closing the Family");
+    }
+    this.ctx.storage.sql.exec(
+      "DELETE FROM family_members WHERE family_id=? AND user_id=?",
+      membership.family_id,userId,
+    );
+    return { ok:true };
+  }
+
+  familyUpdateNotice(userIdValue, noticeValue) {
+    const actor = this._familyMembership(userIdValue);
+    if (!actor || !["leader","admin"].includes(String(actor.role))) {
+      throw new Error("Family Leader/Admin permission required");
+    }
+    const notice = cleanText(noticeValue, 300);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET notice=?,updated_at=? WHERE id=?",
+      notice,now,actor.family_id,
+    );
+    return { ok:true, notice };
+  }
+
+  familyCheckIn(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const membership = this._familyMembership(userId);
+    if (!membership) throw new Error("Join a Family first");
+    const dayKey = this._indiaGiftDayKey(Date.now());
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT exp_awarded FROM family_daily_logins WHERE family_id=? AND user_id=? AND day_key=? LIMIT 1",
+      membership.family_id,userId,dayKey,
+    ).toArray()[0];
+    if (existing) {
+      return { ok:true, already_checked_in:true, exp_awarded:Number(existing.exp_awarded || 0) };
+    }
+    const policies = this.ownerState().policies || {};
+    const exp = Math.max(1, Math.floor(Number(policies.family_daily_login_exp || 1)));
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_daily_logins(family_id,user_id,day_key,exp_awarded,created_at) VALUES(?,?,?,?,?)",
+      membership.family_id,userId,dayKey,exp,now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET experience=experience+?,updated_at=? WHERE id=?",
+      exp,now,membership.family_id,
+    );
+    return { ok:true, already_checked_in:false, exp_awarded:exp };
+  }
+
+  familyTransferCoins(senderUserIdValue, receiverUserIdValue, coinsValue) {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const receiverId = this._resolveOwnerUserId(receiverUserIdValue);
+    const amount = Math.floor(Number(coinsValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    if (senderId === receiverId) throw new Error("Choose another Family member");
+    const sender = this._familyMembership(senderId);
+    const receiver = this._familyMembership(receiverId);
+    if (!sender || !receiver || String(sender.family_id) !== String(receiver.family_id)) {
+      throw new Error("Coins can be sent only to a member of your Family");
+    }
+    this._enforceActionRate(senderId, "family_wallet_send", 20, 60000, 300000);
+    const now = Date.now();
+    const id = "family-transfer-" + crypto.randomUUID();
+    this._debitNormalWalletAuthorized(senderId, amount, "family_member_transfer");
+    this._creditNormalWalletAuthorized(receiverId, amount, "family_member_transfer");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_wallet_transfers(id,family_id,sender_user_id,receiver_user_id,coins,created_at) VALUES(?,?,?,?,?,?)",
+      id,sender.family_id,senderId,receiverId,amount,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_received_coins(id,family_id,sender_user_id,receiver_user_id,coins,source,created_at) VALUES(?,?,?,?,?,'family_wallet',?)",
+      id,sender.family_id,senderId,receiverId,amount,now,
+    );
+    // Receiving coins gives Family EXP 1:1. Sending coins gives no Family EXP.
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET experience=experience+?,updated_at=? WHERE id=?",
+      amount,now,sender.family_id,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'family_send',?,0,?,?,?)",
+      crypto.randomUUID(),senderId,-amount,id,"Family Wallet send to "+receiverId,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'family_receive',?,0,?,?,?)",
+      crypto.randomUUID(),receiverId,amount,id,"Family Wallet received from "+senderId,now,
+    );
+    this._notifyUser(
+      receiverId,
+      "family_coins_received",
+      "Family Wallet",
+      amount.toLocaleString("en-US") + " coins received from " + senderId + ".",
+      { source_user_id:senderId, metadata:{ family_id:String(sender.family_id), coins:amount } },
+    );
+    return {
+      ok:true,
+      transfer_id:id,
+      sender_wallet:this.getWallet(senderId),
+      receiver_user_id:receiverId,
+      coins:amount,
+      family_level:this._familyLevelInfo(Number(sender.experience || 0) + amount),
+    };
+  }
+
+  familyWalletTransfers(userIdValue, limitValue = 100) {
+    const membership = this._familyMembership(userIdValue);
+    if (!membership) return [];
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT t.*, su.display_name AS sender_name, ru.display_name AS receiver_name
+         FROM family_wallet_transfers t
+         JOIN app_users su ON su.user_id=t.sender_user_id
+         JOIN app_users ru ON ru.user_id=t.receiver_user_id
+        WHERE t.family_id=?
+        ORDER BY t.created_at DESC LIMIT ?`,
+      membership.family_id,limit,
+    ).toArray().map((row)=>({
+      id:String(row.id),
+      sender_user_id:String(row.sender_user_id),
+      sender_name:String(row.sender_name || row.sender_user_id),
+      receiver_user_id:String(row.receiver_user_id),
+      receiver_name:String(row.receiver_name || row.receiver_user_id),
+      coins:Number(row.coins || 0),
+      created_at:Number(row.created_at || 0),
+    }));
   }
 
   async createRoom(ownerIdValue, input) {
