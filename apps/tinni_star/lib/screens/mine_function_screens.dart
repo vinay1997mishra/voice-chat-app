@@ -7,9 +7,12 @@ import '../app/tinni_state.dart';
 import '../auth/app_auth_api.dart';
 import 'login_screen.dart';
 
-const _mineBg = Color(0xFFFFFBF4);
-const _mineText = Color(0xFF4B463F);
-const _mineMuted = Color(0xFF817A70);
+const _mineBg = Color(0xFF030201);
+const _minePanel = Color(0xFF0B0804);
+const _minePanel2 = Color(0xFF151006);
+const _mineText = Color(0xFFC18A00);
+const _mineMuted = Color(0xFF9C7000);
+const _mineBorder = Color(0xFF5F4600);
 
 ImageProvider? _avatarProvider(String? value) {
   final source = value?.trim() ?? '';
@@ -33,6 +36,68 @@ String _dateText(dynamic value) {
   final dt = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
   String two(int v) => v.toString().padLeft(2, '0');
   return '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
+}
+
+
+class _MineSubpageBackground extends StatelessWidget {
+  const _MineSubpageBackground({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF070502),
+            Color(0xFF030201),
+            Color(0xFF000000),
+          ],
+        ),
+      ),
+      child: CustomPaint(
+        painter: const _MineSubpageStarsPainter(),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _MineSubpageStarsPainter extends CustomPainter {
+  const _MineSubpageStarsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final dot = Paint()..style = PaintingStyle.fill;
+    final glow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.65;
+
+    for (var i = 0; i < 72; i += 1) {
+      final x = (((i * 43) % 983) / 983) * size.width;
+      final y = (((i * 79) % 977) / 977) * size.height;
+      final bright = i % 12 == 0;
+      dot.color = bright
+          ? const Color(0xFFC18A00)
+          : Color.fromARGB(90 + (i % 4) * 18, 170, 120, 0);
+      canvas.drawCircle(
+        Offset(x, y),
+        bright ? 1.35 : 0.45 + (i % 3) * 0.18,
+        dot,
+      );
+      if (bright) {
+        glow.color = const Color(0x55C18A00);
+        canvas.drawLine(Offset(x - 3.2, y), Offset(x + 3.2, y), glow);
+        canvas.drawLine(Offset(x, y - 3.2), Offset(x, y + 3.2), glow);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MineSubpageStarsPainter oldDelegate) => false;
 }
 
 class MedalOfHonorScreen extends StatefulWidget {
@@ -92,10 +157,11 @@ class _MedalOfHonorScreenState extends State<MedalOfHonorScreen> {
         elevation: 0,
         title: const Text('Medal of Honor'),
       ),
-      body: RefreshIndicator(
+      body: _MineSubpageBackground(
+        child: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
@@ -113,7 +179,7 @@ class _MedalOfHonorScreenState extends State<MedalOfHonorScreen> {
                     ),
                   for (final medal in medals)
                     Card(
-                      color: Colors.white,
+                      color: _minePanel,
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: _colorFromHex(
@@ -201,10 +267,11 @@ class _RewardRecordsScreenState extends State<RewardRecordsScreen> {
         elevation: 0,
         title: const Text('Reward Records'),
       ),
-      body: RefreshIndicator(
+      body: _MineSubpageBackground(
+        child: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : rows.isEmpty
                 ? ListView(
                     children: const [
@@ -366,7 +433,7 @@ class _TaskScreenState extends State<TaskScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
@@ -374,7 +441,7 @@ class _TaskScreenState extends State<TaskScreen> {
                     Text(error!, style: const TextStyle(color: Colors.redAccent)),
                   for (final task in tasks)
                     Card(
-                      color: Colors.white,
+                      color: _minePanel,
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: task['completed'] == true
@@ -565,7 +632,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           if (loading) const LinearProgressIndicator(),
           for (final row in history)
             Card(
-              color: Colors.white,
+              color: _minePanel,
               child: ListTile(
                 title: Text(row['category']?.toString() ?? 'General'),
                 subtitle: Text(
@@ -676,27 +743,62 @@ class _MessageNotificationScreenState extends State<MessageNotificationScreen> {
         elevation: 0,
         title: const Text('Message notification'),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                SwitchListTile(
-                  title: const Text('Voice'),
-                  value: voice,
-                  onChanged: (v) => _save(nextVoice: v),
-                ),
-                SwitchListTile(
-                  title: const Text('Vibration'),
-                  value: vibration,
-                  onChanged: (v) => _save(nextVibration: v),
-                ),
-                SwitchListTile(
-                  title: const Text('Only receive floating screen in the room'),
-                  value: floatingOnly,
-                  onChanged: (v) => _save(nextFloatingOnly: v),
-                ),
-              ],
-            ),
+      body: _MineSubpageBackground(
+        child: loading
+            ? const Center(
+                child: CircularProgressIndicator(color: _mineText),
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(8, 16, 8, 24),
+                children: [
+                  SwitchListTile(
+                    title: const Text(
+                      'Voice',
+                      style: TextStyle(
+                        color: _mineText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    activeThumbColor: _mineText,
+                    activeTrackColor: Color(0x665F4600),
+                    inactiveThumbColor: _mineMuted,
+                    inactiveTrackColor: _minePanel2,
+                    value: voice,
+                    onChanged: (v) => _save(nextVoice: v),
+                  ),
+                  SwitchListTile(
+                    title: const Text(
+                      'Vibration',
+                      style: TextStyle(
+                        color: _mineText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    activeThumbColor: _mineText,
+                    activeTrackColor: Color(0x665F4600),
+                    inactiveThumbColor: _mineMuted,
+                    inactiveTrackColor: _minePanel2,
+                    value: vibration,
+                    onChanged: (v) => _save(nextVibration: v),
+                  ),
+                  SwitchListTile(
+                    title: const Text(
+                      'Only receive floating screen in the room',
+                      style: TextStyle(
+                        color: _mineText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    activeThumbColor: _mineText,
+                    activeTrackColor: Color(0x665F4600),
+                    inactiveThumbColor: _mineMuted,
+                    inactiveTrackColor: _minePanel2,
+                    value: floatingOnly,
+                    onChanged: (v) => _save(nextFloatingOnly: v),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -923,7 +1025,7 @@ class _BindAccountScreenState extends State<BindAccountScreen> {
         title: const Text('Bind account'),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _mineText))
           : ListView(
               padding: const EdgeInsets.all(14),
               children: [
@@ -964,7 +1066,7 @@ class _BindAccountScreenState extends State<BindAccountScreen> {
     String? subtitle,
   }) {
     return Card(
-      color: Colors.white,
+      color: _minePanel,
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: const Color(0xFFFFE8A3),
@@ -1059,34 +1161,50 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
         elevation: 0,
         title: const Text('Language settings'),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                for (final value in values)
-                  ListTile(
-                    key: Key('language-' + value.toLowerCase()),
-                    title: Text(value),
-                    trailing: Icon(
-                      selected == value
-                          ? Icons.radio_button_checked_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      color: selected == value
-                          ? const Color(0xFFC58B00)
-                          : _mineMuted,
+      body: _MineSubpageBackground(
+        child: loading
+            ? const Center(
+                child: CircularProgressIndicator(color: _mineText),
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(8, 16, 8, 24),
+                children: [
+                  for (final value in values)
+                    ListTile(
+                      key: Key('language-' + value.toLowerCase()),
+                      title: Text(
+                        value,
+                        style: TextStyle(
+                          color:
+                              selected == value ? _mineText : _mineMuted,
+                          fontWeight: selected == value
+                              ? FontWeight.w900
+                              : FontWeight.w700,
+                        ),
+                      ),
+                      trailing: Icon(
+                        selected == value
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        color: selected == value ? _mineText : _mineMuted,
+                      ),
+                      onTap: () => _select(value),
                     ),
-                    onTap: () => _select(value),
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'This preference is saved to your Tinni Star account. '
+                      'Screen translations follow this preference where localized text is available.',
+                      style: TextStyle(
+                        color: _mineMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'This preference is saved to your Tinni Star account. '
-                    'Screen translations can follow this preference as localized text is added.',
-                    style: TextStyle(color: _mineMuted, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -1223,7 +1341,7 @@ class _BlocklistScreenState extends State<BlocklistScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : rows.isEmpty
                 ? ListView(
                     children: [
@@ -1305,36 +1423,16 @@ class _PropsScreenState extends State<PropsScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
-      final results = await Future.wait<dynamic>([
-        widget.state.backend.inventory(account.authToken),
-        widget.state.backend.frameCatalog(account.authToken),
-        widget.state.backend.storeCatalog(account.authToken, 'vehicle'),
-        widget.state.backend.storeCatalog(account.authToken, 'entry'),
-        widget.state.backend.storeCatalog(account.authToken, 'profile_card'),
-        widget.state.backend.storeCatalog(account.authToken, 'ring'),
-        widget.state.backend.storeCatalog(
-          account.authToken,
-          'profile_background',
-        ),
-        widget.state.backend.storeCatalog(account.authToken, 'bubble'),
-      ]);
-      final inventory = Map<String, dynamic>.from(results[0] as Map);
+      final inventory = await widget.state.backend.inventory(account.authToken);
       widget.state.inventory.applyRemote(inventory);
       final rawOwned = inventory['owned'];
       final lookup = <String, String>{};
-      for (final raw in <dynamic>[
-        ...(results[1] as List),
-        ...(results[2] as List),
-        ...(results[3] as List),
-        ...(results[4] as List),
-        ...(results[5] as List),
-        ...(results[6] as List),
-        ...(results[7] as List),
-      ]) {
-        if (raw is! Map) continue;
-        final id = raw['id']?.toString() ?? '';
-        final name = raw['name']?.toString() ?? '';
-        if (id.isNotEmpty) lookup[id] = name.isEmpty ? id : name;
+      if (rawOwned is List) {
+        for (final raw in rawOwned.whereType<Map>()) {
+          final id = raw['item_id']?.toString() ?? '';
+          final name = raw['name']?.toString() ?? '';
+          if (id.isNotEmpty) lookup[id] = name.isEmpty ? id : name;
+        }
       }
       if (!mounted) return;
       setState(() {
@@ -1399,7 +1497,7 @@ class _PropsScreenState extends State<PropsScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : owned.isEmpty
                 ? ListView(
                     children: [
@@ -1432,7 +1530,11 @@ class _PropsScreenState extends State<PropsScreen> {
                       final equipped =
                           widget.state.inventory.isEquipped(kind, id);
                       return Card(
-                        color: Colors.white,
+                        color: _minePanel,
+                        shape: RoundedRectangleBorder(
+                          side: const BorderSide(color: _mineBorder),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
@@ -1480,6 +1582,7 @@ class _PropsScreenState extends State<PropsScreen> {
                       );
                     },
                   ),
+        ),
       ),
     );
   }
@@ -1558,7 +1661,7 @@ class _WealthLevelScreenState extends State<WealthLevelScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
@@ -1602,7 +1705,7 @@ class _WealthLevelScreenState extends State<WealthLevelScreen> {
                   ),
                   const SizedBox(height: 14),
                   Card(
-                    color: Colors.white,
+                    color: _minePanel,
                     child: ListTile(
                       title: const Text('Next level'),
                       subtitle: Text(
@@ -1701,15 +1804,25 @@ class _HostDataScreenState extends State<HostDataScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _mineText))
             : ListView(
                 padding: const EdgeInsets.all(14),
                 children: [
                   if (error != null)
                     Text(error!, style: const TextStyle(color: Colors.redAccent)),
                   Card(
-                    color: Colors.white,
-                    child: Column(
+                    color: _minePanel,
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: _mineBorder),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: ListTileTheme(
+                      data: const ListTileThemeData(
+                        textColor: _mineText,
+                        iconColor: _mineText,
+                        subtitleTextStyle: TextStyle(color: _mineMuted),
+                      ),
+                      child: Column(
                       children: [
                         ListTile(
                           leading: const Icon(Icons.badge_rounded),
@@ -1741,6 +1854,7 @@ class _HostDataScreenState extends State<HostDataScreen> {
                         ),
                       ],
                     ),
+                    ),
                   ),
                   if (wallet.canTransferSettlement && widget.onTransfer != null)
                     Padding(
@@ -1766,9 +1880,13 @@ class _HostDataScreenState extends State<HostDataScreen> {
                   ),
                   const SizedBox(height: 8),
                   if (transfers.isEmpty)
-                    const Card(
-                      color: Colors.white,
-                      child: Padding(
+                    Card(
+                      color: _minePanel,
+                      shape: RoundedRectangleBorder(
+                        side: const BorderSide(color: _mineBorder),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Padding(
                         padding: EdgeInsets.all(20),
                         child: Center(
                           child: Text(
@@ -1780,8 +1898,14 @@ class _HostDataScreenState extends State<HostDataScreen> {
                     ),
                   for (final row in transfers)
                     Card(
-                      color: Colors.white,
+                      color: _minePanel,
+                      shape: RoundedRectangleBorder(
+                        side: const BorderSide(color: _mineBorder),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                       child: ListTile(
+                        iconColor: _mineText,
+                        textColor: _mineText,
                         leading: const Icon(Icons.payments_rounded),
                         title: Text(
                           _usd((row['usd_cents'] as num?)?.toInt() ?? 0),
@@ -1803,6 +1927,7 @@ class _HostDataScreenState extends State<HostDataScreen> {
                     ),
                 ],
               ),
+        ),
       ),
     );
   }
