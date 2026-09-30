@@ -3310,6 +3310,24 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row) => String(row.target_id));
   }
 
+  listBlockedProfiles(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT u.user_id,u.display_name,u.avatar_data_url,u.flag_emoji,b.created_at
+         FROM app_blocks b
+         JOIN app_users u ON u.user_id=b.target_id
+        WHERE b.blocker_id=?
+        ORDER BY b.created_at DESC`, userId,
+    ).toArray().map((row)=>({
+      user_id:String(row.user_id),
+      display_name:String(row.display_name || row.user_id),
+      avatar_data_url:row.avatar_data_url ? String(row.avatar_data_url) : null,
+      flag_emoji:String(row.flag_emoji || ""),
+      blocked_at:Number(row.created_at || 0),
+    }));
+  }
+
   isBlockedBetween(firstUserIdValue, secondUserIdValue) {
     const firstUserId = String(firstUserIdValue || "").trim();
     const secondUserId = String(secondUserIdValue || "").trim();
