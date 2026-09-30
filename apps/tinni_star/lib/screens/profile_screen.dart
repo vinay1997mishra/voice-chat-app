@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../identity/owner_tag.dart';
+import '../i18n/tinni_localization.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
@@ -452,6 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    final language = widget.state.languagePreference.value;
     final avatar = _mineAvatarProvider(account.avatarDataUrl);
     final followCount = (_accountStats['following_count'] as num?)?.toInt() ??
         widget.state.social.following.length;
@@ -615,12 +617,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _MineCountStat(
                     value: followCount.toString(),
-                    label: 'Follow',
+                    label: tinniText(language, 'follow'),
                   ),
                   const _MineCountDivider(),
-                  _MineCountStat(value: fansCount.toString(), label: 'Fans'),
+                  _MineCountStat(value: fansCount.toString(), label: tinniText(language, 'fans')),
                   const _MineCountDivider(),
-                  _MineCountStat(value: charmPoints.toString(), label: 'Charm'),
+                  _MineCountStat(value: charmPoints.toString(), label: tinniText(language, 'charm')),
                 ],
               ),
               const SizedBox(height: 12),
@@ -705,7 +707,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            'Wallet',
+                            tinniText(language, 'wallet'),
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 21,
@@ -734,7 +736,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(width: 7),
                   _mineStatusCard(
                     key: const Key('mine-wealth-level-card'),
-                    title: 'Wealth level',
+                    title: tinniText(language, 'wealth_level'),
                     subtitle: 'LV.' + wealthLevel.toString(),
                     colors: const [Color(0xFF24B85B), Color(0xFF087A38)],
                     icon: Icons.diamond_rounded,
@@ -749,7 +751,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-medal-of-honor'),
                   icon: Icons.hexagon_rounded,
-                  label: 'Medal of Honor',
+                  label: tinniText(language, 'medal_of_honor'),
                   onTap: () => _openMineScreen(
                     MedalOfHonorScreen(state: widget.state),
                   ),
@@ -757,7 +759,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-custom-center'),
                   icon: Icons.design_services_rounded,
-                  label: 'Custom Center',
+                  label: tinniText(language, 'custom_center'),
                   onTap: () => _openMineScreen(
                     CustomCenterScreen(state: widget.state),
                   ),
@@ -765,7 +767,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-shop'),
                   icon: Icons.shopping_bag_rounded,
-                  label: 'Shop',
+                  label: tinniText(language, 'shop'),
                   onTap: () => _openMineScreen(
                     StoreScreen(state: widget.state),
                   ),
@@ -773,7 +775,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-props'),
                   icon: Icons.auto_awesome_rounded,
-                  label: 'Props',
+                  label: tinniText(language, 'props'),
                   onTap: () => _openMineScreen(
                     PropsScreen(state: widget.state),
                   ),
@@ -781,7 +783,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-reward-records'),
                   icon: Icons.receipt_long_rounded,
-                  label: 'Reward Records',
+                  label: tinniText(language, 'reward_records'),
                   onTap: () => _openMineScreen(
                     RewardRecordsScreen(state: widget.state),
                   ),
@@ -792,7 +794,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-task'),
                   icon: Icons.task_alt_rounded,
-                  label: 'Task',
+                  label: tinniText(language, 'task'),
                   onTap: () => _openMineScreen(
                     TaskScreen(state: widget.state),
                   ),
@@ -800,7 +802,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-host-data'),
                   icon: Icons.monitor_heart_rounded,
-                  label: 'Host data',
+                  label: tinniText(language, 'host_data'),
                   onTap: () => _openMineScreen(
                     HostDataScreen(
                       state: widget.state,
@@ -814,7 +816,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-family'),
                   icon: Icons.home_work_rounded,
-                  label: 'Family',
+                  label: tinniText(language, 'family'),
                   onTap: () => _openMineScreen(
                     widget.state.family.exists
                         ? FamilyHomeScreen(state: widget.state)
@@ -824,7 +826,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-cp-nest'),
                   icon: Icons.favorite_rounded,
-                  label: 'CP Nest',
+                  label: tinniText(language, 'cp_nest'),
                   onTap: () => _openMineScreen(
                     CpScreen(state: widget.state),
                   ),
@@ -835,7 +837,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-feedback'),
                   icon: Icons.chat_bubble_rounded,
-                  label: 'Feedback',
+                  label: tinniText(language, 'feedback'),
                   onTap: () => _openMineScreen(
                     FeedbackScreen(state: widget.state),
                   ),
@@ -843,7 +845,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _mineMenuRow(
                   key: const Key('mine-setting'),
                   icon: Icons.settings_rounded,
-                  label: 'Setting',
+                  label: tinniText(language, 'setting'),
                   onTap: () => _openMineScreen(
                     TinniSettingsScreen(state: widget.state),
                   ),
