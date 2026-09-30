@@ -1015,6 +1015,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
       if (!mounted) return;
       setState(() {
         selected = row['language']?.toString() ?? 'English';
+        widget.state.setLanguagePreference(selected);
         loading = false;
       });
     } catch (_) {
@@ -1032,6 +1033,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
         account.authToken,
         <String, dynamic>{'language': value},
       );
+      widget.state.setLanguagePreference(value);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Language preference saved: $value')),
