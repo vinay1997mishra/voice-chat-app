@@ -23,6 +23,8 @@ class RoomSummary {
     this.themeId = 'royal-dark',
     this.themeAsset,
     this.seatThemeId = 'royal-gold',
+    this.announcement = '',
+    this.roomLevel = 1,
   });
 
   final String id;
@@ -45,6 +47,8 @@ class RoomSummary {
   final String themeId;
   final String? themeAsset;
   final String seatThemeId;
+  final String announcement;
+  final int roomLevel;
 
   bool createdWithin(
     Duration age, {
@@ -77,6 +81,8 @@ class RoomSummary {
     String? themeId,
     String? themeAsset,
     String? seatThemeId,
+    String? announcement,
+    int? roomLevel,
   }) =>
       RoomSummary(
         id: id,
@@ -100,6 +106,8 @@ class RoomSummary {
         themeId: themeId ?? this.themeId,
         themeAsset: themeAsset ?? this.themeAsset,
         seatThemeId: seatThemeId ?? this.seatThemeId,
+        announcement: announcement ?? this.announcement,
+        roomLevel: roomLevel ?? this.roomLevel,
       );
 }
 
@@ -668,6 +676,8 @@ class DiscoveryService {
       themeId: row['theme_id']?.toString() ?? 'royal-dark',
       themeAsset: row['theme_asset']?.toString(),
       seatThemeId: row['seat_theme_id']?.toString() ?? 'royal-gold',
+      announcement: row['announcement']?.toString() ?? '',
+      roomLevel: _asInt(row['room_level'], fallback: 1),
     );
   }
 
