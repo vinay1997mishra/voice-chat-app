@@ -62,6 +62,10 @@ void main() {
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
     expect(find.byKey(const Key('room-rank-hall-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('room-game-floating-button')),
+      findsOneWidget,
+    );
 
     expect(
       find.byKey(const Key('live-owner-tag-92000002-Official Host')),
@@ -163,6 +167,7 @@ void main() {
     expect(find.byKey(const Key('room-tool-effects')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-feedback')), findsOneWidget);
     expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-game')), findsNothing);
     await tester.tap(find.byKey(const Key('room-tool-gift')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
