@@ -5042,7 +5042,11083 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 return;
               }
               if (!RegExp(
-                r'^(?:\\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})\$' + '',
+                r'^(?:\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})
+              ).hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchError = result == null ? 'User ID not found.' : null;
+                  searchBusy = false;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchBusy = false;
+                  searchedUser = null;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+
+              Widget? trailing;
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' +
+                                  member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key(
+                    'room-member-add-admin-' + member.userId,
+                  ),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchedUserCard() {
+              final user = searchedUser;
+              if (user == null) {
+                if (searchBusy) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (searchError != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    child: Text(
+                      searchError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8A80),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+
+              final userId = user['user_id']?.toString() ?? '';
+              final displayName =
+                  user['display_name']?.toString().trim().isNotEmpty == true
+                      ? user['display_name'].toString()
+                      : userId;
+              final avatar =
+                  avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final liveAdmin = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB52DFF),
+                  ),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                    ),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : liveAdmin
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
+                            ),
+                ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive)
+                                ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.text,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[A-Za-z0-9_]'),
+                                      ),
+                                      LengthLimitingTextInputFormatter(20),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Search number ID / Name ID',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchedUserCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member
+                                              in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(searchController.dispose);
+  }
+
+  Future<void> _showReferenceRoomSetup() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can open Room Setup.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final nameController = TextEditingController(text: _roomTitle);
+    final noticeController =
+        TextEditingController(text: _roomAnnouncement);
+    var pendingPhoto = _roomPhotoDataUrl;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            ImageProvider? pendingPhotoProvider;
+            if (pendingPhoto != null &&
+                pendingPhoto!.startsWith('data:image/')) {
+              try {
+                pendingPhotoProvider = MemoryImage(
+                  base64Decode(pendingPhoto!.split(',').last),
+                );
+              } catch (_) {
+                pendingPhotoProvider = null;
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D062C),
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF1D062C),
+                title: const Text(
+                  'Room Setup',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                children: [
+                  Center(
+                    child: GestureDetector(
+                      key: const Key('reference-room-setup-photo'),
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 68,
+                          maxWidth: 900,
+                          maxHeight: 900,
+                        );
+                        if (image == null) return;
+                        final bytes = await image.readAsBytes();
+                        final mime =
+                            image.mimeType?.startsWith('image/') == true
+                                ? image.mimeType!
+                                : 'image/jpeg';
+                        final dataUrl = 'data:' +
+                            mime +
+                            ';base64,' +
+                            base64Encode(bytes);
+                        if (dataUrl.length > 450000) {
+                          _snack(
+                            'Room cover is too large. Choose a smaller image.',
+                          );
+                          return;
+                        }
+                        setPageState(() {
+                          pendingPhoto = dataUrl;
+                        });
+                      },
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: const Color(0xFF171019),
+                        backgroundImage: pendingPhotoProvider,
+                        child: pendingPhotoProvider == null
+                            ? const Icon(
+                                Icons.add_a_photo_rounded,
+                                color: RoyalPalette.cream,
+                                size: 28,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Room Name',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-name-field'),
+                    controller: nameController,
+                    maxLength: 24,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Notice',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-notice-field'),
+                    controller: noticeController,
+                    maxLength: 24,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    key: const Key('reference-room-block-list'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: const Color(0xFF2A2330),
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      color: RoyalPalette.cream,
+                    ),
+                    title: const Text(
+                      'Block List',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.muted,
+                    ),
+                    onTap: () => _showRoomBlacklist(pageContext),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton(
+                    key: const Key('reference-room-setup-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B08FF),
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 15),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final notice = noticeController.text.trim();
+                      if (name.isEmpty) {
+                        _snack('Room name is required.');
+                        return;
+                      }
+
+                      try {
+                        final photoChanged =
+                            pendingPhoto != _roomPhotoDataUrl;
+                        final updated =
+                            await widget.state.discovery.updateRoomRemote(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          title: name,
+                          announcement: notice,
+                          photoDataUrl:
+                              photoChanged ? pendingPhoto : null,
+                        );
+                        _roomTitleOverride = updated.title;
+                        _roomPhotoOverride = updated.photoDataUrl;
+                        _roomAnnouncementOverride =
+                            updated.announcement;
+
+                        if (mounted) setState(() {});
+                        if (pageContext.mounted) {
+                          Navigator.pop(pageContext);
+                        }
+                        _snack('Room setup saved.');
+                      } catch (error) {
+                        _snack(
+                          error
+                              .toString()
+                              .replaceFirst('Bad state: ', ''),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    noticeController.dispose();
+  }
+
+  Future<void> _showLuckyNumberDialog() async {
+    final controls = widget.state.roomControls;
+    final numberController = TextEditingController(
+      text: controls.luckyNumber?.toString() ?? '',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lucky Number'),
+        content: TextField(
+          controller: numberController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
+        ),
+        actions: [
+          if (controls.luckyNumberEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(context, -1),
+              child: const Text('Turn Off'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(numberController.text.trim());
+              if (value == null || value < 0) return;
+              Navigator.pop(context, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null) return;
+    if (result == -1) {
+      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
+      _snack('Lucky number disabled.');
+    } else {
+      controls.setLuckyNumber(result);
+      _snack('Lucky number set to $result.');
+    }
+    if (mounted) setState(() {});
+  }
+  Future<void> _handleUserSeatTap(int index) async {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+
+    if (!controller.inviteMode) {
+      final text = controller.requestOrJoinSeat(index);
+      _snack(text);
+      return;
+    }
+
+    if (seat.locked) {
+      _snack('Seat ' + (index + 1).toString() + ' is locked.');
+      return;
+    }
+    if (seat.occupied) {
+      _snack('Seat ' + (index + 1).toString() + ' is occupied.');
+      return;
+    }
+    if (controller.mySeat != null) {
+      _snack('Leave your current seat first.');
+      return;
+    }
+
+    try {
+      await widget.state.roomSession.requestMySeat(index);
+      _snack('Request sent for Seat ' + (index + 1).toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  // ignore: unused_element
+  void _showSeatRequests() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can review seat requests.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final requests = widget.state.roomSession.seatRequests;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              child: requests.isEmpty
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'No pending seat requests.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: requests.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final request = requests[index];
+                        var displayName = request.userId;
+                        for (final member
+                            in widget.state.roomSession.liveMembers) {
+                          if (member.userId == request.userId) {
+                            displayName = member.displayName;
+                            break;
+                          }
+                        }
+                        return ListTile(
+                          leading: const ShiningIcon(
+                            icon: Icons.event_seat_rounded,
+                            color: FeaturePalette.family,
+                            size: 18,
+                            boxSize: 34,
+                            glow: 0.30,
+                          ),
+                          title: Text(displayName),
+                          subtitle: Text(
+                            'Seat ' +
+                                (request.seatIndex + 1).toString() +
+                                ' • ID ' +
+                                request.userId,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: false,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.close_rounded,
+                                  color: FeaturePalette.safety,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Approve',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: true,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    _snack(
+                                      displayName +
+                                          ' approved for Seat ' +
+                                          (request.seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.check_rounded,
+                                  color: FeaturePalette.family,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSeatControls(int index) {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('seat-control-lock'),
+              leading: ShiningIcon(
+                icon: seat.locked
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_rounded,
+                color: seat.locked
+                    ? FeaturePalette.family
+                    : FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ${index + 1} locked.'
+                        : 'Seat ${index + 1} unlocked.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              key: const Key('seat-control-mute'),
+              leading: ShiningIcon(
+                icon: seat.roomMuted
+                    ? Icons.mic_rounded
+                    : Icons.mic_off_rounded,
+                color: seat.roomMuted
+                    ? FeaturePalette.safety
+                    : FeaturePalette.family,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(
+                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ${index + 1} muted.'
+                        : 'Seat ${index + 1} unmuted.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            if (!seat.occupied)
+              ListTile(
+                key: const Key('seat-control-take'),
+                leading: const ShiningIcon(
+                  icon: Icons.event_seat_rounded,
+                  color: FeaturePalette.family,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Take Seat'),
+                subtitle: const Text(
+                  'Owner/Admin can take this empty seat directly.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ${index + 1}.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle: Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
+                },
+              ),
+            if (controller.mySeat == index)
+              ListTile(
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave this seat'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+            if (controller.mySeat != null && controller.mySeat != index)
+              ListTile(
+                key: const Key('seat-control-leave-current'),
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave current seat'),
+                subtitle: Text(
+                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+          ],
+          ),
+        ),
+    );
+  }
+
+  Widget _buildSeatRow({
+    required int row,
+    required SeatLayoutSpec spec,
+    required double seatDiameter,
+  }) {
+    final range = spec.rangeForRow(row);
+    final rowSeatCount = range.$2 - range.$1;
+    final seatWidth = (seatDiameter + (seatDiameter < 44 ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+    return Row(
+      key: Key('seat-row-' + row.toString()),
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var offset = 0; offset < rowSeatCount; offset++)
+          SizedBox(
+            width: seatWidth,
+            child: _buildSeat(
+              index: range.$1 + offset,
+              seatDiameter: seatDiameter,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeat({
+    required int index,
+    required double seatDiameter,
+  }) {
+    final seat = controller.seats[index];
+    RoomPresenceMember? presenceMember;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == index) {
+        presenceMember = member;
+        break;
+      }
+    }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
+    final occupied = seat.userName != null || presenceMember != null;
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
+    final emoteUntil = presenceMember?.seatEmoteUntil;
+    final seatEmote = presenceMember?.seatEmote != null &&
+            emoteUntil != null &&
+            emoteUntil.isAfter(DateTime.now())
+        ? presenceMember!.seatEmote
+        : null;
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
+    final compact = seatDiameter < 44;
+    final labelWidth = (seatDiameter + (compact ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+
+    return SizedBox(
+      key: Key('seat-' + index.toString()),
+      width: labelWidth,
+      child: GestureDetector(
+        onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
+          if (occupied) {
+            RoomPresenceMember? member = presenceMember;
+            if (member == null) {
+              final mappedUserId = widget.state.roomControls.seatUsers[index];
+              for (final item in widget.state.roomSession.liveMembers) {
+                final idMatch =
+                    mappedUserId != null && item.userId == mappedUserId;
+                final nameMatch = item.displayName == seat.userName;
+                if (idMatch || nameMatch) {
+                  member = item;
+                  break;
+                }
+              }
+            }
+            if (member != null &&
+                member.userId != widget.state.auth.current?.userId) {
+              _showUserProfile(member, seatIndexHint: index);
+              return;
+            }
+          }
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+            return;
+          }
+          _handleUserSeatTap(index);
+        },
+        onLongPress: () {
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+          } else {
+            _snack('Only the room owner or room admin can control seats.');
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: seatDiameter,
+              height: seatDiameter,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: seat.locked && !occupied
+                        ? Center(
+                            child: Icon(
+                              Icons.lock_rounded,
+                              color: const Color(0xFFFFD76A),
+                              size: seatDiameter * 0.48,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x66FFD76A),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          )
+                        : AnimatedAvatarFrame(
+                            size: seatDiameter,
+                            frameId: presenceMember?.equippedFrameId,
+                            child: Container(
+                              width: seatDiameter,
+                              height: seatDiameter,
+                              padding: EdgeInsets.all(
+                                compact ? 2.4 : 3.2,
+                              ),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0x22000000),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  width: compact ? 1.1 : 1.5,
+                                ),
+                                boxShadow: const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x775D39FF),
+                                    blurRadius: 12,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0x221A0C33),
+                                  image: avatar == null
+                                      ? null
+                                      : DecorationImage(
+                                          image: avatar,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  border: Border.all(
+                                    color: const Color(0x99D9C8FF),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: avatar != null
+                                    ? null
+                                    : Center(
+                                        child: occupied
+                                            ? Text(
+                                                displayName.characters.first,
+                                                style: TextStyle(
+                                                  color:
+                                                      RoyalPalette.cream,
+                                                  fontWeight:
+                                                      FontWeight.w900,
+                                                  fontSize:
+                                                      seatDiameter * 0.32,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.weekend_rounded,
+                                                color: const Color(
+                                                  0xFFF3EAFF,
+                                                ),
+                                                size:
+                                                    seatDiameter * 0.44,
+                                              ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                    ),
+                  if (seat.roomMuted ||
+                      (controller.mySeat == index && controller.selfMuted) ||
+                      (presenceMember?.micMuted ?? false))
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        key: Key(
+                          'seat-muted-indicator-' + index.toString(),
+                        ),
+                        width: compact ? 14 : 18,
+                        height: compact ? 14 : 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE73D4F),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.mic_off_rounded,
+                          size: compact ? 9 : 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (seatEmote != null && seatEmote.isNotEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        seatEmote,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: seatDiameter * 0.82,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: compact ? 2 : 4),
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              key: Key('seat-heart-' + index.toString()),
+              height: compact ? 9 : 11,
+              constraints: BoxConstraints(
+                minWidth: compact ? 28 : 34,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8D72B8).withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '💜0',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFFE9DFFF),
+                  fontSize: compact ? 5.5 : 7,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (occupied &&
+                presenceMember != null &&
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.state.roomSession;
+    final activeController = session.controller;
+    if (activeController == null || session.room?.id != widget.room.id) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_roomTitle)),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: FeaturePalette.social,
+          ),
+        ),
+      );
+    }
+
+    final config = activeController.config;
+    final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
+    final screenSize = MediaQuery.sizeOf(context);
+    final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
+    final maxSeatAreaHeight = screenSize.height * 0.38;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
+    final heightSeatDiameter =
+        (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
+    final seatDiameter = (widthSeatDiameter < heightSeatDiameter
+            ? widthSeatDiameter
+            : heightSeatDiameter)
+        .clamp(28.0, 64.0)
+        .toDouble();
+    final seatAreaHeight = seatSpec
+        .preferredHeight(seatDiameter)
+        .clamp(120.0, maxSeatAreaHeight)
+        .toDouble();
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop || !session.hasRoom) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (session.hasRoom) session.minimize();
+        });
+      },
+      child: Scaffold(
+        backgroundColor: _roomBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: _roomBackgroundColor,
+          titleSpacing: 8,
+          title: InkWell(
+            key: const Key('room-title-button'),
+            onTap: _showRoomIdentityCard,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              key: const Key('reference-room-title-pill'),
+              constraints: const BoxConstraints(maxWidth: 238),
+              padding: const EdgeInsets.fromLTRB(5, 4, 12, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF100A19),
+                    backgroundImage: _roomPhotoProvider,
+                    child: _roomPhotoProvider == null
+                        ? const Icon(
+                            Icons.meeting_room_rounded,
+                            color: Color(0xFFD7C7FF),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _roomTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '🏅 ' + widget.room.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              key: const Key('room-share-button'),
+              tooltip: 'Share room',
+              onPressed: _shareRoom,
+              icon: const ShiningIcon(
+                icon: Icons.share_rounded,
+                color: FeaturePalette.social,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+            IconButton(
+              key: const Key('room-power-button'),
+              tooltip: 'Room options',
+              onPressed: _showRoomPowerMenu,
+              icon: const ShiningIcon(
+                icon: Icons.power_settings_new_rounded,
+                color: FeaturePalette.safety,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+          decoration: BoxDecoration(
+            color: _roomBackgroundColor,
+            image: _roomThemeImage == null
+                ? null
+                : DecorationImage(
+                    image: _roomThemeImage!,
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: Column(
+            children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    key: const Key('room-rank-hall-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showSendingRanking,
+                    child: Container(
+                      key: const Key('reference-room-rank-pill'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFC83D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Ranking',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final currentAccount = widget.state.auth.current;
+                      final live = widget.state.roomSession.liveMembers;
+                      final ordered = <Map<String, String?>>[];
+
+                      if (currentAccount != null) {
+                        RoomPresenceMember? currentMember;
+                        for (final member in live) {
+                          if (member.userId == currentAccount.userId) {
+                            currentMember = member;
+                            break;
+                          }
+                        }
+                        ordered.add(<String, String?>{
+                          'id': currentAccount.userId,
+                          'name': currentMember?.displayName ??
+                              currentAccount.displayName,
+                          'avatar': currentMember?.avatarDataUrl ??
+                              currentAccount.avatarDataUrl,
+                        });
+                      }
+
+                      for (final member in live) {
+                        if (member.userId == currentAccount?.userId) continue;
+                        ordered.add(<String, String?>{
+                          'id': member.userId,
+                          'name': member.displayName,
+                          'avatar': member.avatarDataUrl,
+                        });
+                      }
+
+                      final currentAlreadyLive = currentAccount != null &&
+                          live.any(
+                            (member) => member.userId == currentAccount.userId,
+                          );
+                      final memberCount = live.length +
+                          (currentAccount != null &&
+                                  session.hasRoom &&
+                                  !currentAlreadyLive
+                              ? 1
+                              : 0);
+                      final visible = ordered.take(3).toList(growable: false);
+
+                      ImageProvider? avatarFor(String? data) {
+                        if (data == null || !data.startsWith('data:image/')) {
+                          return null;
+                        }
+                        try {
+                          return MemoryImage(
+                            base64Decode(data.split(',').last),
+                          );
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return InkWell(
+                        key: const Key('room-online-members-button'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _showReferenceRoomMembers,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(7, 4, 9, 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A1D3B)
+                                .withValues(alpha: 0.86),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (visible.isNotEmpty)
+                                SizedBox(
+                                  key: const Key('room-top-member-avatars'),
+                                  width: 27.0 +
+                                      (visible.length - 1) * 17.0,
+                                  height: 28,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      for (var index = 0;
+                                          index < visible.length;
+                                          index++)
+                                        Positioned(
+                                          left: index * 17.0,
+                                          top: 1,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            padding: const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: const Color(0xFFFFD45A),
+                                              boxShadow: const [
+                                                BoxShadow(
+                                                  color: Color(0x55FFD45A),
+                                                  blurRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              key: Key(
+                                                'room-top-member-dp-' +
+                                                    (visible[index]['id'] ??
+                                                        index.toString()),
+                                              ),
+                                              radius: 11,
+                                              backgroundColor:
+                                                  const Color(0xFF171019),
+                                              backgroundImage: avatarFor(
+                                                visible[index]['avatar'],
+                                              ),
+                                              child: avatarFor(
+                                                        visible[index]
+                                                            ['avatar'],
+                                                      ) ==
+                                                      null
+                                                  ? Text(
+                                                      (visible[index]['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '?'
+                                                          : (visible[index]
+                                                                      ['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .characters
+                                                              .first
+                                                              .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.group_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              const SizedBox(width: 5),
+                              Text(
+                                memberCount.toString(),
+                                key: const Key('room-online-member-count'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              key: const Key('tinni-seat-grid'),
+              height: seatAreaHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: Column(
+                  children: [
+                    for (var row = 0; row < seatSpec.rows; row++)
+                      Expanded(
+                        child: _buildSeatRow(
+                          row: row,
+                          spec: seatSpec,
+                          seatDiameter: seatDiameter,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: RoyalPalette.panel.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: FeaturePalette.discover.withValues(alpha: 0.52),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: FeaturePalette.discover.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const ShiningIcon(
+                    icon: Icons.info_outline_rounded,
+                    color: FeaturePalette.discover,
+                    size: 14,
+                    boxSize: 27,
+                    glow: 0.24,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.state.roomControls.settings.topic.isEmpty
+                          ? 'Ask your followers to support the room.'
+                          : widget.state.roomControls.settings.topic,
+                      style: const TextStyle(color: RoyalPalette.muted, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('room-message-list'),
+                padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+                itemCount: controller.messages.length,
+                itemBuilder: (_, index) {
+                  final message = controller.messages[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: message.author + ': ',
+                            style: const TextStyle(
+                              color: FeaturePalette.message,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          TextSpan(text: message.text, style: const TextStyle(color: RoyalPalette.cream)),
+                        ],
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(0, 6, 6, 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF05080B),
+                  border: Border(top: BorderSide(color: RoyalPalette.bronze)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      child: TextField(
+                        key: const Key('room-chat-field'),
+                        controller: chat,
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned &&
+                            _canTypeInRoom,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : !_canTypeInRoom
+                                      ? 'Owner/Admin only'
+                                      : 'Chat',
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
+                        ),
+                        onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
+                          if (!_canTypeInRoom) {
+                            _snack(
+                              'Public Screen is off. Only room owner/admin can type.',
+                            );
+                            return;
+                          }
+                          final value = chat.text.trim();
+                          if (value.isEmpty) return;
+                          controller.sendMessage(value);
+                          chat.clear();
+                        },
+                      ),
+                    ),
+                    if (controller.mySeat != null)
+                      IconButton(
+                        key: const Key('room-emoji-button'),
+                        tooltip: 'Emoji & Emotes',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: _showEmojiPicker,
+                        icon: const ShiningIcon(
+                          icon: Icons.emoji_emotions_rounded,
+                          color: FeaturePalette.games,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                    IconButton(
+                      key: const Key('room-mic-button'),
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      tooltip: widget.state.roomSession.moderationMicMuted
+                          ? 'Muted by room owner/admin'
+                          : 'Microphone',
+                      onPressed: controller.mySeat == null ||
+                              widget.state.roomSession.moderationMicMuted
+                          ? null
+                          : _toggleMic,
+                      icon: ShiningIcon(
+                        icon: controller.micState == MicState.live
+                            ? Icons.mic_rounded
+                            : Icons.mic_off_rounded,
+                        color: controller.mySeat == null ||
+                                widget.state.roomSession.moderationMicMuted
+                            ? RoyalPalette.muted
+                            : controller.micState == MicState.live
+                                ? FeaturePalette.family
+                                : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
+                      ),
+                    ),
+
+                    IconButton(
+                      key: const Key('room-gift-button'),
+                      tooltip: 'Gifts',
+                      iconSize: 31,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      onPressed: config.giftsEnabled ? _showGiftSheet : null,
+                      icon: _roomActionLogo(
+                        label: 'Gift',
+                        icon: Icons.card_giftcard_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-tools-grid-button'),
+                      tooltip: 'More',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _showRoomTools,
+                      icon: _roomActionLogo(
+                        label: '4-Box',
+                        icon: Icons.grid_view_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    if (controller.inviteMode)
+                      IconButton(
+                        key: const Key('room-seat-button'),
+                        tooltip: 'Seat request',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: () async {
+                          if (controller.mySeat == null) {
+                            _snack('Tap any mic seat to send a seat request.');
+                          } else {
+                            await _leaveSeatAndMute();
+                          }
+                        },
+                        icon: const ShiningIcon(
+                          icon: Icons.event_seat_rounded,
+                          color: FeaturePalette.family,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+            ),
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
+            Positioned.fill(
+              child: EffectOverlay(
+                queue: widget.state.effects,
+                enabled: widget.state.roomControls.effectsEnabled,
+                shouldPlay: widget.state.roomControls.shouldPlayEffect,
+              ),
+            ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
+            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+              Positioned(
+                key: const Key('room-game-floating-position'),
+                right: 8,
+                bottom: 138,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Rocket',
+                      child: InkResponse(
+                        key: const Key('room-rocket-floating-button'),
+                        radius: 24,
+                        onTap: _showRocketPanel,
+                        child: const _ReferenceRocketLogo(size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1430),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: const Color(0xFF7E67D9),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Semantics(
+                      button: true,
+                      label: 'Game Center',
+                      child: InkResponse(
+                        key: const Key('room-game-floating-button'),
+                        radius: 32,
+                        onTap: _showGamePanel,
+                        child: const _ReferenceGameLogo(size: 54),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_fruitJackpotOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitJackpotPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+            if (_fruitPartyOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitPartyPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitPartyOpen = false,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceGameLogo extends StatelessWidget {
+  const _ReferenceGameLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x665D3BFF),
+              blurRadius: 18,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Color(0x55FF4FD8),
+              blurRadius: 11,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFFF7CF2),
+                Color(0xFFB56CFF),
+                Color(0xFF6F7BFF),
+              ],
+            ).createShader(bounds),
+            child: Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.78,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceRocketLogo extends StatelessWidget {
+  const _ReferenceRocketLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.86,
+            color: const Color(0xFFFF63E6),
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xFF6B5CFF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: size * 0.22,
+              height: size * 0.22,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD45A),
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x88FFD45A),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferenceGameTile extends StatelessWidget {
+  const _ReferenceGameTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: enabled
+                      ? const <Color>[
+                          Color(0xFF6E38B9),
+                          Color(0xFF2B123E),
+                        ]
+                      : const <Color>[
+                          Color(0xFF3A3240),
+                          Color(0xFF211C24),
+                        ],
+                ),
+                border: Border.all(
+                  color: enabled
+                      ? const Color(0xFFC56CFF)
+                      : const Color(0xFF5B505F),
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? const Color(0xFFFFD45A)
+                      : RoyalPalette.muted,
+                  size: 30,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  enabled ? RoyalPalette.cream : RoyalPalette.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RocketReward extends StatelessWidget {
+  const _RocketReward({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6E3EB3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFCCA7FF),
+          width: 0.8,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: const Color(0xFFFFD45A),
+        size: 27,
+      ),
+    );
+  }
+}
+
+class _RoomThemeChoice {
+  const _RoomThemeChoice({
+    required this.id,
+    required this.name,
+    this.color,
+    this.asset,
+    this.expiresAt,
+    this.panelFree = false,
+  });
+
+  final String id;
+  final String name;
+  final Color? color;
+  final String? asset;
+  final DateTime? expiresAt;
+  final bool panelFree;
+}
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  Color get _color {
+    final value = label.toLowerCase();
+    if (value.contains('follow')) return FeaturePalette.social;
+    if (value.contains('message')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('seat')) return FeaturePalette.family;
+    if (value.contains('mute')) return FeaturePalette.safety;
+    if (value.contains('kick')) return FeaturePalette.safety;
+    return FeaturePalette.social;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ShiningIcon(
+                icon: icon,
+                color: _color,
+                size: 20,
+                boxSize: 40,
+                glow: 0.34,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: RoyalPalette.cream, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _PremiumRoomToolLogo extends StatelessWidget {
+  const _PremiumRoomToolLogo({required this.label, required this.fallbackIcon, required this.size});
+  final String label;
+  final IconData fallbackIcon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _PremiumRoomToolPainter(label),
+        child: Semantics(label: label, child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _PremiumRoomToolPainter extends CustomPainter {
+  const _PremiumRoomToolPainter(this.label);
+  final String label;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lower = label.toLowerCase();
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    final shell = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF3B2A08), Color(0xFF090909), Color(0xFF000000)],
+        stops: [0, .62, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: r));
+    canvas.drawCircle(center, r - 1, shell);
+    canvas.drawCircle(center, r - 1.5, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = const Color(0xFFFFD45A));
+    canvas.drawCircle(center, r - 4, Paint()..style = PaintingStyle.stroke..strokeWidth = .7..color = const Color(0x88FFF1A8));
+
+    if (lower.contains('gift')) {
+      final box = Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: r * 1.05, height: r * .72);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..shader = const LinearGradient(colors:[Color(0xFFFF6FB1),Color(0xFF8A1749)]).createShader(box));
+      canvas.drawRect(Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: 3, height: box.height), Paint()..color=const Color(0xFFFFD45A));
+      canvas.drawLine(Offset(box.left, box.top + 5), Offset(box.right, box.top + 5), Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      final bow=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..color=const Color(0xFFFFD45A);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx-5, box.top-3), width: 10, height: 7), bow);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx+5, box.top-3), width: 10, height: 7), bow);
+    } else if (lower.contains('music') || lower.contains('sound')) {
+      final p=Paint()..color=const Color(0xFF5FE7FF)..strokeWidth=3.2..strokeCap=StrokeCap.round;
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+4,center.dy+7),p);
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+12,center.dy-7),p);
+      canvas.drawCircle(Offset(center.dx-1,center.dy+9),5,p);
+      canvas.drawCircle(Offset(center.dx+10,center.dy+6),5,p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx-1,center.dy+9),p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx+4,center.dy-10),p);
+    } else if (lower.contains('lucky') || lower == 'lp') {
+      final pouch=Path()..moveTo(center.dx-11,center.dy-4)..quadraticBezierTo(center.dx-14,center.dy+14,center.dx,center.dy+15)..quadraticBezierTo(center.dx+14,center.dy+14,center.dx+11,center.dy-4)..close();
+      canvas.drawPath(pouch,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF304F),Color(0xFF700817)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawLine(Offset(center.dx-9,center.dy-3),Offset(center.dx+9,center.dy-3),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      _text(canvas,'LP',center,const Color(0xFFFFE27A),9);
+    } else if (lower.contains('game')) {
+      final pad=RRect.fromRectAndRadius(Rect.fromCenter(center:center,width:r*1.25,height:r*.78),const Radius.circular(7));
+      canvas.drawRRect(pad,Paint()..shader=const LinearGradient(colors:[Color(0xFF555555),Color(0xFF090909)]).createShader(pad.outerRect));
+      final p=Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2;
+      canvas.drawLine(Offset(center.dx-8,center.dy),Offset(center.dx-2,center.dy),p);
+      canvas.drawLine(Offset(center.dx-5,center.dy-3),Offset(center.dx-5,center.dy+3),p);
+      canvas.drawCircle(Offset(center.dx+6,center.dy-2),2.3,Paint()..color=const Color(0xFFFF4FA3));
+      canvas.drawCircle(Offset(center.dx+11,center.dy+3),2.3,Paint()..color=const Color(0xFF44C8FF));
+    } else if (lower.contains('moderation') || lower.contains('shield')) {
+      final shield=Path()..moveTo(center.dx,center.dy-13)..lineTo(center.dx+11,center.dy-8)..lineTo(center.dx+9,center.dy+5)..quadraticBezierTo(center.dx,center.dy+15,center.dx-9,center.dy+5)..lineTo(center.dx-11,center.dy-8)..close();
+      canvas.drawPath(shield,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF6A6A),Color(0xFF7A1111)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawPath(shield,Paint()..style=PaintingStyle.stroke..strokeWidth=1.5..color=const Color(0xFFFFD45A));
+    } else if (lower.contains('setting')) {
+      canvas.drawCircle(center,10,Paint()..style=PaintingStyle.stroke..strokeWidth=5..color=const Color(0xFFFFD45A));
+      canvas.drawCircle(center,3,Paint()..color=const Color(0xFF050505));
+      for(int i=0;i<8;i++){final a=i*3.14159265/4;canvas.drawLine(Offset(center.dx+10*math.cos(a),center.dy+10*math.sin(a)),Offset(center.dx+15*math.cos(a),center.dy+15*math.sin(a)),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=3..strokeCap=StrokeCap.round);}
+    } else {
+      _text(canvas, label.isEmpty ? '•' : label.substring(0,1).toUpperCase(), center, const Color(0xFFFFD45A), 15);
+    }
+    canvas.drawArc(Rect.fromCircle(center:center,radius:r-5),3.7,1.2,false,Paint()..style=PaintingStyle.stroke..strokeWidth=1.4..color=const Color(0x88FFFFFF));
+  }
+
+  void _text(Canvas canvas,String text,Offset center,Color color,double fontSize){
+    final tp=TextPainter(text:TextSpan(text:text,style:TextStyle(color:color,fontSize:fontSize,fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+    tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
+  }
+  @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
+}
+)
+                  .hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchError = result == null ? 'User ID not found.' : null;
+                  searchBusy = false;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchBusy = false;
+                  searchedUser = null;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+
+              Widget? trailing;
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' +
+                                  member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key(
+                    'room-member-add-admin-' + member.userId,
+                  ),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchedUserCard() {
+              final user = searchedUser;
+              if (user == null) {
+                if (searchBusy) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (searchError != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    child: Text(
+                      searchError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8A80),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+
+              final userId = user['user_id']?.toString() ?? '';
+              final displayName =
+                  user['display_name']?.toString().trim().isNotEmpty == true
+                      ? user['display_name'].toString()
+                      : userId;
+              final avatar =
+                  avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final liveAdmin = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB52DFF),
+                  ),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                    ),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : liveAdmin
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
+                            ),
+                ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive)
+                                ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(12),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Search user ID to make Admin',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchedUserCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member
+                                              in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(searchController.dispose);
+  }
+
+  Future<void> _showReferenceRoomSetup() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can open Room Setup.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final nameController = TextEditingController(text: _roomTitle);
+    final noticeController =
+        TextEditingController(text: _roomAnnouncement);
+    var pendingPhoto = _roomPhotoDataUrl;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            ImageProvider? pendingPhotoProvider;
+            if (pendingPhoto != null &&
+                pendingPhoto!.startsWith('data:image/')) {
+              try {
+                pendingPhotoProvider = MemoryImage(
+                  base64Decode(pendingPhoto!.split(',').last),
+                );
+              } catch (_) {
+                pendingPhotoProvider = null;
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D062C),
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF1D062C),
+                title: const Text(
+                  'Room Setup',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                children: [
+                  Center(
+                    child: GestureDetector(
+                      key: const Key('reference-room-setup-photo'),
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 68,
+                          maxWidth: 900,
+                          maxHeight: 900,
+                        );
+                        if (image == null) return;
+                        final bytes = await image.readAsBytes();
+                        final mime =
+                            image.mimeType?.startsWith('image/') == true
+                                ? image.mimeType!
+                                : 'image/jpeg';
+                        final dataUrl = 'data:' +
+                            mime +
+                            ';base64,' +
+                            base64Encode(bytes);
+                        if (dataUrl.length > 450000) {
+                          _snack(
+                            'Room cover is too large. Choose a smaller image.',
+                          );
+                          return;
+                        }
+                        setPageState(() {
+                          pendingPhoto = dataUrl;
+                        });
+                      },
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: const Color(0xFF171019),
+                        backgroundImage: pendingPhotoProvider,
+                        child: pendingPhotoProvider == null
+                            ? const Icon(
+                                Icons.add_a_photo_rounded,
+                                color: RoyalPalette.cream,
+                                size: 28,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Room Name',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-name-field'),
+                    controller: nameController,
+                    maxLength: 24,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Notice',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-notice-field'),
+                    controller: noticeController,
+                    maxLength: 24,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    key: const Key('reference-room-block-list'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: const Color(0xFF2A2330),
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      color: RoyalPalette.cream,
+                    ),
+                    title: const Text(
+                      'Block List',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.muted,
+                    ),
+                    onTap: () => _showRoomBlacklist(pageContext),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton(
+                    key: const Key('reference-room-setup-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B08FF),
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 15),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final notice = noticeController.text.trim();
+                      if (name.isEmpty) {
+                        _snack('Room name is required.');
+                        return;
+                      }
+
+                      try {
+                        final photoChanged =
+                            pendingPhoto != _roomPhotoDataUrl;
+                        final updated =
+                            await widget.state.discovery.updateRoomRemote(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          title: name,
+                          announcement: notice,
+                          photoDataUrl:
+                              photoChanged ? pendingPhoto : null,
+                        );
+                        _roomTitleOverride = updated.title;
+                        _roomPhotoOverride = updated.photoDataUrl;
+                        _roomAnnouncementOverride =
+                            updated.announcement;
+
+                        if (mounted) setState(() {});
+                        if (pageContext.mounted) {
+                          Navigator.pop(pageContext);
+                        }
+                        _snack('Room setup saved.');
+                      } catch (error) {
+                        _snack(
+                          error
+                              .toString()
+                              .replaceFirst('Bad state: ', ''),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    noticeController.dispose();
+  }
+
+  Future<void> _showLuckyNumberDialog() async {
+    final controls = widget.state.roomControls;
+    final numberController = TextEditingController(
+      text: controls.luckyNumber?.toString() ?? '',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lucky Number'),
+        content: TextField(
+          controller: numberController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
+        ),
+        actions: [
+          if (controls.luckyNumberEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(context, -1),
+              child: const Text('Turn Off'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(numberController.text.trim());
+              if (value == null || value < 0) return;
+              Navigator.pop(context, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null) return;
+    if (result == -1) {
+      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
+      _snack('Lucky number disabled.');
+    } else {
+      controls.setLuckyNumber(result);
+      _snack('Lucky number set to $result.');
+    }
+    if (mounted) setState(() {});
+  }
+  Future<void> _handleUserSeatTap(int index) async {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+
+    if (!controller.inviteMode) {
+      final text = controller.requestOrJoinSeat(index);
+      _snack(text);
+      return;
+    }
+
+    if (seat.locked) {
+      _snack('Seat ' + (index + 1).toString() + ' is locked.');
+      return;
+    }
+    if (seat.occupied) {
+      _snack('Seat ' + (index + 1).toString() + ' is occupied.');
+      return;
+    }
+    if (controller.mySeat != null) {
+      _snack('Leave your current seat first.');
+      return;
+    }
+
+    try {
+      await widget.state.roomSession.requestMySeat(index);
+      _snack('Request sent for Seat ' + (index + 1).toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  // ignore: unused_element
+  void _showSeatRequests() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can review seat requests.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final requests = widget.state.roomSession.seatRequests;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              child: requests.isEmpty
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'No pending seat requests.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: requests.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final request = requests[index];
+                        var displayName = request.userId;
+                        for (final member
+                            in widget.state.roomSession.liveMembers) {
+                          if (member.userId == request.userId) {
+                            displayName = member.displayName;
+                            break;
+                          }
+                        }
+                        return ListTile(
+                          leading: const ShiningIcon(
+                            icon: Icons.event_seat_rounded,
+                            color: FeaturePalette.family,
+                            size: 18,
+                            boxSize: 34,
+                            glow: 0.30,
+                          ),
+                          title: Text(displayName),
+                          subtitle: Text(
+                            'Seat ' +
+                                (request.seatIndex + 1).toString() +
+                                ' • ID ' +
+                                request.userId,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: false,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.close_rounded,
+                                  color: FeaturePalette.safety,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Approve',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: true,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    _snack(
+                                      displayName +
+                                          ' approved for Seat ' +
+                                          (request.seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.check_rounded,
+                                  color: FeaturePalette.family,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSeatControls(int index) {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('seat-control-lock'),
+              leading: ShiningIcon(
+                icon: seat.locked
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_rounded,
+                color: seat.locked
+                    ? FeaturePalette.family
+                    : FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ${index + 1} locked.'
+                        : 'Seat ${index + 1} unlocked.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              key: const Key('seat-control-mute'),
+              leading: ShiningIcon(
+                icon: seat.roomMuted
+                    ? Icons.mic_rounded
+                    : Icons.mic_off_rounded,
+                color: seat.roomMuted
+                    ? FeaturePalette.safety
+                    : FeaturePalette.family,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(
+                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ${index + 1} muted.'
+                        : 'Seat ${index + 1} unmuted.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            if (!seat.occupied)
+              ListTile(
+                key: const Key('seat-control-take'),
+                leading: const ShiningIcon(
+                  icon: Icons.event_seat_rounded,
+                  color: FeaturePalette.family,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Take Seat'),
+                subtitle: const Text(
+                  'Owner/Admin can take this empty seat directly.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ${index + 1}.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle: Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
+                },
+              ),
+            if (controller.mySeat == index)
+              ListTile(
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave this seat'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+            if (controller.mySeat != null && controller.mySeat != index)
+              ListTile(
+                key: const Key('seat-control-leave-current'),
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave current seat'),
+                subtitle: Text(
+                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+          ],
+          ),
+        ),
+    );
+  }
+
+  Widget _buildSeatRow({
+    required int row,
+    required SeatLayoutSpec spec,
+    required double seatDiameter,
+  }) {
+    final range = spec.rangeForRow(row);
+    final rowSeatCount = range.$2 - range.$1;
+    final seatWidth = (seatDiameter + (seatDiameter < 44 ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+    return Row(
+      key: Key('seat-row-' + row.toString()),
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var offset = 0; offset < rowSeatCount; offset++)
+          SizedBox(
+            width: seatWidth,
+            child: _buildSeat(
+              index: range.$1 + offset,
+              seatDiameter: seatDiameter,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeat({
+    required int index,
+    required double seatDiameter,
+  }) {
+    final seat = controller.seats[index];
+    RoomPresenceMember? presenceMember;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == index) {
+        presenceMember = member;
+        break;
+      }
+    }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
+    final occupied = seat.userName != null || presenceMember != null;
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
+    final emoteUntil = presenceMember?.seatEmoteUntil;
+    final seatEmote = presenceMember?.seatEmote != null &&
+            emoteUntil != null &&
+            emoteUntil.isAfter(DateTime.now())
+        ? presenceMember!.seatEmote
+        : null;
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
+    final compact = seatDiameter < 44;
+    final labelWidth = (seatDiameter + (compact ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+
+    return SizedBox(
+      key: Key('seat-' + index.toString()),
+      width: labelWidth,
+      child: GestureDetector(
+        onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
+          if (occupied) {
+            RoomPresenceMember? member = presenceMember;
+            if (member == null) {
+              final mappedUserId = widget.state.roomControls.seatUsers[index];
+              for (final item in widget.state.roomSession.liveMembers) {
+                final idMatch =
+                    mappedUserId != null && item.userId == mappedUserId;
+                final nameMatch = item.displayName == seat.userName;
+                if (idMatch || nameMatch) {
+                  member = item;
+                  break;
+                }
+              }
+            }
+            if (member != null &&
+                member.userId != widget.state.auth.current?.userId) {
+              _showUserProfile(member, seatIndexHint: index);
+              return;
+            }
+          }
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+            return;
+          }
+          _handleUserSeatTap(index);
+        },
+        onLongPress: () {
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+          } else {
+            _snack('Only the room owner or room admin can control seats.');
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: seatDiameter,
+              height: seatDiameter,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: seat.locked && !occupied
+                        ? Center(
+                            child: Icon(
+                              Icons.lock_rounded,
+                              color: const Color(0xFFFFD76A),
+                              size: seatDiameter * 0.48,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x66FFD76A),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          )
+                        : AnimatedAvatarFrame(
+                            size: seatDiameter,
+                            frameId: presenceMember?.equippedFrameId,
+                            child: Container(
+                              width: seatDiameter,
+                              height: seatDiameter,
+                              padding: EdgeInsets.all(
+                                compact ? 2.4 : 3.2,
+                              ),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0x22000000),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  width: compact ? 1.1 : 1.5,
+                                ),
+                                boxShadow: const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x775D39FF),
+                                    blurRadius: 12,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0x221A0C33),
+                                  image: avatar == null
+                                      ? null
+                                      : DecorationImage(
+                                          image: avatar,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  border: Border.all(
+                                    color: const Color(0x99D9C8FF),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: avatar != null
+                                    ? null
+                                    : Center(
+                                        child: occupied
+                                            ? Text(
+                                                displayName.characters.first,
+                                                style: TextStyle(
+                                                  color:
+                                                      RoyalPalette.cream,
+                                                  fontWeight:
+                                                      FontWeight.w900,
+                                                  fontSize:
+                                                      seatDiameter * 0.32,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.weekend_rounded,
+                                                color: const Color(
+                                                  0xFFF3EAFF,
+                                                ),
+                                                size:
+                                                    seatDiameter * 0.44,
+                                              ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                    ),
+                  if (seat.roomMuted ||
+                      (controller.mySeat == index && controller.selfMuted) ||
+                      (presenceMember?.micMuted ?? false))
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        key: Key(
+                          'seat-muted-indicator-' + index.toString(),
+                        ),
+                        width: compact ? 14 : 18,
+                        height: compact ? 14 : 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE73D4F),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.mic_off_rounded,
+                          size: compact ? 9 : 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (seatEmote != null && seatEmote.isNotEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        seatEmote,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: seatDiameter * 0.82,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: compact ? 2 : 4),
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              key: Key('seat-heart-' + index.toString()),
+              height: compact ? 9 : 11,
+              constraints: BoxConstraints(
+                minWidth: compact ? 28 : 34,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8D72B8).withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '💜0',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFFE9DFFF),
+                  fontSize: compact ? 5.5 : 7,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (occupied &&
+                presenceMember != null &&
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.state.roomSession;
+    final activeController = session.controller;
+    if (activeController == null || session.room?.id != widget.room.id) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_roomTitle)),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: FeaturePalette.social,
+          ),
+        ),
+      );
+    }
+
+    final config = activeController.config;
+    final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
+    final screenSize = MediaQuery.sizeOf(context);
+    final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
+    final maxSeatAreaHeight = screenSize.height * 0.38;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
+    final heightSeatDiameter =
+        (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
+    final seatDiameter = (widthSeatDiameter < heightSeatDiameter
+            ? widthSeatDiameter
+            : heightSeatDiameter)
+        .clamp(28.0, 64.0)
+        .toDouble();
+    final seatAreaHeight = seatSpec
+        .preferredHeight(seatDiameter)
+        .clamp(120.0, maxSeatAreaHeight)
+        .toDouble();
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop || !session.hasRoom) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (session.hasRoom) session.minimize();
+        });
+      },
+      child: Scaffold(
+        backgroundColor: _roomBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: _roomBackgroundColor,
+          titleSpacing: 8,
+          title: InkWell(
+            key: const Key('room-title-button'),
+            onTap: _showRoomIdentityCard,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              key: const Key('reference-room-title-pill'),
+              constraints: const BoxConstraints(maxWidth: 238),
+              padding: const EdgeInsets.fromLTRB(5, 4, 12, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF100A19),
+                    backgroundImage: _roomPhotoProvider,
+                    child: _roomPhotoProvider == null
+                        ? const Icon(
+                            Icons.meeting_room_rounded,
+                            color: Color(0xFFD7C7FF),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _roomTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '🏅 ' + widget.room.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              key: const Key('room-share-button'),
+              tooltip: 'Share room',
+              onPressed: _shareRoom,
+              icon: const ShiningIcon(
+                icon: Icons.share_rounded,
+                color: FeaturePalette.social,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+            IconButton(
+              key: const Key('room-power-button'),
+              tooltip: 'Room options',
+              onPressed: _showRoomPowerMenu,
+              icon: const ShiningIcon(
+                icon: Icons.power_settings_new_rounded,
+                color: FeaturePalette.safety,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+          decoration: BoxDecoration(
+            color: _roomBackgroundColor,
+            image: _roomThemeImage == null
+                ? null
+                : DecorationImage(
+                    image: _roomThemeImage!,
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: Column(
+            children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    key: const Key('room-rank-hall-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showSendingRanking,
+                    child: Container(
+                      key: const Key('reference-room-rank-pill'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFC83D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Ranking',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final currentAccount = widget.state.auth.current;
+                      final live = widget.state.roomSession.liveMembers;
+                      final ordered = <Map<String, String?>>[];
+
+                      if (currentAccount != null) {
+                        RoomPresenceMember? currentMember;
+                        for (final member in live) {
+                          if (member.userId == currentAccount.userId) {
+                            currentMember = member;
+                            break;
+                          }
+                        }
+                        ordered.add(<String, String?>{
+                          'id': currentAccount.userId,
+                          'name': currentMember?.displayName ??
+                              currentAccount.displayName,
+                          'avatar': currentMember?.avatarDataUrl ??
+                              currentAccount.avatarDataUrl,
+                        });
+                      }
+
+                      for (final member in live) {
+                        if (member.userId == currentAccount?.userId) continue;
+                        ordered.add(<String, String?>{
+                          'id': member.userId,
+                          'name': member.displayName,
+                          'avatar': member.avatarDataUrl,
+                        });
+                      }
+
+                      final currentAlreadyLive = currentAccount != null &&
+                          live.any(
+                            (member) => member.userId == currentAccount.userId,
+                          );
+                      final memberCount = live.length +
+                          (currentAccount != null &&
+                                  session.hasRoom &&
+                                  !currentAlreadyLive
+                              ? 1
+                              : 0);
+                      final visible = ordered.take(3).toList(growable: false);
+
+                      ImageProvider? avatarFor(String? data) {
+                        if (data == null || !data.startsWith('data:image/')) {
+                          return null;
+                        }
+                        try {
+                          return MemoryImage(
+                            base64Decode(data.split(',').last),
+                          );
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return InkWell(
+                        key: const Key('room-online-members-button'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _showReferenceRoomMembers,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(7, 4, 9, 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A1D3B)
+                                .withValues(alpha: 0.86),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (visible.isNotEmpty)
+                                SizedBox(
+                                  key: const Key('room-top-member-avatars'),
+                                  width: 27.0 +
+                                      (visible.length - 1) * 17.0,
+                                  height: 28,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      for (var index = 0;
+                                          index < visible.length;
+                                          index++)
+                                        Positioned(
+                                          left: index * 17.0,
+                                          top: 1,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            padding: const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: const Color(0xFFFFD45A),
+                                              boxShadow: const [
+                                                BoxShadow(
+                                                  color: Color(0x55FFD45A),
+                                                  blurRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              key: Key(
+                                                'room-top-member-dp-' +
+                                                    (visible[index]['id'] ??
+                                                        index.toString()),
+                                              ),
+                                              radius: 11,
+                                              backgroundColor:
+                                                  const Color(0xFF171019),
+                                              backgroundImage: avatarFor(
+                                                visible[index]['avatar'],
+                                              ),
+                                              child: avatarFor(
+                                                        visible[index]
+                                                            ['avatar'],
+                                                      ) ==
+                                                      null
+                                                  ? Text(
+                                                      (visible[index]['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '?'
+                                                          : (visible[index]
+                                                                      ['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .characters
+                                                              .first
+                                                              .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.group_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              const SizedBox(width: 5),
+                              Text(
+                                memberCount.toString(),
+                                key: const Key('room-online-member-count'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              key: const Key('tinni-seat-grid'),
+              height: seatAreaHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: Column(
+                  children: [
+                    for (var row = 0; row < seatSpec.rows; row++)
+                      Expanded(
+                        child: _buildSeatRow(
+                          row: row,
+                          spec: seatSpec,
+                          seatDiameter: seatDiameter,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: RoyalPalette.panel.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: FeaturePalette.discover.withValues(alpha: 0.52),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: FeaturePalette.discover.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const ShiningIcon(
+                    icon: Icons.info_outline_rounded,
+                    color: FeaturePalette.discover,
+                    size: 14,
+                    boxSize: 27,
+                    glow: 0.24,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.state.roomControls.settings.topic.isEmpty
+                          ? 'Ask your followers to support the room.'
+                          : widget.state.roomControls.settings.topic,
+                      style: const TextStyle(color: RoyalPalette.muted, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('room-message-list'),
+                padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+                itemCount: controller.messages.length,
+                itemBuilder: (_, index) {
+                  final message = controller.messages[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: message.author + ': ',
+                            style: const TextStyle(
+                              color: FeaturePalette.message,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          TextSpan(text: message.text, style: const TextStyle(color: RoyalPalette.cream)),
+                        ],
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(0, 6, 6, 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF05080B),
+                  border: Border(top: BorderSide(color: RoyalPalette.bronze)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      child: TextField(
+                        key: const Key('room-chat-field'),
+                        controller: chat,
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned &&
+                            _canTypeInRoom,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : !_canTypeInRoom
+                                      ? 'Owner/Admin only'
+                                      : 'Chat',
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
+                        ),
+                        onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
+                          if (!_canTypeInRoom) {
+                            _snack(
+                              'Public Screen is off. Only room owner/admin can type.',
+                            );
+                            return;
+                          }
+                          final value = chat.text.trim();
+                          if (value.isEmpty) return;
+                          controller.sendMessage(value);
+                          chat.clear();
+                        },
+                      ),
+                    ),
+                    if (controller.mySeat != null)
+                      IconButton(
+                        key: const Key('room-emoji-button'),
+                        tooltip: 'Emoji & Emotes',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: _showEmojiPicker,
+                        icon: const ShiningIcon(
+                          icon: Icons.emoji_emotions_rounded,
+                          color: FeaturePalette.games,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                    IconButton(
+                      key: const Key('room-mic-button'),
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      tooltip: widget.state.roomSession.moderationMicMuted
+                          ? 'Muted by room owner/admin'
+                          : 'Microphone',
+                      onPressed: controller.mySeat == null ||
+                              widget.state.roomSession.moderationMicMuted
+                          ? null
+                          : _toggleMic,
+                      icon: ShiningIcon(
+                        icon: controller.micState == MicState.live
+                            ? Icons.mic_rounded
+                            : Icons.mic_off_rounded,
+                        color: controller.mySeat == null ||
+                                widget.state.roomSession.moderationMicMuted
+                            ? RoyalPalette.muted
+                            : controller.micState == MicState.live
+                                ? FeaturePalette.family
+                                : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
+                      ),
+                    ),
+
+                    IconButton(
+                      key: const Key('room-gift-button'),
+                      tooltip: 'Gifts',
+                      iconSize: 31,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      onPressed: config.giftsEnabled ? _showGiftSheet : null,
+                      icon: _roomActionLogo(
+                        label: 'Gift',
+                        icon: Icons.card_giftcard_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-tools-grid-button'),
+                      tooltip: 'More',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _showRoomTools,
+                      icon: _roomActionLogo(
+                        label: '4-Box',
+                        icon: Icons.grid_view_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    if (controller.inviteMode)
+                      IconButton(
+                        key: const Key('room-seat-button'),
+                        tooltip: 'Seat request',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: () async {
+                          if (controller.mySeat == null) {
+                            _snack('Tap any mic seat to send a seat request.');
+                          } else {
+                            await _leaveSeatAndMute();
+                          }
+                        },
+                        icon: const ShiningIcon(
+                          icon: Icons.event_seat_rounded,
+                          color: FeaturePalette.family,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+            ),
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
+            Positioned.fill(
+              child: EffectOverlay(
+                queue: widget.state.effects,
+                enabled: widget.state.roomControls.effectsEnabled,
+                shouldPlay: widget.state.roomControls.shouldPlayEffect,
+              ),
+            ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
+            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+              Positioned(
+                key: const Key('room-game-floating-position'),
+                right: 8,
+                bottom: 138,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Rocket',
+                      child: InkResponse(
+                        key: const Key('room-rocket-floating-button'),
+                        radius: 24,
+                        onTap: _showRocketPanel,
+                        child: const _ReferenceRocketLogo(size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1430),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: const Color(0xFF7E67D9),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Semantics(
+                      button: true,
+                      label: 'Game Center',
+                      child: InkResponse(
+                        key: const Key('room-game-floating-button'),
+                        radius: 32,
+                        onTap: _showGamePanel,
+                        child: const _ReferenceGameLogo(size: 54),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_fruitJackpotOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitJackpotPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+            if (_fruitPartyOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitPartyPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitPartyOpen = false,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceGameLogo extends StatelessWidget {
+  const _ReferenceGameLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x665D3BFF),
+              blurRadius: 18,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Color(0x55FF4FD8),
+              blurRadius: 11,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFFF7CF2),
+                Color(0xFFB56CFF),
+                Color(0xFF6F7BFF),
+              ],
+            ).createShader(bounds),
+            child: Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.78,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceRocketLogo extends StatelessWidget {
+  const _ReferenceRocketLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.86,
+            color: const Color(0xFFFF63E6),
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xFF6B5CFF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: size * 0.22,
+              height: size * 0.22,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD45A),
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x88FFD45A),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferenceGameTile extends StatelessWidget {
+  const _ReferenceGameTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: enabled
+                      ? const <Color>[
+                          Color(0xFF6E38B9),
+                          Color(0xFF2B123E),
+                        ]
+                      : const <Color>[
+                          Color(0xFF3A3240),
+                          Color(0xFF211C24),
+                        ],
+                ),
+                border: Border.all(
+                  color: enabled
+                      ? const Color(0xFFC56CFF)
+                      : const Color(0xFF5B505F),
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? const Color(0xFFFFD45A)
+                      : RoyalPalette.muted,
+                  size: 30,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  enabled ? RoyalPalette.cream : RoyalPalette.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RocketReward extends StatelessWidget {
+  const _RocketReward({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6E3EB3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFCCA7FF),
+          width: 0.8,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: const Color(0xFFFFD45A),
+        size: 27,
+      ),
+    );
+  }
+}
+
+class _RoomThemeChoice {
+  const _RoomThemeChoice({
+    required this.id,
+    required this.name,
+    this.color,
+    this.asset,
+    this.expiresAt,
+    this.panelFree = false,
+  });
+
+  final String id;
+  final String name;
+  final Color? color;
+  final String? asset;
+  final DateTime? expiresAt;
+  final bool panelFree;
+}
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  Color get _color {
+    final value = label.toLowerCase();
+    if (value.contains('follow')) return FeaturePalette.social;
+    if (value.contains('message')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('seat')) return FeaturePalette.family;
+    if (value.contains('mute')) return FeaturePalette.safety;
+    if (value.contains('kick')) return FeaturePalette.safety;
+    return FeaturePalette.social;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ShiningIcon(
+                icon: icon,
+                color: _color,
+                size: 20,
+                boxSize: 40,
+                glow: 0.34,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: RoyalPalette.cream, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _PremiumRoomToolLogo extends StatelessWidget {
+  const _PremiumRoomToolLogo({required this.label, required this.fallbackIcon, required this.size});
+  final String label;
+  final IconData fallbackIcon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _PremiumRoomToolPainter(label),
+        child: Semantics(label: label, child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _PremiumRoomToolPainter extends CustomPainter {
+  const _PremiumRoomToolPainter(this.label);
+  final String label;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lower = label.toLowerCase();
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    final shell = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF3B2A08), Color(0xFF090909), Color(0xFF000000)],
+        stops: [0, .62, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: r));
+    canvas.drawCircle(center, r - 1, shell);
+    canvas.drawCircle(center, r - 1.5, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = const Color(0xFFFFD45A));
+    canvas.drawCircle(center, r - 4, Paint()..style = PaintingStyle.stroke..strokeWidth = .7..color = const Color(0x88FFF1A8));
+
+    if (lower.contains('gift')) {
+      final box = Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: r * 1.05, height: r * .72);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..shader = const LinearGradient(colors:[Color(0xFFFF6FB1),Color(0xFF8A1749)]).createShader(box));
+      canvas.drawRect(Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: 3, height: box.height), Paint()..color=const Color(0xFFFFD45A));
+      canvas.drawLine(Offset(box.left, box.top + 5), Offset(box.right, box.top + 5), Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      final bow=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..color=const Color(0xFFFFD45A);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx-5, box.top-3), width: 10, height: 7), bow);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx+5, box.top-3), width: 10, height: 7), bow);
+    } else if (lower.contains('music') || lower.contains('sound')) {
+      final p=Paint()..color=const Color(0xFF5FE7FF)..strokeWidth=3.2..strokeCap=StrokeCap.round;
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+4,center.dy+7),p);
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+12,center.dy-7),p);
+      canvas.drawCircle(Offset(center.dx-1,center.dy+9),5,p);
+      canvas.drawCircle(Offset(center.dx+10,center.dy+6),5,p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx-1,center.dy+9),p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx+4,center.dy-10),p);
+    } else if (lower.contains('lucky') || lower == 'lp') {
+      final pouch=Path()..moveTo(center.dx-11,center.dy-4)..quadraticBezierTo(center.dx-14,center.dy+14,center.dx,center.dy+15)..quadraticBezierTo(center.dx+14,center.dy+14,center.dx+11,center.dy-4)..close();
+      canvas.drawPath(pouch,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF304F),Color(0xFF700817)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawLine(Offset(center.dx-9,center.dy-3),Offset(center.dx+9,center.dy-3),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      _text(canvas,'LP',center,const Color(0xFFFFE27A),9);
+    } else if (lower.contains('game')) {
+      final pad=RRect.fromRectAndRadius(Rect.fromCenter(center:center,width:r*1.25,height:r*.78),const Radius.circular(7));
+      canvas.drawRRect(pad,Paint()..shader=const LinearGradient(colors:[Color(0xFF555555),Color(0xFF090909)]).createShader(pad.outerRect));
+      final p=Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2;
+      canvas.drawLine(Offset(center.dx-8,center.dy),Offset(center.dx-2,center.dy),p);
+      canvas.drawLine(Offset(center.dx-5,center.dy-3),Offset(center.dx-5,center.dy+3),p);
+      canvas.drawCircle(Offset(center.dx+6,center.dy-2),2.3,Paint()..color=const Color(0xFFFF4FA3));
+      canvas.drawCircle(Offset(center.dx+11,center.dy+3),2.3,Paint()..color=const Color(0xFF44C8FF));
+    } else if (lower.contains('moderation') || lower.contains('shield')) {
+      final shield=Path()..moveTo(center.dx,center.dy-13)..lineTo(center.dx+11,center.dy-8)..lineTo(center.dx+9,center.dy+5)..quadraticBezierTo(center.dx,center.dy+15,center.dx-9,center.dy+5)..lineTo(center.dx-11,center.dy-8)..close();
+      canvas.drawPath(shield,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF6A6A),Color(0xFF7A1111)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawPath(shield,Paint()..style=PaintingStyle.stroke..strokeWidth=1.5..color=const Color(0xFFFFD45A));
+    } else if (lower.contains('setting')) {
+      canvas.drawCircle(center,10,Paint()..style=PaintingStyle.stroke..strokeWidth=5..color=const Color(0xFFFFD45A));
+      canvas.drawCircle(center,3,Paint()..color=const Color(0xFF050505));
+      for(int i=0;i<8;i++){final a=i*3.14159265/4;canvas.drawLine(Offset(center.dx+10*math.cos(a),center.dy+10*math.sin(a)),Offset(center.dx+15*math.cos(a),center.dy+15*math.sin(a)),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=3..strokeCap=StrokeCap.round);}
+    } else {
+      _text(canvas, label.isEmpty ? '•' : label.substring(0,1).toUpperCase(), center, const Color(0xFFFFD45A), 15);
+    }
+    canvas.drawArc(Rect.fromCircle(center:center,radius:r-5),3.7,1.2,false,Paint()..style=PaintingStyle.stroke..strokeWidth=1.4..color=const Color(0x88FFFFFF));
+  }
+
+  void _text(Canvas canvas,String text,Offset center,Color color,double fontSize){
+    final tp=TextPainter(text:TextSpan(text:text,style:TextStyle(color:color,fontSize:fontSize,fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+    tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
+  }
+  @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
+}
+,
+              ).hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchError = result == null ? 'User ID not found.' : null;
+                  searchBusy = false;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchBusy = false;
+                  searchedUser = null;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+
+              Widget? trailing;
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' +
+                                  member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key(
+                    'room-member-add-admin-' + member.userId,
+                  ),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchedUserCard() {
+              final user = searchedUser;
+              if (user == null) {
+                if (searchBusy) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (searchError != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    child: Text(
+                      searchError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8A80),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+
+              final userId = user['user_id']?.toString() ?? '';
+              final displayName =
+                  user['display_name']?.toString().trim().isNotEmpty == true
+                      ? user['display_name'].toString()
+                      : userId;
+              final avatar =
+                  avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final liveAdmin = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB52DFF),
+                  ),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                    ),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : liveAdmin
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
+                            ),
+                ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive)
+                                ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.text,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[A-Za-z0-9_]'),
+                                      ),
+                                      LengthLimitingTextInputFormatter(20),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Search number ID / Name ID',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchedUserCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member
+                                              in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(searchController.dispose);
+  }
+
+  Future<void> _showReferenceRoomSetup() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can open Room Setup.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final nameController = TextEditingController(text: _roomTitle);
+    final noticeController =
+        TextEditingController(text: _roomAnnouncement);
+    var pendingPhoto = _roomPhotoDataUrl;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            ImageProvider? pendingPhotoProvider;
+            if (pendingPhoto != null &&
+                pendingPhoto!.startsWith('data:image/')) {
+              try {
+                pendingPhotoProvider = MemoryImage(
+                  base64Decode(pendingPhoto!.split(',').last),
+                );
+              } catch (_) {
+                pendingPhotoProvider = null;
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D062C),
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF1D062C),
+                title: const Text(
+                  'Room Setup',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                children: [
+                  Center(
+                    child: GestureDetector(
+                      key: const Key('reference-room-setup-photo'),
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 68,
+                          maxWidth: 900,
+                          maxHeight: 900,
+                        );
+                        if (image == null) return;
+                        final bytes = await image.readAsBytes();
+                        final mime =
+                            image.mimeType?.startsWith('image/') == true
+                                ? image.mimeType!
+                                : 'image/jpeg';
+                        final dataUrl = 'data:' +
+                            mime +
+                            ';base64,' +
+                            base64Encode(bytes);
+                        if (dataUrl.length > 450000) {
+                          _snack(
+                            'Room cover is too large. Choose a smaller image.',
+                          );
+                          return;
+                        }
+                        setPageState(() {
+                          pendingPhoto = dataUrl;
+                        });
+                      },
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: const Color(0xFF171019),
+                        backgroundImage: pendingPhotoProvider,
+                        child: pendingPhotoProvider == null
+                            ? const Icon(
+                                Icons.add_a_photo_rounded,
+                                color: RoyalPalette.cream,
+                                size: 28,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Room Name',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-name-field'),
+                    controller: nameController,
+                    maxLength: 24,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Notice',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-notice-field'),
+                    controller: noticeController,
+                    maxLength: 24,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    key: const Key('reference-room-block-list'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: const Color(0xFF2A2330),
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      color: RoyalPalette.cream,
+                    ),
+                    title: const Text(
+                      'Block List',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.muted,
+                    ),
+                    onTap: () => _showRoomBlacklist(pageContext),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton(
+                    key: const Key('reference-room-setup-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B08FF),
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 15),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final notice = noticeController.text.trim();
+                      if (name.isEmpty) {
+                        _snack('Room name is required.');
+                        return;
+                      }
+
+                      try {
+                        final photoChanged =
+                            pendingPhoto != _roomPhotoDataUrl;
+                        final updated =
+                            await widget.state.discovery.updateRoomRemote(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          title: name,
+                          announcement: notice,
+                          photoDataUrl:
+                              photoChanged ? pendingPhoto : null,
+                        );
+                        _roomTitleOverride = updated.title;
+                        _roomPhotoOverride = updated.photoDataUrl;
+                        _roomAnnouncementOverride =
+                            updated.announcement;
+
+                        if (mounted) setState(() {});
+                        if (pageContext.mounted) {
+                          Navigator.pop(pageContext);
+                        }
+                        _snack('Room setup saved.');
+                      } catch (error) {
+                        _snack(
+                          error
+                              .toString()
+                              .replaceFirst('Bad state: ', ''),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    noticeController.dispose();
+  }
+
+  Future<void> _showLuckyNumberDialog() async {
+    final controls = widget.state.roomControls;
+    final numberController = TextEditingController(
+      text: controls.luckyNumber?.toString() ?? '',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lucky Number'),
+        content: TextField(
+          controller: numberController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
+        ),
+        actions: [
+          if (controls.luckyNumberEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(context, -1),
+              child: const Text('Turn Off'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(numberController.text.trim());
+              if (value == null || value < 0) return;
+              Navigator.pop(context, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null) return;
+    if (result == -1) {
+      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
+      _snack('Lucky number disabled.');
+    } else {
+      controls.setLuckyNumber(result);
+      _snack('Lucky number set to $result.');
+    }
+    if (mounted) setState(() {});
+  }
+  Future<void> _handleUserSeatTap(int index) async {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+
+    if (!controller.inviteMode) {
+      final text = controller.requestOrJoinSeat(index);
+      _snack(text);
+      return;
+    }
+
+    if (seat.locked) {
+      _snack('Seat ' + (index + 1).toString() + ' is locked.');
+      return;
+    }
+    if (seat.occupied) {
+      _snack('Seat ' + (index + 1).toString() + ' is occupied.');
+      return;
+    }
+    if (controller.mySeat != null) {
+      _snack('Leave your current seat first.');
+      return;
+    }
+
+    try {
+      await widget.state.roomSession.requestMySeat(index);
+      _snack('Request sent for Seat ' + (index + 1).toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  // ignore: unused_element
+  void _showSeatRequests() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can review seat requests.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final requests = widget.state.roomSession.seatRequests;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              child: requests.isEmpty
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'No pending seat requests.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: requests.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final request = requests[index];
+                        var displayName = request.userId;
+                        for (final member
+                            in widget.state.roomSession.liveMembers) {
+                          if (member.userId == request.userId) {
+                            displayName = member.displayName;
+                            break;
+                          }
+                        }
+                        return ListTile(
+                          leading: const ShiningIcon(
+                            icon: Icons.event_seat_rounded,
+                            color: FeaturePalette.family,
+                            size: 18,
+                            boxSize: 34,
+                            glow: 0.30,
+                          ),
+                          title: Text(displayName),
+                          subtitle: Text(
+                            'Seat ' +
+                                (request.seatIndex + 1).toString() +
+                                ' • ID ' +
+                                request.userId,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: false,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.close_rounded,
+                                  color: FeaturePalette.safety,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Approve',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: true,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    _snack(
+                                      displayName +
+                                          ' approved for Seat ' +
+                                          (request.seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.check_rounded,
+                                  color: FeaturePalette.family,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSeatControls(int index) {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('seat-control-lock'),
+              leading: ShiningIcon(
+                icon: seat.locked
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_rounded,
+                color: seat.locked
+                    ? FeaturePalette.family
+                    : FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ${index + 1} locked.'
+                        : 'Seat ${index + 1} unlocked.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              key: const Key('seat-control-mute'),
+              leading: ShiningIcon(
+                icon: seat.roomMuted
+                    ? Icons.mic_rounded
+                    : Icons.mic_off_rounded,
+                color: seat.roomMuted
+                    ? FeaturePalette.safety
+                    : FeaturePalette.family,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(
+                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ${index + 1} muted.'
+                        : 'Seat ${index + 1} unmuted.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            if (!seat.occupied)
+              ListTile(
+                key: const Key('seat-control-take'),
+                leading: const ShiningIcon(
+                  icon: Icons.event_seat_rounded,
+                  color: FeaturePalette.family,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Take Seat'),
+                subtitle: const Text(
+                  'Owner/Admin can take this empty seat directly.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ${index + 1}.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle: Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
+                },
+              ),
+            if (controller.mySeat == index)
+              ListTile(
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave this seat'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+            if (controller.mySeat != null && controller.mySeat != index)
+              ListTile(
+                key: const Key('seat-control-leave-current'),
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave current seat'),
+                subtitle: Text(
+                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+          ],
+          ),
+        ),
+    );
+  }
+
+  Widget _buildSeatRow({
+    required int row,
+    required SeatLayoutSpec spec,
+    required double seatDiameter,
+  }) {
+    final range = spec.rangeForRow(row);
+    final rowSeatCount = range.$2 - range.$1;
+    final seatWidth = (seatDiameter + (seatDiameter < 44 ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+    return Row(
+      key: Key('seat-row-' + row.toString()),
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var offset = 0; offset < rowSeatCount; offset++)
+          SizedBox(
+            width: seatWidth,
+            child: _buildSeat(
+              index: range.$1 + offset,
+              seatDiameter: seatDiameter,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeat({
+    required int index,
+    required double seatDiameter,
+  }) {
+    final seat = controller.seats[index];
+    RoomPresenceMember? presenceMember;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == index) {
+        presenceMember = member;
+        break;
+      }
+    }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
+    final occupied = seat.userName != null || presenceMember != null;
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
+    final emoteUntil = presenceMember?.seatEmoteUntil;
+    final seatEmote = presenceMember?.seatEmote != null &&
+            emoteUntil != null &&
+            emoteUntil.isAfter(DateTime.now())
+        ? presenceMember!.seatEmote
+        : null;
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
+    final compact = seatDiameter < 44;
+    final labelWidth = (seatDiameter + (compact ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+
+    return SizedBox(
+      key: Key('seat-' + index.toString()),
+      width: labelWidth,
+      child: GestureDetector(
+        onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
+          if (occupied) {
+            RoomPresenceMember? member = presenceMember;
+            if (member == null) {
+              final mappedUserId = widget.state.roomControls.seatUsers[index];
+              for (final item in widget.state.roomSession.liveMembers) {
+                final idMatch =
+                    mappedUserId != null && item.userId == mappedUserId;
+                final nameMatch = item.displayName == seat.userName;
+                if (idMatch || nameMatch) {
+                  member = item;
+                  break;
+                }
+              }
+            }
+            if (member != null &&
+                member.userId != widget.state.auth.current?.userId) {
+              _showUserProfile(member, seatIndexHint: index);
+              return;
+            }
+          }
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+            return;
+          }
+          _handleUserSeatTap(index);
+        },
+        onLongPress: () {
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+          } else {
+            _snack('Only the room owner or room admin can control seats.');
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: seatDiameter,
+              height: seatDiameter,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: seat.locked && !occupied
+                        ? Center(
+                            child: Icon(
+                              Icons.lock_rounded,
+                              color: const Color(0xFFFFD76A),
+                              size: seatDiameter * 0.48,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x66FFD76A),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          )
+                        : AnimatedAvatarFrame(
+                            size: seatDiameter,
+                            frameId: presenceMember?.equippedFrameId,
+                            child: Container(
+                              width: seatDiameter,
+                              height: seatDiameter,
+                              padding: EdgeInsets.all(
+                                compact ? 2.4 : 3.2,
+                              ),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0x22000000),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  width: compact ? 1.1 : 1.5,
+                                ),
+                                boxShadow: const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x775D39FF),
+                                    blurRadius: 12,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0x221A0C33),
+                                  image: avatar == null
+                                      ? null
+                                      : DecorationImage(
+                                          image: avatar,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  border: Border.all(
+                                    color: const Color(0x99D9C8FF),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: avatar != null
+                                    ? null
+                                    : Center(
+                                        child: occupied
+                                            ? Text(
+                                                displayName.characters.first,
+                                                style: TextStyle(
+                                                  color:
+                                                      RoyalPalette.cream,
+                                                  fontWeight:
+                                                      FontWeight.w900,
+                                                  fontSize:
+                                                      seatDiameter * 0.32,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.weekend_rounded,
+                                                color: const Color(
+                                                  0xFFF3EAFF,
+                                                ),
+                                                size:
+                                                    seatDiameter * 0.44,
+                                              ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                    ),
+                  if (seat.roomMuted ||
+                      (controller.mySeat == index && controller.selfMuted) ||
+                      (presenceMember?.micMuted ?? false))
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        key: Key(
+                          'seat-muted-indicator-' + index.toString(),
+                        ),
+                        width: compact ? 14 : 18,
+                        height: compact ? 14 : 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE73D4F),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.mic_off_rounded,
+                          size: compact ? 9 : 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (seatEmote != null && seatEmote.isNotEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        seatEmote,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: seatDiameter * 0.82,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: compact ? 2 : 4),
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              key: Key('seat-heart-' + index.toString()),
+              height: compact ? 9 : 11,
+              constraints: BoxConstraints(
+                minWidth: compact ? 28 : 34,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8D72B8).withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '💜0',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFFE9DFFF),
+                  fontSize: compact ? 5.5 : 7,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (occupied &&
+                presenceMember != null &&
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.state.roomSession;
+    final activeController = session.controller;
+    if (activeController == null || session.room?.id != widget.room.id) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_roomTitle)),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: FeaturePalette.social,
+          ),
+        ),
+      );
+    }
+
+    final config = activeController.config;
+    final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
+    final screenSize = MediaQuery.sizeOf(context);
+    final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
+    final maxSeatAreaHeight = screenSize.height * 0.38;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
+    final heightSeatDiameter =
+        (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
+    final seatDiameter = (widthSeatDiameter < heightSeatDiameter
+            ? widthSeatDiameter
+            : heightSeatDiameter)
+        .clamp(28.0, 64.0)
+        .toDouble();
+    final seatAreaHeight = seatSpec
+        .preferredHeight(seatDiameter)
+        .clamp(120.0, maxSeatAreaHeight)
+        .toDouble();
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop || !session.hasRoom) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (session.hasRoom) session.minimize();
+        });
+      },
+      child: Scaffold(
+        backgroundColor: _roomBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: _roomBackgroundColor,
+          titleSpacing: 8,
+          title: InkWell(
+            key: const Key('room-title-button'),
+            onTap: _showRoomIdentityCard,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              key: const Key('reference-room-title-pill'),
+              constraints: const BoxConstraints(maxWidth: 238),
+              padding: const EdgeInsets.fromLTRB(5, 4, 12, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF100A19),
+                    backgroundImage: _roomPhotoProvider,
+                    child: _roomPhotoProvider == null
+                        ? const Icon(
+                            Icons.meeting_room_rounded,
+                            color: Color(0xFFD7C7FF),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _roomTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '🏅 ' + widget.room.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              key: const Key('room-share-button'),
+              tooltip: 'Share room',
+              onPressed: _shareRoom,
+              icon: const ShiningIcon(
+                icon: Icons.share_rounded,
+                color: FeaturePalette.social,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+            IconButton(
+              key: const Key('room-power-button'),
+              tooltip: 'Room options',
+              onPressed: _showRoomPowerMenu,
+              icon: const ShiningIcon(
+                icon: Icons.power_settings_new_rounded,
+                color: FeaturePalette.safety,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+          decoration: BoxDecoration(
+            color: _roomBackgroundColor,
+            image: _roomThemeImage == null
+                ? null
+                : DecorationImage(
+                    image: _roomThemeImage!,
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: Column(
+            children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    key: const Key('room-rank-hall-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showSendingRanking,
+                    child: Container(
+                      key: const Key('reference-room-rank-pill'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFC83D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Ranking',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final currentAccount = widget.state.auth.current;
+                      final live = widget.state.roomSession.liveMembers;
+                      final ordered = <Map<String, String?>>[];
+
+                      if (currentAccount != null) {
+                        RoomPresenceMember? currentMember;
+                        for (final member in live) {
+                          if (member.userId == currentAccount.userId) {
+                            currentMember = member;
+                            break;
+                          }
+                        }
+                        ordered.add(<String, String?>{
+                          'id': currentAccount.userId,
+                          'name': currentMember?.displayName ??
+                              currentAccount.displayName,
+                          'avatar': currentMember?.avatarDataUrl ??
+                              currentAccount.avatarDataUrl,
+                        });
+                      }
+
+                      for (final member in live) {
+                        if (member.userId == currentAccount?.userId) continue;
+                        ordered.add(<String, String?>{
+                          'id': member.userId,
+                          'name': member.displayName,
+                          'avatar': member.avatarDataUrl,
+                        });
+                      }
+
+                      final currentAlreadyLive = currentAccount != null &&
+                          live.any(
+                            (member) => member.userId == currentAccount.userId,
+                          );
+                      final memberCount = live.length +
+                          (currentAccount != null &&
+                                  session.hasRoom &&
+                                  !currentAlreadyLive
+                              ? 1
+                              : 0);
+                      final visible = ordered.take(3).toList(growable: false);
+
+                      ImageProvider? avatarFor(String? data) {
+                        if (data == null || !data.startsWith('data:image/')) {
+                          return null;
+                        }
+                        try {
+                          return MemoryImage(
+                            base64Decode(data.split(',').last),
+                          );
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return InkWell(
+                        key: const Key('room-online-members-button'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _showReferenceRoomMembers,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(7, 4, 9, 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A1D3B)
+                                .withValues(alpha: 0.86),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (visible.isNotEmpty)
+                                SizedBox(
+                                  key: const Key('room-top-member-avatars'),
+                                  width: 27.0 +
+                                      (visible.length - 1) * 17.0,
+                                  height: 28,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      for (var index = 0;
+                                          index < visible.length;
+                                          index++)
+                                        Positioned(
+                                          left: index * 17.0,
+                                          top: 1,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            padding: const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: const Color(0xFFFFD45A),
+                                              boxShadow: const [
+                                                BoxShadow(
+                                                  color: Color(0x55FFD45A),
+                                                  blurRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              key: Key(
+                                                'room-top-member-dp-' +
+                                                    (visible[index]['id'] ??
+                                                        index.toString()),
+                                              ),
+                                              radius: 11,
+                                              backgroundColor:
+                                                  const Color(0xFF171019),
+                                              backgroundImage: avatarFor(
+                                                visible[index]['avatar'],
+                                              ),
+                                              child: avatarFor(
+                                                        visible[index]
+                                                            ['avatar'],
+                                                      ) ==
+                                                      null
+                                                  ? Text(
+                                                      (visible[index]['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '?'
+                                                          : (visible[index]
+                                                                      ['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .characters
+                                                              .first
+                                                              .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.group_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              const SizedBox(width: 5),
+                              Text(
+                                memberCount.toString(),
+                                key: const Key('room-online-member-count'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              key: const Key('tinni-seat-grid'),
+              height: seatAreaHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: Column(
+                  children: [
+                    for (var row = 0; row < seatSpec.rows; row++)
+                      Expanded(
+                        child: _buildSeatRow(
+                          row: row,
+                          spec: seatSpec,
+                          seatDiameter: seatDiameter,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: RoyalPalette.panel.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: FeaturePalette.discover.withValues(alpha: 0.52),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: FeaturePalette.discover.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const ShiningIcon(
+                    icon: Icons.info_outline_rounded,
+                    color: FeaturePalette.discover,
+                    size: 14,
+                    boxSize: 27,
+                    glow: 0.24,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.state.roomControls.settings.topic.isEmpty
+                          ? 'Ask your followers to support the room.'
+                          : widget.state.roomControls.settings.topic,
+                      style: const TextStyle(color: RoyalPalette.muted, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('room-message-list'),
+                padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+                itemCount: controller.messages.length,
+                itemBuilder: (_, index) {
+                  final message = controller.messages[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: message.author + ': ',
+                            style: const TextStyle(
+                              color: FeaturePalette.message,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          TextSpan(text: message.text, style: const TextStyle(color: RoyalPalette.cream)),
+                        ],
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(0, 6, 6, 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF05080B),
+                  border: Border(top: BorderSide(color: RoyalPalette.bronze)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      child: TextField(
+                        key: const Key('room-chat-field'),
+                        controller: chat,
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned &&
+                            _canTypeInRoom,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : !_canTypeInRoom
+                                      ? 'Owner/Admin only'
+                                      : 'Chat',
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
+                        ),
+                        onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
+                          if (!_canTypeInRoom) {
+                            _snack(
+                              'Public Screen is off. Only room owner/admin can type.',
+                            );
+                            return;
+                          }
+                          final value = chat.text.trim();
+                          if (value.isEmpty) return;
+                          controller.sendMessage(value);
+                          chat.clear();
+                        },
+                      ),
+                    ),
+                    if (controller.mySeat != null)
+                      IconButton(
+                        key: const Key('room-emoji-button'),
+                        tooltip: 'Emoji & Emotes',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: _showEmojiPicker,
+                        icon: const ShiningIcon(
+                          icon: Icons.emoji_emotions_rounded,
+                          color: FeaturePalette.games,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                    IconButton(
+                      key: const Key('room-mic-button'),
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      tooltip: widget.state.roomSession.moderationMicMuted
+                          ? 'Muted by room owner/admin'
+                          : 'Microphone',
+                      onPressed: controller.mySeat == null ||
+                              widget.state.roomSession.moderationMicMuted
+                          ? null
+                          : _toggleMic,
+                      icon: ShiningIcon(
+                        icon: controller.micState == MicState.live
+                            ? Icons.mic_rounded
+                            : Icons.mic_off_rounded,
+                        color: controller.mySeat == null ||
+                                widget.state.roomSession.moderationMicMuted
+                            ? RoyalPalette.muted
+                            : controller.micState == MicState.live
+                                ? FeaturePalette.family
+                                : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
+                      ),
+                    ),
+
+                    IconButton(
+                      key: const Key('room-gift-button'),
+                      tooltip: 'Gifts',
+                      iconSize: 31,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      onPressed: config.giftsEnabled ? _showGiftSheet : null,
+                      icon: _roomActionLogo(
+                        label: 'Gift',
+                        icon: Icons.card_giftcard_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-tools-grid-button'),
+                      tooltip: 'More',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _showRoomTools,
+                      icon: _roomActionLogo(
+                        label: '4-Box',
+                        icon: Icons.grid_view_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    if (controller.inviteMode)
+                      IconButton(
+                        key: const Key('room-seat-button'),
+                        tooltip: 'Seat request',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: () async {
+                          if (controller.mySeat == null) {
+                            _snack('Tap any mic seat to send a seat request.');
+                          } else {
+                            await _leaveSeatAndMute();
+                          }
+                        },
+                        icon: const ShiningIcon(
+                          icon: Icons.event_seat_rounded,
+                          color: FeaturePalette.family,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+            ),
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
+            Positioned.fill(
+              child: EffectOverlay(
+                queue: widget.state.effects,
+                enabled: widget.state.roomControls.effectsEnabled,
+                shouldPlay: widget.state.roomControls.shouldPlayEffect,
+              ),
+            ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
+            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+              Positioned(
+                key: const Key('room-game-floating-position'),
+                right: 8,
+                bottom: 138,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Rocket',
+                      child: InkResponse(
+                        key: const Key('room-rocket-floating-button'),
+                        radius: 24,
+                        onTap: _showRocketPanel,
+                        child: const _ReferenceRocketLogo(size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1430),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: const Color(0xFF7E67D9),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Semantics(
+                      button: true,
+                      label: 'Game Center',
+                      child: InkResponse(
+                        key: const Key('room-game-floating-button'),
+                        radius: 32,
+                        onTap: _showGamePanel,
+                        child: const _ReferenceGameLogo(size: 54),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_fruitJackpotOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitJackpotPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+            if (_fruitPartyOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitPartyPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitPartyOpen = false,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceGameLogo extends StatelessWidget {
+  const _ReferenceGameLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x665D3BFF),
+              blurRadius: 18,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Color(0x55FF4FD8),
+              blurRadius: 11,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFFF7CF2),
+                Color(0xFFB56CFF),
+                Color(0xFF6F7BFF),
+              ],
+            ).createShader(bounds),
+            child: Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.78,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceRocketLogo extends StatelessWidget {
+  const _ReferenceRocketLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.86,
+            color: const Color(0xFFFF63E6),
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xFF6B5CFF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: size * 0.22,
+              height: size * 0.22,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD45A),
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x88FFD45A),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferenceGameTile extends StatelessWidget {
+  const _ReferenceGameTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: enabled
+                      ? const <Color>[
+                          Color(0xFF6E38B9),
+                          Color(0xFF2B123E),
+                        ]
+                      : const <Color>[
+                          Color(0xFF3A3240),
+                          Color(0xFF211C24),
+                        ],
+                ),
+                border: Border.all(
+                  color: enabled
+                      ? const Color(0xFFC56CFF)
+                      : const Color(0xFF5B505F),
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? const Color(0xFFFFD45A)
+                      : RoyalPalette.muted,
+                  size: 30,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  enabled ? RoyalPalette.cream : RoyalPalette.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RocketReward extends StatelessWidget {
+  const _RocketReward({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6E3EB3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFCCA7FF),
+          width: 0.8,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: const Color(0xFFFFD45A),
+        size: 27,
+      ),
+    );
+  }
+}
+
+class _RoomThemeChoice {
+  const _RoomThemeChoice({
+    required this.id,
+    required this.name,
+    this.color,
+    this.asset,
+    this.expiresAt,
+    this.panelFree = false,
+  });
+
+  final String id;
+  final String name;
+  final Color? color;
+  final String? asset;
+  final DateTime? expiresAt;
+  final bool panelFree;
+}
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  Color get _color {
+    final value = label.toLowerCase();
+    if (value.contains('follow')) return FeaturePalette.social;
+    if (value.contains('message')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('seat')) return FeaturePalette.family;
+    if (value.contains('mute')) return FeaturePalette.safety;
+    if (value.contains('kick')) return FeaturePalette.safety;
+    return FeaturePalette.social;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ShiningIcon(
+                icon: icon,
+                color: _color,
+                size: 20,
+                boxSize: 40,
+                glow: 0.34,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: RoyalPalette.cream, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _PremiumRoomToolLogo extends StatelessWidget {
+  const _PremiumRoomToolLogo({required this.label, required this.fallbackIcon, required this.size});
+  final String label;
+  final IconData fallbackIcon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _PremiumRoomToolPainter(label),
+        child: Semantics(label: label, child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _PremiumRoomToolPainter extends CustomPainter {
+  const _PremiumRoomToolPainter(this.label);
+  final String label;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lower = label.toLowerCase();
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    final shell = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF3B2A08), Color(0xFF090909), Color(0xFF000000)],
+        stops: [0, .62, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: r));
+    canvas.drawCircle(center, r - 1, shell);
+    canvas.drawCircle(center, r - 1.5, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = const Color(0xFFFFD45A));
+    canvas.drawCircle(center, r - 4, Paint()..style = PaintingStyle.stroke..strokeWidth = .7..color = const Color(0x88FFF1A8));
+
+    if (lower.contains('gift')) {
+      final box = Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: r * 1.05, height: r * .72);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..shader = const LinearGradient(colors:[Color(0xFFFF6FB1),Color(0xFF8A1749)]).createShader(box));
+      canvas.drawRect(Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: 3, height: box.height), Paint()..color=const Color(0xFFFFD45A));
+      canvas.drawLine(Offset(box.left, box.top + 5), Offset(box.right, box.top + 5), Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      final bow=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..color=const Color(0xFFFFD45A);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx-5, box.top-3), width: 10, height: 7), bow);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx+5, box.top-3), width: 10, height: 7), bow);
+    } else if (lower.contains('music') || lower.contains('sound')) {
+      final p=Paint()..color=const Color(0xFF5FE7FF)..strokeWidth=3.2..strokeCap=StrokeCap.round;
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+4,center.dy+7),p);
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+12,center.dy-7),p);
+      canvas.drawCircle(Offset(center.dx-1,center.dy+9),5,p);
+      canvas.drawCircle(Offset(center.dx+10,center.dy+6),5,p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx-1,center.dy+9),p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx+4,center.dy-10),p);
+    } else if (lower.contains('lucky') || lower == 'lp') {
+      final pouch=Path()..moveTo(center.dx-11,center.dy-4)..quadraticBezierTo(center.dx-14,center.dy+14,center.dx,center.dy+15)..quadraticBezierTo(center.dx+14,center.dy+14,center.dx+11,center.dy-4)..close();
+      canvas.drawPath(pouch,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF304F),Color(0xFF700817)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawLine(Offset(center.dx-9,center.dy-3),Offset(center.dx+9,center.dy-3),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      _text(canvas,'LP',center,const Color(0xFFFFE27A),9);
+    } else if (lower.contains('game')) {
+      final pad=RRect.fromRectAndRadius(Rect.fromCenter(center:center,width:r*1.25,height:r*.78),const Radius.circular(7));
+      canvas.drawRRect(pad,Paint()..shader=const LinearGradient(colors:[Color(0xFF555555),Color(0xFF090909)]).createShader(pad.outerRect));
+      final p=Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2;
+      canvas.drawLine(Offset(center.dx-8,center.dy),Offset(center.dx-2,center.dy),p);
+      canvas.drawLine(Offset(center.dx-5,center.dy-3),Offset(center.dx-5,center.dy+3),p);
+      canvas.drawCircle(Offset(center.dx+6,center.dy-2),2.3,Paint()..color=const Color(0xFFFF4FA3));
+      canvas.drawCircle(Offset(center.dx+11,center.dy+3),2.3,Paint()..color=const Color(0xFF44C8FF));
+    } else if (lower.contains('moderation') || lower.contains('shield')) {
+      final shield=Path()..moveTo(center.dx,center.dy-13)..lineTo(center.dx+11,center.dy-8)..lineTo(center.dx+9,center.dy+5)..quadraticBezierTo(center.dx,center.dy+15,center.dx-9,center.dy+5)..lineTo(center.dx-11,center.dy-8)..close();
+      canvas.drawPath(shield,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF6A6A),Color(0xFF7A1111)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawPath(shield,Paint()..style=PaintingStyle.stroke..strokeWidth=1.5..color=const Color(0xFFFFD45A));
+    } else if (lower.contains('setting')) {
+      canvas.drawCircle(center,10,Paint()..style=PaintingStyle.stroke..strokeWidth=5..color=const Color(0xFFFFD45A));
+      canvas.drawCircle(center,3,Paint()..color=const Color(0xFF050505));
+      for(int i=0;i<8;i++){final a=i*3.14159265/4;canvas.drawLine(Offset(center.dx+10*math.cos(a),center.dy+10*math.sin(a)),Offset(center.dx+15*math.cos(a),center.dy+15*math.sin(a)),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=3..strokeCap=StrokeCap.round);}
+    } else {
+      _text(canvas, label.isEmpty ? '•' : label.substring(0,1).toUpperCase(), center, const Color(0xFFFFD45A), 15);
+    }
+    canvas.drawArc(Rect.fromCircle(center:center,radius:r-5),3.7,1.2,false,Paint()..style=PaintingStyle.stroke..strokeWidth=1.4..color=const Color(0x88FFFFFF));
+  }
+
+  void _text(Canvas canvas,String text,Offset center,Color color,double fontSize){
+    final tp=TextPainter(text:TextSpan(text:text,style:TextStyle(color:color,fontSize:fontSize,fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+    tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
+  }
+  @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
+}
+)
+                  .hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) return;
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchError = result == null ? 'User ID not found.' : null;
+                  searchBusy = false;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchBusy = false;
+                  searchedUser = null;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+
+              Widget? trailing;
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' +
+                                  member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key(
+                    'room-member-add-admin-' + member.userId,
+                  ),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                  ),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchedUserCard() {
+              final user = searchedUser;
+              if (user == null) {
+                if (searchBusy) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (searchError != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    child: Text(
+                      searchError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8A80),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+
+              final userId = user['user_id']?.toString() ?? '';
+              final displayName =
+                  user['display_name']?.toString().trim().isNotEmpty == true
+                      ? user['display_name'].toString()
+                      : userId;
+              final avatar =
+                  avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final liveAdmin = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB52DFF),
+                  ),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(
+                      color: RoyalPalette.muted,
+                    ),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : liveAdmin
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : FilledButton(
+                              key: const Key(
+                                'room-admin-search-add-button',
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
+                            ),
+                ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive)
+                                ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key(
+                                      'room-admin-id-search-field',
+                                    ),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(12),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Search user ID to make Admin',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        key: const Key(
+                                          'room-admin-id-search-button',
+                                        ),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchedUserCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member
+                                              in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(searchController.dispose);
+  }
+
+  Future<void> _showReferenceRoomSetup() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can open Room Setup.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final nameController = TextEditingController(text: _roomTitle);
+    final noticeController =
+        TextEditingController(text: _roomAnnouncement);
+    var pendingPhoto = _roomPhotoDataUrl;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (pageContext) => StatefulBuilder(
+          builder: (pageContext, setPageState) {
+            ImageProvider? pendingPhotoProvider;
+            if (pendingPhoto != null &&
+                pendingPhoto!.startsWith('data:image/')) {
+              try {
+                pendingPhotoProvider = MemoryImage(
+                  base64Decode(pendingPhoto!.split(',').last),
+                );
+              } catch (_) {
+                pendingPhotoProvider = null;
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D062C),
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF1D062C),
+                title: const Text(
+                  'Room Setup',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                children: [
+                  Center(
+                    child: GestureDetector(
+                      key: const Key('reference-room-setup-photo'),
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 68,
+                          maxWidth: 900,
+                          maxHeight: 900,
+                        );
+                        if (image == null) return;
+                        final bytes = await image.readAsBytes();
+                        final mime =
+                            image.mimeType?.startsWith('image/') == true
+                                ? image.mimeType!
+                                : 'image/jpeg';
+                        final dataUrl = 'data:' +
+                            mime +
+                            ';base64,' +
+                            base64Encode(bytes);
+                        if (dataUrl.length > 450000) {
+                          _snack(
+                            'Room cover is too large. Choose a smaller image.',
+                          );
+                          return;
+                        }
+                        setPageState(() {
+                          pendingPhoto = dataUrl;
+                        });
+                      },
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: const Color(0xFF171019),
+                        backgroundImage: pendingPhotoProvider,
+                        child: pendingPhotoProvider == null
+                            ? const Icon(
+                                Icons.add_a_photo_rounded,
+                                color: RoyalPalette.cream,
+                                size: 28,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Room Name',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-name-field'),
+                    controller: nameController,
+                    maxLength: 24,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Notice',
+                    style: TextStyle(
+                      color: RoyalPalette.cream,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('reference-room-notice-field'),
+                    controller: noticeController,
+                    maxLength: 24,
+                    minLines: 5,
+                    maxLines: 5,
+                    style: const TextStyle(color: RoyalPalette.cream),
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Color(0xFF2A2330),
+                      counterStyle: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    key: const Key('reference-room-block-list'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: const Color(0xFF2A2330),
+                    leading: const Icon(
+                      Icons.block_rounded,
+                      color: RoyalPalette.cream,
+                    ),
+                    title: const Text(
+                      'Block List',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.muted,
+                    ),
+                    onTap: () => _showRoomBlacklist(pageContext),
+                  ),
+                  const SizedBox(height: 26),
+                  FilledButton(
+                    key: const Key('reference-room-setup-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B08FF),
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 15),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final notice = noticeController.text.trim();
+                      if (name.isEmpty) {
+                        _snack('Room name is required.');
+                        return;
+                      }
+
+                      try {
+                        final photoChanged =
+                            pendingPhoto != _roomPhotoDataUrl;
+                        final updated =
+                            await widget.state.discovery.updateRoomRemote(
+                          authToken: account.authToken,
+                          roomId: widget.room.id,
+                          title: name,
+                          announcement: notice,
+                          photoDataUrl:
+                              photoChanged ? pendingPhoto : null,
+                        );
+                        _roomTitleOverride = updated.title;
+                        _roomPhotoOverride = updated.photoDataUrl;
+                        _roomAnnouncementOverride =
+                            updated.announcement;
+
+                        if (mounted) setState(() {});
+                        if (pageContext.mounted) {
+                          Navigator.pop(pageContext);
+                        }
+                        _snack('Room setup saved.');
+                      } catch (error) {
+                        _snack(
+                          error
+                              .toString()
+                              .replaceFirst('Bad state: ', ''),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    noticeController.dispose();
+  }
+
+  Future<void> _showLuckyNumberDialog() async {
+    final controls = widget.state.roomControls;
+    final numberController = TextEditingController(
+      text: controls.luckyNumber?.toString() ?? '',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lucky Number'),
+        content: TextField(
+          controller: numberController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
+        ),
+        actions: [
+          if (controls.luckyNumberEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(context, -1),
+              child: const Text('Turn Off'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(numberController.text.trim());
+              if (value == null || value < 0) return;
+              Navigator.pop(context, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null) return;
+    if (result == -1) {
+      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
+      _snack('Lucky number disabled.');
+    } else {
+      controls.setLuckyNumber(result);
+      _snack('Lucky number set to $result.');
+    }
+    if (mounted) setState(() {});
+  }
+  Future<void> _handleUserSeatTap(int index) async {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+
+    if (!controller.inviteMode) {
+      final text = controller.requestOrJoinSeat(index);
+      _snack(text);
+      return;
+    }
+
+    if (seat.locked) {
+      _snack('Seat ' + (index + 1).toString() + ' is locked.');
+      return;
+    }
+    if (seat.occupied) {
+      _snack('Seat ' + (index + 1).toString() + ' is occupied.');
+      return;
+    }
+    if (controller.mySeat != null) {
+      _snack('Leave your current seat first.');
+      return;
+    }
+
+    try {
+      await widget.state.roomSession.requestMySeat(index);
+      _snack('Request sent for Seat ' + (index + 1).toString() + '.');
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  // ignore: unused_element
+  void _showSeatRequests() {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can review seat requests.');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final requests = widget.state.roomSession.seatRequests;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              child: requests.isEmpty
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'No pending seat requests.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: requests.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final request = requests[index];
+                        var displayName = request.userId;
+                        for (final member
+                            in widget.state.roomSession.liveMembers) {
+                          if (member.userId == request.userId) {
+                            displayName = member.displayName;
+                            break;
+                          }
+                        }
+                        return ListTile(
+                          leading: const ShiningIcon(
+                            icon: Icons.event_seat_rounded,
+                            color: FeaturePalette.family,
+                            size: 18,
+                            boxSize: 34,
+                            glow: 0.30,
+                          ),
+                          title: Text(displayName),
+                          subtitle: Text(
+                            'Seat ' +
+                                (request.seatIndex + 1).toString() +
+                                ' • ID ' +
+                                request.userId,
+                          ),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              IconButton(
+                                tooltip: 'Reject',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: false,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.close_rounded,
+                                  color: FeaturePalette.safety,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Approve',
+                                onPressed: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .resolveSeatRequest(
+                                      request.userId,
+                                      approved: true,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    _snack(
+                                      displayName +
+                                          ' approved for Seat ' +
+                                          (request.seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                                icon: const ShiningIcon(
+                                  icon: Icons.check_rounded,
+                                  color: FeaturePalette.family,
+                                  size: 16,
+                                  boxSize: 30,
+                                  glow: 0.28,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSeatControls(int index) {
+    if (index < 0 || index >= controller.seats.length) return;
+    final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              key: const Key('seat-control-lock'),
+              leading: ShiningIcon(
+                icon: seat.locked
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_rounded,
+                color: seat.locked
+                    ? FeaturePalette.family
+                    : FeaturePalette.safety,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ${index + 1} locked.'
+                        : 'Seat ${index + 1} unlocked.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              key: const Key('seat-control-mute'),
+              leading: ShiningIcon(
+                icon: seat.roomMuted
+                    ? Icons.mic_rounded
+                    : Icons.mic_off_rounded,
+                color: seat.roomMuted
+                    ? FeaturePalette.safety
+                    : FeaturePalette.family,
+                size: 18,
+                boxSize: 34,
+                glow: 0.30,
+              ),
+              title: Text(
+                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ${index + 1} muted.'
+                        : 'Seat ${index + 1} unmuted.',
+                  );
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
+              },
+            ),
+            if (!seat.occupied)
+              ListTile(
+                key: const Key('seat-control-take'),
+                leading: const ShiningIcon(
+                  icon: Icons.event_seat_rounded,
+                  color: FeaturePalette.family,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Take Seat'),
+                subtitle: const Text(
+                  'Owner/Admin can take this empty seat directly.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ${index + 1}.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle: Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
+                },
+              ),
+            if (controller.mySeat == index)
+              ListTile(
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave this seat'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+            if (controller.mySeat != null && controller.mySeat != index)
+              ListTile(
+                key: const Key('seat-control-leave-current'),
+                leading: const ShiningIcon(
+                  icon: Icons.logout_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Leave current seat'),
+                subtitle: Text(
+                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _leaveSeatAndMute();
+                },
+              ),
+          ],
+          ),
+        ),
+    );
+  }
+
+  Widget _buildSeatRow({
+    required int row,
+    required SeatLayoutSpec spec,
+    required double seatDiameter,
+  }) {
+    final range = spec.rangeForRow(row);
+    final rowSeatCount = range.$2 - range.$1;
+    final seatWidth = (seatDiameter + (seatDiameter < 44 ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+    return Row(
+      key: Key('seat-row-' + row.toString()),
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var offset = 0; offset < rowSeatCount; offset++)
+          SizedBox(
+            width: seatWidth,
+            child: _buildSeat(
+              index: range.$1 + offset,
+              seatDiameter: seatDiameter,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeat({
+    required int index,
+    required double seatDiameter,
+  }) {
+    final seat = controller.seats[index];
+    RoomPresenceMember? presenceMember;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == index) {
+        presenceMember = member;
+        break;
+      }
+    }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
+    final occupied = seat.userName != null || presenceMember != null;
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
+    final emoteUntil = presenceMember?.seatEmoteUntil;
+    final seatEmote = presenceMember?.seatEmote != null &&
+            emoteUntil != null &&
+            emoteUntil.isAfter(DateTime.now())
+        ? presenceMember!.seatEmote
+        : null;
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
+    final compact = seatDiameter < 44;
+    final labelWidth = (seatDiameter + (compact ? 8 : 16))
+        .clamp(38.0, 78.0)
+        .toDouble();
+
+    return SizedBox(
+      key: Key('seat-' + index.toString()),
+      width: labelWidth,
+      child: GestureDetector(
+        onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
+          if (occupied) {
+            RoomPresenceMember? member = presenceMember;
+            if (member == null) {
+              final mappedUserId = widget.state.roomControls.seatUsers[index];
+              for (final item in widget.state.roomSession.liveMembers) {
+                final idMatch =
+                    mappedUserId != null && item.userId == mappedUserId;
+                final nameMatch = item.displayName == seat.userName;
+                if (idMatch || nameMatch) {
+                  member = item;
+                  break;
+                }
+              }
+            }
+            if (member != null &&
+                member.userId != widget.state.auth.current?.userId) {
+              _showUserProfile(member, seatIndexHint: index);
+              return;
+            }
+          }
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+            return;
+          }
+          _handleUserSeatTap(index);
+        },
+        onLongPress: () {
+          if (_canModerateSeats) {
+            _showSeatControls(index);
+          } else {
+            _snack('Only the room owner or room admin can control seats.');
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: seatDiameter,
+              height: seatDiameter,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  GestureDetector(
+                    key: presenceMember == null
+                        ? null
+                        : Key('room-seat-user-dp-' + presenceMember.userId),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: presenceMember == null
+                        ? null
+                        : () => _showUserProfile(
+                              presenceMember!,
+                              seatIndexHint: index,
+                            ),
+                    child: seat.locked && !occupied
+                        ? Center(
+                            child: Icon(
+                              Icons.lock_rounded,
+                              color: const Color(0xFFFFD76A),
+                              size: seatDiameter * 0.48,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x66FFD76A),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          )
+                        : AnimatedAvatarFrame(
+                            size: seatDiameter,
+                            frameId: presenceMember?.equippedFrameId,
+                            child: Container(
+                              width: seatDiameter,
+                              height: seatDiameter,
+                              padding: EdgeInsets.all(
+                                compact ? 2.4 : 3.2,
+                              ),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0x22000000),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  width: compact ? 1.1 : 1.5,
+                                ),
+                                boxShadow: const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x775D39FF),
+                                    blurRadius: 12,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0x221A0C33),
+                                  image: avatar == null
+                                      ? null
+                                      : DecorationImage(
+                                          image: avatar,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  border: Border.all(
+                                    color: const Color(0x99D9C8FF),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: avatar != null
+                                    ? null
+                                    : Center(
+                                        child: occupied
+                                            ? Text(
+                                                displayName.characters.first,
+                                                style: TextStyle(
+                                                  color:
+                                                      RoyalPalette.cream,
+                                                  fontWeight:
+                                                      FontWeight.w900,
+                                                  fontSize:
+                                                      seatDiameter * 0.32,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.weekend_rounded,
+                                                color: const Color(
+                                                  0xFFF3EAFF,
+                                                ),
+                                                size:
+                                                    seatDiameter * 0.44,
+                                              ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                    ),
+                  if (seat.roomMuted ||
+                      (controller.mySeat == index && controller.selfMuted) ||
+                      (presenceMember?.micMuted ?? false))
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        key: Key(
+                          'seat-muted-indicator-' + index.toString(),
+                        ),
+                        width: compact ? 14 : 18,
+                        height: compact ? 14 : 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE73D4F),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.mic_off_rounded,
+                          size: compact ? 9 : 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (seatEmote != null && seatEmote.isNotEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        seatEmote,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: seatDiameter * 0.82,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: compact ? 2 : 4),
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              key: Key('seat-heart-' + index.toString()),
+              height: compact ? 9 : 11,
+              constraints: BoxConstraints(
+                minWidth: compact ? 28 : 34,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8D72B8).withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '💜0',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFFE9DFFF),
+                  fontSize: compact ? 5.5 : 7,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (occupied &&
+                presenceMember != null &&
+                (presenceMember.ownerTags.isNotEmpty ||
+                    presenceMember.ownerMedals.isNotEmpty))
+              SizedBox(
+                height: compact ? 10 : 13,
+                width: labelWidth,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final tag in presenceMember.ownerTags)
+                      Container(
+                        key: Key(
+                          'seat-owner-tag-' +
+                              presenceMember.userId +
+                              '-' +
+                              tag.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(tag.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: _ownerTagColor(tag.colorHex),
+                            fontSize: compact ? 5.0 : 6.0,
+                            height: 1.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    for (final medal in presenceMember.ownerMedals)
+                      Container(
+                        key: Key(
+                          'seat-owner-medal-' +
+                              presenceMember.userId +
+                              '-' +
+                              medal.name,
+                        ),
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _ownerTagColor(medal.colorHex),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium_rounded,
+                              size: compact ? 5.0 : 6.0,
+                              color: _ownerTagColor(medal.colorHex),
+                            ),
+                            Text(
+                              medal.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(medal.colorHex),
+                                fontSize: compact ? 5.0 : 6.0,
+                                height: 1.0,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.state.roomSession;
+    final activeController = session.controller;
+    if (activeController == null || session.room?.id != widget.room.id) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_roomTitle)),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: FeaturePalette.social,
+          ),
+        ),
+      );
+    }
+
+    final config = activeController.config;
+    final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
+    final screenSize = MediaQuery.sizeOf(context);
+    final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
+    final maxSeatAreaHeight = screenSize.height * 0.38;
+    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
+    final heightSeatDiameter =
+        (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
+    final seatDiameter = (widthSeatDiameter < heightSeatDiameter
+            ? widthSeatDiameter
+            : heightSeatDiameter)
+        .clamp(28.0, 64.0)
+        .toDouble();
+    final seatAreaHeight = seatSpec
+        .preferredHeight(seatDiameter)
+        .clamp(120.0, maxSeatAreaHeight)
+        .toDouble();
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop || !session.hasRoom) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (session.hasRoom) session.minimize();
+        });
+      },
+      child: Scaffold(
+        backgroundColor: _roomBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: _roomBackgroundColor,
+          titleSpacing: 8,
+          title: InkWell(
+            key: const Key('room-title-button'),
+            onTap: _showRoomIdentityCard,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              key: const Key('reference-room-title-pill'),
+              constraints: const BoxConstraints(maxWidth: 238),
+              padding: const EdgeInsets.fromLTRB(5, 4, 12, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF100A19),
+                    backgroundImage: _roomPhotoProvider,
+                    child: _roomPhotoProvider == null
+                        ? const Icon(
+                            Icons.meeting_room_rounded,
+                            color: Color(0xFFD7C7FF),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _roomTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '🏅 ' + widget.room.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              key: const Key('room-share-button'),
+              tooltip: 'Share room',
+              onPressed: _shareRoom,
+              icon: const ShiningIcon(
+                icon: Icons.share_rounded,
+                color: FeaturePalette.social,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+            IconButton(
+              key: const Key('room-power-button'),
+              tooltip: 'Room options',
+              onPressed: _showRoomPowerMenu,
+              icon: const ShiningIcon(
+                icon: Icons.power_settings_new_rounded,
+                color: FeaturePalette.safety,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+          decoration: BoxDecoration(
+            color: _roomBackgroundColor,
+            image: _roomThemeImage == null
+                ? null
+                : DecorationImage(
+                    image: _roomThemeImage!,
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: Column(
+            children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    key: const Key('room-rank-hall-button'),
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _showSendingRanking,
+                    child: Container(
+                      key: const Key('reference-room-rank-pill'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A1D3B)
+                            .withValues(alpha: 0.86),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFC83D),
+                            size: 18,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Ranking',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final currentAccount = widget.state.auth.current;
+                      final live = widget.state.roomSession.liveMembers;
+                      final ordered = <Map<String, String?>>[];
+
+                      if (currentAccount != null) {
+                        RoomPresenceMember? currentMember;
+                        for (final member in live) {
+                          if (member.userId == currentAccount.userId) {
+                            currentMember = member;
+                            break;
+                          }
+                        }
+                        ordered.add(<String, String?>{
+                          'id': currentAccount.userId,
+                          'name': currentMember?.displayName ??
+                              currentAccount.displayName,
+                          'avatar': currentMember?.avatarDataUrl ??
+                              currentAccount.avatarDataUrl,
+                        });
+                      }
+
+                      for (final member in live) {
+                        if (member.userId == currentAccount?.userId) continue;
+                        ordered.add(<String, String?>{
+                          'id': member.userId,
+                          'name': member.displayName,
+                          'avatar': member.avatarDataUrl,
+                        });
+                      }
+
+                      final currentAlreadyLive = currentAccount != null &&
+                          live.any(
+                            (member) => member.userId == currentAccount.userId,
+                          );
+                      final memberCount = live.length +
+                          (currentAccount != null &&
+                                  session.hasRoom &&
+                                  !currentAlreadyLive
+                              ? 1
+                              : 0);
+                      final visible = ordered.take(3).toList(growable: false);
+
+                      ImageProvider? avatarFor(String? data) {
+                        if (data == null || !data.startsWith('data:image/')) {
+                          return null;
+                        }
+                        try {
+                          return MemoryImage(
+                            base64Decode(data.split(',').last),
+                          );
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return InkWell(
+                        key: const Key('room-online-members-button'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _showReferenceRoomMembers,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(7, 4, 9, 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A1D3B)
+                                .withValues(alpha: 0.86),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (visible.isNotEmpty)
+                                SizedBox(
+                                  key: const Key('room-top-member-avatars'),
+                                  width: 27.0 +
+                                      (visible.length - 1) * 17.0,
+                                  height: 28,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      for (var index = 0;
+                                          index < visible.length;
+                                          index++)
+                                        Positioned(
+                                          left: index * 17.0,
+                                          top: 1,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            padding: const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: const Color(0xFFFFD45A),
+                                              boxShadow: const [
+                                                BoxShadow(
+                                                  color: Color(0x55FFD45A),
+                                                  blurRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              key: Key(
+                                                'room-top-member-dp-' +
+                                                    (visible[index]['id'] ??
+                                                        index.toString()),
+                                              ),
+                                              radius: 11,
+                                              backgroundColor:
+                                                  const Color(0xFF171019),
+                                              backgroundImage: avatarFor(
+                                                visible[index]['avatar'],
+                                              ),
+                                              child: avatarFor(
+                                                        visible[index]
+                                                            ['avatar'],
+                                                      ) ==
+                                                      null
+                                                  ? Text(
+                                                      (visible[index]['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '?'
+                                                          : (visible[index]
+                                                                      ['name'] ??
+                                                                  '?')
+                                                              .trim()
+                                                              .characters
+                                                              .first
+                                                              .toUpperCase(),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.group_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              const SizedBox(width: 5),
+                              Text(
+                                memberCount.toString(),
+                                key: const Key('room-online-member-count'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              key: const Key('tinni-seat-grid'),
+              height: seatAreaHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: Column(
+                  children: [
+                    for (var row = 0; row < seatSpec.rows; row++)
+                      Expanded(
+                        child: _buildSeatRow(
+                          row: row,
+                          spec: seatSpec,
+                          seatDiameter: seatDiameter,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: RoyalPalette.panel.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: FeaturePalette.discover.withValues(alpha: 0.52),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: FeaturePalette.discover.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const ShiningIcon(
+                    icon: Icons.info_outline_rounded,
+                    color: FeaturePalette.discover,
+                    size: 14,
+                    boxSize: 27,
+                    glow: 0.24,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.state.roomControls.settings.topic.isEmpty
+                          ? 'Ask your followers to support the room.'
+                          : widget.state.roomControls.settings.topic,
+                      style: const TextStyle(color: RoyalPalette.muted, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                key: const Key('room-message-list'),
+                padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+                itemCount: controller.messages.length,
+                itemBuilder: (_, index) {
+                  final message = controller.messages[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: message.author + ': ',
+                            style: const TextStyle(
+                              color: FeaturePalette.message,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          TextSpan(text: message.text, style: const TextStyle(color: RoyalPalette.cream)),
+                        ],
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(0, 6, 6, 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF05080B),
+                  border: Border(top: BorderSide(color: RoyalPalette.bronze)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      child: TextField(
+                        key: const Key('room-chat-field'),
+                        controller: chat,
+                        enabled:
+                            !widget.state.roomSession.moderationChatBanned &&
+                            _canTypeInRoom,
+                        decoration: InputDecoration(
+                          hintText:
+                              widget.state.roomSession.moderationChatBanned
+                                  ? 'Chat banned'
+                                  : !_canTypeInRoom
+                                      ? 'Owner/Admin only'
+                                      : 'Chat',
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 10, 8, 10),
+                        ),
+                        onSubmitted: (_) {
+                          if (widget.state.roomSession.moderationChatBanned) {
+                            _snack('Room owner/admin has chat banned this ID.');
+                            return;
+                          }
+                          if (!_canTypeInRoom) {
+                            _snack(
+                              'Public Screen is off. Only room owner/admin can type.',
+                            );
+                            return;
+                          }
+                          final value = chat.text.trim();
+                          if (value.isEmpty) return;
+                          controller.sendMessage(value);
+                          chat.clear();
+                        },
+                      ),
+                    ),
+                    if (controller.mySeat != null)
+                      IconButton(
+                        key: const Key('room-emoji-button'),
+                        tooltip: 'Emoji & Emotes',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: _showEmojiPicker,
+                        icon: const ShiningIcon(
+                          icon: Icons.emoji_emotions_rounded,
+                          color: FeaturePalette.games,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                    IconButton(
+                      key: const Key('room-mic-button'),
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      tooltip: widget.state.roomSession.moderationMicMuted
+                          ? 'Muted by room owner/admin'
+                          : 'Microphone',
+                      onPressed: controller.mySeat == null ||
+                              widget.state.roomSession.moderationMicMuted
+                          ? null
+                          : _toggleMic,
+                      icon: ShiningIcon(
+                        icon: controller.micState == MicState.live
+                            ? Icons.mic_rounded
+                            : Icons.mic_off_rounded,
+                        color: controller.mySeat == null ||
+                                widget.state.roomSession.moderationMicMuted
+                            ? RoyalPalette.muted
+                            : controller.micState == MicState.live
+                                ? FeaturePalette.family
+                                : FeaturePalette.safety,
+                        size: 22,
+                        boxSize: 38,
+                        glow: controller.mySeat == null ? 0.08 : 0.34,
+                      ),
+                    ),
+
+                    IconButton(
+                      key: const Key('room-gift-button'),
+                      tooltip: 'Gifts',
+                      iconSize: 31,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      onPressed: config.giftsEnabled ? _showGiftSheet : null,
+                      icon: _roomActionLogo(
+                        label: 'Gift',
+                        icon: Icons.card_giftcard_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-tools-grid-button'),
+                      tooltip: 'More',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(9),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _showRoomTools,
+                      icon: _roomActionLogo(
+                        label: '4-Box',
+                        icon: Icons.grid_view_rounded,
+                        size: 42,
+                      ),
+                    ),
+                    if (controller.inviteMode)
+                      IconButton(
+                        key: const Key('room-seat-button'),
+                        tooltip: 'Seat request',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(9),
+                        constraints: const BoxConstraints(
+                          minWidth: 46,
+                          minHeight: 46,
+                        ),
+                        onPressed: () async {
+                          if (controller.mySeat == null) {
+                            _snack('Tap any mic seat to send a seat request.');
+                          } else {
+                            await _leaveSeatAndMute();
+                          }
+                        },
+                        icon: const ShiningIcon(
+                          icon: Icons.event_seat_rounded,
+                          color: FeaturePalette.family,
+                          size: 22,
+                          boxSize: 38,
+                          glow: 0.34,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+            ),
+            for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
+              _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
+            Positioned.fill(
+              child: EffectOverlay(
+                queue: widget.state.effects,
+                enabled: widget.state.roomControls.effectsEnabled,
+                shouldPlay: widget.state.roomControls.shouldPlayEffect,
+              ),
+            ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
+            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+              Positioned(
+                key: const Key('room-game-floating-position'),
+                right: 8,
+                bottom: 138,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Rocket',
+                      child: InkResponse(
+                        key: const Key('room-rocket-floating-button'),
+                        radius: 24,
+                        onTap: _showRocketPanel,
+                        child: const _ReferenceRocketLogo(size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1430),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: const Color(0xFF7E67D9),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Semantics(
+                      button: true,
+                      label: 'Game Center',
+                      child: InkResponse(
+                        key: const Key('room-game-floating-button'),
+                        radius: 32,
+                        onTap: _showGamePanel,
+                        child: const _ReferenceGameLogo(size: 54),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_fruitJackpotOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitJackpotPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitJackpotOpen = false,
+                  ),
+                ),
+              ),
+            if (_fruitPartyOpen)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: 4,
+                height: MediaQuery.sizeOf(context).height * 0.58,
+                child: FruitPartyPanel(
+                  state: widget.state,
+                  onClose: () => setState(
+                    () => _fruitPartyOpen = false,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceGameLogo extends StatelessWidget {
+  const _ReferenceGameLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x665D3BFF),
+              blurRadius: 18,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Color(0x55FF4FD8),
+              blurRadius: 11,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFFF7CF2),
+                Color(0xFFB56CFF),
+                Color(0xFF6F7BFF),
+              ],
+            ).createShader(bounds),
+            child: Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.78,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferenceRocketLogo extends StatelessWidget {
+  const _ReferenceRocketLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.86,
+            color: const Color(0xFFFF63E6),
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xFF6B5CFF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: size * 0.22,
+              height: size * 0.22,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD45A),
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x88FFD45A),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferenceGameTile extends StatelessWidget {
+  const _ReferenceGameTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: enabled
+                      ? const <Color>[
+                          Color(0xFF6E38B9),
+                          Color(0xFF2B123E),
+                        ]
+                      : const <Color>[
+                          Color(0xFF3A3240),
+                          Color(0xFF211C24),
+                        ],
+                ),
+                border: Border.all(
+                  color: enabled
+                      ? const Color(0xFFC56CFF)
+                      : const Color(0xFF5B505F),
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? const Color(0xFFFFD45A)
+                      : RoyalPalette.muted,
+                  size: 30,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  enabled ? RoyalPalette.cream : RoyalPalette.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RocketReward extends StatelessWidget {
+  const _RocketReward({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6E3EB3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFCCA7FF),
+          width: 0.8,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: const Color(0xFFFFD45A),
+        size: 27,
+      ),
+    );
+  }
+}
+
+class _RoomThemeChoice {
+  const _RoomThemeChoice({
+    required this.id,
+    required this.name,
+    this.color,
+    this.asset,
+    this.expiresAt,
+    this.panelFree = false,
+  });
+
+  final String id;
+  final String name;
+  final Color? color;
+  final String? asset;
+  final DateTime? expiresAt;
+  final bool panelFree;
+}
+class _RoomMemberProfilePage extends StatelessWidget {
+  const _RoomMemberProfilePage({required this.member});
+
+  final RoomPresenceMember member;
+
+  Color _color(String hex) {
+    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+    return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  ImageProvider? get _avatar {
+    final value = member.avatarDataUrl;
+    if (value == null || !value.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(value.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pill(OwnerTag item, {required bool medal}) {
+    final color = _color(item.colorHex);
+    return Container(
+      key: Key(
+        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
+            member.userId +
+            '-' +
+            item.name,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (medal) ...[
+            Icon(
+              Icons.workspace_premium_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            item.name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar;
+    return Scaffold(
+      backgroundColor: RoyalPalette.nearBlack,
+      appBar: AppBar(
+        title: Text(
+          member.displayName,
+          style: const TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 30),
+        children: [
+          Center(
+            child: CircleAvatar(
+              key: Key('full-profile-dp-' + member.userId),
+              radius: 54,
+              backgroundColor: RoyalPalette.panel2,
+              backgroundImage: avatar,
+              child: avatar == null
+                  ? Text(
+                      member.displayName.isEmpty
+                          ? '?'
+                          : member.displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.social,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            member.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID ' + member.userId,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: RoyalPalette.muted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tags',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerTags.isEmpty)
+            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final tag in member.ownerTags)
+                  _pill(tag, medal: false),
+              ],
+            ),
+          const SizedBox(height: 20),
+          const Text(
+            'Medals',
+            style: TextStyle(
+              color: RoyalPalette.cream,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (member.ownerMedals.isEmpty)
+            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
+          else
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final medal in member.ownerMedals)
+                  _pill(medal, medal: true),
+              ],
+            ),
+          const SizedBox(height: 20),
+          RoyalPanel(
+            accentColor: FeaturePalette.social,
+            child: Column(
+              children: [
+                _ProfileDetailRow(
+                  label: 'Country',
+                  value: member.countryCode.isEmpty
+                      ? member.flagEmoji
+                      : member.flagEmoji + ' ' + member.countryCode,
+                ),
+                _ProfileDetailRow(
+                  label: 'Family',
+                  value: member.familyTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Host',
+                  value: member.hostTag ?? '—',
+                ),
+                _ProfileDetailRow(
+                  label: 'Agency',
+                  value: member.agencyName ?? '—',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailRow extends StatelessWidget {
+  const _ProfileDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  Color get _color {
+    final value = label.toLowerCase();
+    if (value.contains('follow')) return FeaturePalette.social;
+    if (value.contains('message')) return FeaturePalette.music;
+    if (value.contains('gift')) return FeaturePalette.gift;
+    if (value.contains('seat')) return FeaturePalette.family;
+    if (value.contains('mute')) return FeaturePalette.safety;
+    if (value.contains('kick')) return FeaturePalette.safety;
+    return FeaturePalette.social;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ShiningIcon(
+                icon: icon,
+                color: _color,
+                size: 20,
+                boxSize: 40,
+                glow: 0.34,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: RoyalPalette.cream, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _PremiumRoomToolLogo extends StatelessWidget {
+  const _PremiumRoomToolLogo({required this.label, required this.fallbackIcon, required this.size});
+  final String label;
+  final IconData fallbackIcon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _PremiumRoomToolPainter(label),
+        child: Semantics(label: label, child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _PremiumRoomToolPainter extends CustomPainter {
+  const _PremiumRoomToolPainter(this.label);
+  final String label;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lower = label.toLowerCase();
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    final shell = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF3B2A08), Color(0xFF090909), Color(0xFF000000)],
+        stops: [0, .62, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: r));
+    canvas.drawCircle(center, r - 1, shell);
+    canvas.drawCircle(center, r - 1.5, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = const Color(0xFFFFD45A));
+    canvas.drawCircle(center, r - 4, Paint()..style = PaintingStyle.stroke..strokeWidth = .7..color = const Color(0x88FFF1A8));
+
+    if (lower.contains('gift')) {
+      final box = Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: r * 1.05, height: r * .72);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..shader = const LinearGradient(colors:[Color(0xFFFF6FB1),Color(0xFF8A1749)]).createShader(box));
+      canvas.drawRect(Rect.fromCenter(center: Offset(center.dx, center.dy + 4), width: 3, height: box.height), Paint()..color=const Color(0xFFFFD45A));
+      canvas.drawLine(Offset(box.left, box.top + 5), Offset(box.right, box.top + 5), Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      final bow=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..color=const Color(0xFFFFD45A);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx-5, box.top-3), width: 10, height: 7), bow);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx+5, box.top-3), width: 10, height: 7), bow);
+    } else if (lower.contains('music') || lower.contains('sound')) {
+      final p=Paint()..color=const Color(0xFF5FE7FF)..strokeWidth=3.2..strokeCap=StrokeCap.round;
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+4,center.dy+7),p);
+      canvas.drawLine(Offset(center.dx+4,center.dy-10),Offset(center.dx+12,center.dy-7),p);
+      canvas.drawCircle(Offset(center.dx-1,center.dy+9),5,p);
+      canvas.drawCircle(Offset(center.dx+10,center.dy+6),5,p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx-1,center.dy+9),p);
+      canvas.drawLine(Offset(center.dx-1,center.dy-7),Offset(center.dx+4,center.dy-10),p);
+    } else if (lower.contains('lucky') || lower == 'lp') {
+      final pouch=Path()..moveTo(center.dx-11,center.dy-4)..quadraticBezierTo(center.dx-14,center.dy+14,center.dx,center.dy+15)..quadraticBezierTo(center.dx+14,center.dy+14,center.dx+11,center.dy-4)..close();
+      canvas.drawPath(pouch,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF304F),Color(0xFF700817)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawLine(Offset(center.dx-9,center.dy-3),Offset(center.dx+9,center.dy-3),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2);
+      _text(canvas,'LP',center,const Color(0xFFFFE27A),9);
+    } else if (lower.contains('game')) {
+      final pad=RRect.fromRectAndRadius(Rect.fromCenter(center:center,width:r*1.25,height:r*.78),const Radius.circular(7));
+      canvas.drawRRect(pad,Paint()..shader=const LinearGradient(colors:[Color(0xFF555555),Color(0xFF090909)]).createShader(pad.outerRect));
+      final p=Paint()..color=const Color(0xFFFFD45A)..strokeWidth=2;
+      canvas.drawLine(Offset(center.dx-8,center.dy),Offset(center.dx-2,center.dy),p);
+      canvas.drawLine(Offset(center.dx-5,center.dy-3),Offset(center.dx-5,center.dy+3),p);
+      canvas.drawCircle(Offset(center.dx+6,center.dy-2),2.3,Paint()..color=const Color(0xFFFF4FA3));
+      canvas.drawCircle(Offset(center.dx+11,center.dy+3),2.3,Paint()..color=const Color(0xFF44C8FF));
+    } else if (lower.contains('moderation') || lower.contains('shield')) {
+      final shield=Path()..moveTo(center.dx,center.dy-13)..lineTo(center.dx+11,center.dy-8)..lineTo(center.dx+9,center.dy+5)..quadraticBezierTo(center.dx,center.dy+15,center.dx-9,center.dy+5)..lineTo(center.dx-11,center.dy-8)..close();
+      canvas.drawPath(shield,Paint()..shader=const LinearGradient(colors:[Color(0xFFFF6A6A),Color(0xFF7A1111)]).createShader(Rect.fromCircle(center:center,radius:r)));
+      canvas.drawPath(shield,Paint()..style=PaintingStyle.stroke..strokeWidth=1.5..color=const Color(0xFFFFD45A));
+    } else if (lower.contains('setting')) {
+      canvas.drawCircle(center,10,Paint()..style=PaintingStyle.stroke..strokeWidth=5..color=const Color(0xFFFFD45A));
+      canvas.drawCircle(center,3,Paint()..color=const Color(0xFF050505));
+      for(int i=0;i<8;i++){final a=i*3.14159265/4;canvas.drawLine(Offset(center.dx+10*math.cos(a),center.dy+10*math.sin(a)),Offset(center.dx+15*math.cos(a),center.dy+15*math.sin(a)),Paint()..color=const Color(0xFFFFD45A)..strokeWidth=3..strokeCap=StrokeCap.round);}
+    } else {
+      _text(canvas, label.isEmpty ? '•' : label.substring(0,1).toUpperCase(), center, const Color(0xFFFFD45A), 15);
+    }
+    canvas.drawArc(Rect.fromCircle(center:center,radius:r-5),3.7,1.2,false,Paint()..style=PaintingStyle.stroke..strokeWidth=1.4..color=const Color(0x88FFFFFF));
+  }
+
+  void _text(Canvas canvas,String text,Offset center,Color color,double fontSize){
+    final tp=TextPainter(text:TextSpan(text:text,style:TextStyle(color:color,fontSize:fontSize,fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+    tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
+  }
+  @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
+}
+,
               ).hasMatch(query)) {
                 setSheetState(() {
                   searchedUser = null;
