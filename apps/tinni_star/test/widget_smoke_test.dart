@@ -236,13 +236,6 @@ void main() {
     expect(find.byKey(const Key('effect-gift-effects')), findsOneWidget);
     expect(find.byKey(const Key('effect-lucky-gift')), findsOneWidget);
     expect(find.byKey(const Key('effect-gift-sound')), findsOneWidget);
-    expect(find.byKey(const Key('effect-gift-fly-in')), findsOneWidget);
-    expect(find.byKey(const Key('effect-car-effects')), findsOneWidget);
-    expect(find.byKey(const Key('effect-gift-bubble')), findsOneWidget);
-    expect(
-      find.byKey(const Key('effect-rocket-draw-notice')),
-      findsOneWidget,
-    );
 
     final originalGiftEffects = state.roomControls.giftEffectsEnabled;
     await tester.tap(find.byKey(const Key('effect-gift-effects')));
@@ -250,6 +243,17 @@ void main() {
     expect(
       state.roomControls.giftEffectsEnabled,
       isNot(originalGiftEffects),
+    );
+
+    final effectsList = find.byType(ListView).last;
+    await tester.drag(effectsList, const Offset(0, -360));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('effect-gift-fly-in')), findsOneWidget);
+    expect(find.byKey(const Key('effect-car-effects')), findsOneWidget);
+    expect(find.byKey(const Key('effect-gift-bubble')), findsOneWidget);
+    expect(
+      find.byKey(const Key('effect-rocket-draw-notice')),
+      findsOneWidget,
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -443,6 +447,8 @@ void main() {
     expect(find.text('Room Lock'), findsNothing);
     expect(find.text('Public'), findsNothing);
     expect(find.text('Private'), findsNothing);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('reference-room-setup-save')),
       findsOneWidget,
