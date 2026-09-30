@@ -165,7 +165,7 @@ class _FamilyRankingScreenState extends State<FamilyRankingScreen> {
       backgroundColor: RoyalPalette.black,
       appBar: AppBar(
         title: const Text(
-          'Top Families',
+          'Top Families of the Month',
           style: TextStyle(
             color: FeaturePalette.family,
             fontWeight: FontWeight.w900,
