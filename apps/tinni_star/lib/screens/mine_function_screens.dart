@@ -1309,6 +1309,12 @@ class _PropsScreenState extends State<PropsScreen> {
         widget.state.backend.storeCatalog(account.authToken, 'vehicle'),
         widget.state.backend.storeCatalog(account.authToken, 'entry'),
         widget.state.backend.storeCatalog(account.authToken, 'profile_card'),
+        widget.state.backend.storeCatalog(account.authToken, 'ring'),
+        widget.state.backend.storeCatalog(
+          account.authToken,
+          'profile_background',
+        ),
+        widget.state.backend.storeCatalog(account.authToken, 'bubble'),
       ]);
       final inventory = Map<String, dynamic>.from(results[0] as Map);
       widget.state.inventory.applyRemote(inventory);
@@ -1319,6 +1325,9 @@ class _PropsScreenState extends State<PropsScreen> {
         ...(results[2] as List),
         ...(results[3] as List),
         ...(results[4] as List),
+        ...(results[5] as List),
+        ...(results[6] as List),
+        ...(results[7] as List),
       ]) {
         if (raw is! Map) continue;
         final id = raw['id']?.toString() ?? '';
@@ -1346,18 +1355,24 @@ class _PropsScreenState extends State<PropsScreen> {
     }
   }
 
-  Future<void> _equipFrame(String itemId) async {
+  Future<void> _equip(String kind, String itemId) async {
     final account = widget.state.auth.current;
     if (account == null || busyId != null) return;
     setState(() => busyId = itemId);
     try {
-      final result = await widget.state.backend.equipFrame(
-        account.authToken,
-        itemId,
-      );
-      widget.state.inventory.applyRemote(
-        Map<String, dynamic>.from(result['inventory'] as Map),
-      );
+      final result = kind == 'frame'
+          ? await widget.state.backend.equipFrame(account.authToken, itemId)
+          : await widget.state.backend.equipStoreItem(
+              account.authToken,
+              kind: kind,
+              itemId: itemId,
+            );
+      final inventory = result['inventory'];
+      if (inventory is Map) {
+        widget.state.inventory.applyRemote(
+          Map<String, dynamic>.from(inventory),
+        );
+      }
       if (mounted) setState(() => busyId = null);
     } catch (e) {
       if (!mounted) return;
@@ -1413,8 +1428,7 @@ class _PropsScreenState extends State<PropsScreen> {
                       final id = row['item_id']?.toString() ?? '';
                       final kind = row['item_kind']?.toString() ?? 'prop';
                       final equipped =
-                          kind == 'frame' &&
-                          widget.state.inventory.equippedFrameId == id;
+                          widget.state.inventory.isEquipped(kind, id);
                       return Card(
                         color: Colors.white,
                         child: Padding(
@@ -1446,27 +1460,18 @@ class _PropsScreenState extends State<PropsScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              if (kind == 'frame')
-                                FilledButton(
-                                  onPressed: equipped || busyId != null
-                                      ? null
-                                      : () => _equipFrame(id),
-                                  child: Text(
-                                    equipped
-                                        ? 'Using'
-                                        : busyId == id
-                                            ? 'Applying…'
-                                            : 'Use',
-                                  ),
-                                )
-                              else
-                                const Text(
-                                  'Owned',
-                                  style: TextStyle(
-                                    color: Color(0xFF198754),
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              FilledButton(
+                                onPressed: equipped || busyId != null
+                                    ? null
+                                    : () => _equip(kind, id),
+                                child: Text(
+                                  equipped
+                                      ? 'Using'
+                                      : busyId == id
+                                          ? 'Applying…'
+                                          : 'Use',
                                 ),
+                              ),
                             ],
                           ),
                         ),
