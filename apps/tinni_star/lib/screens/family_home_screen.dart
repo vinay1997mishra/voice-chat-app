@@ -136,7 +136,7 @@ class _FamilyWalletScreenState extends State<FamilyWalletScreen> {
     if (amount == null || !mounted) return;
 
     try {
-      final result = await widget.state.backend.sendFamilyCoins(
+      await widget.state.backend.sendFamilyCoins(
         me.authToken,
         receiverUserId: member.userId,
         coins: amount,
