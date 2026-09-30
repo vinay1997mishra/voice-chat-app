@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
@@ -99,6 +100,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
     widget.state.roomControls.roomMode =
         widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
+    if (RoomControlService.availableSeatThemes.contains(widget.room.seatThemeId)) {
+      widget.state.roomControls.setSeatTheme(widget.room.seatThemeId);
+    } else {
+      widget.state.roomControls.setSeatTheme('royal-gold');
+    }
     if (widget.room.themeAsset == null || widget.room.themeAsset!.isEmpty) {
       if (RoomControlService.availableThemes.contains(widget.room.themeId)) {
         widget.state.roomControls.setTheme(widget.room.themeId);
@@ -352,6 +358,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _snack('Room locked with password.');
     } catch (error) {
       _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Color get _seatThemeAccent {
+    switch (widget.state.roomControls.seatThemeId) {
+      case 'neon-blue':
+        return const Color(0xFF44C8FF);
+      case 'rose-glow':
+        return const Color(0xFFFF4FA3);
+      default:
+        return RoyalPalette.gold;
     }
   }
 
@@ -2975,6 +2992,383 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _shareRoom() async {
+    final text = 'Join my Tinni Star room: ' +
+        widget.room.title +
+        '\nRoom ID: ' +
+        widget.room.id;
+    try {
+      await SharePlus.instance.share(ShareParams(text: text));
+    } catch (error) {
+      _snack('Unable to share room right now.');
+    }
+  }
+
+  Future<void> _changeRoomCover() async {
+    if (!_isRoomOwner) {
+      _snack('Only the room owner can change the room cover.');
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 68,
+      maxWidth: 900,
+      maxHeight: 900,
+    );
+    if (image == null || !mounted) return;
+
+    final bytes = await image.readAsBytes();
+    final mime = image.mimeType?.startsWith('image/') == true
+        ? image.mimeType!
+        : 'image/jpeg';
+    final dataUrl = 'data:' + mime + ';base64,' + base64Encode(bytes);
+    if (dataUrl.length > 450000) {
+      _snack('Room cover is too large. Choose a smaller image.');
+      return;
+    }
+
+    try {
+      await widget.state.discovery.updateRoomRemote(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        photoDataUrl: dataUrl,
+      );
+      _snack('Room cover updated.');
+      if (mounted) setState(() {});
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _showRoomBlacklist() {
+    final controls = widget.state.roomControls;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final ids = controls.roomBlacklist.toList()..sort();
+          return SafeArea(
+            key: const Key('room-blacklist-panel'),
+            child: SizedBox(
+              height: 420,
+              child: Column(
+                children: [
+                  const ListTile(
+                    leading: Icon(Icons.person_off_rounded),
+                    title: Text(
+                      'Blacklist',
+                      style: TextStyle(
+                        color: RoyalPalette.gold,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Users blocked from this room.',
+                      style: TextStyle(color: RoyalPalette.muted),
+                    ),
+                  ),
+                  Expanded(
+                    child: ids.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No blacklisted users.',
+                              style: TextStyle(color: RoyalPalette.muted),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+                            itemCount: ids.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, index) {
+                              final userId = ids[index];
+                              return ListTile(
+                                title: Text('ID ' + userId),
+                                trailing: _isRoomOwner
+                                    ? TextButton(
+                                        onPressed: () {
+                                          controls.unblacklist(userId);
+                                          setSheetState(() {});
+                                          if (mounted) setState(() {});
+                                        },
+                                        child: const Text('Remove'),
+                                      )
+                                    : null,
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showRoomFeedback() {
+    final ownerId = widget.room.ownerId ?? widget.room.id;
+    final isOwnRoom = ownerId == widget.state.auth.current?.userId;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        key: const Key('room-feedback-panel'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                leading: Icon(Icons.feedback_rounded),
+                title: Text(
+                  'Feedback',
+                  style: TextStyle(
+                    color: RoyalPalette.gold,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                subtitle: Text(
+                  'Report a problem with this room or its owner.',
+                  style: TextStyle(color: RoyalPalette.muted),
+                ),
+              ),
+              ListTile(
+                enabled: !isOwnRoom,
+                leading: const Icon(Icons.report_rounded),
+                title: Text(isOwnRoom ? 'Your own room' : 'Report room'),
+                subtitle: Text(
+                  isOwnRoom
+                      ? 'You cannot report your own room.'
+                      : 'Open the room/user report flow.',
+                ),
+                onTap: isOwnRoom
+                    ? null
+                    : () {
+                        Navigator.pop(sheetContext);
+                        showReportUserSheet(
+                          context: context,
+                          state: widget.state,
+                          targetUserId: ownerId,
+                          targetDisplayName: widget.room.title,
+                          roomId: widget.room.id,
+                        );
+                      },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRoomTypePanel() {
+    final controls = widget.state.roomControls;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => DefaultTabController(
+        length: 3,
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) => SafeArea(
+            key: const Key('room-type-panel'),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.66,
+              child: Column(
+                children: [
+                  const ListTile(
+                    leading: Icon(Icons.dashboard_customize_rounded),
+                    title: Text(
+                      'Room Type',
+                      style: TextStyle(
+                        color: RoyalPalette.gold,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const TabBar(
+                    tabs: [
+                      Tab(text: 'Mic Types'),
+                      Tab(text: 'Mic Theme'),
+                      Tab(text: 'Setting'),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            ListTile(
+                              key: const Key('room-type-mic-types'),
+                              leading: const Icon(Icons.event_seat_rounded),
+                              title: const Text('Mic Types'),
+                              subtitle: Text(
+                                controller.seats.length.toString() +
+                                    ' seats • Tinni 8–42 layout',
+                              ),
+                              trailing:
+                                  const Icon(Icons.chevron_right_rounded),
+                              onTap: () {
+                                Navigator.pop(sheetContext);
+                                _showSeatCountSelector();
+                              },
+                            ),
+                          ],
+                        ),
+                        ListView(
+                          key: const Key('room-type-mic-theme'),
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            const Text(
+                              'Mic Theme',
+                              style: TextStyle(
+                                color: RoyalPalette.cream,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            for (final entry in const <(String, String)>[
+                              ('royal-gold', 'Royal Gold'),
+                              ('neon-blue', 'Neon Blue'),
+                              ('rose-glow', 'Rose Glow'),
+                            ])
+                              RadioListTile<String>(
+                                value: entry.$1,
+                                groupValue: controls.seatThemeId,
+                                title: Text(entry.$2),
+                                onChanged: !_isRoomOwner
+                                    ? null
+                                    : (value) async {
+                                        if (value == null) return;
+                                        final account =
+                                            widget.state.auth.current;
+                                        if (account == null) return;
+                                        try {
+                                          final updated = await widget
+                                              .state.discovery
+                                              .updateRoomRemote(
+                                            authToken: account.authToken,
+                                            roomId: widget.room.id,
+                                            seatThemeId: value,
+                                          );
+                                          controls.setSeatTheme(
+                                            updated.seatThemeId,
+                                          );
+                                          setSheetState(() {});
+                                          if (mounted) setState(() {});
+                                        } catch (error) {
+                                          _snack(
+                                            error
+                                                .toString()
+                                                .replaceFirst(
+                                                  'Bad state: ',
+                                                  '',
+                                                ),
+                                          );
+                                        }
+                                      },
+                              ),
+                          ],
+                        ),
+                        ListView(
+                          key: const Key('room-type-setting'),
+                          padding: const EdgeInsets.all(12),
+                          children: [
+                            SwitchListTile(
+                              title: const Text('Free mic'),
+                              subtitle: const Text(
+                                'When off, users send a mic request.',
+                              ),
+                              value: controller.inviteMode == false,
+                              onChanged: !_isRoomOwner
+                                  ? null
+                                  : (value) async {
+                                      try {
+                                        await widget.state.roomSession
+                                            .setRoomMicMode(
+                                          value ? 'free' : 'apply',
+                                        );
+                                        controls.settings =
+                                            controls.settings.copyWith(
+                                          micMode: value
+                                              ? MicMode.free
+                                              : MicMode.apply,
+                                        );
+                                        setSheetState(() {});
+                                        if (mounted) setState(() {});
+                                      } catch (error) {
+                                        _snack(
+                                          error
+                                              .toString()
+                                              .replaceFirst(
+                                                'Bad state: ',
+                                                '',
+                                              ),
+                                        );
+                                      }
+                                    },
+                            ),
+                            SwitchListTile(
+                              title: const Text(
+                                'Only managers can speak',
+                              ),
+                              value:
+                                  controls.settings.onlyManagersCanSpeak,
+                              onChanged: !_isRoomOwner
+                                  ? null
+                                  : (value) {
+                                      controls.settings =
+                                          controls.settings.copyWith(
+                                        onlyManagersCanSpeak: value,
+                                      );
+                                      setSheetState(() {});
+                                      if (mounted) setState(() {});
+                                    },
+                            ),
+                            ListTile(
+                              leading: Icon(
+                                controls.settings.visibility ==
+                                        RoomVisibility.publicRoom
+                                    ? Icons.lock_open_rounded
+                                    : Icons.lock_rounded,
+                              ),
+                              title: Text(
+                                controls.settings.visibility ==
+                                        RoomVisibility.publicRoom
+                                    ? 'Room Open'
+                                    : 'Room Locked',
+                              ),
+                              onTap: !_isRoomOwner
+                                  ? null
+                                  : () async {
+                                      await _toggleRoomLock();
+                                      setSheetState(() {});
+                                    },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showRoomEffects() {
     final controls = widget.state.roomControls;
 
@@ -3074,6 +3468,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(8, 0, 8, 18),
                       children: [
+                        SwitchListTile(
+                          key: const Key('effect-master-effects'),
+                          title: const Text('All Visual Effects'),
+                          subtitle: const Text(
+                            'Master switch for room visual effects.',
+                          ),
+                          value: controls.effectsEnabled,
+                          onChanged: (_) {
+                            controls.toggleEffects();
+                            setSheetState(() {});
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                        SwitchListTile(
+                          key: const Key('effect-master-notices'),
+                          title: const Text('Room Notices'),
+                          subtitle: const Text(
+                            'Show or hide general room notices.',
+                          ),
+                          value: controls.noticesVisible,
+                          onChanged: (_) {
+                            controls.toggleNotices();
+                            setSheetState(() {});
+                            if (mounted) setState(() {});
+                          },
+                        ),
                         effectSwitch(
                           key: const Key('effect-gift-effects'),
                           title: 'Gift Effects',
@@ -3145,6 +3565,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
+      (
+        'Room Type',
+        Icons.dashboard_customize_rounded,
+        _showRoomTypePanel,
+      ),
+      (
+        'Cover',
+        Icons.image_rounded,
+        () {
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _changeRoomCover();
+          });
+        },
+      ),
+      (
+        'Blacklist',
+        Icons.person_off_rounded,
+        _showRoomBlacklist,
+      ),
+      (
+        'Feedback',
+        Icons.feedback_rounded,
+        _showRoomFeedback,
+      ),
+      (
+        controls.settings.visibility == RoomVisibility.publicRoom
+            ? 'Lock'
+            : 'Unlock',
+        controls.settings.visibility == RoomVisibility.publicRoom
+            ? Icons.lock_rounded
+            : Icons.lock_open_rounded,
+        () {
+          _toggleRoomLock();
+        },
+      ),
       (
         'Gift',
         Icons.card_giftcard_rounded,
@@ -3235,22 +3690,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _snack(active ? 'Room event launched.' : 'Room event stopped.');
         },
       ),
-      (
-        controls.effectsEnabled ? 'Block Effects' : 'Allow Effects',
-        Icons.hide_image_rounded,
-        () {
-          final enabled = controls.toggleEffects();
-          _snack(enabled ? 'Gift effects enabled.' : 'Gift effects blocked.');
-        },
-      ),
-      (
-        controls.noticesVisible ? 'Hide Notice' : 'Show Notice',
-        Icons.visibility_off_rounded,
-        () {
-          final visible = controls.toggleNotices();
-          _snack(visible ? 'Room notice visible.' : 'Room notice hidden.');
-        },
-      ),
       if (_isRoomOwner)
         (
           'Room Theme',
@@ -3289,17 +3728,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           }
           final enabled = controls.toggleGroupPk();
           _snack(enabled ? 'Group PK enabled.' : 'Group PK disabled.');
-        },
-      ),
-      (
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? 'Room Open'
-            : 'Room Locked',
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? Icons.lock_open_rounded
-            : Icons.lock_rounded,
-        () {
-          _toggleRoomLock();
         },
       ),
       (
@@ -3423,8 +3851,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   static const List<int> _validRoomSeatCounts = <int>[
-    8, 9, 10,
-    12, 13, 14, 15, 16, 17, 18,
+    8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
     29, 30, 31, 32, 33, 34, 35,
     36, 37, 38, 39, 40, 41, 42,
@@ -4249,18 +4676,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               fit: BoxFit.cover,
                             ),
                       border: Border.all(
-                        color: occupied
-                            ? FeaturePalette.social
-                            : FeaturePalette.family.withValues(alpha: 0.72),
+                        color: _seatThemeAccent.withValues(
+                          alpha: occupied ? 1 : 0.78,
+                        ),
                         width: occupied ? 3 : 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: (occupied
-                                  ? FeaturePalette.social
-                                  : FeaturePalette.family)
-                              .withValues(
-                            alpha: occupied ? 0.34 : 0.14,
+                          color: _seatThemeAccent.withValues(
+                            alpha: occupied ? 0.34 : 0.18,
                           ),
                           blurRadius: compact ? 6 : 12,
                         ),
@@ -4286,7 +4710,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       )
                                     : Icon(
                                         Icons.star_rounded,
-                                        color: FeaturePalette.family,
+                                        color: _seatThemeAccent,
                                         size: seatDiameter * 0.42,
                                       ),
                           ),
@@ -4503,6 +4927,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               icon: const ShiningIcon(
                 icon: Icons.leaderboard_rounded,
                 color: FeaturePalette.rank,
+                size: 20,
+                boxSize: 36,
+                glow: 0.34,
+              ),
+            ),
+            IconButton(
+              key: const Key('room-share-button'),
+              tooltip: 'Share room',
+              onPressed: _shareRoom,
+              icon: const ShiningIcon(
+                icon: Icons.share_rounded,
+                color: FeaturePalette.social,
                 size: 20,
                 boxSize: 36,
                 glow: 0.34,
