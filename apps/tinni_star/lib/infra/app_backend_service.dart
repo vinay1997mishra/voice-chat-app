@@ -327,6 +327,18 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> accountStats(String token) async {
+    final data = await _request('GET', '/account/stats', token);
+    return _map(data['stats']);
+  }
+
+  Future<List<Map<String, dynamic>>> settlementTransfers(String token) async {
+    final data = await _request('GET', '/wallet/settlement/transfers', token);
+    final raw = data['transfers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> accountPreferences(String token) async {
     final data = await _request('GET', '/account/preferences', token);
     return _map(data['preferences']);
