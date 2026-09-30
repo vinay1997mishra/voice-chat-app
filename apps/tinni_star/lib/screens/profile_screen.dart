@@ -325,20 +325,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 27,
                 height: 27,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFD21A),
+                  color: const Color(0xFF171006),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF8C6500),
+                    width: 1,
+                  ),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x33D8A900),
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
+                      color: Color(0x448C6500),
+                      blurRadius: 7,
                     ),
                   ],
                 ),
                 child: Icon(
                   icon,
                   size: 17,
-                  color: const Color(0xFF5A4A12),
+                  color: const Color(0xFFC18A00),
                 ),
               ),
               const SizedBox(width: 12),
@@ -346,15 +349,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF5C574F),
+                    color: Color(0xFFC18A00),
                     fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: Color(0xFFBDB8AF),
+                color: Color(0xFF9C7000),
                 size: 23,
               ),
             ],
@@ -368,12 +371,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xE60A0804),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF5F4600),
+          width: 1,
+        ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0F6D5A2A),
-            blurRadius: 7,
+            color: Color(0x443D2A00),
+            blurRadius: 10,
             offset: Offset(0, 2),
           ),
         ],
@@ -399,7 +406,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           height: 60,
           padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: colors),
+            gradient: LinearGradient(
+              colors: [
+                Color.lerp(const Color(0xFF050402), colors.first, 0.10)!,
+                Color.lerp(const Color(0xFF100B03), colors.last, 0.08)!,
+              ],
+            ),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0xFFFFC400), width: 1.2),
             boxShadow: const [
@@ -420,23 +432,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text(
                       title,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFFD09A0A),
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFFAA7C08),
                         fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(icon, color: Colors.white70, size: 30),
+              Icon(icon, color: const Color(0xFFC18A00), size: 30),
             ],
           ),
         ),
@@ -480,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       key: const Key('reference-mine-screen'),
-      backgroundColor: const Color(0xFFFFFBF4),
+      backgroundColor: const Color(0xFF030201),
       body: SafeArea(
         bottom: false,
         child: Container(
@@ -489,42 +501,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Color(0xFFFFE39B),
-                Color(0xFFFFF5DB),
-                Color(0xFFFFFBF4),
-                Color(0xFFFFFBF4),
+                Color(0xFF050402),
+                Color(0xFF090603),
+                Color(0xFF020201),
+                Color(0xFF000000),
               ],
-              stops: [0.0, 0.20, 0.36, 1.0],
+              stops: [0.0, 0.24, 0.58, 1.0],
             ),
             image: profileBackground == null
                 ? null
                 : DecorationImage(
                     image: profileBackground,
                     fit: BoxFit.cover,
-                    opacity: 0.24,
+                    opacity: 0.08,
                   ),
           ),
-          child: ListView(
+          child: CustomPaint(
+            painter: const _MineGoldenStarsPainter(),
+            child: ListView(
             key: const Key('reference-mine-list'),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
             children: [
               Container(
                 key: const Key('profile-active-card'),
-                padding: EdgeInsets.all(profileCardId == null ? 0 : 9),
-                decoration: profileCardId == null
-                    ? null
-                    : BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0x33FFC928),
-                            Color(0x22FFFFFF),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: profileCardId == null
+                        ? const [
+                            Color(0xE60A0804),
+                            Color(0xD9060503),
+                          ]
+                        : const [
+                            Color(0xFF151006),
+                            Color(0xFF090603),
                           ],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFFFFC928),
-                        ),
-                      ),
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: profileCardId == null
+                        ? const Color(0xFF5F4600)
+                        : const Color(0xFFC18A00),
+                    width: profileCardId == null ? 1 : 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x443D2A00),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
                 child: Row(
                   children: [
                   Container(
@@ -563,7 +589,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       .first
                                       .toUpperCase(),
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: Color(0xFFC18A00),
                                 fontSize: 26,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -585,7 +611,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  color: Color(0xFF433D34),
+                                  color: Color(0xFFD09A0A),
                                   fontSize: 17,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -607,7 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  color: Color(0xFF777168),
+                                  color: Color(0xFF9C7000),
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -620,13 +646,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF5C5962),
+                                color: const Color(0xFF0A0804),
                                 borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF8C6500),
+                                ),
                               ),
                               child: const Text(
                                 'Lv.0',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: Color(0xFFC18A00),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -643,15 +672,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFD665),
+                              color: const Color(0xFF0A0804),
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF8C6500),
+                              ),
                             ),
                             child: Text(
                               (widget.state.family.tag ?? 'FM') +
                                   ' • ' +
                                   widget.state.family.levelLabel,
                               style: const TextStyle(
-                                color: Color(0xFF6E5200),
+                                color: Color(0xFFC18A00),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -663,7 +695,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const Icon(
                     Icons.workspace_premium_rounded,
-                    color: Color(0xFF6D5B00),
+                    color: Color(0xFFC18A00),
                     size: 23,
                   ),
                 ],
@@ -694,11 +726,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFF5A900), Color(0xFFFFD944)],
+                      colors: [Color(0xFF120D04), Color(0xFF050402)],
                     ),
                     borderRadius: BorderRadius.circular(11),
                     border: Border.all(
-                      color: const Color(0xFFD88900),
+                      color: const Color(0xFF8C6500),
                       width: 1.2,
                     ),
                     boxShadow: const [
@@ -714,7 +746,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const Icon(
                         Icons.monetization_on_rounded,
                         size: 40,
-                        color: Color(0xFFFFF0A4),
+                        color: Color(0xFFC18A00),
                       ),
                       const SizedBox(width: 10),
                       Column(
@@ -724,7 +756,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const Text(
                             'Coins',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFFAA7C08),
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                             ),
@@ -732,7 +764,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Text(
                             widget.state.wallet.coins.toString(),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFFD09A0A),
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
                             ),
@@ -750,13 +782,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFE98D),
+                              color: const Color(0xFF0A0804),
                               borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFF8C6500),
+                              ),
                             ),
                             child: const Text(
                               'First Recharge',
                               style: TextStyle(
-                                color: Color(0xFF9E6900),
+                                color: Color(0xFFAA7C08),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -766,7 +801,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Text(
                             tinniText(language, 'wallet'),
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFFD09A0A),
                               fontSize: 21,
                               fontWeight: FontWeight.w800,
                             ),
@@ -910,6 +945,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ]),
             ],
           ),
+          ),
         ),
       ),
     );
@@ -930,7 +966,7 @@ class _MineCountStat extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: Color(0xFF514A41),
+              color: Color(0xFFD09A0A),
               fontSize: 17,
               fontWeight: FontWeight.w600,
             ),
@@ -939,7 +975,7 @@ class _MineCountStat extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF898279),
+              color: Color(0xFF9C7000),
               fontSize: 10,
             ),
           ),
@@ -957,9 +993,54 @@ class _MineCountDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 24,
-      color: const Color(0xFFE2D8C4),
+      color: const Color(0xFF5F4600),
     );
   }
 }
 
 
+
+class _MineGoldenStarsPainter extends CustomPainter {
+  const _MineGoldenStarsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    for (var i = 0; i < 96; i += 1) {
+      final x = (((i * 47) % 997) / 997) * size.width;
+      final y = (((i * 83) % 991) / 991) * size.height;
+      final bright = i % 13 == 0;
+      final radius = bright ? 1.65 : 0.55 + (i % 3) * 0.22;
+      dotPaint.color = bright
+          ? const Color(0xFFD9A514)
+          : Color.fromARGB(
+              105 + (i % 4) * 20,
+              190,
+              137,
+              0,
+            );
+      canvas.drawCircle(Offset(x, y), radius, dotPaint);
+
+      if (bright) {
+        glowPaint.color = const Color(0x66D9A514);
+        canvas.drawLine(
+          Offset(x - 4.2, y),
+          Offset(x + 4.2, y),
+          glowPaint,
+        );
+        canvas.drawLine(
+          Offset(x, y - 4.2),
+          Offset(x, y + 4.2),
+          glowPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MineGoldenStarsPainter oldDelegate) => false;
+}
