@@ -771,6 +771,17 @@ Top room bar:
 Tinni-specific extra room tools may remain after these primary reference-style entries.
 
 
+
+### Room Game entry placement — LOCKED
+
+- **Game is not a 4-box tile.**
+- The room shows a dedicated floating **purple game-controller** entry on the right side of the room, above the bottom room controls, matching the reference placement.
+- Tapping the floating controller opens **Game Center**.
+- Tinni Star keeps its own games inside Game Center; moving the entry does not remove Fruit Jackpot or Fruit Party.
+- When a Tinni game panel is actively open, the floating controller entry is hidden so it does not cover gameplay.
+- The floating Game icon uses the same purple/pink controller visual family as the reference video, while the rest of the room keeps Tinni Star branding.
+
+
 ## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
 
 - VIP levels.
