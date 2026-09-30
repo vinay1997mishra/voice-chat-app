@@ -2455,7 +2455,6 @@ Shine rule:
 The room 4-box must contain these active entries only:
 - Room Type
 - Music
-- Blacklist
 - Effects
 - Lock / Unlock
 - Lucky Bag
@@ -2535,4 +2534,22 @@ The main Tinni room adopts the supplied reference-video room flow without changi
 - LP/Game country ribbons use reference-style gold-edged room banners while preserving existing LP-first / game-next priority and country targeting.
 
 Do **not** add or duplicate Room Settings, Blocklist, Cover, Lock, Seat Requests, Game, Rocket, or other room controls in the 4-box. The previously locked 4-box structure and Room Type → Cover / Setting placement remain unchanged.
+
+
+
+### Blueprint sync state — 0.5.22+40
+
+This blueprint is synchronized with the current Tinni Star room implementation at app version `0.5.22+40`.
+
+Canonical current room rules:
+- 4-box has exactly: Room Type, Music, Effects, Lock / Unlock, Lucky Bag, Sound On / Off, Lucky Number, Group PK, Public Screen / Screen On, Report.
+- Blacklist and Seat Requests are **not** 4-box tiles.
+- Room Type contains Mic Types, Cover, Mic Theme, Setting.
+- Room Type → Setting contains Room Seats, Free mic, Only managers can speak.
+- Room Type → Cover opens Room Cover / Theme.
+- Room Lock exists only as the 4-box Lock / Unlock entry and uses exactly 5 numeric digits; no VIP requirement.
+- Public Screen ON allows all non-chat-banned room users to type; OFF allows only Room Owner/Admin.
+- Reference room visuals are adopted for Room DP + Name + ID, in-room Daily/Weekly/Monthly ranking, seat styling, self-mute mic-off badge, right-side Rocket/Game stack, and LP/Game ribbons.
+- Game and Rocket remain outside the 4-box.
+- Existing Room Setup / Block List behavior must not be duplicated into the 4-box.
 
