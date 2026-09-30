@@ -290,6 +290,18 @@ void main() {
 
     expect(find.byKey(const Key('seat-heart-0')), findsOneWidget);
     expect(
+      find.byKey(const Key('reference-room-title-pill')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reference-room-rank-pill')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-online-members-button')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('room-game-floating-button')),
       findsOneWidget,
     );
@@ -297,6 +309,33 @@ void main() {
       find.byKey(const Key('room-rocket-floating-button')),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('room-rank-hall-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('reference-room-rank-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Daily'), findsOneWidget);
+    expect(find.text('Weekly'), findsOneWidget);
+    expect(find.text('Monthly'), findsOneWidget);
+    expect(
+      find.byKey(const Key('room-rank-self-row')),
+      findsOneWidget,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    state.roomSession.controller!.managerTakeSeat(1);
+    state.roomSession.controller!.setSelfMuted(true);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('seat-muted-indicator-1')),
+      findsOneWidget,
+    );
+    state.roomSession.controller!.setSelfMuted(false);
+    state.roomSession.controller!.leaveSeat();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('seat-0')));
     await tester.pumpAndSettle();
