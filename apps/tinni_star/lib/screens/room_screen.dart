@@ -48,6 +48,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _roomPhotoOverride;
   String? _roomAnnouncementOverride;
   Timer? _ribbonTimer;
+  Timer? _roomSendingTimer;
+  Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
   RoomController get controller => widget.state.roomSession.controller!;
@@ -82,6 +84,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.addListener(_refresh);
     _ribbonTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshCountryRibbons());
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
+    _primeRoomSendingSummary();
+    _roomSendingTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshRoomSendingSummary(),
+    );
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
@@ -93,6 +100,51 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (mounted) session.resume();
       });
     }
+  }
+
+  void _primeRoomSendingSummary() {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    _roomSendingSummaryFuture = widget.state.discovery.roomGiftRanking(
+      authToken: account.authToken,
+      roomId: widget.room.id,
+      period: 'day',
+    );
+  }
+
+  void _refreshRoomSendingSummary() {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final next = widget.state.discovery.roomGiftRanking(
+      authToken: account.authToken,
+      roomId: widget.room.id,
+      period: 'day',
+    );
+    if (!mounted) {
+      _roomSendingSummaryFuture = next;
+      return;
+    }
+    setState(() => _roomSendingSummaryFuture = next);
+  }
+
+  String _compactRoomSending(int value) {
+    if (value >= 1000000000) {
+      final n = value / 1000000000;
+      return n.toStringAsFixed(value % 1000000000 == 0 ? 0 : 1) + 'B';
+    }
+    if (value >= 1000000) {
+      final n = value / 1000000;
+      return n.toStringAsFixed(value % 1000000 == 0 ? 0 : 1) + 'M';
+    }
+    if (value >= 100000) {
+      final n = value / 100000;
+      return n.toStringAsFixed(value % 100000 == 0 ? 0 : 1) + 'L';
+    }
+    if (value >= 1000) {
+      final n = value / 1000;
+      return n.toStringAsFixed(value % 1000 == 0 ? 0 : 1) + 'K';
+    }
+    return value.toString();
   }
 
   Future<void> _openRoom() async {
@@ -453,6 +505,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
     _ribbonTimer?.cancel();
+    _roomSendingTimer?.cancel();
     chat.dispose();
     super.dispose();
   }
@@ -2293,6 +2346,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   unitPrice: gift.price,
                                   receiverIds: _selectedGiftRecipients.toList(growable: false),
                                 );
+                                _refreshRoomSendingSummary();
                               } catch (error) {
                                 _snack(error.toString().replaceFirst('Bad state: ', ''));
                                 return;
@@ -6189,54 +6243,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ),
           child: Column(
             children: [
-            if (widget.state.roomControls.noticesVisible)
-              Container(
-                margin: const EdgeInsets.fromLTRB(10, 2, 10, 7),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: FeaturePalette.glow(FeaturePalette.rank),
-                  border: Border.all(
-                    color: FeaturePalette.rank.withValues(alpha: 0.72),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: FeaturePalette.rank.withValues(alpha: 0.20),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  children: [
-                    ShiningIcon(
-                      icon: Icons.campaign_rounded,
-                      color: FeaturePalette.rank,
-                      size: 15,
-                      boxSize: 28,
-                      glow: 0.30,
-                    ),
-                    SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        'Welcome to Tinni Star Royal Party',
-                        style: TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '×250',
-                      style: TextStyle(
-                        color: FeaturePalette.rank,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
               child: Row(
@@ -6276,6 +6282,48 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ],
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const Spacer(),
                   InkWell(
@@ -6318,230 +6366,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
             SizedBox(
-              key: const Key('room-live-users'),
-              height: 126,
-              child: session.liveMembers.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Waiting for users…',
-                        style: TextStyle(
-                          color: RoyalPalette.muted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: session.liveMembers.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 9),
-                      itemBuilder: (_, index) {
-                        final member = session.liveMembers[index];
-                        final isMe =
-                            member.userId == widget.state.auth.current?.userId;
-                        final initial = member.displayName.trim().isEmpty
-                            ? '?'
-                            : member.displayName.trim().characters.first;
-                        ImageProvider? avatar;
-                        final avatarData = member.avatarDataUrl;
-                        if (avatarData != null &&
-                            avatarData.startsWith('data:image/')) {
-                          try {
-                            avatar = MemoryImage(
-                              base64Decode(avatarData.split(',').last),
-                            );
-                          } catch (_) {
-                            avatar = null;
-                          }
-                        }
-                        return Container(
-                          width: 104,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: RoyalPalette.panel.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isMe
-                                  ? FeaturePalette.family
-                                  : FeaturePalette.social
-                                      .withValues(alpha: 0.65),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isMe
-                                        ? FeaturePalette.family
-                                        : FeaturePalette.social)
-                                    .withValues(alpha: 0.18),
-                                blurRadius: 9,
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              GestureDetector(
-                                key: Key('room-live-user-dp-' + member.userId),
-                                onTap: () => _showUserProfile(member),
-                                child: CircleAvatar(
-                                  radius: 17,
-                                  backgroundColor: RoyalPalette.panel2,
-                                  backgroundImage: avatar,
-                                  child: avatar == null
-                                      ? Text(
-                                          initial.toUpperCase(),
-                                          style: TextStyle(
-                                            color: isMe
-                                                ? FeaturePalette.family
-                                                : FeaturePalette.social,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                (member.flagEmoji.isEmpty
-                                        ? ''
-                                        : member.flagEmoji + ' ') +
-                                    (isMe ? 'You' : member.displayName),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                'ID ' + member.userId,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: RoyalPalette.muted,
-                                  fontSize: 7.5,
-                                ),
-                              ),
-                              if (member.ownerTags.isNotEmpty) ...[
-                                const SizedBox(height: 3),
-                                SizedBox(
-                                  height: 15,
-                                  width: 94,
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
-                                      for (final tag in member.ownerTags)
-                                        Container(
-                                          key: Key(
-                                            'live-owner-tag-' +
-                                                member.userId +
-                                                '-' +
-                                                tag.name,
-                                          ),
-                                          margin:
-                                              const EdgeInsets.only(right: 3),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(7),
-                                            border: Border.all(
-                                              color: _ownerTagColor(
-                                                tag.colorHex,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            tag.name,
-                                            style: TextStyle(
-                                              color: _ownerTagColor(
-                                                tag.colorHex,
-                                              ),
-                                              fontSize: 6,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (member.ownerMedals.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                SizedBox(
-                                  height: 15,
-                                  width: 94,
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
-                                      for (final medal in member.ownerMedals)
-                                        Container(
-                                          key: Key(
-                                            'live-owner-medal-' +
-                                                member.userId +
-                                                '-' +
-                                                medal.name,
-                                          ),
-                                          margin:
-                                              const EdgeInsets.only(right: 3),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(7),
-                                            border: Border.all(
-                                              color: _ownerTagColor(
-                                                medal.colorHex,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.workspace_premium_rounded,
-                                                size: 7,
-                                                color: _ownerTagColor(
-                                                  medal.colorHex,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 1),
-                                              Text(
-                                                medal.name,
-                                                style: TextStyle(
-                                                  color: _ownerTagColor(
-                                                    medal.colorHex,
-                                                  ),
-                                                  fontSize: 6,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
               key: const Key('tinni-seat-grid'),
               height: seatAreaHeight,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
                 child: Column(
                   children: [
                     for (var row = 0; row < seatSpec.rows; row++)
