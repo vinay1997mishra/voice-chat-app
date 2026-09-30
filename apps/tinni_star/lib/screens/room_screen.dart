@@ -1594,6 +1594,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  bool _adminCanControlSeatOccupant(RoomPresenceMember member) {
+    if (_isRoomOwner) return true;
+    final ownerId =
+        _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    if (member.userId == ownerId) return false;
+    if (member.isAdmin) return false;
+    return _currentRoomRole == RoomRole.admin;
+  }
+
+  RoomPresenceMember? _memberOnSeat(int seatIndex) {
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == seatIndex) return member;
+    }
+    final mappedUserId = widget.state.roomControls.seatUsers[seatIndex];
+    if (mappedUserId != null) {
+      for (final member in widget.state.roomSession.liveMembers) {
+        if (member.userId == mappedUserId) return member;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _moveMemberSeatDown(RoomPresenceMember member) async {
+    try {
+      await widget.state.roomSession.moveUserToAudience(member.userId);
+      _snack(member.displayName + ' moved to audience.');
+      if (mounted) setState(() {});
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
   Future<void> _toggleRoomAdmin(
     RoomPresenceMember member,
     bool enabled,
@@ -1671,7 +1703,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             hint: seatIndexHint,
           );
           final micMuted = currentMember.micMuted;
-          final canModerate = !isSelf && _canModerateSeats;
+          final ownerId =
+              _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+          final targetIsOwner = currentMember.userId == ownerId;
+          final canModerate = !isSelf &&
+              _canModerateSeats &&
+              !targetIsOwner &&
+              (_isRoomOwner || !currentMember.isAdmin);
           final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.44;
 
           ImageProvider? avatar;
@@ -1896,7 +1934,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   }
                                 },
                               ),
-                            if (canModerate)
+                            if (_isRoomOwner &&
+                                !isSelf &&
+                                !targetIsOwner)
                               _ProfileAction(
                                 icon: currentMember.isAdmin
                                     ? Icons.remove_moderator_rounded
@@ -1961,6 +2001,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   if (sheetContext.mounted) {
                                     setSheetState(() {});
                                   }
+                                },
+                              ),
+                            if (canModerate && seatIndex != null)
+                              _ProfileAction(
+                                icon:
+                                    Icons.airline_seat_recline_normal_rounded,
+                                label: 'Seat down',
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _moveMemberSeatDown(currentMember);
                                 },
                               ),
                             if (canModerate)
@@ -5535,187 +5585,74 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showReferenceSeatControl(int index) {
-    if (index < 0 || index >= controller.seats.length) return;
-    final initialSeat = controller.seats[index];
-    var micUp = controller.mySeat == index ||
-        (!initialSeat.occupied &&
-            controller.mySeat == null &&
-            !initialSeat.locked);
-    var lockMic = initialSeat.locked;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF241033),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          Widget choiceRow({
-            required Key key,
-            required String label,
-            required bool selected,
-            required VoidCallback onTap,
-          }) {
-            return InkWell(
-              key: key,
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(14),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? const Color(0xFF29405C)
-                      : const Color(0xFF3A2A43),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected
-                        ? const Color(0xFF7B11FF)
-                        : const Color(0xFF5B4A62),
-                    width: selected ? 1.4 : 0.8,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      color: selected
-                          ? const Color(0xFF9A14FF)
-                          : Colors.white,
-                      size: 26,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return SafeArea(
-            key: const Key('reference-seat-control-panel'),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 16, 14, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  choiceRow(
-                    key: const Key('reference-seat-mic-up'),
-                    label: 'Mic up',
-                    selected: micUp,
-                    onTap: () => setSheetState(() => micUp = !micUp),
-                  ),
-                  const SizedBox(height: 12),
-                  choiceRow(
-                    key: const Key('reference-seat-lock-mic'),
-                    label: 'Lock mic',
-                    selected: lockMic,
-                    onTap: initialSeat.occupied
-                        ? () {}
-                        : () =>
-                            setSheetState(() => lockMic = !lockMic),
-                  ),
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    width: 180,
-                    child: FilledButton(
-                      key: const Key('reference-seat-confirm'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B08FF),
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: const StadiumBorder(),
-                      ),
-                      onPressed: () async {
-                        Navigator.pop(sheetContext);
-
-                        var currentSeat = controller.seats[index];
-                        if (!currentSeat.occupied &&
-                            currentSeat.locked != lockMic) {
-                          controller.toggleSeatLock(index);
-                          currentSeat = controller.seats[index];
-                        }
-
-                        if (micUp && controller.mySeat != index) {
-                          if (controller.mySeat != null) {
-                            _snack('Leave your current seat first.');
-                          } else if (!currentSeat.occupied) {
-                            final text =
-                                controller.managerTakeSeat(index);
-                            await widget.state.roomSession
-                                .setMicFromController();
-                            _snack(text);
-                          }
-                        } else if (!micUp &&
-                            controller.mySeat == index) {
-                          await _leaveSeatAndMute();
-                        }
-
-                        if (mounted) setState(() {});
-                      },
-                      child: const Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (context) => SafeArea(
-        child: Wrap(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
           children: [
+            ListTile(
+              title: Text(
+                'Seat ' + (index + 1).toString(),
+                style: const TextStyle(
+                  color: RoyalPalette.cream,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              subtitle: Text(
+                occupant?.displayName ??
+                    (seat.occupied ? (seat.userName ?? 'Occupied') : 'Empty'),
+              ),
+            ),
             ListTile(
               key: const Key('seat-control-lock'),
               leading: ShiningIcon(
                 icon: seat.locked
                     ? Icons.lock_open_rounded
                     : Icons.lock_rounded,
-                color: seat.locked
-                    ? FeaturePalette.family
-                    : FeaturePalette.safety,
+                color: FeaturePalette.wallet,
                 size: 18,
                 boxSize: 34,
                 glow: 0.30,
               ),
               title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatLock(index);
-                _snack(
-                  seat.locked
-                      ? 'Seat ${index + 1} unlocked.'
-                      : 'Seat ${index + 1} locked.',
-                );
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ' + (index + 1).toString() + ' locked.'
+                        : 'Seat ' + (index + 1).toString() + ' unlocked.',
+                  );
+                } catch (error) {
+                  _snack(error.toString().replaceFirst('Bad state: ', ''));
+                }
               },
             ),
             ListTile(
@@ -5731,23 +5668,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 boxSize: 34,
                 glow: 0.30,
               ),
-              title: Text(
-                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
-              ),
+              title: Text(seat.roomMuted ? 'Seat Unmute' : 'Seat Mute'),
               onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatRoomMute(index);
-                if (controller.mySeat == index) {
-                  await widget.state.roomSession.setMicFromController();
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ' + (index + 1).toString() + ' muted.'
+                        : 'Seat ' + (index + 1).toString() + ' unmuted.',
+                  );
+                } catch (error) {
+                  _snack(error.toString().replaceFirst('Bad state: ', ''));
                 }
-                _snack(
-                  seat.roomMuted
-                      ? 'Seat ${index + 1} unmuted.'
-                      : 'Seat ${index + 1} muted.',
-                );
               },
             ),
-            if (!seat.occupied && controller.mySeat == null)
+            if (!seat.occupied)
               ListTile(
                 key: const Key('seat-control-take'),
                 leading: const ShiningIcon(
@@ -5759,12 +5701,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 title: const Text('Take Seat'),
                 subtitle: const Text(
-                  'Owner/Admin can take the seat without Apply Mic.',
+                  'Owner/Admin can take this empty seat directly.',
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  final text = controller.managerTakeSeat(index);
-                  _snack(text);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ' + (index + 1).toString() + '.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(error.toString().replaceFirst('Bad state: ', ''));
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle:
+                    Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
                 },
               ),
             if (controller.mySeat == index)
@@ -5782,30 +5754,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   await _leaveSeatAndMute();
                 },
               ),
-            if (controller.mySeat != null && controller.mySeat != index)
-              ListTile(
-                key: const Key('seat-control-leave-current'),
-                leading: const ShiningIcon(
-                  icon: Icons.logout_rounded,
-                  color: FeaturePalette.safety,
-                  size: 18,
-                  boxSize: 34,
-                  glow: 0.30,
-                ),
-                title: const Text('Leave current seat'),
-                subtitle: Text(
-                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _leaveSeatAndMute();
-                },
-              ),
           ],
-          ),
         ),
+      ),
     );
   }
+
 
   Widget _buildSeatRow({
     required int row,
@@ -5898,6 +5852,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
           if (occupied) {
             RoomPresenceMember? member = presenceMember;
             if (member == null) {
@@ -5919,7 +5877,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             }
           }
           if (_canModerateSeats) {
-            _showReferenceSeatControl(index);
+            _showSeatControls(index);
             return;
           }
           _handleUserSeatTap(index);
