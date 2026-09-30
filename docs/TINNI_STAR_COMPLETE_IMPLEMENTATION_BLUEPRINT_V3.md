@@ -1907,36 +1907,115 @@ Required architecture:
 
 Do not claim background microphone support across all Android/OEM versions until tested on real devices.
 
-## W. Profile / Setting / Blacklist
+## W. Mine / Me / Profile / Setting — REFERENCE VIDEO LOCKED
 
-Bottom Mine/Profile includes the user's account-oriented area.
+Bottom **Mine/Me** is the user's personal account surface and is separate from **Party > Mine**.
 
-Reference Setting menu includes:
-- Message notification
-- Bind account
-- Language settings
-- About
-- Feedback
-- Blacklist
-- Privacy statement
-- Sign out
+### W.1 Reference-video visual target
 
-Mine/Profile may also expose:
-- VIP
-- Wealth level
-- Medal of Honor
-- Custom Center
-- Shop
-- Props
-- Reward Records
-- Task
-- Host data
-- Family
-- CP Nest
-- Feedback
-- Setting
+The supplied reference videos are the visual source for the Mine page. Final UI must preserve the same overall composition, order and interaction pattern rather than replacing it with a generic profile page. Match the reference as closely as practical for:
 
-Tinni UI styling may differ, but functional routing must remain clear.
+- top DP/name/UID identity block;
+- Follow / Fans / Charm statistics row;
+- Wallet card;
+- VIP and Wealth cards;
+- grouped menu rows;
+- icon location, chevrons, spacing, row height and card proportions;
+- light Mine-page surface with Tinni gold/yellow accents.
+
+Exact functional labels and menu order are product-locked unless the user explicitly changes them.
+
+### W.2 Top identity and stats
+
+Show real account data:
+
+- DP/avatar + equipped profile frame;
+- display name;
+- country flag;
+- public UID;
+- user level;
+- Family tag + Family level when applicable;
+- active identity/VIP indicator;
+- **Follow** = real following count;
+- **Fans** = real follower count;
+- **Charm** = real lifetime eligible gift receiving.
+
+Do not hard-code these counters.
+
+### W.3 Wallet, VIP and Wealth
+
+- **Wallet** shows the real normal-wallet Coin balance and opens the real wallet/recharge surface.
+- **VIP** shows current VIP status/level and opens the real VIP page.
+- **Wealth level** is calculated from real lifetime eligible gift sending and opens a dedicated Wealth page.
+- Wealth level thresholds are data-driven/Owner-Panel configurable.
+- Charm and Wealth remain separate: receiving drives Charm; sending drives Wealth.
+
+### W.4 Mine menu exact order
+
+1. Medal of Honor
+2. Custom Center
+3. Shop
+4. Props
+5. Reward Records
+6. Task
+7. Host data
+8. Family
+9. CP Nest
+10. Feedback
+11. Setting
+
+Each row opens a real function; no defined row may terminate at a generic placeholder.
+
+### W.5 Function behavior
+
+- **Medal of Honor**: backend-driven user medals with truthful empty state.
+- **Custom Center**: existing personalization/customization center.
+- **Shop**: real data-driven store with category browsing, preview, price, duration/permanent state, Purchase/Send where supported.
+- **Props**: owned inventory/entitlements with real equip/use state.
+- **Reward Records**: server wallet/reward transaction history with date/time and Coin/Diamond delta.
+- **Task**: server-derived task completion, one-time reward claim and wallet transaction write.
+- **Host data**: real Host/Agency/BD role, diamonds, commission, withdrawable value, settlement transfer and transfer history.
+- **Family**: Family home when joined; Family discovery/ranking/join flow when not joined.
+- **CP Nest**: personal CP entry remains in Mine and opens real CP functions.
+- **Feedback**: category + message submission stored server-side, with user's own feedback history.
+
+Games remain room-only and do not move into Mine.
+
+### W.6 Setting exact order
+
+1. Message notification
+2. Bind account
+3. Language settings
+4. About Tinni Star
+5. Feedback
+6. Blocklist
+7. Privacy statement
+8. Sign out
+
+Required behaviors:
+
+- **Message notification** persists Voice, Vibration and Only receive floating screen in the room preferences.
+- **Bind account** shows linked identities; Google linking uses verified Google identity; Email linking uses OTP + 8–128 character Tinni password and must bind to the same Tinni user ID.
+- Facebook binding stays hidden unless Facebook login is deliberately re-enabled.
+- **Language settings** saves the account preference; current choices include English, Hindi and Urdu.
+- **About Tinni Star** shows real Tinni Star identity/version information.
+- **Blocklist** loads real blocked users and supports Move out / Unblock through the backend.
+- **Privacy statement** opens the real Service Agreement & Privacy Policy page.
+- **Sign out** confirms, closes active room session, unregisters push, clears persisted auth/profile state and returns to Login.
+
+### W.7 Privacy / Service Agreement
+
+- Privacy statement is not a placeholder.
+- Page title: **Service Agreement & Privacy Policy**.
+- Two switchable sections: **Service Agreement** and **Privacy Policy**.
+- Policy is written for Tinni Star and covers account/profile data, rooms/chat/calls, verification material, device/diagnostic information, wallet/gifts/purchases, public visibility, providers, retention, security, permissions, rights, age requirements, international processing, policy updates and contact route.
+- Until an official legal/support contact is configured, privacy/contact requests route through **Mine → Feedback**.
+- Current effective date: **30 September 2026**.
+
+### W.8 No-placeholder / server-authority rule
+
+For the Mine flow, do not use fake local balances, fake stats, fake reward history, hard-coded Fans/Charm/Wealth values, unrelated destination pages or generic No content yet pages for functions defined above. Empty states are allowed only when they truthfully represent empty server-backed data.
+
 
 ## X. Social graph
 
