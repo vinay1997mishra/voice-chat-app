@@ -2516,3 +2516,23 @@ Game / Rocket stay outside the 4-box.
 - When Public Screen is off for a normal user, the typing field is disabled and shows `Owner/Admin only`.
 - The existing per-user chat-ban remains stronger than Public Screen permission: a chat-banned Owner/Admin cannot type until the ban is removed.
 
+
+
+### Reference room visual adoption — LOCKED
+
+The main Tinni room adopts the supplied reference-video room flow without changing the current 4-box/settings rules:
+
+- Top-left room identity uses a compact rounded pill with **Room DP + Room Name + Room ID**.
+- Top-right keeps **Share** and **Power / Minimize / Exit** controls.
+- A trophy-style **room Ranking** pill opens an in-room bottom panel instead of navigating to the old full Ranking Center.
+- Room Ranking uses **Daily / Weekly / Monthly** tabs, a dark-purple reference-style sheet, contributor rows, and a fixed current-user row at the bottom.
+- The top member-count pill opens the existing room-member surface.
+- Empty unlocked seats keep the reference circular glowing seat look; locked empty seats show the standalone gold lock.
+- Every seat keeps the **No.X** label and heart/intimacy pill.
+- A red mic-off badge appears on the seat when that seat is room-muted, presence-muted, or the seated user has **Self Mute** enabled.
+- **Rocket** stays above **Game** in the right-side floating stack with the small progress bar between them.
+- Rocket and Game remain outside the 4-box.
+- LP/Game country ribbons use reference-style gold-edged room banners while preserving existing LP-first / game-next priority and country targeting.
+
+Do **not** add or duplicate Room Settings, Blocklist, Cover, Lock, Seat Requests, Game, Rocket, or other room controls in the 4-box. The previously locked 4-box structure and Room Type → Cover / Setting placement remain unchanged.
+
