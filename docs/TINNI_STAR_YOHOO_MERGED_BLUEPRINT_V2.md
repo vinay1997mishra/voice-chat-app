@@ -1192,9 +1192,9 @@ Do **not** add or duplicate Room Settings, Blocklist, Cover, Lock, Seat Requests
 
 
 
-### Blueprint sync state — 0.5.22+40
+### Blueprint sync state — 0.5.23+41
 
-This blueprint is synchronized with the current Tinni Star room implementation at app version `0.5.22+40`.
+This blueprint is synchronized with the current Tinni Star room implementation at app version `0.5.23+41`.
 
 Canonical current room rules:
 - 4-box has exactly: Room Type, Music, Effects, Lock / Unlock, Lucky Bag, Sound On / Off, Lucky Number, Group PK, Public Screen / Screen On, Report.
@@ -1207,4 +1207,22 @@ Canonical current room rules:
 - Reference room visuals are adopted for Room DP + Name + ID, in-room Daily/Weekly/Monthly ranking, seat styling, self-mute mic-off badge, right-side Rocket/Game stack, and LP/Game ribbons.
 - Game and Rocket remain outside the 4-box.
 - Existing Room Setup / Block List behavior must not be duplicated into the 4-box.
+
+
+
+
+### Build stabilization sync — 0.5.23+41
+
+The successful Tinni Star `0.5.23+41` APK build keeps all previously locked room behavior and adds the following stability/layout fixes:
+
+- Reference seat rows reserve extra vertical label space so the stack **seat/avatar or lock → No.X/name → heart pill → optional tag/medal** does not overflow.
+- The seat-count rules remain unchanged: every count **8–42** stays supported with the existing fixed row-distribution policy.
+- The exact **5-digit room password** rule is unchanged. The password dialogs now use local value state instead of a disposable text controller, preventing disposed-controller failures during modal close/reopen transitions.
+- Opening **Room Type → Cover**, room tools, **Room Setup**, and **Room Members** after closing another modal uses a short transition delay so sheets/pages do not collide during route animation.
+- Removed 4-box entries remain removed: Gift, Feedback, Moderation, Friends/Event Mode, Launch/Stop Event, Blacklist, Seat Requests, standalone Cover/Room Theme, and standalone Settings.
+- Hidden legacy helper methods may remain in source only for compatibility, but they are not exposed as 4-box tiles and must not reappear in the room UI.
+- The current 4-box remains exactly: **Room Type, Music, Effects, Lock / Unlock, Lucky Bag, Sound On / Off, Lucky Number, Group PK, Public Screen / Screen On, Report**.
+- Room Type remains exactly: **Mic Types, Cover, Mic Theme, Setting**.
+- Room Type → Setting remains: **Room Seats, Free mic, Only managers can speak**.
+- The reference-style room visuals and flows remain unchanged: **Room DP + Name + ID**, in-room **Daily / Weekly / Monthly Ranking**, seat self-mute red mic-off badge, right-side **Rocket above Game**, and LP/Game ribbons.
 
