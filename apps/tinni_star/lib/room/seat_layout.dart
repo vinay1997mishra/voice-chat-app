@@ -20,13 +20,27 @@ class SeatLayoutSpec {
   int get columns => (seatCount / rows).ceil();
 
   List<int> get rowLengths {
-    final base = seatCount ~/ rows;
-    final extra = seatCount % rows;
-    return List<int>.generate(
-      rows,
-      (row) => base + (row < extra ? 1 : 0),
-      growable: false,
-    );
+    if (rows <= 2) {
+      final base = seatCount ~/ rows;
+      final extra = seatCount % rows;
+      return List<int>.generate(
+        rows,
+        (row) => base + (row < extra ? 1 : 0),
+        growable: false,
+      );
+    }
+
+    final upperRowCount = rows - 2;
+    final seatsPerUpperRow = (seatCount / rows).ceil();
+    final remaining = seatCount - (upperRowCount * seatsPerUpperRow);
+    final penultimateRow = (remaining / 2).ceil();
+    final lastRow = remaining ~/ 2;
+
+    return <int>[
+      ...List<int>.filled(upperRowCount, seatsPerUpperRow),
+      penultimateRow,
+      lastRow,
+    ];
   }
 
   (int, int) rangeForRow(int row) {
