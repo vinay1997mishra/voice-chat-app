@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
@@ -67,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String countryFilter = '';
   String countryFilterLabel = '';
   final List<RemoteNotification> _notifications = <RemoteNotification>[];
+  bool _notificationsInitialized = false;
+  bool _notificationVoice = true;
+  bool _notificationVibration = true;
+  bool _roomFloatingOnly = false;
 
   @override
   void initState() {
@@ -102,13 +107,59 @@ class _HomeScreenState extends State<HomeScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
-      final values = await widget.state.backend.notifications(account.authToken);
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.notifications(account.authToken),
+        widget.state.backend.accountPreferences(account.authToken),
+      ]);
+      final values = List<RemoteNotification>.from(results[0] as List);
+      final preferences =
+          Map<String, dynamic>.from(results[1] as Map);
+
+      final previousIds = _notifications.map((item) => item.id).toSet();
+      final newlyArrived = _notificationsInitialized
+          ? values
+              .where((item) => !item.read && !previousIds.contains(item.id))
+              .toList(growable: false)
+          : const <RemoteNotification>[];
+
+      _notificationVoice = preferences['message_voice'] != false;
+      _notificationVibration =
+          preferences['message_vibration'] != false;
+      _roomFloatingOnly = preferences['room_floating_only'] == true;
+
       if (!mounted) return;
       setState(() {
         _notifications
           ..clear()
           ..addAll(values);
+        _notificationsInitialized = true;
       });
+
+      if (newlyArrived.isNotEmpty) {
+        if (_notificationVoice) {
+          await SystemSound.play(SystemSoundType.alert);
+        }
+        if (_notificationVibration) {
+          await HapticFeedback.mediumImpact();
+        }
+        final canFloat =
+            !_roomFloatingOnly || widget.state.roomSession.hasRoom;
+        if (canFloat && mounted) {
+          final notice = newlyArrived.first;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(notice.title + ': ' + notice.message),
+                duration: const Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: 'View',
+                  onPressed: _showNotifications,
+                ),
+              ),
+            );
+        }
+      }
     } catch (_) {
       // Keep the last notification snapshot while reconnecting.
     }
