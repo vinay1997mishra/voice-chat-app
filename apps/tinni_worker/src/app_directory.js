@@ -115,13 +115,30 @@ function roomSeatLayout(seatCountValue) {
   else if (seatCount >= 31 && seatCount <= 42) rowCount = 6;
   else return { row_count: 0, row_sizes: [] };
 
-  const base = Math.floor(seatCount / rowCount);
-  const extra = seatCount % rowCount;
+  if (rowCount <= 2) {
+    const base = Math.floor(seatCount / rowCount);
+    const extra = seatCount % rowCount;
+    return {
+      row_count: rowCount,
+      row_sizes: Array.from({ length: rowCount }, (_, index) =>
+        base + (index < extra ? 1 : 0)
+      ),
+    };
+  }
+
+  const upperRowCount = rowCount - 2;
+  const seatsPerUpperRow = Math.ceil(seatCount / rowCount);
+  const remaining = seatCount - (upperRowCount * seatsPerUpperRow);
+  const penultimateRow = Math.ceil(remaining / 2);
+  const lastRow = Math.floor(remaining / 2);
+
   return {
     row_count: rowCount,
-    row_sizes: Array.from({ length: rowCount }, (_, index) =>
-      base + (index < extra ? 1 : 0)
-    ),
+    row_sizes: [
+      ...Array.from({ length: upperRowCount }, () => seatsPerUpperRow),
+      penultimateRow,
+      lastRow,
+    ],
   };
 }
 
