@@ -4,10 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../community/family_service.dart';
 import '../identity/owner_tag.dart';
 import '../infra/app_backend_service.dart';
-import '../ui/royal_theme.dart';
 import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
