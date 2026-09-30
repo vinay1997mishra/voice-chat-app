@@ -327,6 +327,55 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> accountPreferences(String token) async {
+    final data = await _request('GET', '/account/preferences', token);
+    return _map(data['preferences']);
+  }
+
+  Future<Map<String, dynamic>> updateAccountPreferences(
+    String token,
+    Map<String, dynamic> values,
+  ) async {
+    final data = await _request(
+      'POST',
+      '/account/preferences',
+      token,
+      body: values,
+    );
+    return _map(data['preferences']);
+  }
+
+  Future<List<Map<String, dynamic>>> accountIdentities(String token) async {
+    final data = await _request('GET', '/account/identities', token);
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> feedbackHistory(String token) async {
+    final data = await _request('GET', '/feedback', token);
+    final raw = data['feedback'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> submitFeedback(
+    String token, {
+    required String category,
+    required String message,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/feedback',
+      token,
+      body: <String, dynamic>{
+        'category': category,
+        'message': message,
+      },
+    );
+    return _map(data['feedback']);
+  }
+
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
