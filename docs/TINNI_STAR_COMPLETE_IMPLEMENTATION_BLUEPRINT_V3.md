@@ -2553,3 +2553,14 @@ Canonical current room rules:
 - Game and Rocket remain outside the 4-box.
 - Existing Room Setup / Block List behavior must not be duplicated into the 4-box.
 
+
+
+## Tinni Star Privacy & Service Agreement
+
+- Mine → Setting must contain **Privacy statement**.
+- Privacy statement opens a real in-app page titled **Service Agreement & Privacy Policy**; it must not be a placeholder.
+- The page has two switchable sections: **Service Agreement** and **Privacy Policy**.
+- Privacy Policy must be written specifically for Tinni Star and cover account/profile data, rooms/chat/calls, verification material, device/diagnostic data, wallet/gift/purchase records, public profile visibility, service providers, retention, security, device permissions, user privacy choices/rights, age requirements, international processing, policy updates and in-app privacy contact.
+- Service Agreement must cover account responsibility, rooms/chat/calls, virtual items/balances, purchases/refunds, safety/moderation, service availability, privacy-policy linkage, agreement updates and support contact.
+- Do not publish invented legal contact information. Until an official legal/support email is configured, privacy/contact requests route through **Mine → Feedback**.
+- Current policy effective date: **30 September 2026**. Any material future policy change must update the displayed effective date and the policy text.
