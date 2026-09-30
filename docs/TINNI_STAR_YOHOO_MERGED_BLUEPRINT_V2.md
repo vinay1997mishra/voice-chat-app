@@ -723,6 +723,54 @@ Rules:
 - Gift sound playback must respect Gift Sound and the room sound master control.
 
 
+
+### Reference-style room toolbar / 4-box — LOCKED
+
+The room 4-box must include these primary entries in this order:
+1. Room Type
+2. Cover
+3. Music
+4. Blacklist
+5. Effects
+6. Feedback
+7. Lock / Unlock
+
+Room Type opens a 3-tab panel:
+- **Mic Types** — opens the Tinni seat-count/layout selector for the supported 8–42 seat system.
+- **Mic Theme** — owner can select the room's persisted mic/seat visual theme.
+- **Setting** — room mic-mode and related room-type controls.
+
+Mic Theme built-in choices:
+- Royal Gold
+- Neon Blue
+- Rose Glow
+
+Cover:
+- Owner selects a room cover image from the device.
+- The image is validated and stored through the room settings backend.
+
+Blacklist:
+- Opens the room blacklist list.
+- Room owner can remove IDs from the blacklist.
+
+Effects:
+- Opens the Effects panel; the granular effect toggles stay inside this panel.
+- Overall visual-effects and room-notice master switches also stay inside Effects, not as separate 4-box tiles.
+
+Feedback:
+- Opens the room feedback/report surface.
+
+Lock / Unlock:
+- Uses the existing owner-only password room flow.
+- Password remains 5–7 digits and the existing failed-attempt rules remain unchanged.
+
+Top room bar:
+- Share icon is visible beside the existing room actions.
+- Power/exit icon remains visible and keeps the existing Minimize / Exit behavior.
+
+Tinni-specific extra room tools may remain after these primary reference-style entries.
+
+
 ## 17. VIP / Noble / Identity — CLEAR AT FEATURE LEVEL
 
 - VIP levels.
