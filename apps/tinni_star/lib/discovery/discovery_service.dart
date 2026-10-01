@@ -244,6 +244,11 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
+    final storedPhoto = await _storeRoomPhotoIfNeeded(
+      authToken,
+      photoDataUrl,
+    );
+
     final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms'));
     request.headers.contentType = ContentType.json;
     request.headers.set(
@@ -256,7 +261,7 @@ class DiscoveryService {
         'seat_count': seatCount,
         'party_mode': partyMode,
         'locked': locked,
-        'photo_data_url': photoDataUrl,
+        'photo_data_url': storedPhoto,
       }),
     );
 
@@ -291,6 +296,9 @@ class DiscoveryService {
     String? seatThemeId,
   }) async {
     if (authToken.trim().isEmpty) throw StateError('Login session is required');
+    final storedPhoto = photoDataUrl == null
+        ? null
+        : await _storeRoomPhotoIfNeeded(authToken, photoDataUrl);
     final request = await _httpClient.patchUrl(apiBase.replace(path: '/rooms/settings'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
@@ -305,7 +313,7 @@ class DiscoveryService {
     if (partyMode != null) body['party_mode'] = partyMode;
     if (privacy != null) body['privacy'] = privacy;
     if (closed != null) body['closed'] = closed;
-    if (photoDataUrl != null) body['photo_data_url'] = photoDataUrl;
+    if (storedPhoto != null) body['photo_data_url'] = storedPhoto;
     if (seatThemeId != null) body['seat_theme_id'] = seatThemeId;
     request.write(jsonEncode(body));
     final response = await request.close();
@@ -559,6 +567,38 @@ class DiscoveryService {
       throw StateError('Server returned invalid room theme');
     }
     return theme;
+  }
+
+  Future<String?> _storeRoomPhotoIfNeeded(
+    String authToken,
+    String? value,
+  ) async {
+    final source = value?.trim();
+    if (source == null || source.isEmpty || !source.startsWith('data:image/')) {
+      return source;
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-media'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(jsonEncode(<String, dynamic>{'data_url': source}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to upload room photo',
+      );
+    }
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) {
+      throw StateError('Server did not return room photo URL');
+    }
+    return url;
   }
 
     Future<RoomAccessResult> getRoomAccessStatus({
