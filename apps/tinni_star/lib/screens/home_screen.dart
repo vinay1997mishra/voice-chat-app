@@ -49,6 +49,22 @@ Color _homeFeatureColor(String title) {
 }
 
 
+ImageProvider? _homeAvatarProvider(String? value) {
+  final source = value?.trim() ?? '';
+  if (source.isEmpty) return null;
+  if (source.startsWith('data:image/')) {
+    try {
+      return MemoryImage(base64Decode(source.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+  if (source.startsWith('https://') || source.startsWith('http://')) {
+    return NetworkImage(source);
+  }
+  return null;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.state});
 
@@ -752,6 +768,22 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList();
     final topRooms = ordered.take(3).toList();
     final listRooms = ordered.skip(3).toList();
+    final roomRankGroups = topRooms
+        .map<List<String?>>((room) => <String?>[room.photoDataUrl])
+        .toList(growable: false);
+    final cpRankGroups = _cpTop
+        .map<List<String?>>(
+          (row) => <String?>[
+            row['user_a_avatar']?.toString(),
+            row['user_b_avatar']?.toString(),
+          ],
+        )
+        .toList(growable: false);
+    final familyRankGroups = _familyTop
+        .map<List<String?>>(
+          (row) => <String?>[row['leader_avatar_data_url']?.toString()],
+        )
+        .toList(growable: false);
 
     return ListView(
       key: const Key('home-party-page'),
@@ -791,6 +823,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-room-rank-button'),
                 title: 'Room',
                 icon: Icons.mic_external_on_rounded,
+                rankAvatarGroups: roomRankGroups,
                 onTap: () => openRankings(initialTab: 0),
               ),
             ),
@@ -800,6 +833,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-cp-button'),
                 title: 'CP Ranking',
                 icon: Icons.favorite_rounded,
+                rankAvatarGroups: cpRankGroups,
                 onTap: openCpRanking,
               ),
             ),
@@ -809,6 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-family-button'),
                 title: 'Family',
                 icon: Icons.groups_rounded,
+                rankAvatarGroups: familyRankGroups,
                 onTap: openFamilyRanking,
               ),
             ),
@@ -1438,11 +1473,13 @@ class _FeatureCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.onTap,
+    this.rankAvatarGroups = const <List<String?>>[],
   });
 
   final String title;
   final IconData icon;
   final VoidCallback onTap;
+  final List<List<String?>> rankAvatarGroups;
 
   @override
   Widget build(BuildContext context) {
@@ -1454,20 +1491,159 @@ class _FeatureCard extends StatelessWidget {
       accentColor: color,
       child: Column(
         children: [
-          ShiningIcon(
-            icon: icon,
-            color: color,
-            size: 28,
-            boxSize: 50,
-          ),
-          const SizedBox(height: 7),
           Text(
             title,
             textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              shadows: [
+                Shadow(
+                  color: color.withValues(alpha: 0.55),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (rankAvatarGroups.isNotEmpty)
+            _PartyRankAvatarRow(
+              groups: rankAvatarGroups.take(3).toList(growable: false),
+              accent: color,
+            )
+          else
+            ShiningIcon(
+              icon: icon,
+              color: color,
+              size: 28,
+              boxSize: 50,
+            ),
+          const SizedBox(height: 7),
+          Text(
+            rankAvatarGroups.isEmpty ? 'Top ranking' : 'TOP 1  •  TOP 2  •  TOP 3',
+            textAlign: TextAlign.center,
+            maxLines: 1,
             style: const TextStyle(
               color: RoyalPalette.cream,
               fontWeight: FontWeight.w800,
-              fontSize: 12,
+              fontSize: 8.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PartyRankAvatarRow extends StatelessWidget {
+  const _PartyRankAvatarRow({
+    required this.groups,
+    required this.accent,
+  });
+
+  final List<List<String?>> groups;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (var i = 0; i < groups.length; i++)
+          _PartyRankAvatarGroup(
+            rank: i + 1,
+            sources: groups[i],
+            accent: i == 0
+                ? FeaturePalette.rank
+                : i == 1
+                    ? const Color(0xFFC7D1DC)
+                    : const Color(0xFFD78955),
+          ),
+      ],
+    );
+  }
+}
+
+class _PartyRankAvatarGroup extends StatelessWidget {
+  const _PartyRankAvatarGroup({
+    required this.rank,
+    required this.sources,
+    required this.accent,
+  });
+
+  final int rank;
+  final List<String?> sources;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = sources
+        .map(_homeAvatarProvider)
+        .whereType<ImageProvider>()
+        .take(2)
+        .toList(growable: false);
+    return SizedBox(
+      width: 52,
+      height: 50,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          for (var i = 0; i < (valid.isEmpty ? 1 : valid.length); i++)
+            Positioned(
+              left: valid.length > 1 ? 5.0 + i * 18 : 11,
+              bottom: 1,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: accent, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.55),
+                      blurRadius: 9,
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: RoyalPalette.nearBlack,
+                  backgroundImage: valid.isEmpty ? null : valid[i],
+                  child: valid.isEmpty
+                      ? Icon(
+                          rank == 1
+                              ? Icons.workspace_premium_rounded
+                              : Icons.person_rounded,
+                          size: 15,
+                          color: accent,
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          Positioned(
+            top: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.55),
+                    blurRadius: 7,
+                  ),
+                ],
+              ),
+              child: Text(
+                rank.toString(),
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
         ],
