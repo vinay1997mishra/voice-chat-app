@@ -2060,6 +2060,150 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _luckyArtwork(
+    GiftDefinition gift, {
+    required double size,
+    BoxFit fit = BoxFit.contain,
+  }) {
+    final asset = gift.artworkAsset;
+    if (asset == null || asset.isEmpty) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Text(
+            gift.emoji,
+            style: TextStyle(fontSize: size * 0.62),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Image.asset(
+        asset,
+        fit: fit,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, __, ___) => Center(
+          child: Text(
+            gift.emoji,
+            style: TextStyle(fontSize: size * 0.62),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLuckyImpactEffect({
+    required GiftDefinition gift,
+    required double seatDiameter,
+  }) {
+    final highWin = _luckyLastMultiplier >= 200;
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey<String>('lucky-impact-$_luckyAnimationSequence'),
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 1180),
+        curve: Curves.easeOut,
+        builder: (context, value, _) {
+          if (value < 0.46) return const SizedBox.shrink();
+          final phase = ((value - 0.46) / 0.54).clamp(0.0, 1.0).toDouble();
+          final fade = (1 - phase).clamp(0.0, 1.0).toDouble();
+          final burstRadius = seatDiameter * (0.45 + phase * 0.9);
+          return SizedBox(
+            width: seatDiameter * 2.6,
+            height: seatDiameter * 2.6,
+            child: Center(
+              child: Opacity(
+                opacity: fade,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Transform.scale(
+                      scale: 0.55 + phase * 1.35,
+                      child: Container(
+                        width: seatDiameter * 0.95,
+                        height: seatDiameter * 0.95,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: highWin
+                                ? const <Color>[
+                                    Color(0xFFFFF7B2),
+                                    Color(0xCCFFAE36),
+                                    Color(0x55FF4D18),
+                                    Colors.transparent,
+                                  ]
+                                : const <Color>[
+                                    Color(0xFFFFF4A8),
+                                    Color(0xAAFF67D8),
+                                    Color(0x553A7BFF),
+                                    Colors.transparent,
+                                  ],
+                            stops: const <double>[0, 0.28, 0.62, 1],
+                          ),
+                          border: Border.all(
+                            color: highWin
+                                ? const Color(0xFFFFD45A)
+                                : const Color(0xFFFFB7F2),
+                            width: highWin ? 2.2 : 1.4,
+                          ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: highWin
+                                  ? const Color(0xAAFFB020)
+                                  : const Color(0x887F55FF),
+                              blurRadius: highWin ? 24 : 17,
+                              spreadRadius: highWin ? 5 : 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    for (var index = 0; index < 10; index++)
+                      Transform.translate(
+                        offset: Offset(
+                          math.cos(index * math.pi / 5) * burstRadius,
+                          math.sin(index * math.pi / 5) * burstRadius,
+                        ),
+                        child: Transform.rotate(
+                          angle: index * 0.45 + phase,
+                          child: Icon(
+                            index.isEven
+                                ? Icons.auto_awesome
+                                : Icons.star_rounded,
+                            size: seatDiameter *
+                                (highWin ? 0.28 : 0.22) *
+                                (1 - phase * 0.35),
+                            color: index % 3 == 0
+                                ? const Color(0xFFFFD45A)
+                                : index % 3 == 1
+                                    ? const Color(0xFFFF70D8)
+                                    : const Color(0xFF72D9FF),
+                          ),
+                        ),
+                      ),
+                    Transform.scale(
+                      scale: 0.55 +
+                          Curves.easeOutBack.transform(phase) *
+                              (highWin ? 0.95 : 0.72),
+                      child: _luckyArtwork(
+                        gift,
+                        size: seatDiameter * (highWin ? 1.12 : 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildLuckyComboOverlay() {
     final gift = _luckyComboGift;
     if (gift == null) return const SizedBox.shrink();
@@ -2096,7 +2240,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(gift.emoji, style: const TextStyle(fontSize: 24)),
+              Container(
+                width: 34,
+                height: 34,
+                padding: const EdgeInsets.all(1),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    colors: <Color>[
+                      Color(0x55FFFFFF),
+                      Color(0x448C5CFF),
+                      Colors.transparent,
+                    ],
+                  ),
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x88FFB84D),
+                      blurRadius: 9,
+                    ),
+                  ],
+                ),
+                child: _luckyArtwork(gift, size: 32),
+              ),
               const SizedBox(width: 6),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2803,10 +2968,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               Expanded(
                                 child: Center(
                                   child: gift.lucky
-                                      ? Text(
-                                          gift.emoji,
-                                          style: const TextStyle(fontSize: 30),
-                                          textAlign: TextAlign.center,
+                                      ? Container(
+                                          width: 54,
+                                          height: 54,
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: const RadialGradient(
+                                              colors: <Color>[
+                                                Color(0x66FFFFFF),
+                                                Color(0x445C2A80),
+                                                Colors.transparent,
+                                              ],
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0x88FFD45A),
+                                              width: 1,
+                                            ),
+                                            boxShadow: const <BoxShadow>[
+                                              BoxShadow(
+                                                color: Color(0x66FFB84D),
+                                                blurRadius: 9,
+                                              ),
+                                            ],
+                                          ),
+                                          child: _luckyArtwork(
+                                            gift,
+                                            size: 50,
+                                          ),
                                         )
                                       : ShiningIcon(
                                           icon: Icons.card_giftcard_rounded,
@@ -6379,24 +6568,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           'lucky-flight-$_luckyAnimationSequence',
                         ),
                         tween: Tween<double>(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 620),
-                        builder: (context, value, child) => Transform.translate(
-                          offset: Offset(
-                            0,
-                            (1 - value) * seatDiameter * 1.35,
-                          ),
-                          child: Opacity(
-                            opacity: (1 - value * 0.72)
-                                .clamp(0.0, 1.0)
-                                .toDouble(),
-                            child: child,
-                          ),
-                        ),
-                        child: Text(
-                          _luckyComboGift!.emoji,
-                          style: TextStyle(fontSize: seatDiameter * 0.58),
+                        duration: const Duration(milliseconds: 720),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          final disappear = value <= 0.86
+                              ? 1.0
+                              : ((1 - value) / 0.14)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                          final scale = 0.42 +
+                              Curves.easeOutBack.transform(value) * 0.74;
+                          return Transform.translate(
+                            offset: Offset(
+                              (1 - value) * seatDiameter * 2.15,
+                              (1 - value) * seatDiameter * 2.8,
+                            ),
+                            child: Transform.rotate(
+                              angle: (1 - value) * 0.8,
+                              child: Transform.scale(
+                                scale: scale,
+                                child: Opacity(
+                                  opacity: disappear,
+                                  child: Container(
+                                    padding: EdgeInsets.all(
+                                      math.max(1.0, seatDiameter * 0.03),
+                                    ),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: const <BoxShadow>[
+                                        BoxShadow(
+                                          color: Color(0xAAFFB84D),
+                                          blurRadius: 13,
+                                          spreadRadius: 2,
+                                        ),
+                                        BoxShadow(
+                                          color: Color(0x887F55FF),
+                                          blurRadius: 18,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                    child: child,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: _luckyArtwork(
+                          _luckyComboGift!,
+                          size: seatDiameter * 0.74,
                         ),
                       ),
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyComboGift != null)
+                    _buildLuckyImpactEffect(
+                      gift: _luckyComboGift!,
+                      seatDiameter: seatDiameter,
                     ),
                   if (presenceMember?.userId == _luckyAnimationReceiverId &&
                       _luckyLastMultiplier > 0)
