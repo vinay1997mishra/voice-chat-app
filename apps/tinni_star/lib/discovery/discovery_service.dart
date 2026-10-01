@@ -25,6 +25,10 @@ class RoomSummary {
     this.seatThemeId = 'royal-gold',
     this.announcement = '',
     this.roomLevel = 1,
+    this.roomExperience = 0,
+    this.activeUserExp = 0,
+    this.sendingExp = 0,
+    this.receivingExp = 0,
   });
 
   final String id;
@@ -49,6 +53,10 @@ class RoomSummary {
   final String seatThemeId;
   final String announcement;
   final int roomLevel;
+  final int roomExperience;
+  final int activeUserExp;
+  final int sendingExp;
+  final int receivingExp;
 
   bool createdWithin(
     Duration age, {
@@ -83,6 +91,10 @@ class RoomSummary {
     String? seatThemeId,
     String? announcement,
     int? roomLevel,
+    int? roomExperience,
+    int? activeUserExp,
+    int? sendingExp,
+    int? receivingExp,
   }) =>
       RoomSummary(
         id: id,
@@ -108,6 +120,10 @@ class RoomSummary {
         seatThemeId: seatThemeId ?? this.seatThemeId,
         announcement: announcement ?? this.announcement,
         roomLevel: roomLevel ?? this.roomLevel,
+        roomExperience: roomExperience ?? this.roomExperience,
+        activeUserExp: activeUserExp ?? this.activeUserExp,
+        sendingExp: sendingExp ?? this.sendingExp,
+        receivingExp: receivingExp ?? this.receivingExp,
       );
 }
 
@@ -660,7 +676,7 @@ class DiscoveryService {
       country: row['country_code']?.toString() ?? '',
       countryName: row['country_name']?.toString(),
       flagEmoji: row['flag_emoji']?.toString(),
-      online: _asInt(row['online']),
+      online: _asInt(row['online'], fallback: _asInt(row['member_count'])),
       locked: row['locked'] == true,
       seatCount: _asInt(row['seat_count'], fallback: 12),
       partyMode:
@@ -678,6 +694,10 @@ class DiscoveryService {
       seatThemeId: row['seat_theme_id']?.toString() ?? 'royal-gold',
       announcement: row['announcement']?.toString() ?? '',
       roomLevel: _asInt(row['room_level'], fallback: 1),
+      roomExperience: _asInt(row['room_experience']),
+      activeUserExp: _asInt(row['active_user_exp']),
+      sendingExp: _asInt(row['sending_exp']),
+      receivingExp: _asInt(row['receiving_exp']),
     );
   }
 
@@ -688,6 +708,8 @@ class DiscoveryService {
         : visibleRooms.where((room) => room.country == country).toList();
     final sorted = List<RoomSummary>.from(filtered)
       ..sort((a, b) {
+        final expOrder = b.roomExperience.compareTo(a.roomExperience);
+        if (expOrder != 0) return expOrder;
         final onlineOrder = b.online.compareTo(a.online);
         if (onlineOrder != 0) return onlineOrder;
         return (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
