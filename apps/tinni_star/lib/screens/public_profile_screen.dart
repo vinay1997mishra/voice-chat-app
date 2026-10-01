@@ -529,7 +529,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          if (media.values.any((value) => value != null && value!.isNotEmpty))
+          if (media.values.any((value) => (value ?? '').isNotEmpty))
             RoyalPanel(
               accentColor: RoyalPalette.deepGold,
               child: Column(
