@@ -5,6 +5,7 @@ class RoomSummary {
   const RoomSummary({
     required this.id,
     required this.title,
+    this.publicId,
     required this.country,
     required this.online,
     this.countryName,
@@ -33,6 +34,10 @@ class RoomSummary {
 
   final String id;
   final String title;
+  final String? publicId;
+
+  String get displayId =>
+      publicId == null || publicId!.isEmpty ? id : publicId!;
   final String country;
   final String? countryName;
   final String? flagEmoji;
@@ -71,6 +76,7 @@ class RoomSummary {
 
   RoomSummary copyWith({
     String? title,
+    String? publicId,
     String? country,
     String? countryName,
     String? flagEmoji,
@@ -99,6 +105,7 @@ class RoomSummary {
       RoomSummary(
         id: id,
         title: title ?? this.title,
+        publicId: publicId ?? this.publicId,
         country: country ?? this.country,
         countryName: countryName ?? this.countryName,
         flagEmoji: flagEmoji ?? this.flagEmoji,
@@ -713,6 +720,7 @@ class DiscoveryService {
     return RoomSummary(
       id: id,
       title: title,
+      publicId: row['public_id']?.toString(),
       country: row['country_code']?.toString() ?? '',
       countryName: row['country_name']?.toString(),
       flagEmoji: row['flag_emoji']?.toString(),
@@ -792,8 +800,10 @@ class DiscoveryService {
     return rooms
         .where(
           (room) => room.locked
-              ? room.id == value
-              : room.id == value || room.title.toLowerCase().contains(lower),
+              ? room.displayId == value
+              : room.displayId == value ||
+                  room.id == value ||
+                  room.title.toLowerCase().contains(lower),
         )
         .toList();
   }
