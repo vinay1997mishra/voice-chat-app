@@ -29,6 +29,22 @@ class RoomSeatInvite {
   final DateTime createdAt;
 }
 
+class RoomLuckyNumberEvent {
+  const RoomLuckyNumberEvent({
+    required this.id,
+    required this.userId,
+    required this.displayName,
+    required this.number,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String userId;
+  final String displayName;
+  final int number;
+  final DateTime createdAt;
+}
+
 class RoomPresenceMember {
   const RoomPresenceMember({
     required this.userId,
@@ -98,6 +114,8 @@ class RoomPresenceService extends ChangeNotifier {
   int? selfForcedSeatIndex;
   RoomSeatInvite? pendingSeatInvite;
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
+  final List<RoomLuckyNumberEvent> luckyNumberEvents =
+      <RoomLuckyNumberEvent>[];
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
@@ -258,6 +276,30 @@ class RoomPresenceService extends ChangeNotifier {
     );
     this.micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     notifyListeners();
+  }
+
+  Future<RoomLuckyNumberEvent> drawLuckyNumber({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/lucky-number',
+      authToken,
+      <String, Object>{'room_id': roomId},
+    );
+    final raw = data['event'];
+    if (raw is! Map) {
+      throw StateError('Lucky number result is unavailable');
+    }
+    return RoomLuckyNumberEvent(
+      id: raw['id']?.toString() ?? '',
+      userId: raw['user_id']?.toString() ?? '',
+      displayName: raw['display_name']?.toString() ?? 'User',
+      number: _asInt(raw['number']),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        _asInt(raw['created_at']),
+      ),
+    );
   }
 
   Future<void> setSeatLock({
@@ -625,6 +667,33 @@ class RoomPresenceService extends ChangeNotifier {
       } else {
         pendingSeatInvite = null;
       }
+    }
+
+    if (data.containsKey('lucky_number_events')) {
+      final rawEvents = data['lucky_number_events'];
+      luckyNumberEvents
+        ..clear()
+        ..addAll(
+          rawEvents is List
+              ? rawEvents.whereType<Map>().map(
+                    (row) => RoomLuckyNumberEvent(
+                      id: row['id']?.toString() ?? '',
+                      userId: row['user_id']?.toString() ?? '',
+                      displayName:
+                          row['display_name']?.toString() ?? 'User',
+                      number: _asInt(row['number']),
+                      createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        _asInt(row['created_at']),
+                      ),
+                    ),
+                  ).where(
+                    (event) =>
+                        event.id.isNotEmpty &&
+                        event.number >= 1 &&
+                        event.number <= 100,
+                  )
+              : const <RoomLuckyNumberEvent>[],
+        );
     }
 
     if (data.containsKey('locked_seats')) {
