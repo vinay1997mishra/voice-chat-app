@@ -217,8 +217,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       userId: account.userId,
       authToken: account.authToken,
     );
-    widget.state.roomSession.controller?.setInviteMode(
-      widget.state.roomControls.settings.micMode == MicMode.apply,
+
+    // The room-presence backend is authoritative for Free mic / Request mode.
+    // Do not overwrite the freshly loaded server value with the local default
+    // when the room is reopened. Keep the local room settings mirror in sync
+    // with the server instead.
+    final serverMicMode = widget.state.roomSession.presence.micMode;
+    widget.state.roomControls.settings =
+        widget.state.roomControls.settings.copyWith(
+      micMode: serverMicMode == 'free' ? MicMode.free : MicMode.apply,
     );
   }
 
