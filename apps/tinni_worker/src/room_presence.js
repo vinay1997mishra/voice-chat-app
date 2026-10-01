@@ -19,6 +19,7 @@ export class RoomPresenceStore extends DurableObject {
         equipped_entry_id TEXT,
         equipped_profile_card_id TEXT,
         owner_tags_json TEXT NOT NULL DEFAULT '[]',
+        mic_enabled INTEGER NOT NULL DEFAULT 0,
         seat_index INTEGER,
         seat_emote TEXT,
         seat_emote_until INTEGER,
@@ -104,6 +105,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN equipped_profile_card_id TEXT",
       "ALTER TABLE room_members ADD COLUMN owner_tags_json TEXT NOT NULL DEFAULT '[]'",
       "ALTER TABLE room_members ADD COLUMN owner_medals_json TEXT NOT NULL DEFAULT '[]'",
+      "ALTER TABLE room_members ADD COLUMN mic_enabled INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
@@ -825,7 +827,7 @@ export class RoomPresenceStore extends DurableObject {
       `SELECT user_id, display_name, avatar_data_url, flag_emoji,
               country_code, family_tag, host_tag, agency_name, equipped_frame_id,
               equipped_entry_id, equipped_profile_card_id,
-              owner_tags_json, owner_medals_json,
+              owner_tags_json, owner_medals_json, mic_enabled,
               seat_index, seat_emote, seat_emote_until, joined_at, last_seen
          FROM room_members
         ORDER BY joined_at ASC`,
@@ -861,7 +863,9 @@ export class RoomPresenceStore extends DurableObject {
         row.seat_index === null || row.seat_index === undefined
           ? null
           : Number(row.seat_index),
-      mic_muted: this.muteStatus(row.user_id, row.seat_index),
+      mic_muted:
+        this.muteStatus(row.user_id, row.seat_index) ||
+        Number(row.mic_enabled || 0) !== 1,
       chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
       seat_emote:
@@ -934,6 +938,7 @@ export class RoomPresenceStore extends DurableObject {
           ? null
           : Number(forceRow.seat_index);
     }
+    const micEnabled = seatIndex !== null && input?.mic_enabled === true;
 
     if (!userId) throw new Error("user_id is required");
     if (!displayName) throw new Error("display_name is required");
@@ -983,8 +988,8 @@ export class RoomPresenceStore extends DurableObject {
       `INSERT INTO room_members
         (user_id, display_name, avatar_data_url, flag_emoji, country_code,
          family_tag, host_tag, agency_name, equipped_frame_id, equipped_entry_id, equipped_profile_card_id, owner_tags_json, owner_medals_json,
-         seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         mic_enabled, seat_index, seat_emote, seat_emote_until, joined_at, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_data_url = excluded.avatar_data_url,
@@ -998,6 +1003,7 @@ export class RoomPresenceStore extends DurableObject {
          equipped_profile_card_id = excluded.equipped_profile_card_id,
          owner_tags_json = excluded.owner_tags_json,
          owner_medals_json = excluded.owner_medals_json,
+         mic_enabled = excluded.mic_enabled,
          seat_index = excluded.seat_index,
          seat_emote = CASE
            WHEN room_members.seat_index IS excluded.seat_index THEN room_members.seat_emote
@@ -1017,6 +1023,7 @@ export class RoomPresenceStore extends DurableObject {
       equippedProfileCardId,
       ownerTagsJson,
       ownerMedalsJson,
+      micEnabled ? 1 : 0,
       seatIndex,
       null,
       null,
