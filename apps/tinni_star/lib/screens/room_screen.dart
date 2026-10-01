@@ -5857,12 +5857,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
 
-    if (!controller.inviteMode) {
-      final text = controller.requestOrJoinSeat(index);
-      _snack(text);
-      return;
-    }
-
     if (seat.locked) {
       _snack('Seat ' + (index + 1).toString() + ' is locked.');
       return;
@@ -5877,6 +5871,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     try {
+      if (!controller.inviteMode) {
+        // Free Mic must take the seat on the authoritative room backend
+        // immediately. Do not wait for the next presence heartbeat.
+        await widget.state.roomSession.takeMySeat(index);
+        _snack('Joined seat ' + (index + 1).toString() + '.');
+        if (mounted) setState(() {});
+        return;
+      }
+
       await widget.state.roomSession.requestMySeat(index);
       _snack('Request sent for Seat ' + (index + 1).toString() + '.');
     } catch (error) {
