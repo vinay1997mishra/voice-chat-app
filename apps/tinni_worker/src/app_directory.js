@@ -2144,7 +2144,28 @@ export class AppDirectoryStore extends DurableObject {
       }
       const now = Date.now();
       if (operation === "credit") {
-        this._creditNormalWalletAuthorized(userId, amount, "owner_or_staff_panel");
+        const credited = this._creditNormalWalletAuthorized(
+          userId,
+          amount,
+          "owner_or_staff_panel",
+        );
+        const confirmed = this.getWallet(userId);
+        if (
+          confirmed.security_frozen ||
+          Number(confirmed.coins || 0) !== Number(credited.coins || 0)
+        ) {
+          throw new Error("Normal wallet credit could not be confirmed");
+        }
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'owner_wallet_credit',?,0,?,?,?)",
+          crypto.randomUUID(),
+          userId,
+          amount,
+          "owner-wallet:" + crypto.randomUUID(),
+          "Coins added from Owner Panel",
+          now,
+        );
+        return { wallet_type: "normal", ...confirmed, owner_credit_confirmed: true };
       } else if (operation === "debit") {
         const wallet = this.getWallet(userId);
         if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
