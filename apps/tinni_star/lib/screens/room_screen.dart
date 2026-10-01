@@ -4338,14 +4338,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
+        'Lucky Number',
         Icons.confirmation_number_rounded,
         () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can set lucky number.');
-            return;
-          }
-          _showLuckyNumberDialog();
+          Future<void>.delayed(Duration.zero, () async {
+            try {
+              await widget.state.roomSession.drawLuckyNumber();
+            } catch (error) {
+              _snack(
+                error.toString().replaceFirst('Bad state: ', ''),
+              );
+            }
+          });
         },
       ),
       (
@@ -5828,52 +5832,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     noticeController.dispose();
   }
 
-  Future<void> _showLuckyNumberDialog() async {
-    final controls = widget.state.roomControls;
-    final numberController = TextEditingController(
-      text: controls.luckyNumber?.toString() ?? '',
-    );
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Lucky Number'),
-        content: TextField(
-          controller: numberController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
-        ),
-        actions: [
-          if (controls.luckyNumberEnabled)
-            TextButton(
-              onPressed: () => Navigator.pop(context, -1),
-              child: const Text('Turn Off'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = int.tryParse(numberController.text.trim());
-              if (value == null || value < 0) return;
-              Navigator.pop(context, value);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    numberController.dispose();
-    if (result == null) return;
-    if (result == -1) {
-      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
-      _snack('Lucky number disabled.');
-    } else {
-      controls.setLuckyNumber(result);
-      _snack('Lucky number set to $result.');
-    }
-    if (mounted) setState(() {});
-  }
   Future<void> _handleUserSeatTap(int index) async {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
