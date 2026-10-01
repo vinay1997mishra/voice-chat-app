@@ -2608,3 +2608,15 @@ Built-in colorful test Lucky gifts:
 10. Royal Treasure Box — 20,000 Coins
 
 These ten gifts are testable from the room Gift panel's **Lucky** category and are seeded into the backend Owner gift catalog without overwriting later Owner edits.
+
+
+### Lucky Gift 3D artwork & send animation — LOCKED
+
+- All 10 built-in Lucky Gifts use bundled full-colour transparent 3D artwork assets instead of emoji placeholders.
+- The room Gift panel renders each Lucky Gift's own artwork, and the Combo surface reuses the same artwork.
+- On send, the selected gift performs a 3D-style fly-in toward the selected receiver seat/DP using translation, rotation, scale/depth and glow.
+- At DP impact, the gift pops with an expanding luminous ring, gold/rainbow sparkle particles, star bursts and a short artwork impact pop.
+- The Lucky multiplier floats above the receiver DP and fades upward; 200×+ uses stronger gold/orange high-win styling.
+- The client never selects the Lucky multiplier. Wallet debit, rebate credit and multiplier remain server-authoritative.
+- Backend catalog metadata stores artwork_asset, send_effect=fly_3d, impact_effect=sparkle_pop and multiplier_effect=float_multiplier for the built-in Lucky Gifts.
+- Existing Owner gift price/probability configuration is preserved when the new visual metadata is migrated.
