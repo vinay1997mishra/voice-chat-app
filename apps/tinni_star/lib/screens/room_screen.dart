@@ -6204,7 +6204,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   if (presenceMember?.userId == _luckyAnimationReceiverId &&
                       _luckyLastMultiplier > 0)
                     Positioned(
-                      top: -(compact ? 30 : 38),
+                      top: -(compact ? 30.0 : 38.0),
                       child: IgnorePointer(
                         child: TweenAnimationBuilder<double>(
                           key: ValueKey<String>(
