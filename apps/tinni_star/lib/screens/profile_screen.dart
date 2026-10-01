@@ -34,11 +34,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final List<OwnerTag> _ownerTags = <OwnerTag>[];
   final List<OwnerTag> _ownerMedals = <OwnerTag>[];
   Map<String, dynamic> _accountStats = const <String, dynamic>{};
+  bool _economyLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadOwnerTags();
+    _loadEconomyState();
+    _loadAccountStats();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
     _loadEconomyState();
     _loadAccountStats();
   }
@@ -55,7 +63,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadEconomyState() async {
     final account = widget.state.auth.current;
-    if (account == null) return;
+    if (account == null || _economyLoading) return;
+    _economyLoading = true;
     try {
       final wallet = await widget.state.backend.wallet(account.authToken);
       final vip = await widget.state.backend.vipMe(account.authToken);
@@ -64,7 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         vip == null ? 0 : int.tryParse(vip['vip_level']?.toString() ?? '') ?? 0,
       );
       if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _economyLoading = false;
+    }
   }
 
   Future<void> _showSettlementTransfer() async {
