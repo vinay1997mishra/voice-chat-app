@@ -13,6 +13,7 @@ abstract interface class RtcAdapter {
   });
   Future<void> leave();
   Future<void> setMicPublished(bool enabled);
+  Future<void> setRemoteAudioEnabled(bool enabled);
 }
 
 abstract interface class ImAdapter {
@@ -26,6 +27,7 @@ abstract interface class ImAdapter {
 class LocalRtcAdapter implements RtcAdapter {
   RtcConnectionState _state = RtcConnectionState.idle;
   bool _publishing = false;
+  bool _remoteAudioEnabled = true;
 
   @override
   RtcConnectionState get state => _state;
@@ -59,6 +61,11 @@ class LocalRtcAdapter implements RtcAdapter {
       throw StateError('RTC room is not joined');
     }
     _publishing = enabled;
+  }
+
+  @override
+  Future<void> setRemoteAudioEnabled(bool enabled) async {
+    _remoteAudioEnabled = enabled;
   }
 }
 
@@ -228,6 +235,11 @@ class RealtimeCoordinator {
       'enabled': enabled,
       'userId': userId,
     });
+  }
+
+  Future<void> setRemoteAudioEnabled(bool enabled) async {
+    if (activeRoomId == null) throw StateError('No active room');
+    await rtc.setRemoteAudioEnabled(enabled);
   }
 
   Future<void> exitRoom() async {
