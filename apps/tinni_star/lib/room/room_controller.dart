@@ -221,6 +221,14 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addRoomMessage(String author, String text) {
+    final cleanAuthor = author.trim().isEmpty ? 'User' : author.trim();
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+    messages.add(RoomMessage(cleanAuthor, cleanText));
+    notifyListeners();
+  }
+
   void _rebuildSeats() {
     final requested = seatCountOverride ?? config.seatCount;
     final normalized = normalizeSeatCount(requested);
