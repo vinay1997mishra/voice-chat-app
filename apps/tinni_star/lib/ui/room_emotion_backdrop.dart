@@ -55,6 +55,7 @@ class _EmotionThemePainter extends CustomPainter {
           Offset(size.width * .2, 0),
           Offset(size.width * .8, size.height),
           palette,
+          palette.length == 3 ? const <double>[0, .48, 1] : null,
         ),
     );
 
