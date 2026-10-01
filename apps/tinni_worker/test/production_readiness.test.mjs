@@ -28,7 +28,7 @@ console.log("Production readiness guards passed");
 
 assert.match(
   index,
-  /facebook_configured:\\s*Boolean\\(env\\.FACEBOOK_APP_ID && env\\.FACEBOOK_APP_SECRET\\)/,
+  /facebook_configured:\s*Boolean\(env\.FACEBOOK_APP_ID && env\.FACEBOOK_APP_SECRET\)/,
   "Facebook login must be available when Facebook credentials are configured",
 );
 
