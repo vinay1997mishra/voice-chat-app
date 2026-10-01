@@ -6300,7 +6300,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                     ),
                   if (seat.roomMuted ||
-                      (controller.mySeat == index && controller.selfMuted) ||
+                      (controller.mySeat == index &&
+                          (controller.selfMuted ||
+                              controller.micState != MicState.live)) ||
                       (presenceMember?.micMuted ?? false))
                     Positioned(
                       right: 0,
