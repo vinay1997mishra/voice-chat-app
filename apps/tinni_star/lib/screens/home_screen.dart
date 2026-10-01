@@ -1183,7 +1183,7 @@ class _RoomArtwork extends StatelessWidget {
                     child: Image.network(
                       remotePhoto,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Center(
+                      errorBuilder: (context, error, stackTrace) => Center(
                         child: Text(
                           fallback ?? room.title.characters.first.toUpperCase(),
                           style: const TextStyle(
