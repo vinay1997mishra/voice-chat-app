@@ -52,6 +52,7 @@ class ActiveRoomSession extends ChangeNotifier {
   Timer? _presenceTimer;
   String? _activeAuthToken;
   bool _roomSoundEnabled = true;
+  final Set<String> _seenLuckyNumberEventIds = <String>{};
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -118,6 +119,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
     room = nextRoom;
     _roomSoundEnabled = true;
+    _seenLuckyNumberEventIds.clear();
     controller = RoomController(
       runtime: runtime,
       seatCountOverride: nextRoom.seatCount,
@@ -168,6 +170,20 @@ class ActiveRoomSession extends ChangeNotifier {
     if (!hasRoom) return;
     minimized = false;
     notifyListeners();
+  }
+
+  Future<RoomLuckyNumberEvent> drawLuckyNumber() async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    final event = await presence.drawLuckyNumber(
+      roomId: roomId,
+      authToken: authToken,
+    );
+    _syncLuckyNumberMessages();
+    return event;
   }
 
   Future<void> setRoomSoundEnabled(bool enabled) async {
@@ -457,6 +473,7 @@ class ActiveRoomSession extends ChangeNotifier {
     connecting = false;
     connected = false;
     connectionError = null;
+    _seenLuckyNumberEventIds.clear();
 
     oldController?.removeListener(_onRoomChanged);
     oldController?.dispose();
@@ -588,6 +605,7 @@ class ActiveRoomSession extends ChangeNotifier {
   void _onPresenceChanged() {
     final roomController = controller;
     roomController?.setInviteMode(presence.micMode != 'free');
+    _syncLuckyNumberMessages();
     if (roomController != null) {
       for (var index = 0; index < roomController.seats.length; index++) {
         roomController.setSeatLocked(
@@ -601,6 +619,18 @@ class ActiveRoomSession extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  void _syncLuckyNumberMessages() {
+    final roomController = controller;
+    if (roomController == null) return;
+    for (final event in presence.luckyNumberEvents) {
+      if (!_seenLuckyNumberEventIds.add(event.id)) continue;
+      roomController.addRoomMessage(
+        event.displayName,
+        '🎲 Lucky Number: ${event.number}',
+      );
+    }
   }
 
   void _onRoomChanged() {
