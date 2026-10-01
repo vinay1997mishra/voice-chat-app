@@ -75,6 +75,10 @@ class ActiveRoomSession extends ChangeNotifier {
         receiverIds: receiverIds,
       );
 
+  Future<Map<String, dynamic>> luckyGiftState({
+    required String authToken,
+  }) => presence.luckyGiftState(authToken: authToken);
+
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
   bool get moderationChatBanned => presence.selfChatBanned;
