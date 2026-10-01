@@ -87,6 +87,19 @@ class ActiveRoomSession extends ChangeNotifier {
   String? get _equippedEntryId => equippedEntryIdProvider?.call();
   String? get _equippedProfileCardId => equippedProfileCardIdProvider?.call();
 
+  bool get _micEnabledForPresence {
+    final roomController = controller;
+    final seatIndex = roomController?.mySeat;
+    if (roomController == null || seatIndex == null) return false;
+    final seatMuted = seatIndex >= 0 &&
+        seatIndex < roomController.seats.length &&
+        roomController.seats[seatIndex].roomMuted;
+    return roomController.micState == MicState.live &&
+        !roomController.selfMuted &&
+        !presence.selfMicMuted &&
+        !seatMuted;
+  }
+
   Future<void> open(
     RoomSummary nextRoom, {
     required String userId,
@@ -461,6 +474,7 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
         seatIndex: controller?.mySeat,
+        micEnabled: _micEnabledForPresence,
         familyTag: _familyTag,
         hostTag: _hostTag,
         agencyName: _agencyName,
@@ -486,6 +500,7 @@ class ActiveRoomSession extends ChangeNotifier {
           roomId: currentRoomId,
           authToken: currentAuthToken,
           seatIndex: controller?.mySeat,
+          micEnabled: _micEnabledForPresence,
           familyTag: _familyTag,
           hostTag: _hostTag,
           agencyName: _agencyName,
