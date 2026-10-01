@@ -865,11 +865,110 @@ class AppBackendService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> rechargeProviders(
+    String token,
+  ) async {
+    final data = await _request('GET', '/wallet/recharge-providers', token);
+    final raw = data['providers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<bool> roleWalletPasswordConfigured(
+    String token, {
+    required String walletType,
+  }) async {
+    final base = apiBase.replace(path: '/wallet/role-password/status');
+    final uri = base.replace(
+      queryParameters: <String, String>{'wallet_type': walletType},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load wallet password status',
+      );
+    }
+    return data['configured'] == true;
+  }
+
+  Future<void> setupRoleWalletPassword(
+    String token, {
+    required String walletType,
+    required String password,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/setup',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'password': password,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> startRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+  }) {
+    return _request(
+      'POST',
+      '/wallet/role-password/reset/start',
+      token,
+      body: <String, dynamic>{'wallet_type': walletType},
+    );
+  }
+
+  Future<void> verifyRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+    required String requestId,
+    required String otp,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/reset/verify',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'request_id': requestId,
+        'otp': otp,
+      },
+    );
+  }
+
+  Future<void> completeRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+    required String requestId,
+    required String newPassword,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/reset/complete',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'request_id': requestId,
+        'new_password': newPassword,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> transferCoins(
     String token, {
     required String recipientUserId,
     required int amountCoins,
     required String walletType,
+    required String password,
   }) async {
     return _request(
       'POST',
@@ -879,6 +978,7 @@ class AppBackendService {
         'recipient_user_id': recipientUserId,
         'amount_coins': amountCoins,
         'wallet_type': walletType,
+        'password': password,
       },
     );
   }
