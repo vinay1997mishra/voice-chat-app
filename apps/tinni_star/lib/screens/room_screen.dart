@@ -7458,7 +7458,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ..rotateY((1 - value) * 2.15)
                             ..rotateX((1 - value) * -0.48)
                             ..rotateZ((1 - value) * 0.72)
-                            ..scale(scale, scale, 1.0);
+                            ..scaleByDouble(scale, scale, 1.0, 1.0);
                           return Transform.translate(
                             offset: Offset(
                               (1 - value) * seatDiameter * 2.15,
