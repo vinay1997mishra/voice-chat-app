@@ -1098,6 +1098,84 @@ export default {
       });
     }
 
+    if (url.pathname === "/profile-media" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const slots = ["cover", "life_1", "life_2", "life_3", "travel"];
+      const media = {};
+      for (const slot of slots) {
+        const key = "profiles/" + userId + "/" + slot;
+        const object = await env.EFFECT_MEDIA.head(key);
+        media[slot] = object
+          ? (env.PUBLIC_API_ORIGIN || url.origin) + "/media/" + encodeURIComponent(key)
+          : null;
+      }
+      return json({ ok: true, media });
+    }
+
+    if (url.pathname === "/profile-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const slot = String(body.slot || "").trim().toLowerCase();
+      const allowed = new Set(["cover", "life_1", "life_2", "life_3", "travel"]);
+      if (!allowed.has(slot)) {
+        return json({ ok: false, error: "Invalid profile photo slot" }, 400);
+      }
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({ ok: false, error: "Profile photo must be JPEG, PNG or WebP" }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid profile photo data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
+        return json({ ok: false, error: "Profile photo must be 650 KB or smaller" }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const key = "profiles/" + userId + "/" + slot;
+      await env.EFFECT_MEDIA.put(key, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          user_id: userId,
+          slot,
+          updated_at: String(Date.now()),
+        },
+      });
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) + "/media/" + encodeURIComponent(key);
+      return json({ ok: true, slot, url: mediaUrl }, 201);
+    }
+
+    if (url.pathname === "/profile-media" && request.method === "DELETE") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const slot = String(body.slot || "").trim().toLowerCase();
+      const allowed = new Set(["cover", "life_1", "life_2", "life_3", "travel"]);
+      if (!allowed.has(slot)) {
+        return json({ ok: false, error: "Invalid profile photo slot" }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      await env.EFFECT_MEDIA.delete("profiles/" + userId + "/" + slot);
+      return json({ ok: true, slot });
+    }
+
     if (url.pathname.startsWith("/media/") && request.method === "GET") {
       if (!env.EFFECT_MEDIA) {
         return new Response("Media storage is not configured", { status: 503 });
