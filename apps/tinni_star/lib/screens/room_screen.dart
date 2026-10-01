@@ -3945,6 +3945,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   const Icon(Icons.chevron_right_rounded),
                               onTap: _showSeatCountSelector,
                             ),
+                            if (_isRoomOwner)
+                              SwitchListTile(
+                                key: const Key('room-type-setting-lock'),
+                                secondary: Icon(
+                                  controls.settings.visibility ==
+                                          RoomVisibility.privateRoom
+                                      ? Icons.lock_rounded
+                                      : Icons.lock_open_rounded,
+                                  color: RoyalPalette.gold,
+                                ),
+                                title: const Text('Room Lock'),
+                                subtitle: Text(
+                                  controls.settings.visibility ==
+                                          RoomVisibility.privateRoom
+                                      ? 'Locked • password required to enter'
+                                      : 'Public • no room password',
+                                ),
+                                value: controls.settings.visibility ==
+                                    RoomVisibility.privateRoom,
+                                onChanged: (_) async {
+                                  await _toggleRoomLock();
+                                  setSheetState(() {});
+                                },
+                              ),
                             SwitchListTile(
                               title: const Text('Free mic'),
                               subtitle: const Text(
@@ -4227,17 +4251,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           Future<void>.delayed(Duration.zero, () {
             if (mounted) _showRoomEffects();
           });
-        },
-      ),
-      (
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? 'Lock'
-            : 'Unlock',
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? Icons.lock_rounded
-            : Icons.lock_open_rounded,
-        () {
-          _toggleRoomLock();
         },
       ),
       (
