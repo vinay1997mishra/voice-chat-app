@@ -6386,7 +6386,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             (1 - value) * seatDiameter * 1.35,
                           ),
                           child: Opacity(
-                            opacity: (1 - value * 0.72).clamp(0.0, 1.0),
+                            opacity: (1 - value * 0.72)
+                                .clamp(0.0, 1.0)
+                                .toDouble(),
                             child: child,
                           ),
                         ),
@@ -6410,7 +6412,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           builder: (context, value, child) {
                             final opacity = value < 0.72
                                 ? 1.0
-                                : ((1 - value) / 0.28).clamp(0.0, 1.0);
+                                : ((1 - value) / 0.28)
+                                    .clamp(0.0, 1.0)
+                                    .toDouble();
                             return Transform.translate(
                               offset: Offset(0, -24 * value),
                               child: Opacity(
