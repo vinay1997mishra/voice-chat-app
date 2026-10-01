@@ -903,6 +903,32 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS privileged_wallet_credentials (
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        password_salt TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        auth_version INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, wallet_type)
+      );
+
+      CREATE TABLE IF NOT EXISTS privileged_wallet_reset_requests (
+        request_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        otp_salt TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        verified INTEGER NOT NULL DEFAULT 0,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_privileged_wallet_reset_user
+        ON privileged_wallet_reset_requests(user_id, wallet_type, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS owner_settings (
         key TEXT PRIMARY KEY,
         value_json TEXT NOT NULL,
@@ -1825,6 +1851,13 @@ export class AppDirectoryStore extends DurableObject {
     if (requested.length > 500) throw new Error("Tag batch is limited to 500 IDs");
     const name = cleanText(nameValue, 40);
     const color = String(colorValue || "").trim();
+    const normalizedRoleTag = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const roleWalletType =
+      normalizedRoleTag === "coinseller"
+        ? "coin_seller"
+        : (normalizedRoleTag === "merchant" || normalizedRoleTag === "marchant")
+          ? "merchant"
+          : null;
     if (!name) throw new Error("Tag name is required");
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Choose a valid tag color");
     let tagged = 0;
@@ -1850,9 +1883,12 @@ export class AppDirectoryStore extends DurableObject {
           userId, name, color, now,
         );
       }
+      if (roleWalletType) {
+        this._manageWallet(userId, roleWalletType, "create", 0);
+      }
       tagged += 1;
     }
-    return { ok: true, tagged, name, color };
+    return { ok: true, tagged, name, color, activated_wallet_type: roleWalletType };
   }
 
   removeOwnerTag(userIdValue, tagIdValue) {
@@ -7605,7 +7641,298 @@ export class AppDirectoryStore extends DurableObject {
     return { notified };
   }
 
-  transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue, walletTypeValue = "") {
+  _normalizePrivilegedWalletType(walletTypeValue) {
+    const raw = String(walletTypeValue || "")
+      .trim()
+      .toLowerCase()
+      .replaceAll("-", "_")
+      .replace(/\s+/g, "_");
+    const normalized = raw === "coinseller" ? "coin_seller" : raw;
+    if (!["coin_seller", "merchant"].includes(normalized)) {
+      throw new Error("Valid Coin Seller or Merchant wallet is required");
+    }
+    return normalized;
+  }
+
+  _activePrivilegedWalletRow(userIdValue, walletTypeValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = this._normalizePrivilegedWalletType(walletTypeValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id,wallet_type,balance,banned FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId,
+      walletType,
+    ).toArray()[0];
+    if (!row || Number(row.banned || 0) === 1) {
+      throw new Error("Active " + walletType.replaceAll("_", " ") + " wallet is required");
+    }
+    return {
+      user_id: userId,
+      wallet_type: walletType,
+      balance: Math.max(0, Number(row.balance || 0)),
+    };
+  }
+
+  listRechargeProviders() {
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT w.user_id,w.wallet_type,u.display_name,u.avatar_data_url,
+              u.flag_emoji,u.country_code
+         FROM owner_wallets w
+         JOIN app_users u ON u.user_id=w.user_id
+        WHERE w.wallet_type IN ('coin_seller','merchant')
+          AND w.banned=0
+        ORDER BY CASE w.wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END,
+                 w.updated_at DESC
+        LIMIT 300`,
+    ).toArray();
+
+    const providers = [];
+    for (const row of rows) {
+      try {
+        const guard = this._privilegedWalletGuard(row.user_id, row.wallet_type);
+        if (guard.security_frozen) continue;
+        providers.push({
+          user_id: String(row.user_id),
+          display_name: String(row.display_name || row.user_id),
+          wallet_type: String(row.wallet_type),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          flag_emoji: String(row.flag_emoji || ""),
+          country_code: String(row.country_code || ""),
+        });
+      } catch {}
+    }
+    return providers;
+  }
+
+  roleWalletPasswordStatus(userIdValue, walletTypeValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT auth_version,updated_at FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: Boolean(row),
+      auth_version: row ? Number(row.auth_version || 1) : 0,
+      updated_at: row ? Number(row.updated_at || 0) : null,
+    };
+  }
+
+  async setupRoleWalletPassword(userIdValue, walletTypeValue, passwordValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (existing) throw new Error("Wallet password is already set. Use reset password.");
+
+    const password = String(passwordValue || "");
+    if (password.length < 6 || password.length > 64) {
+      throw new Error("Wallet password must be 6 to 64 characters");
+    }
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_credentials
+        (user_id,wallet_type,password_salt,password_hash,auth_version,created_at,updated_at)
+       VALUES (?,?,?,?,1,?,?)`,
+      wallet.user_id,
+      wallet.wallet_type,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now,
+      now,
+    );
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: true,
+      auth_version: 1,
+      updated_at: now,
+    };
+  }
+
+  async verifyRoleWalletPassword(userIdValue, walletTypeValue, passwordValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const password = String(passwordValue || "");
+    const row = this.ctx.storage.sql.exec(
+      "SELECT password_salt,password_hash FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!row) throw new Error("Set your wallet transfer password first");
+    if (!password) return false;
+    const actual = await deriveSecret(
+      password,
+      fromBase64Url(String(row.password_salt)),
+      210000,
+    );
+    return safeEqualBytes(actual, fromBase64Url(String(row.password_hash)));
+  }
+
+  async startRoleWalletPasswordReset(userIdValue, walletTypeValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const configured = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!configured) throw new Error("Set your wallet transfer password first");
+
+    const user = this.ctx.storage.sql.exec(
+      "SELECT email FROM app_users WHERE user_id=? LIMIT 1",
+      wallet.user_id,
+    ).toArray()[0];
+    const email = String(user?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) throw new Error("Account email is unavailable");
+
+    const now = Date.now();
+    const recent = this.ctx.storage.sql.exec(
+      `SELECT created_at FROM privileged_wallet_reset_requests
+        WHERE user_id=? AND wallet_type=?
+        ORDER BY created_at DESC LIMIT 1`,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (recent && now - Number(recent.created_at || 0) < 60000) {
+      throw new Error("Please wait before requesting another OTP");
+    }
+
+    const otp = randomOtp();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(otp, salt, 120000);
+    const requestId = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_reset_requests
+        (request_id,user_id,wallet_type,otp_salt,otp_hash,attempts,verified,
+         expires_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,0,0,?,?,?)`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now + 10 * 60 * 1000,
+      now,
+      now,
+    );
+    return {
+      ok: true,
+      request_id: requestId,
+      wallet_type: wallet.wallet_type,
+      email,
+      otp,
+      expires_at: now + 10 * 60 * 1000,
+    };
+  }
+
+  async verifyRoleWalletPasswordReset(
+    userIdValue,
+    walletTypeValue,
+    requestIdValue,
+    otpValue,
+  ) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const requestId = String(requestIdValue || "").trim();
+    const otp = String(otpValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM privileged_wallet_reset_requests
+        WHERE request_id=? AND user_id=? AND wallet_type=? LIMIT 1`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!row) throw new Error("Wallet reset request not found");
+    if (Date.now() > Number(row.expires_at || 0)) throw new Error("OTP has expired");
+    if (Number(row.verified || 0) === 1) {
+      return { ok: true, verified: true, request_id: requestId };
+    }
+    if (Number(row.attempts || 0) >= 5) throw new Error("Too many OTP attempts");
+    if (!/^\d{6}$/.test(otp)) throw new Error("Enter the 6-digit OTP");
+
+    const attempts = Number(row.attempts || 0) + 1;
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_reset_requests SET attempts=?,updated_at=? WHERE request_id=?",
+      attempts,
+      Date.now(),
+      requestId,
+    );
+    const actual = await deriveSecret(
+      otp,
+      fromBase64Url(String(row.otp_salt)),
+      120000,
+    );
+    if (!safeEqualBytes(actual, fromBase64Url(String(row.otp_hash)))) {
+      throw new Error("Incorrect OTP");
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_reset_requests SET verified=1,updated_at=? WHERE request_id=?",
+      Date.now(),
+      requestId,
+    );
+    return { ok: true, verified: true, request_id: requestId };
+  }
+
+  async completeRoleWalletPasswordReset(
+    userIdValue,
+    walletTypeValue,
+    requestIdValue,
+    newPasswordValue,
+  ) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const requestId = String(requestIdValue || "").trim();
+    const password = String(newPasswordValue || "");
+    if (password.length < 6 || password.length > 64) {
+      throw new Error("Wallet password must be 6 to 64 characters");
+    }
+    const request = this.ctx.storage.sql.exec(
+      `SELECT verified,expires_at FROM privileged_wallet_reset_requests
+        WHERE request_id=? AND user_id=? AND wallet_type=? LIMIT 1`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!request || Number(request.verified || 0) !== 1) {
+      throw new Error("Verify the email OTP first");
+    }
+    if (Date.now() > Number(request.expires_at || 0)) throw new Error("OTP has expired");
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE privileged_wallet_credentials
+          SET password_salt=?,password_hash=?,auth_version=auth_version+1,updated_at=?
+        WHERE user_id=? AND wallet_type=?`,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now,
+      wallet.user_id,
+      wallet.wallet_type,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM privileged_wallet_reset_requests WHERE user_id=? AND wallet_type=?",
+      wallet.user_id,
+      wallet.wallet_type,
+    );
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: true,
+      updated_at: now,
+    };
+  }
+
+  async transferCoinsFromSeller(
+    senderUserIdValue,
+    recipientUserIdValue,
+    amountValue,
+    walletTypeValue = "",
+    passwordValue = "",
+  ) {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
     this._enforceActionRate(senderId, "seller_coin_transfer", 10, 60000, 300000);
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
@@ -7636,6 +7963,12 @@ export class AppDirectoryStore extends DurableObject {
       }
     }
     if (!source) throw new Error("Active funded Coin Seller or Merchant wallet is required");
+    const passwordValid = await this.verifyRoleWalletPassword(
+      senderId,
+      source.wallet_type,
+      passwordValue,
+    );
+    if (!passwordValid) throw new Error("Incorrect wallet password");
 
     const recipient = this.ctx.storage.sql.exec(
       "SELECT user_id,display_name FROM app_users WHERE user_id=? LIMIT 1", recipientId,
