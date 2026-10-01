@@ -1073,11 +1073,7 @@ export default {
       return json({
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
-        facebook_configured: Boolean(
-          env.FACEBOOK_LOGIN_ENABLED === "true" &&
-          env.FACEBOOK_APP_ID &&
-          env.FACEBOOK_APP_SECRET,
-        ),
+        facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
         email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
         livekit_configured: Boolean(
           env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
@@ -1227,9 +1223,6 @@ export default {
     }
 
     if (url.pathname === "/app-auth/facebook/start" && request.method === "POST") {
-      if (env.FACEBOOK_LOGIN_ENABLED !== "true") {
-        return json({ ok: false, error: "Facebook login is disabled" }, 404);
-      }
       if (!env.SESSION_SECRET) {
         return json({ ok: false, error: "App session secret is not configured" }, 503);
       }
