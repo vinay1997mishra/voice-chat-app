@@ -1062,7 +1062,7 @@ export default {
         ok: true,
         service: "tinni-star-api",
         message: "Tinni Star API online",
-        version: "1.5.0",
+        version: "1.6.0",
       });
     }
 
@@ -2143,6 +2143,16 @@ export default {
       const period = String(url.searchParams.get("period") || "day").trim();
       try { return json(await getAppDirectoryStore(env).roomGiftRanking(roomId, period)); }
       catch (error) { return json({ ok:false,error:String(error?.message||"Unable to load sending ranking") },400); }
+    }
+
+    if (url.pathname === "/gifts/lucky/state" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json(await getAppDirectoryStore(env).luckyGiftState(appSession.user.user_id));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load Lucky Gift state") }, 400);
+      }
     }
 
     if (url.pathname === "/rooms/follow" && request.method === "GET") {
