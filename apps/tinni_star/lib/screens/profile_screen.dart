@@ -18,6 +18,7 @@ import 'recharge_screen.dart';
 import 'cp_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'personal_profile_screen.dart';
+import 'guardian_screen.dart';
 import 'mine_function_screens.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -857,6 +858,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'Personal information',
                   onTap: () => _openMineScreen(
                     PersonalProfileScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-my-guardian'),
+                  icon: Icons.shield_rounded,
+                  label: 'My Guardian',
+                  onTap: () => _openMineScreen(
+                    GuardianScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
