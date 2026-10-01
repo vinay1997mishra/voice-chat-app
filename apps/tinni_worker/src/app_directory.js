@@ -1438,14 +1438,23 @@ export class AppDirectoryStore extends DurableObject {
   _resolveOwnerUserId(userIdValue) {
     const raw = String(userIdValue || "").trim();
     if (!raw) return "";
-    const direct = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", raw,
-    ).toArray()[0];
-    if (direct) return String(direct.user_id);
-    const history = this.ctx.storage.sql.exec(
-      "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1", raw,
-    ).toArray()[0];
-    return history ? String(history.new_user_id) : raw;
+    let current = raw;
+    const seen = new Set();
+    for (let depth = 0; depth < 12; depth += 1) {
+      if (seen.has(current)) break;
+      seen.add(current);
+      const direct = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", current,
+      ).toArray()[0];
+      if (direct) return String(direct.user_id);
+      const history = this.ctx.storage.sql.exec(
+        "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1",
+        current,
+      ).toArray()[0];
+      if (!history?.new_user_id) break;
+      current = String(history.new_user_id);
+    }
+    return current;
   }
 
   listUserTags(userIdValue) {
@@ -2479,17 +2488,47 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     const oldRoomId = room ? String(room.id) : null;
     const userColumns = [
+      ["profile_trends","user_id"],
       ["app_user_identities","user_id"], ["app_wallets","user_id"],
+      ["wallet_coin_guards","user_id"], ["privileged_wallet_coin_guards","user_id"],
+      ["wallet_transactions","user_id"], ["vip_entitlements","user_id"],
       ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
       ["owner_hierarchy","user_id"], ["owner_hierarchy","parent_user_id"],
+      ["hierarchy_period_earnings","user_id"], ["settlement_balances","user_id"],
+      ["settlement_transfers","sender_user_id"], ["settlement_transfers","recipient_user_id"],
       ["room_lock_attempts","user_id"], ["room_access_grants","user_id"],
       ["room_themes","creator_user_id"], ["app_follows","follower_id"],
       ["app_follows","target_id"], ["app_blocks","blocker_id"],
       ["app_blocks","target_id"], ["direct_messages","from_user_id"],
       ["direct_messages","to_user_id"], ["app_calls","caller_id"],
-      ["app_calls","receiver_id"],
+      ["app_calls","receiver_id"], ["call_privacy_incidents","actor_user_id"],
+      ["user_notifications","user_id"], ["user_notifications","source_user_id"],
+      ["user_feedback","user_id"], ["user_task_claims","user_id"],
+      ["user_preferences","user_id"], ["event_notification_dispatches","user_id"],
+      ["app_room_invites","user_id"], ["app_recent_rooms","user_id"],
+      ["app_user_presence","user_id"], ["room_realtime_events","user_id"],
+      ["gift_transactions","sender_id"], ["gift_transactions","receiver_id"],
+      ["lucky_gift_results","sender_id"], ["lucky_gift_results","receiver_id"],
+      ["lucky_gift_daily","user_id"], ["lucky_gift_sessions","user_id"],
+      ["lucky_gift_settlements","user_id"], ["room_gift_owner_daily","owner_id"],
+      ["room_follows","user_id"], ["room_memberships","user_id"],
+      ["lucky_pouches","creator_id"], ["lucky_pouch_claims","user_id"],
+      ["country_ribbons","user_id"], ["room_game_actions","user_id"],
+      ["ludo_room_players","user_id"], ["security_action_windows","user_id"],
+      ["security_events","user_id"], ["client_analytics_events","user_id"],
+      ["client_crash_reports","user_id"], ["owner_user_price_overrides","user_id"],
+      ["user_inventory","user_id"], ["user_equipment","user_id"],
+      ["cp_relationships","user_a"], ["cp_relationships","user_b"],
+      ["cp_relationships","requested_by"], ["cp_memories","user_a"],
+      ["cp_memories","user_b"], ["families","leader_user_id"],
+      ["family_members","user_id"], ["family_join_requests","user_id"],
+      ["family_daily_logins","user_id"], ["family_received_coins","sender_user_id"],
+      ["family_received_coins","receiver_user_id"],
+      ["family_wallet_transfers","sender_user_id"],
+      ["family_wallet_transfers","receiver_user_id"],
+      ["owner_unique_ids","assigned_user_id"],
     ];
     for (const pair of userColumns) {
       const tableName = pair[0], columnName = pair[1];
@@ -2502,11 +2541,28 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE app_rooms SET owner_id = ? WHERE owner_id = ?", newId, oldId,
     );
 
-    if (oldRoomId && oldRoomId === oldId) {
+    if (oldRoomId) {
+      const conflictingRoom = this.ctx.storage.sql.exec(
+        "SELECT id FROM app_rooms WHERE id = ? AND id <> ? LIMIT 1",
+        newId,
+        oldRoomId,
+      ).toArray()[0];
+      if (conflictingRoom) {
+        throw new Error("New public ID conflicts with an existing room ID");
+      }
+
       const roomColumns = [
         ["room_locks","room_id"], ["room_lock_attempts","room_id"],
         ["room_access_grants","room_id"], ["room_themes","room_id"],
-        ["owner_room_controls","room_id"],
+        ["owner_room_controls","room_id"], ["app_room_invites","room_id"],
+        ["app_recent_rooms","room_id"], ["app_user_presence","room_id"],
+        ["app_room_presence_counts","room_id"], ["room_realtime_events","room_id"],
+        ["gift_transactions","room_id"], ["lucky_gift_results","room_id"],
+        ["lucky_gift_sessions","room_id"], ["room_gift_owner_daily","room_id"],
+        ["room_follows","room_id"], ["room_memberships","room_id"],
+        ["lucky_pouches","room_id"], ["country_ribbons","room_id"],
+        ["room_game_actions","room_id"], ["ludo_room_sessions","room_id"],
+        ["ludo_room_players","room_id"],
       ];
       for (const pair of roomColumns) {
         const tableName = pair[0], columnName = pair[1];
@@ -2516,7 +2572,8 @@ export class AppDirectoryStore extends DurableObject {
         );
       }
       this.ctx.storage.sql.exec(
-        "UPDATE app_rooms SET id = ? WHERE id = ?", newId, oldRoomId,
+        "UPDATE app_rooms SET id = ?, owner_id = ?, updated_at = ? WHERE id = ?",
+        newId, newId, Date.now(), oldRoomId,
       );
     }
 
@@ -8984,7 +9041,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async createRoom(ownerIdValue, input) {
-    const ownerId = String(ownerIdValue || "").trim();
+    const ownerId = this._resolveOwnerUserId(ownerIdValue);
     const owner = await this.getUserById(ownerId);
     if (!owner) throw new Error("Owner user does not exist");
 
