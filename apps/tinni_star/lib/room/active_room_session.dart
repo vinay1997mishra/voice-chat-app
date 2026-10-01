@@ -51,6 +51,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Timer? _presenceTimer;
   String? _activeAuthToken;
+  bool _roomSoundEnabled = true;
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -116,6 +117,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     room = nextRoom;
+    _roomSoundEnabled = true;
     controller = RoomController(
       runtime: runtime,
       seatCountOverride: nextRoom.seatCount,
@@ -165,6 +167,14 @@ class ActiveRoomSession extends ChangeNotifier {
   void resume() {
     if (!hasRoom) return;
     minimized = false;
+    notifyListeners();
+  }
+
+  Future<void> setRoomSoundEnabled(bool enabled) async {
+    _roomSoundEnabled = enabled;
+    if (connected) {
+      await realtime.setRemoteAudioEnabled(enabled);
+    }
     notifyListeners();
   }
 
@@ -510,6 +520,9 @@ class ActiveRoomSession extends ChangeNotifier {
         );
         await _applyForcedSeatChange();
         await _enforceModerationMute();
+        if (!_roomSoundEnabled) {
+          await realtime.setRemoteAudioEnabled(false);
+        }
       } catch (error) {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
