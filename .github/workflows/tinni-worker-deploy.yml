@@ -41,6 +41,35 @@ jobs:
         working-directory: apps/tinni_worker
         run: npm install --no-audit --no-fund
 
+      - name: Sync optional production service secrets
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: apps/tinni_worker
+        shell: bash
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: |
+          set -euo pipefail
+          if [ -n "$LIVEKIT_URL" ] && [ -n "$LIVEKIT_API_KEY" ] && [ -n "$LIVEKIT_API_SECRET" ]; then
+            printf '%s' "$LIVEKIT_URL" | npx wrangler secret put LIVEKIT_URL
+            printf '%s' "$LIVEKIT_API_KEY" | npx wrangler secret put LIVEKIT_API_KEY
+            printf '%s' "$LIVEKIT_API_SECRET" | npx wrangler secret put LIVEKIT_API_SECRET
+            echo "LiveKit secrets synced."
+          else
+            echo "LiveKit GitHub secrets are incomplete; existing Cloudflare configuration is unchanged."
+          fi
+
+          if [ -n "$RESEND_API_KEY" ] && [ -n "$EMAIL_FROM" ]; then
+            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+            printf '%s' "$EMAIL_FROM" | npx wrangler secret put EMAIL_FROM
+            echo "Email OTP secrets synced."
+          else
+            echo "Email OTP GitHub secrets are incomplete; existing Cloudflare configuration is unchanged."
+          fi
+
       - name: Ensure premium effects R2 bucket
         id: r2
         if: steps.creds.outputs.ready == 'true'
@@ -65,6 +94,7 @@ jobs:
         working-directory: apps/tinni_worker
         run: |
           npx wrangler r2 object put tinni-star-effects/premium/manifest.json \
+            --remote \
             --file assets/premium_effects_manifest.json \
             --content-type application/json
 
@@ -74,6 +104,7 @@ jobs:
         run: |
           rm -f /tmp/tinni-r2-manifest.json
           npx wrangler r2 object get tinni-star-effects/premium/manifest.json \
+            --remote \
             --file /tmp/tinni-r2-manifest.json
           cmp assets/premium_effects_manifest.json /tmp/tinni-r2-manifest.json
           echo "R2 bucket and premium manifest verified."
