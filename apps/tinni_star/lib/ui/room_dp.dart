@@ -63,7 +63,7 @@ class RoomDp extends StatelessWidget {
         fit: fit,
         alignment: Alignment.center,
         filterQuality: FilterQuality.medium,
-        errorBuilder: (_, __, ___) => fallback(),
+        errorBuilder: (_, error, stackTrace) => fallback(),
       );
     } else if (hasLocal) {
       image = Image.file(
