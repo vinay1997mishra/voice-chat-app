@@ -3738,6 +3738,28 @@ export default {
       return json(await getRoomPresenceStore(env, roomId).unkick(targetUserId));
     }
 
+    if (url.pathname === "/room-presence/lucky-number" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const store = getRoomPresenceStore(env, roomId);
+      try {
+        return json(await store.drawLuckyNumber({
+          user_id: appSession.user.user_id,
+          display_name: appSession.user.display_name,
+        }));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to draw lucky number"),
+        }, 400);
+      }
+    }
+
     if (
       (url.pathname === "/room-presence/join" ||
        url.pathname === "/room-presence/heartbeat" ||
