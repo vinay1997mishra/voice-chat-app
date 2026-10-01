@@ -6,6 +6,9 @@ const ROOM_THEME_DURATION_DAYS = new Set([7, 10, 15, 30]);
 const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
 const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
+const COINS_PER_USD = 2000000;
+const RECHARGE_PROVIDER_MIN_USD = 5;
+const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
@@ -7690,6 +7693,8 @@ export class AppDirectoryStore extends DurableObject {
       try {
         const guard = this._privilegedWalletGuard(row.user_id, row.wallet_type);
         if (guard.security_frozen) continue;
+        if (guard.balance < RECHARGE_PROVIDER_MIN_COINS) continue;
+        const usdCents = Math.floor((guard.balance * 100) / COINS_PER_USD);
         providers.push({
           user_id: String(row.user_id),
           display_name: String(row.display_name || row.user_id),
@@ -7697,6 +7702,9 @@ export class AppDirectoryStore extends DurableObject {
           avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
           flag_emoji: String(row.flag_emoji || ""),
           country_code: String(row.country_code || ""),
+          balance_coins: guard.balance,
+          usd_cents: usdCents,
+          minimum_visible_usd: RECHARGE_PROVIDER_MIN_USD,
         });
       } catch {}
     }
