@@ -6047,6 +6047,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               width: seatDiameter,
               height: seatDiameter,
               child: Stack(
+                clipBehavior: Clip.none,
                 alignment: Alignment.center,
                 children: [
                   GestureDetector(
@@ -6172,6 +6173,96 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         style: TextStyle(
                           fontSize: seatDiameter * 0.82,
                           height: 1,
+                        ),
+                      ),
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyComboGift != null)
+                    IgnorePointer(
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey<String>(
+                          'lucky-flight-$_luckyAnimationSequence',
+                        ),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 620),
+                        builder: (context, value, child) => Transform.translate(
+                          offset: Offset(
+                            0,
+                            (1 - value) * seatDiameter * 1.35,
+                          ),
+                          child: Opacity(
+                            opacity: (1 - value * 0.72).clamp(0.0, 1.0),
+                            child: child,
+                          ),
+                        ),
+                        child: Text(
+                          _luckyComboGift!.emoji,
+                          style: TextStyle(fontSize: seatDiameter * 0.58),
+                        ),
+                      ),
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyLastMultiplier > 0)
+                    Positioned(
+                      top: -(compact ? 30 : 38),
+                      child: IgnorePointer(
+                        child: TweenAnimationBuilder<double>(
+                          key: ValueKey<String>(
+                            'lucky-multiplier-$_luckyAnimationSequence',
+                          ),
+                          tween: Tween<double>(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 1500),
+                          builder: (context, value, child) {
+                            final opacity = value < 0.72
+                                ? 1.0
+                                : ((1 - value) / 0.28).clamp(0.0, 1.0);
+                            return Transform.translate(
+                              offset: Offset(0, -24 * value),
+                              child: Opacity(
+                                opacity: opacity,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _luckyLastMultiplier >= 200
+                                    ? const <Color>[
+                                        Color(0xFFFFE66D),
+                                        Color(0xFFFF8C26),
+                                        Color(0xFFD82323),
+                                      ]
+                                    : const <Color>[
+                                        Color(0xFF8C5CFF),
+                                        Color(0xFFFF5FCE),
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                width: 1,
+                              ),
+                              boxShadow: const <BoxShadow>[
+                                BoxShadow(
+                                  color: Color(0x88FFB84D),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '$_luckyLastMultiplier×',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: compact ? 11 : 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
