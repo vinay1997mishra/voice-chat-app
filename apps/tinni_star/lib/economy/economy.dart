@@ -105,6 +105,7 @@ class GiftDefinition {
     this.lucky = false,
     this.emoji = '🎁',
     this.maxMultiplier = 0,
+    this.artworkAsset,
   });
 
   final String id;
@@ -114,6 +115,7 @@ class GiftDefinition {
   final bool lucky;
   final String emoji;
   final int maxMultiplier;
+  final String? artworkAsset;
 }
 
 class GiftTransaction {
@@ -158,6 +160,7 @@ class GiftService {
       lucky: true,
       emoji: '🌈🌹',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/colorful_rose.webp',
     ),
     GiftDefinition(
       id: 'lucky-rainbow-heart',
@@ -167,6 +170,7 @@ class GiftService {
       lucky: true,
       emoji: '🌈💖',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/rainbow_heart.webp',
     ),
     GiftDefinition(
       id: 'lucky-magic-balloon',
@@ -176,6 +180,7 @@ class GiftService {
       lucky: true,
       emoji: '🎈',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/magic_balloon.webp',
     ),
     GiftDefinition(
       id: 'lucky-candy-star',
@@ -185,6 +190,7 @@ class GiftService {
       lucky: true,
       emoji: '🍭⭐',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/candy_star.webp',
     ),
     GiftDefinition(
       id: 'lucky-neon-butterfly',
@@ -194,6 +200,7 @@ class GiftService {
       lucky: true,
       emoji: '🦋',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/neon_butterfly.webp',
     ),
     GiftDefinition(
       id: 'lucky-sparkle-crown',
@@ -203,6 +210,7 @@ class GiftService {
       lucky: true,
       emoji: '👑',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/sparkle_crown.webp',
     ),
     GiftDefinition(
       id: 'lucky-dream-cake',
@@ -212,6 +220,7 @@ class GiftService {
       lucky: true,
       emoji: '🎂',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/dream_cake.webp',
     ),
     GiftDefinition(
       id: 'lucky-galaxy-ring',
@@ -221,6 +230,7 @@ class GiftService {
       lucky: true,
       emoji: '💍',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/galaxy_ring.webp',
     ),
     GiftDefinition(
       id: 'lucky-shining-unicorn',
@@ -230,6 +240,7 @@ class GiftService {
       lucky: true,
       emoji: '🦄',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/shining_unicorn.webp',
     ),
     GiftDefinition(
       id: 'lucky-royal-treasure',
@@ -239,6 +250,7 @@ class GiftService {
       lucky: true,
       emoji: '🎁',
       maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/royal_treasure.webp',
     ),
   ];
 
