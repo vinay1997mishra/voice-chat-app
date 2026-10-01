@@ -1091,18 +1091,18 @@ export class AppDirectoryStore extends DurableObject {
     }
 
     const defaultLuckyGifts = [
-      ["lucky-colorful-rose", "Colorful Rose", 20, "🌈🌹"],
-      ["lucky-rainbow-heart", "Rainbow Heart", 50, "🌈💖"],
-      ["lucky-magic-balloon", "Magic Balloon", 100, "🎈"],
-      ["lucky-candy-star", "Candy Star", 200, "🍭⭐"],
-      ["lucky-neon-butterfly", "Neon Butterfly", 500, "🦋"],
-      ["lucky-sparkle-crown", "Sparkle Crown", 1000, "👑"],
-      ["lucky-dream-cake", "Dream Cake", 2000, "🎂"],
-      ["lucky-galaxy-ring", "Galaxy Ring", 5000, "💍"],
-      ["lucky-shining-unicorn", "Shining Unicorn", 10000, "🦄"],
-      ["lucky-royal-treasure", "Royal Treasure Box", 20000, "🎁"],
+      ["lucky-colorful-rose", "Colorful Rose", 20, "🌈🌹", "assets/lucky_gifts/colorful_rose.webp"],
+      ["lucky-rainbow-heart", "Rainbow Heart", 50, "🌈💖", "assets/lucky_gifts/rainbow_heart.webp"],
+      ["lucky-magic-balloon", "Magic Balloon", 100, "🎈", "assets/lucky_gifts/magic_balloon.webp"],
+      ["lucky-candy-star", "Candy Star", 200, "🍭⭐", "assets/lucky_gifts/candy_star.webp"],
+      ["lucky-neon-butterfly", "Neon Butterfly", 500, "🦋", "assets/lucky_gifts/neon_butterfly.webp"],
+      ["lucky-sparkle-crown", "Sparkle Crown", 1000, "👑", "assets/lucky_gifts/sparkle_crown.webp"],
+      ["lucky-dream-cake", "Dream Cake", 2000, "🎂", "assets/lucky_gifts/dream_cake.webp"],
+      ["lucky-galaxy-ring", "Galaxy Ring", 5000, "💍", "assets/lucky_gifts/galaxy_ring.webp"],
+      ["lucky-shining-unicorn", "Shining Unicorn", 10000, "🦄", "assets/lucky_gifts/shining_unicorn.webp"],
+      ["lucky-royal-treasure", "Royal Treasure Box", 20000, "🎁", "assets/lucky_gifts/royal_treasure.webp"],
     ];
-    for (const [giftId, giftName, coinPrice, emoji] of defaultLuckyGifts) {
+    for (const [giftId, giftName, coinPrice, emoji, artworkAsset] of defaultLuckyGifts) {
       this.ctx.storage.sql.exec(
         `INSERT OR IGNORE INTO owner_catalog
           (id, kind, name, data_json, enabled, created_at, updated_at)
@@ -1121,10 +1121,43 @@ export class AppDirectoryStore extends DurableObject {
           host_reward_percent: 10,
           charm_wealth_percent: 10,
           prize_pool_percent: 2,
+          artwork_asset: artworkAsset,
+          send_effect: "fly_3d",
+          impact_effect: "sparkle_pop",
+          multiplier_effect: "float_multiplier",
         }),
         Date.now(),
         Date.now(),
       );
+
+      const existingGift = this.ctx.storage.sql.exec(
+        "SELECT data_json FROM owner_catalog WHERE id=? AND kind='gift' LIMIT 1",
+        giftId,
+      ).toArray()[0];
+      if (existingGift) {
+        try {
+          const existingData = JSON.parse(String(existingGift.data_json || "{}"));
+          let changed = false;
+          const defaults = {
+            artwork_asset: artworkAsset,
+            send_effect: "fly_3d",
+            impact_effect: "sparkle_pop",
+            multiplier_effect: "float_multiplier",
+          };
+          for (const [key, value] of Object.entries(defaults)) {
+            if (!existingData[key]) {
+              existingData[key] = value;
+              changed = true;
+            }
+          }
+          if (changed) {
+            this.ctx.storage.sql.exec(
+              "UPDATE owner_catalog SET data_json=?,updated_at=? WHERE id=?",
+              JSON.stringify(existingData), Date.now(), giftId,
+            );
+          }
+        } catch {}
+      }
     }
 
     const defaultRoles = [
@@ -4238,6 +4271,14 @@ export class AppDirectoryStore extends DurableObject {
         pool_contribution: totalPoolContribution,
         pool_balance: this.luckyGiftState(senderId).pool_balance,
         max_multiplier: Math.max(1, Math.min(1000, Number(luckyConfig.max_multiplier || 1000))),
+        artwork_asset: String(giftData.artwork_asset || ""),
+        send_effect: String(giftData.send_effect || "fly_3d"),
+        impact_effect: String(giftData.impact_effect || "sparkle_pop"),
+        multiplier_effect: String(giftData.multiplier_effect || "float_multiplier"),
+        high_win: highestMultiplier >= Math.max(
+          1,
+          Number(giftData.high_win_multiplier ?? luckyConfig.high_win_multiplier ?? 200),
+        ),
       } : null,
     };
   }
