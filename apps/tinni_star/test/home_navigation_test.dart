@@ -112,7 +112,7 @@ void main() {
     },
   );
 
-  testWidgets('bottom Mine keeps CP out of personal account surface', (tester) async {
+  testWidgets('bottom Mine keeps CP as a separate personal panel', (tester) async {
     final state = makeState();
     await tester.pumpWidget(TinniStarApp(state: state));
     await tester.pumpAndSettle();
@@ -120,7 +120,7 @@ void main() {
     await tester.tap(find.text('Mine').last);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('mine-cp-panel')), findsNothing);
+    expect(find.byKey(const Key('mine-cp-panel')), findsOneWidget);
     expect(find.text('Coins'), findsOneWidget);
     expect(find.text('Diamonds'), findsNothing);
   });
