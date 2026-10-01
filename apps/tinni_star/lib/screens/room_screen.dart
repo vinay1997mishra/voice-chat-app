@@ -2394,35 +2394,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showLuckyRechargeDialog() async {
+  Future<void> _openRechargeDirect() async {
     if (!mounted) return;
-    final openRecharge = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Insufficient coins'),
-        content: const Text(
-          'Do not have enough coins, please go recharge.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Recharge'),
-          ),
-        ],
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RechargeScreen(state: widget.state),
       ),
     );
-    if (openRecharge == true && mounted) {
-      await Navigator.push<void>(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => RechargeScreen(state: widget.state),
-        ),
-      );
-    }
   }
 
   Future<bool> _sendLuckyGift(
@@ -2518,7 +2497,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     } catch (error) {
       final message = error.toString().replaceFirst('Bad state: ', '');
       if (message.toLowerCase().contains('insufficient coins')) {
-        await _showLuckyRechargeDialog();
+        await _openRechargeDirect();
       } else if (mounted) {
         _snack(message);
       }
@@ -3384,9 +3363,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           );
           _refreshRoomSendingSummary();
         } catch (error) {
-          _snack(
-            error.toString().replaceFirst('Bad state: ', ''),
-          );
+          final message =
+              error.toString().replaceFirst('Bad state: ', '');
+          if (message.toLowerCase().contains('insufficient coins')) {
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+            await _openRechargeDirect();
+          } else {
+            _snack(message);
+          }
           return;
         }
       }
@@ -3417,11 +3401,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         );
       }
       if (tx == null) {
-        _snack(
-          giftCategory == 'Backpack'
-              ? 'This gift is not available in Backpack.'
-              : 'Gift failed, select a recipient or check balance.',
-        );
+        if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
+          await _openRechargeDirect();
+        } else {
+          _snack(
+            giftCategory == 'Backpack'
+                ? 'This gift is not available in Backpack.'
+                : 'Gift failed, select a recipient or check balance.',
+          );
+        }
         return;
       }
       if (!sheetContext.mounted) return;
