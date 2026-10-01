@@ -578,7 +578,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
         if (providers.isEmpty)
           const RoyalPanel(
             child: Text(
-              'No Coin Seller or Merchant with at least $5 balance is available right now.',
+              'No Coin Seller or Merchant with at least \$5 balance is available right now.',
               style: TextStyle(color: RoyalPalette.muted),
             ),
           )
@@ -758,6 +758,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(14),
                 children: [
                   RoyalPanel(
