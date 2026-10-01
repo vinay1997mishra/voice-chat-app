@@ -170,7 +170,7 @@ void main() {
     expect(find.byKey(const Key('room-tool-event-mode')), findsNothing);
     expect(find.byKey(const Key('room-tool-launch-event')), findsNothing);
     expect(find.byKey(const Key('room-tool-stop-event')), findsNothing);
-    expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-lock')), findsNothing);
     expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
     await tester.binding.handlePopRoute();
@@ -210,7 +210,11 @@ void main() {
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
-    final lockTool = find.byKey(const Key('room-tool-lock'));
+    await tester.tap(find.byKey(const Key('room-tool-room-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Setting'));
+    await tester.pumpAndSettle();
+    final lockTool = find.byKey(const Key('room-type-setting-lock'));
     await tester.ensureVisible(lockTool);
     await tester.tap(lockTool);
     await tester.pumpAndSettle();
@@ -490,6 +494,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('room-type-setting-seats')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-type-setting-lock')),
       findsOneWidget,
     );
     expect(find.text('Free mic'), findsOneWidget);
