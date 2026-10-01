@@ -2056,6 +2056,16 @@ export default {
       }
     }
 
+    if (url.pathname === "/cp/ranking" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const limit = Number(url.searchParams.get("limit") || 100);
+      return json({
+        ok: true,
+        ranking: await getAppDirectoryStore(env).cpRanking(limit),
+      });
+    }
+
     if (url.pathname === "/cp" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
