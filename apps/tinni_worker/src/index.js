@@ -2386,6 +2386,97 @@ export default {
       return json({ ok: true, wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id) });
     }
 
+    if (url.pathname === "/wallet/recharge-providers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        providers: await getAppDirectoryStore(env).listRechargeProviders(),
+      });
+    }
+
+    if (url.pathname === "/wallet/role-password/status" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json(await getAppDirectoryStore(env).roleWalletPasswordStatus(
+          appSession.user.user_id,
+          url.searchParams.get("wallet_type") || "",
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load wallet password status") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/setup" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).setupRoleWalletPassword(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.password,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to set wallet password") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/start" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).startRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+        );
+        await sendEmailOtp(result.email, result.otp, env);
+        return json({
+          ok: true,
+          request_id: result.request_id,
+          wallet_type: result.wallet_type,
+          email: result.email,
+          expires_at: result.expires_at,
+        }, 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send wallet reset OTP") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/verify" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).verifyRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.request_id,
+          body.otp,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Wallet reset OTP verification failed") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/complete" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).completeRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.request_id,
+          body.new_password,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to reset wallet password") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet/transactions" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2439,6 +2530,7 @@ export default {
           body.recipient_user_id,
           body.amount_coins,
           body.wallet_type,
+          body.password,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer coins") }, 400);
