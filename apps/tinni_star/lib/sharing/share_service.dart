@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 enum ShareTarget {
+  system,
   whatsapp,
   telegram,
   facebook,

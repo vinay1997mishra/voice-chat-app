@@ -66,6 +66,20 @@ void main() {
     expect(sharing.history.single, startsWith('whatsapp:'));
   });
 
+  test('system share opens native share instead of copying the link', () async {
+    final native = _FakeNativeShare();
+    final sharing = ShareService(native: native);
+    const payload = SharePayload(
+      title: 'Join Tinni Star',
+      link: 'https://example.test/r/123',
+    );
+
+    await sharing.share(ShareTarget.system, payload);
+
+    expect(native.value, payload.text);
+    expect(sharing.history.single, startsWith('system:'));
+  });
+
   test('profile mirrors the authenticated real account', () {
     final state = makeState();
     final account = attachTestAccount(state, name: 'Tinni Queen');
