@@ -177,7 +177,16 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
     final frameBlink = (_tick ~/ 7).isEven;
 
     return LayoutBuilder(
-      builder: (context, constraints) {
+      builder: (context, viewport) {
+        return RefreshIndicator(
+          onRefresh: _sync,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              width: viewport.maxWidth,
+              height: viewport.maxHeight,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
         final tight = constraints.maxHeight < 520;
         final railWidth = tight ? 36.0 : 44.0;
         final cellWidth =
@@ -351,6 +360,11 @@ class _FruitPartyPanelState extends State<FruitPartyPanel> {
                 ],
               ),
             ],
+          ),
+        );
+                },
+              ),
+            ),
           ),
         );
       },
