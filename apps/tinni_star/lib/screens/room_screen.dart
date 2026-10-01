@@ -2657,6 +2657,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Builder(
+                builder: (context) {
+                  final avatar = _luckyAvatarProvider(
+                    widget.state.auth.current?.avatarDataUrl,
+                  );
+                  final name = widget.state.auth.current?.displayName ?? '';
+                  return CircleAvatar(
+                    radius: 13,
+                    backgroundColor: const Color(0xFF2E2140),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            name.isNotEmpty ? name.characters.first : '?',
+                            style: const TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          )
+                        : null,
+                  );
+                },
+              ),
+              const SizedBox(width: 5),
               Container(
                 width: 34,
                 height: 34,
@@ -2699,6 +2723,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (_luckySessionHighest > 0)
+                    Text(
+                      'Highest ×$_luckySessionHighest',
+                      style: const TextStyle(
+                        color: Color(0xFFFFEFA8),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   if (_luckyPoolBalance > 0)
                     Text(
                       'Pool $_luckyPoolBalance',
