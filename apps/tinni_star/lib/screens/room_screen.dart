@@ -870,6 +870,54 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  Future<void> _showMySeatLeavePanel() async {
+    if (controller.mySeat == null) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: RoyalPalette.nearBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: RoyalPalette.gold.withValues(alpha: 0.85),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () async {
+            Navigator.pop(dialogContext);
+            await _leaveSeatAndMute();
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 34, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShiningIcon(
+                  icon: Icons.keyboard_double_arrow_down_rounded,
+                  color: FeaturePalette.safety,
+                  size: 28,
+                  boxSize: 44,
+                  glow: 0.34,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Leave Seat',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showEmojiPicker() {
     const emojis = <String>[
       '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
@@ -4209,9 +4257,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           Future<void>.delayed(Duration.zero, () async {
             try {
               await widget.state.roomSession.setRoomSoundEnabled(enabled);
+              await widget.state.ktv.setOutputMuted(!enabled);
               _snack('Room sound ${enabled ? "enabled" : "muted"}.');
             } catch (error) {
               controls.toggleSound();
+              await widget.state.ktv.setOutputMuted(enabled);
               _snack(
                 error.toString().replaceFirst('Bad state: ', ''),
               );
@@ -6188,6 +6238,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (isMySeat) {
+            _showMySeatLeavePanel();
+            return;
+          }
           if (_canModerateSeats && !occupied) {
             _showSeatControls(index);
             return;
@@ -6239,12 +6293,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ? null
                         : Key('room-seat-user-dp-' + presenceMember.userId),
                     behavior: HitTestBehavior.opaque,
-                    onTap: presenceMember == null
-                        ? null
-                        : () => _showUserProfile(
-                              presenceMember!,
-                              seatIndexHint: index,
-                            ),
+                    onTap: isMySeat
+                        ? _showMySeatLeavePanel
+                        : presenceMember == null
+                            ? null
+                            : () => _showUserProfile(
+                                  presenceMember!,
+                                  seatIndexHint: index,
+                                ),
                     child: seat.locked && !occupied
                         ? Center(
                             child: Icon(
