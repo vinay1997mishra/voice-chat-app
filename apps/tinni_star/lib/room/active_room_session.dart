@@ -65,6 +65,7 @@ class ActiveRoomSession extends ChangeNotifier {
     required int quantity,
     required int unitPrice,
     required List<String> receiverIds,
+    String? luckySessionId,
   }) => presence.sendGift(
         roomId: roomId,
         authToken: authToken,
@@ -73,11 +74,20 @@ class ActiveRoomSession extends ChangeNotifier {
         quantity: quantity,
         unitPrice: unitPrice,
         receiverIds: receiverIds,
+        luckySessionId: luckySessionId,
       );
 
   Future<Map<String, dynamic>> luckyGiftState({
     required String authToken,
   }) => presence.luckyGiftState(authToken: authToken);
+
+  Future<List<Map<String, dynamic>>> roomGiftFeed({
+    required String roomId,
+    required String authToken,
+  }) => presence.roomGiftFeed(
+        roomId: roomId,
+        authToken: authToken,
+      );
 
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
