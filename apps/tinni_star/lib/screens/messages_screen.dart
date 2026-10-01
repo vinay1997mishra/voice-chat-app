@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -30,7 +29,6 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final controller = TextEditingController();
-  Timer? refreshTimer;
   bool loading = true;
   bool sending = false;
   bool checkingIncoming = false;
@@ -47,18 +45,57 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.social.messageEvents.addListener(_handleMessageEvent);
+    final account = widget.state.auth.current;
+    if (account != null) {
+      widget.state.social.connectMessageEvents(account.authToken);
+    }
     _load();
-    refreshTimer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _refreshSilently(),
-    );
   }
 
   @override
   void dispose() {
-    refreshTimer?.cancel();
+    widget.state.social.messageEvents.removeListener(_handleMessageEvent);
     controller.dispose();
     super.dispose();
+  }
+
+  void _handleMessageEvent() {
+    final event = widget.state.social.messageEvents.value;
+    if (event == null || event['type'] != 'message_received') return;
+    _refreshForIncomingMessage(event);
+  }
+
+  Future<void> _refreshForIncomingMessage(
+    Map<String, dynamic> event,
+  ) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final rawMessage = event['message'];
+    final message = rawMessage is Map
+        ? rawMessage.map(
+            (key, value) => MapEntry(key.toString(), value),
+          )
+        : const <String, dynamic>{};
+    final from = message['from']?.toString() ?? '';
+    final to = message['to']?.toString() ?? '';
+
+    try {
+      if (_isInbox) {
+        await widget.state.social.syncInbox(account.authToken);
+      } else if (from == _targetUserId || to == _targetUserId) {
+        await widget.state.social.loadConversation(
+          authToken: account.authToken,
+          myUserId: _myUserId,
+          peerUserId: _targetUserId,
+        );
+      } else {
+        return;
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      // The next message event, manual pull-to-refresh, or re-entry retries.
+    }
   }
 
   Future<void> _load() async {
@@ -499,7 +536,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                       ),
                                     ),
                                   );
-                                  if (mounted) await _refreshSilently();
+                                  if (mounted) setState(() {});
                                 },
                                 gradient: FeaturePalette.glow(
                                   FeaturePalette.message,
