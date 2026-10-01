@@ -99,3 +99,25 @@ jobs:
           else
             npx wrangler deploy
           fi
+
+      - name: Verify deployed service readiness
+        if: steps.creds.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$(curl --retry 5 --retry-delay 2 --fail --silent --show-error \
+            https://tinni-star-api.mishrajii7991.workers.dev/app-config)"
+          CONFIG_JSON="$config" node - <<'NODE'
+          const config = JSON.parse(process.env.CONFIG_JSON || "{}");
+          const status = {
+            r2_effect_media: config.effect_media_configured === true,
+            livekit: config.livekit_configured === true,
+            google_login: Boolean(config.google_server_client_id),
+            email_otp: config.email_otp_configured === true,
+            facebook: config.facebook_configured === true,
+          };
+          console.log("Tinni production readiness:", JSON.stringify(status));
+          if (!status.r2_effect_media) {
+            throw new Error("R2 EFFECT_MEDIA binding is not active after deploy");
+          }
+          NODE

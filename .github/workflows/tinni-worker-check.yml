@@ -40,6 +40,10 @@ jobs:
           node --check apps/tinni_worker/src/fruit_game.js
           node --check apps/tinni_owner_panel/app.js
 
+      - name: Run Worker tests
+        working-directory: apps/tinni_worker
+        run: npm test
+
       - name: Bundle Worker
         working-directory: apps/tinni_worker
         run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
