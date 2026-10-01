@@ -7696,7 +7696,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           valueListenable:
                               widget.state.roomSession.speakingLevelsListenable,
                           builder: (context, levels, child) {
-                            final level = levels[speakingUserId!] ?? 0.0;
+                            final level = levels[speakingUserId] ?? 0.0;
                             if (isMicBlocked || level <= 0) {
                               return const SizedBox.shrink();
                             }
