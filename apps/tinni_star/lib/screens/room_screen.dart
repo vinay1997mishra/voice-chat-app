@@ -1881,7 +1881,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             currentMember,
             hint: seatIndexHint,
           );
-          final micMuted = currentMember.micMuted;
+          final moderationMuted = currentMember.moderationMuted;
           final ownerId =
               _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
           final targetIsOwner = currentMember.userId == ownerId;
@@ -2160,10 +2160,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             if (canModerate)
                               _ProfileAction(
-                                icon: micMuted
+                                icon: moderationMuted
                                     ? Icons.mic_rounded
                                     : Icons.mic_off_rounded,
-                                label: micMuted ? 'Unmute' : 'Mute',
+                                label: moderationMuted ? 'Unmute' : 'Mute',
                                 onTap: () async {
                                   if (seatIndex == null) {
                                     _snack(
@@ -2175,7 +2175,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   await _setUserSeatMute(
                                     currentMember,
                                     seatIndex,
-                                    !micMuted,
+                                    !moderationMuted,
                                   );
                                   if (sheetContext.mounted) {
                                     setSheetState(() {});
