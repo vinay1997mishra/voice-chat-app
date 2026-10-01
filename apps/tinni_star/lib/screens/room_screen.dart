@@ -3165,6 +3165,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     var giftCategory = 'Popular';
+    var luckyQuantity = 1;
     const giftCategories = <String>[
       'Popular',
       'Lucky',
@@ -3488,6 +3489,85 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       },
                       ),
                     ),
+                  if (giftCategory == 'Lucky')
+                    Container(
+                      key: const Key('lucky-gift-quantity-selector'),
+                      height: 38,
+                      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF21162B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x88FFD45A),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.repeat_rounded,
+                            color: Color(0xFFFFD45A),
+                            size: 17,
+                          ),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Text(
+                              'Lucky quantity • separate result per send',
+                              style: TextStyle(
+                                color: RoyalPalette.cream,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: const Key('lucky-quantity-minus'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity <= 1
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity--,
+                                    ),
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          SizedBox(
+                            width: 30,
+                            child: Text(
+                              luckyQuantity.toString(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: const Key('lucky-quantity-plus'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 20
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
@@ -3511,11 +3591,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             if (gift.lucky) {
                               final recipients = _selectedGiftRecipients
                                   .toList(growable: false);
-                              final sent = await _sendLuckyGift(
-                                gift,
-                                recipients,
-                              );
-                              if (sent && context.mounted) {
+                              var sentCount = 0;
+                              var allSent = true;
+                              for (var sendIndex = 0;
+                                  sendIndex < luckyQuantity;
+                                  sendIndex++) {
+                                final sent = await _sendLuckyGift(
+                                  gift,
+                                  recipients,
+                                );
+                                if (!sent) {
+                                  allSent = false;
+                                  break;
+                                }
+                                sentCount++;
+                              }
+                              if (allSent &&
+                                  sentCount == luckyQuantity &&
+                                  context.mounted) {
                                 Navigator.pop(context);
                               }
                               return;
