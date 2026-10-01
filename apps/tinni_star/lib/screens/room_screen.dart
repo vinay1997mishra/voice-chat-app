@@ -41,6 +41,16 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final Set<String> _selectedGiftRecipients = <String>{};
+  GiftDefinition? _luckyComboGift;
+  List<String> _luckyComboRecipients = <String>[];
+  int _luckyComboCount = 0;
+  int _luckyComboWon = 0;
+  int _luckyLastMultiplier = 0;
+  int _luckyPoolBalance = 0;
+  int _luckyAnimationSequence = 0;
+  String? _luckyAnimationReceiverId;
+  bool _luckyComboSending = false;
+  Timer? _luckyBubbleTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -2248,6 +2258,577 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _snack(name + ' added to Custom Gifts and sent for review.');
   }
 
+  int _giftInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  void _applyGiftServerWallet(Map<String, dynamic> response) {
+    final raw = response['wallet'];
+    if (raw is! Map) return;
+    final wallet = raw.map((key, value) => MapEntry(key.toString(), value));
+    widget.state.wallet.coins = _giftInt(wallet['coins']);
+    widget.state.wallet.diamonds = _giftInt(wallet['diamonds']);
+  }
+
+  bool _sameLuckyRecipients(List<String> next) {
+    if (_luckyComboRecipients.length != next.length) return false;
+    for (var index = 0; index < next.length; index++) {
+      if (_luckyComboRecipients[index] != next[index]) return false;
+    }
+    return true;
+  }
+
+  Future<bool> _sendLuckyGift(
+    GiftDefinition gift,
+    List<String> receiverIds,
+  ) async {
+    final account = widget.state.auth.current;
+    if (account == null || receiverIds.isEmpty || _luckyComboSending) {
+      return false;
+    }
+    setState(() => _luckyComboSending = true);
+    try {
+      final response = await widget.state.roomSession.sendGift(
+        roomId: widget.room.id,
+        authToken: account.authToken,
+        giftId: gift.id,
+        giftName: gift.name,
+        quantity: 1,
+        unitPrice: gift.price,
+        receiverIds: receiverIds,
+      );
+      _applyGiftServerWallet(response);
+
+      final rawLucky = response['lucky'];
+      final lucky = rawLucky is Map
+          ? rawLucky.map((key, value) => MapEntry(key.toString(), value))
+          : <String, dynamic>{};
+      final multiplier = _giftInt(lucky['multiplier']);
+      final rebateCoins = _giftInt(lucky['rebate_coins']);
+      final poolBalance = _giftInt(lucky['pool_balance']);
+      final totalCost = _giftInt(response['total_cost']);
+
+      final sameCombo = _luckyComboGift?.id == gift.id &&
+          _sameLuckyRecipients(receiverIds);
+      _luckyComboGift = gift;
+      _luckyComboRecipients = List<String>.from(receiverIds);
+      _luckyComboCount = sameCombo ? _luckyComboCount + 1 : 1;
+      _luckyComboWon = sameCombo ? _luckyComboWon + rebateCoins : rebateCoins;
+      _luckyLastMultiplier = multiplier;
+      _luckyPoolBalance = poolBalance;
+      _luckyAnimationReceiverId = receiverIds.first;
+      _luckyAnimationSequence++;
+
+      final tx = GiftTransaction(
+        gift: gift,
+        quantity: 1,
+        senderId: account.userId,
+        receiverIds: List<String>.unmodifiable(receiverIds),
+        totalCost: totalCost > 0
+            ? totalCost
+            : gift.price * receiverIds.length,
+      );
+      widget.state.gifts.sent.insert(0, tx);
+      widget.state.activities.addGiftScore(account.userId, tx.totalCost);
+      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+
+      _luckyBubbleTimer?.cancel();
+      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
+        if (!mounted) return;
+        setState(() {
+          _luckyAnimationReceiverId = null;
+          _luckyLastMultiplier = 0;
+        });
+      });
+
+      if (mounted) setState(() {});
+      return true;
+    } catch (error) {
+      if (mounted) {
+        _snack(error.toString().replaceFirst('Bad state: ', ''));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _luckyComboSending = false);
+    }
+  }
+
+  Future<void> _repeatLuckyGift() async {
+    final gift = _luckyComboGift;
+    if (gift == null || _luckyComboRecipients.isEmpty) return;
+    await _sendLuckyGift(
+      gift,
+      List<String>.from(_luckyComboRecipients),
+    );
+  }
+
+  Widget _luckyArtwork(
+    GiftDefinition gift, {
+    required double size,
+    BoxFit fit = BoxFit.contain,
+  }) {
+    final asset = gift.artworkAsset;
+    if (asset == null || asset.isEmpty) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Text(
+            gift.emoji,
+            style: TextStyle(fontSize: size * 0.62),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Image.asset(
+        asset,
+        fit: fit,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (context, error, stackTrace) => Center(
+          child: Text(
+            gift.emoji,
+            style: TextStyle(fontSize: size * 0.62),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLuckyImpactEffect({
+    required GiftDefinition gift,
+    required double seatDiameter,
+  }) {
+    final highWin = _luckyLastMultiplier >= 200;
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey<String>('lucky-impact-$_luckyAnimationSequence'),
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 1180),
+        curve: Curves.easeOut,
+        builder: (context, value, _) {
+          if (value < 0.46) return const SizedBox.shrink();
+          final phase = ((value - 0.46) / 0.54).clamp(0.0, 1.0).toDouble();
+          final fade = (1 - phase).clamp(0.0, 1.0).toDouble();
+          final burstRadius = seatDiameter * (0.45 + phase * 0.9);
+          return SizedBox(
+            width: seatDiameter * 2.6,
+            height: seatDiameter * 2.6,
+            child: Center(
+              child: Opacity(
+                opacity: fade,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Transform.scale(
+                      scale: 0.55 + phase * 1.35,
+                      child: Container(
+                        width: seatDiameter * 0.95,
+                        height: seatDiameter * 0.95,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: highWin
+                                ? const <Color>[
+                                    Color(0xFFFFF7B2),
+                                    Color(0xCCFFAE36),
+                                    Color(0x55FF4D18),
+                                    Colors.transparent,
+                                  ]
+                                : const <Color>[
+                                    Color(0xFFFFF4A8),
+                                    Color(0xAAFF67D8),
+                                    Color(0x553A7BFF),
+                                    Colors.transparent,
+                                  ],
+                            stops: const <double>[0, 0.28, 0.62, 1],
+                          ),
+                          border: Border.all(
+                            color: highWin
+                                ? const Color(0xFFFFD45A)
+                                : const Color(0xFFFFB7F2),
+                            width: highWin ? 2.2 : 1.4,
+                          ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: highWin
+                                  ? const Color(0xAAFFB020)
+                                  : const Color(0x887F55FF),
+                              blurRadius: highWin ? 24 : 17,
+                              spreadRadius: highWin ? 5 : 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    for (var index = 0; index < 10; index++)
+                      Transform.translate(
+                        offset: Offset(
+                          math.cos(index * math.pi / 5) * burstRadius,
+                          math.sin(index * math.pi / 5) * burstRadius,
+                        ),
+                        child: Transform.rotate(
+                          angle: index * 0.45 + phase,
+                          child: Icon(
+                            index.isEven
+                                ? Icons.auto_awesome
+                                : Icons.star_rounded,
+                            size: seatDiameter *
+                                (highWin ? 0.28 : 0.22) *
+                                (1 - phase * 0.35),
+                            color: index % 3 == 0
+                                ? const Color(0xFFFFD45A)
+                                : index % 3 == 1
+                                    ? const Color(0xFFFF70D8)
+                                    : const Color(0xFF72D9FF),
+                          ),
+                        ),
+                      ),
+                    Transform.scale(
+                      scale: 0.55 +
+                          Curves.easeOutBack.transform(phase) *
+                              (highWin ? 0.95 : 0.72),
+                      child: _luckyArtwork(
+                        gift,
+                        size: seatDiameter * (highWin ? 1.12 : 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLuckyComboOverlay() {
+    final gift = _luckyComboGift;
+    if (gift == null) return const SizedBox.shrink();
+    return Positioned(
+      key: const Key('lucky-combo-overlay'),
+      right: 8,
+      bottom: 218,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 154),
+          padding: const EdgeInsets.fromLTRB(9, 7, 7, 7),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: <Color>[
+                Color(0xFF2B123E),
+                Color(0xFF511866),
+                Color(0xFF1A0D2B),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color(0xFFFFD45A),
+              width: 1.2,
+            ),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Color(0x66B55CFF),
+                blurRadius: 15,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                padding: const EdgeInsets.all(1),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    colors: <Color>[
+                      Color(0x55FFFFFF),
+                      Color(0x448C5CFF),
+                      Colors.transparent,
+                    ],
+                  ),
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x88FFB84D),
+                      blurRadius: 9,
+                    ),
+                  ],
+                ),
+                child: _luckyArtwork(gift, size: 32),
+              ),
+              const SizedBox(width: 6),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    gift.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    '×$_luckyComboCount   +$_luckyComboWon',
+                    style: const TextStyle(
+                      color: Color(0xFFFFD45A),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (_luckyPoolBalance > 0)
+                    Text(
+                      'Pool $_luckyPoolBalance',
+                      style: const TextStyle(
+                        color: Color(0xFFD9C8F4),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 7),
+              InkResponse(
+                key: const Key('lucky-combo-button'),
+                radius: 30,
+                onTap: _luckyComboSending ? null : _repeatLuckyGift,
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const RadialGradient(
+                      colors: <Color>[
+                        Color(0xFFFFE985),
+                        Color(0xFFFF9E2C),
+                        Color(0xFF8B2800),
+                      ],
+                    ),
+                    border: Border.all(color: Colors.white, width: 1.2),
+                  ),
+                  child: _luckyComboSending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Combo',
+                          style: TextStyle(
+                            color: Color(0xFF3E1400),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLuckyGiftDetails() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    Map<String, dynamic> data;
+    try {
+      data = await widget.state.roomSession.luckyGiftState(
+        authToken: account.authToken,
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      return;
+    }
+    if (!mounted) return;
+
+    final rawRanking = data['ranking'];
+    final ranking = rawRanking is List
+        ? rawRanking.whereType<Map>().map(
+              (row) => row.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            ).toList(growable: false)
+        : const <Map<String, dynamic>>[];
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF171021),
+        title: const Row(
+          children: [
+            Text('🎁', style: TextStyle(fontSize: 24)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Lucky Gift',
+                style: TextStyle(
+                  color: Color(0xFFFFD45A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: <Color>[
+                      Color(0xFF4C175F),
+                      Color(0xFF241035),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFD45A),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'REAL-TIME PRIZE POOL',
+                      style: TextStyle(
+                        color: Color(0xFFD7C7FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '🪙 ${_giftInt(data['pool_balance'])}',
+                      style: const TextStyle(
+                        color: Color(0xFFFFD45A),
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Up to ${_giftInt(data['max_multiplier'])}× • 200×+ is rare',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Lucky Day Ranking',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (ranking.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'No Lucky Gift ranking yet today.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: math.min(10, ranking.length),
+                    itemBuilder: (_, index) {
+                      final row = ranking[index];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: const Color(0xFF2E2140),
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          row['display_name']?.toString() ??
+                              row['user_id']?.toString() ??
+                              'User',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Sent ${_giftInt(row['sent_count'])} • Highest ${_giftInt(row['highest_multiplier'])}×',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 9,
+                          ),
+                        ),
+                        trailing: Text(
+                          '+${_giftInt(row['rebate_coins'])}',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 6),
+              const Text(
+                'Visible daily Top 3 shares: 50% • 25% • 15%',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showGiftSheet({String? preselectedUserId}) {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
@@ -2261,6 +2842,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     var giftCategory = 'Popular';
     const giftCategories = <String>[
       'Popular',
+      'Lucky',
       'Normal',
       'Luxury',
       'CP',
@@ -2293,10 +2875,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         effectKind: 'svga',
       ),
       ...GiftService.catalog,
+      ...GiftService.luckyCatalog,
     ];
 
     List<GiftDefinition> visibleGifts() {
       switch (giftCategory) {
+        case 'Lucky':
+          return roomGifts.where((gift) => gift.lucky).toList();
         case 'Normal':
           return roomGifts
               .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
@@ -2392,6 +2977,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
+                        IconButton(
+                          key: const Key('lucky-prize-pool-button'),
+                          tooltip: 'Lucky Prize Pool & Ranking',
+                          onPressed: _showLuckyGiftDetails,
+                          icon: const Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFD45A),
+                          ),
+                        ),
                         TextButton.icon(
                           key: const Key('room-custom-gift-button'),
                           onPressed: _createRoomCustomGift,
@@ -2410,15 +3004,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       separatorBuilder: (_, _) => const SizedBox(width: 7),
                       itemBuilder: (_, index) {
                         final value = giftCategories[index];
-                        final color = value == 'CP'
-                            ? FeaturePalette.cp
-                            : value == 'Backpack'
-                                ? FeaturePalette.backpack
-                                : value == 'Luxury'
-                                    ? FeaturePalette.vip
-                                    : value == 'Normal'
-                                        ? FeaturePalette.social
-                                        : FeaturePalette.gift;
+                        final color = value == 'Lucky'
+                            ? const Color(0xFFFFC247)
+                            : value == 'CP'
+                                ? FeaturePalette.cp
+                                : value == 'Backpack'
+                                    ? FeaturePalette.backpack
+                                    : value == 'Luxury'
+                                        ? FeaturePalette.vip
+                                        : value == 'Normal'
+                                            ? FeaturePalette.social
+                                            : FeaturePalette.gift;
                         return ChoiceChip(
                           label: Text(value),
                           selected: giftCategory == value,
@@ -2587,6 +3183,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               _snack('Select at least one recipient.');
                               return;
                             }
+                            if (gift.lucky) {
+                              final recipients = _selectedGiftRecipients
+                                  .toList(growable: false);
+                              final sent = await _sendLuckyGift(
+                                gift,
+                                recipients,
+                              );
+                              if (sent && context.mounted) {
+                                Navigator.pop(context);
+                              }
+                              return;
+                            }
                             if (giftCategory != 'Backpack') {
                               try {
                                 await widget.state.roomSession.sendGift(
@@ -2664,19 +3272,49 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             children: [
                               Expanded(
                                 child: Center(
-                                  child: ShiningIcon(
-                                    icon: Icons.card_giftcard_rounded,
-                                    color: gift.id.contains('heart') ||
-                                            gift.id.contains('ring')
-                                        ? FeaturePalette.cp
-                                        : gift.id.contains('dragon') ||
-                                                gift.id.contains('crown')
-                                            ? FeaturePalette.rank
-                                            : FeaturePalette.gift,
-                                    size: 30,
-                                    boxSize: 50,
-                                    glow: 0.38,
-                                  ),
+                                  child: gift.lucky
+                                      ? Container(
+                                          width: 54,
+                                          height: 54,
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: const RadialGradient(
+                                              colors: <Color>[
+                                                Color(0x66FFFFFF),
+                                                Color(0x445C2A80),
+                                                Colors.transparent,
+                                              ],
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0x88FFD45A),
+                                              width: 1,
+                                            ),
+                                            boxShadow: const <BoxShadow>[
+                                              BoxShadow(
+                                                color: Color(0x66FFB84D),
+                                                blurRadius: 9,
+                                              ),
+                                            ],
+                                          ),
+                                          child: _luckyArtwork(
+                                            gift,
+                                            size: 50,
+                                          ),
+                                        )
+                                      : ShiningIcon(
+                                          icon: Icons.card_giftcard_rounded,
+                                          color: gift.id.contains('heart') ||
+                                                  gift.id.contains('ring')
+                                              ? FeaturePalette.cp
+                                              : gift.id.contains('dragon') ||
+                                                      gift.id.contains('crown')
+                                                  ? FeaturePalette.rank
+                                                  : FeaturePalette.gift,
+                                          size: 30,
+                                          boxSize: 50,
+                                          glow: 0.38,
+                                        ),
                                 ),
                               ),
                               Text(
@@ -2693,7 +3331,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                                     ?.quantity ??
                                                 0)
                                             .toString()
-                                    : '🪙 ${gift.price}',
+                                    : gift.lucky
+                                        ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
+                                        : '🪙 ${gift.price}',
                                 style: const TextStyle(
                                   color: RoyalPalette.gold,
                                   fontSize: 10,
@@ -6335,6 +6975,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               width: seatDiameter,
               height: seatDiameter,
               child: Stack(
+                clipBehavior: Clip.none,
                 alignment: Alignment.center,
                 children: [
                   GestureDetector(
@@ -6464,6 +7105,140 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         style: TextStyle(
                           fontSize: seatDiameter * 0.82,
                           height: 1,
+                        ),
+                      ),
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyComboGift != null)
+                    IgnorePointer(
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey<String>(
+                          'lucky-flight-$_luckyAnimationSequence',
+                        ),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 720),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          final disappear = value <= 0.86
+                              ? 1.0
+                              : ((1 - value) / 0.14)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                          final scale = 0.42 +
+                              Curves.easeOutBack.transform(value) * 0.74;
+                          return Transform.translate(
+                            offset: Offset(
+                              (1 - value) * seatDiameter * 2.15,
+                              (1 - value) * seatDiameter * 2.8,
+                            ),
+                            child: Transform.rotate(
+                              angle: (1 - value) * 0.8,
+                              child: Transform.scale(
+                                scale: scale,
+                                child: Opacity(
+                                  opacity: disappear,
+                                  child: Container(
+                                    padding: EdgeInsets.all(
+                                      math.max(1.0, seatDiameter * 0.03),
+                                    ),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: const <BoxShadow>[
+                                        BoxShadow(
+                                          color: Color(0xAAFFB84D),
+                                          blurRadius: 13,
+                                          spreadRadius: 2,
+                                        ),
+                                        BoxShadow(
+                                          color: Color(0x887F55FF),
+                                          blurRadius: 18,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                    child: child,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: _luckyArtwork(
+                          _luckyComboGift!,
+                          size: seatDiameter * 0.74,
+                        ),
+                      ),
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyComboGift != null)
+                    _buildLuckyImpactEffect(
+                      gift: _luckyComboGift!,
+                      seatDiameter: seatDiameter,
+                    ),
+                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                      _luckyLastMultiplier > 0)
+                    Positioned(
+                      top: -(compact ? 30.0 : 38.0),
+                      child: IgnorePointer(
+                        child: TweenAnimationBuilder<double>(
+                          key: ValueKey<String>(
+                            'lucky-multiplier-$_luckyAnimationSequence',
+                          ),
+                          tween: Tween<double>(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 1500),
+                          builder: (context, value, child) {
+                            final opacity = value < 0.72
+                                ? 1.0
+                                : ((1 - value) / 0.28)
+                                    .clamp(0.0, 1.0)
+                                    .toDouble();
+                            return Transform.translate(
+                              offset: Offset(0, -24 * value),
+                              child: Opacity(
+                                opacity: opacity,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _luckyLastMultiplier >= 200
+                                    ? const <Color>[
+                                        Color(0xFFFFE66D),
+                                        Color(0xFFFF8C26),
+                                        Color(0xFFD82323),
+                                      ]
+                                    : const <Color>[
+                                        Color(0xFF8C5CFF),
+                                        Color(0xFFFF5FCE),
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                width: 1,
+                              ),
+                              boxShadow: const <BoxShadow>[
+                                BoxShadow(
+                                  color: Color(0x88FFB84D),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '$_luckyLastMultiplier×',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: compact ? 11 : 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -7340,6 +8115,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   onFinished: _finishPremiumEntrance,
                 ),
               ),
+            if (_luckyComboGift != null &&
+                !_fruitJackpotOpen &&
+                !_fruitPartyOpen)
+              _buildLuckyComboOverlay(),
             if (!_fruitJackpotOpen && !_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),
