@@ -3,7 +3,7 @@ name: Tinni Worker Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main, build/tinni-star-0.5.23-41]
+    branches: [main, build/tinni-star-0.5.23-41, build/tinni-star-0.5.23-44-lucky-only]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
