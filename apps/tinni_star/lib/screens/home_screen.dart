@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
@@ -1948,6 +1951,13 @@ class _RoomListCard extends StatelessWidget {
   }
 }
 
+enum _RoomPhotoCropMode {
+  full,
+  center,
+  top,
+  bottom,
+}
+
 class _CreateRoomResult {
   const _CreateRoomResult({
     required this.title,
@@ -1975,6 +1985,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   int seatCount = 12;
   String partyMode = 'Friends-making Party';
   String? photoDataUrl;
+  _RoomPhotoCropMode photoCropMode = _RoomPhotoCropMode.full;
 
   @override
   void dispose() {
@@ -2047,16 +2058,199 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
     );
     if (image == null || !mounted) return;
     final bytes = await image.readAsBytes();
-    if (bytes.length > 320000) {
-      if (!mounted) return;
+    if (!mounted) return;
+
+    final mode = await _chooseRoomPhotoCrop(bytes);
+    if (mode == null || !mounted) return;
+
+    final squareBytes = await _renderSquareRoomPhoto(bytes, mode);
+    if (!mounted) return;
+    if (squareBytes.length > 320000) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a smaller room photo.')),
+        const SnackBar(
+          content: Text('Room photo is still too large after cropping.'),
+        ),
       );
       return;
     }
     setState(() {
-      photoDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      photoCropMode = mode;
+      photoDataUrl = 'data:image/png;base64,${base64Encode(squareBytes)}';
     });
+  }
+
+  String _cropModeLabel(_RoomPhotoCropMode mode) => switch (mode) {
+        _RoomPhotoCropMode.full => 'Full photo',
+        _RoomPhotoCropMode.center => 'Center crop',
+        _RoomPhotoCropMode.top => 'Top crop',
+        _RoomPhotoCropMode.bottom => 'Bottom crop',
+      };
+
+  Alignment _cropPreviewAlignment(_RoomPhotoCropMode mode) => switch (mode) {
+        _RoomPhotoCropMode.top => Alignment.topCenter,
+        _RoomPhotoCropMode.bottom => Alignment.bottomCenter,
+        _ => Alignment.center,
+      };
+
+  Future<_RoomPhotoCropMode?> _chooseRoomPhotoCrop(Uint8List bytes) {
+    return showModalBottomSheet<_RoomPhotoCropMode>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Room DP crop',
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Choose exactly how the square room DP should look.',
+                style: TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 14),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.14,
+                children: [
+                  for (final mode in _RoomPhotoCropMode.values)
+                    InkWell(
+                      key: Key('room-photo-crop-' + mode.name),
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.pop(sheetContext, mode),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: RoyalPalette.panel,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: RoyalPalette.deepGold.withValues(alpha: .72),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  color: RoyalPalette.black,
+                                  width: double.infinity,
+                                  child: Image.memory(
+                                    bytes,
+                                    fit: mode == _RoomPhotoCropMode.full
+                                        ? BoxFit.contain
+                                        : BoxFit.cover,
+                                    alignment: _cropPreviewAlignment(mode),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              _cropModeLabel(mode),
+                              style: const TextStyle(
+                                color: RoyalPalette.cream,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Uint8List> _renderSquareRoomPhoto(
+    Uint8List bytes,
+    _RoomPhotoCropMode mode,
+  ) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    const outputSize = 256;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(RoyalPalette.black, BlendMode.src);
+
+    final width = image.width.toDouble();
+    final height = image.height.toDouble();
+    final src = mode == _RoomPhotoCropMode.full
+        ? Rect.fromLTWH(0, 0, width, height)
+        : _squareSourceRect(width, height, mode);
+
+    Rect dst;
+    if (mode == _RoomPhotoCropMode.full) {
+      final scale = math.min(outputSize / width, outputSize / height);
+      final drawWidth = width * scale;
+      final drawHeight = height * scale;
+      dst = Rect.fromLTWH(
+        (outputSize - drawWidth) / 2,
+        (outputSize - drawHeight) / 2,
+        drawWidth,
+        drawHeight,
+      );
+    } else {
+      dst = const Rect.fromLTWH(
+        0,
+        0,
+        outputSize.toDouble(),
+        outputSize.toDouble(),
+      );
+    }
+
+    canvas.drawImageRect(
+      image,
+      src,
+      dst,
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    final output = await recorder.endRecording().toImage(
+          outputSize,
+          outputSize,
+        );
+    final data = await output.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    output.dispose();
+    codec.dispose();
+    if (data == null) throw StateError('Unable to crop room photo');
+    return data.buffer.asUint8List();
+  }
+
+  Rect _squareSourceRect(
+    double width,
+    double height,
+    _RoomPhotoCropMode mode,
+  ) {
+    final side = math.min(width, height);
+    final left = (width - side) / 2;
+    final top = switch (mode) {
+      _RoomPhotoCropMode.top => 0.0,
+      _RoomPhotoCropMode.bottom => height - side,
+      _ => (height - side) / 2,
+    };
+    return Rect.fromLTWH(left, top, side, side);
   }
 
   @override
@@ -2088,20 +2282,40 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                 borderRadius: BorderRadius.circular(48),
                 child: Column(
                   children: [
-                    ShiningIcon(
-                      icon: photoDataUrl == null
-                          ? Icons.add_a_photo_rounded
-                          : Icons.check_circle_rounded,
-                      color: photoDataUrl == null
-                          ? FeaturePalette.moments
-                          : FeaturePalette.family,
-                      size: 34,
-                      boxSize: 76,
-                      glow: 0.44,
-                    ),
+                    if (photoDataUrl == null)
+                      const ShiningIcon(
+                        icon: Icons.add_a_photo_rounded,
+                        color: FeaturePalette.moments,
+                        size: 34,
+                        boxSize: 76,
+                        glow: 0.24,
+                      )
+                    else
+                      Container(
+                        width: 104,
+                        height: 104,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: RoyalPalette.black,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: RoyalPalette.gold,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.memory(
+                            base64Decode(photoDataUrl!.split(',').last),
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 7),
                     Text(
-                      photoDataUrl == null ? 'Add room photo' : 'Room photo selected',
+                      photoDataUrl == null
+                          ? 'Add room photo'
+                          : 'Room DP • ' + _cropModeLabel(photoCropMode),
                       style: const TextStyle(
                         color: RoyalPalette.cream,
                         fontWeight: FontWeight.w800,
