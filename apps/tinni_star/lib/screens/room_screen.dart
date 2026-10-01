@@ -963,115 +963,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       '👌', '🤟', '🤘', '👋', '💋', '🫶', '💃', '🕺',
     ];
 
-    Future<void> sendSelectedGift(
-      BuildContext sheetContext,
-      GiftDefinition gift,
-    ) async {
-      if (_selectedGiftRecipients.isEmpty) {
-        _snack('Select at least one recipient.');
-        return;
-      }
-
-      if (gift.lucky) {
-        final selectedRecipients =
-            _selectedGiftRecipients.toList(growable: false);
-        var sentCount = 0;
-        var allSent = true;
-        for (var sendIndex = 0;
-            sendIndex < luckyQuantity;
-            sendIndex++) {
-          final sent = await _sendLuckyGift(
-            gift,
-            selectedRecipients,
-          );
-          if (!sent) {
-            allSent = false;
-            break;
-          }
-          sentCount++;
-        }
-        if (allSent &&
-            sentCount == luckyQuantity &&
-            sheetContext.mounted) {
-          Navigator.pop(sheetContext);
-        }
-        return;
-      }
-
-      if (giftCategory != 'Backpack') {
-        try {
-          await widget.state.roomSession.sendGift(
-            roomId: widget.room.id,
-            authToken: widget.state.auth.current!.authToken,
-            giftId: gift.id,
-            giftName: gift.name,
-            quantity: 1,
-            unitPrice: gift.price,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-          );
-          _refreshRoomSendingSummary();
-        } catch (error) {
-          _snack(
-            error.toString().replaceFirst('Bad state: ', ''),
-          );
-          return;
-        }
-      }
-
-      GiftTransaction? tx;
-      if (giftCategory == 'Backpack') {
-        final consumed = widget.state.backpack.consume(gift.id, 1);
-        if (consumed) {
-          tx = GiftTransaction(
-            gift: gift,
-            quantity: 1,
-            senderId: senderId,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-            totalCost:
-                gift.price * _selectedGiftRecipients.length,
-          );
-          widget.state.gifts.sent.insert(0, tx);
-        }
-      } else {
-        tx = widget.state.gifts.send(
-          gift: gift,
-          quantity: 1,
-          maxCombo: controller.config.maxGiftCombo,
-          senderId: senderId,
-          receiverIds:
-              _selectedGiftRecipients.toList(growable: false),
-        );
-      }
-      if (tx == null) {
-        _snack(
-          giftCategory == 'Backpack'
-              ? 'This gift is not available in Backpack.'
-              : 'Gift failed, select a recipient or check balance.',
-        );
-        return;
-      }
-      if (!sheetContext.mounted) return;
-      Navigator.pop(sheetContext);
-      if (widget.state.roomControls.effectsEnabled) {
-        widget.state.effects.enqueue(
-          EffectRequest(
-            id: 'gift-${widget.state.gifts.sent.length}',
-            kind: EffectKind.gift,
-            asset: '${gift.effectKind}:${gift.id}',
-            priority: 50,
-          ),
-        );
-      }
-      widget.state.activities.addGiftScore(senderId, tx.totalCost);
-      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-      _snack(
-        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
-      );
-      setState(() {});
-    }
-
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -3382,6 +3273,115 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _selectedGiftRecipients.add(values.first.$1);
       }
       return values;
+    }
+
+    Future<void> sendSelectedGift(
+      BuildContext sheetContext,
+      GiftDefinition gift,
+    ) async {
+      if (_selectedGiftRecipients.isEmpty) {
+        _snack('Select at least one recipient.');
+        return;
+      }
+
+      if (gift.lucky) {
+        final selectedRecipients =
+            _selectedGiftRecipients.toList(growable: false);
+        var sentCount = 0;
+        var allSent = true;
+        for (var sendIndex = 0;
+            sendIndex < luckyQuantity;
+            sendIndex++) {
+          final sent = await _sendLuckyGift(
+            gift,
+            selectedRecipients,
+          );
+          if (!sent) {
+            allSent = false;
+            break;
+          }
+          sentCount++;
+        }
+        if (allSent &&
+            sentCount == luckyQuantity &&
+            sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        return;
+      }
+
+      if (giftCategory != 'Backpack') {
+        try {
+          await widget.state.roomSession.sendGift(
+            roomId: widget.room.id,
+            authToken: widget.state.auth.current!.authToken,
+            giftId: gift.id,
+            giftName: gift.name,
+            quantity: 1,
+            unitPrice: gift.price,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+          );
+          _refreshRoomSendingSummary();
+        } catch (error) {
+          _snack(
+            error.toString().replaceFirst('Bad state: ', ''),
+          );
+          return;
+        }
+      }
+
+      GiftTransaction? tx;
+      if (giftCategory == 'Backpack') {
+        final consumed = widget.state.backpack.consume(gift.id, 1);
+        if (consumed) {
+          tx = GiftTransaction(
+            gift: gift,
+            quantity: 1,
+            senderId: senderId,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+            totalCost:
+                gift.price * _selectedGiftRecipients.length,
+          );
+          widget.state.gifts.sent.insert(0, tx);
+        }
+      } else {
+        tx = widget.state.gifts.send(
+          gift: gift,
+          quantity: 1,
+          maxCombo: controller.config.maxGiftCombo,
+          senderId: senderId,
+          receiverIds:
+              _selectedGiftRecipients.toList(growable: false),
+        );
+      }
+      if (tx == null) {
+        _snack(
+          giftCategory == 'Backpack'
+              ? 'This gift is not available in Backpack.'
+              : 'Gift failed, select a recipient or check balance.',
+        );
+        return;
+      }
+      if (!sheetContext.mounted) return;
+      Navigator.pop(sheetContext);
+      if (widget.state.roomControls.effectsEnabled) {
+        widget.state.effects.enqueue(
+          EffectRequest(
+            id: 'gift-${widget.state.gifts.sent.length}',
+            kind: EffectKind.gift,
+            asset: '${gift.effectKind}:${gift.id}',
+            priority: 50,
+          ),
+        );
+      }
+      widget.state.activities.addGiftScore(senderId, tx.totalCost);
+      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+      _snack(
+        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
+      );
+      setState(() {});
     }
 
     showModalBottomSheet<void>(
