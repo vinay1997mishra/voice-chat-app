@@ -84,75 +84,105 @@ class _TinniShellState extends State<TinniShell> {
           );
         },
       ),
-      bottomNavigationBar: ValueListenableBuilder<String>(
-        valueListenable: widget.state.languagePreference,
-        builder: (context, language, _) => NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (value) {
-            const labels = <String>['party', 'discover', 'message', 'mine'];
-            widget.state.analytics.event('navigation_tab', <String, Object?>{
-              'tab': labels[value],
-            });
-            setState(() => index = value);
-          },
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(
-                Icons.groups_rounded,
-                color: FeaturePalette.family,
-              ),
-              selectedIcon: const ShiningIcon(
-                icon: Icons.groups_rounded,
-                color: FeaturePalette.family,
-                size: 20,
-                boxSize: 36,
-                glow: 0.34,
-              ),
-              label: tinniText(language, 'party'),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF17130D),
+              RoyalPalette.nearBlack,
+              RoyalPalette.black,
+            ],
+          ),
+          border: Border(
+            top: BorderSide(
+              color: RoyalPalette.gold.withValues(alpha: .42),
+              width: .8,
             ),
-            NavigationDestination(
-              icon: const Icon(
-                Icons.explore_rounded,
-                color: FeaturePalette.discover,
-              ),
-              selectedIcon: const ShiningIcon(
-                icon: Icons.explore_rounded,
-                color: FeaturePalette.discover,
-                size: 20,
-                boxSize: 36,
-                glow: 0.34,
-              ),
-              label: tinniText(language, 'discover'),
-            ),
-            NavigationDestination(
-              icon: const Icon(
-                Icons.mail_rounded,
-                color: FeaturePalette.message,
-              ),
-              selectedIcon: const ShiningIcon(
-                icon: Icons.mail_rounded,
-                color: FeaturePalette.message,
-                size: 20,
-                boxSize: 36,
-                glow: 0.34,
-              ),
-              label: tinniText(language, 'message'),
-            ),
-            NavigationDestination(
-              icon: const Icon(
-                Icons.person_rounded,
-                color: FeaturePalette.social,
-              ),
-              selectedIcon: const ShiningIcon(
-                icon: Icons.person_rounded,
-                color: FeaturePalette.social,
-                size: 20,
-                boxSize: 36,
-                glow: 0.34,
-              ),
-              label: tinniText(language, 'mine'),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: RoyalPalette.gold.withValues(alpha: .08),
+              blurRadius: 18,
+              offset: const Offset(0, -5),
             ),
           ],
+        ),
+        child: ValueListenableBuilder<String>(
+          valueListenable: widget.state.languagePreference,
+          builder: (context, language, _) => NavigationBar(
+            height: 70,
+            backgroundColor: Colors.transparent,
+            indicatorColor: RoyalPalette.gold.withValues(alpha: .12),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            selectedIndex: index,
+            onDestinationSelected: (value) {
+              const labels = <String>['party', 'discover', 'message', 'mine'];
+              widget.state.analytics.event('navigation_tab', <String, Object?>{
+                'tab': labels[value],
+              });
+              setState(() => index = value);
+            },
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.groups_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.groups_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'party'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.explore_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.explore_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'discover'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.mail_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.mail_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'message'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.person_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.person_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'mine'),
+              ),
+            ],
+          ),
         ),
       ),
     );
