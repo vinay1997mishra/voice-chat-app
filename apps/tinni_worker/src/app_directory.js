@@ -4112,7 +4112,7 @@ export class AppDirectoryStore extends DurableObject {
             hostCredit, now, receiverId,
           );
           this.ctx.storage.sql.exec(
-            "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?,?)",
+            "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?)",
             "wallet-" + crypto.randomUUID(), receiverId, hostCredit, id,
             (isLucky ? "Lucky host gift 10%: " : "Host gift: ") + giftName, now,
           );
@@ -4239,7 +4239,9 @@ export class AppDirectoryStore extends DurableObject {
       rebate_coins: row.rebate_coins == null ? null : Number(row.rebate_coins),
       pool_contribution: row.pool_contribution == null ? null : Number(row.pool_contribution),
     }));
-  }  _ludoInitialState() {
+  }
+
+  _ludoInitialState() {
     return {
       current_player: "red",
       rolled: null,
