@@ -1111,7 +1111,11 @@ export default {
         const key = "profiles/" + userId + "/" + slot;
         const object = await env.EFFECT_MEDIA.head(key);
         media[slot] = object
-          ? (env.PUBLIC_API_ORIGIN || url.origin) + "/media/" + encodeURIComponent(key)
+          ? (env.PUBLIC_API_ORIGIN || url.origin) +
+              "/media/" +
+              encodeURIComponent(key) +
+              "?v=" +
+              encodeURIComponent(object.customMetadata?.updated_at || object.etag || "1")
           : null;
       }
       return json({ ok: true, media });
@@ -1146,16 +1150,21 @@ export default {
       }
       const userId = String(appSession.user.user_id || "").trim();
       const key = "profiles/" + userId + "/" + slot;
+      const updatedAt = Date.now();
       await env.EFFECT_MEDIA.put(key, bytes, {
         httpMetadata: { contentType: match[1] },
         customMetadata: {
           user_id: userId,
           slot,
-          updated_at: String(Date.now()),
+          updated_at: String(updatedAt),
         },
       });
       const mediaUrl =
-        (env.PUBLIC_API_ORIGIN || url.origin) + "/media/" + encodeURIComponent(key);
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/media/" +
+        encodeURIComponent(key) +
+        "?v=" +
+        updatedAt;
       return json({ ok: true, slot, url: mediaUrl }, 201);
     }
 
