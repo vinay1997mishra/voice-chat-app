@@ -166,7 +166,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               style: const TextStyle(color: RoyalPalette.muted, fontSize: 11),
                             ),
                             Text(
-                              room.country + ' • ID ' + room.id + ' • ' + room.online.toString() + ' online',
+                              room.country + ' • ID ' + room.displayId + ' • ' + room.online.toString() + ' online',
                               style: const TextStyle(fontSize: 10),
                             ),
                           ],
