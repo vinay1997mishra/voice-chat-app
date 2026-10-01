@@ -20,6 +20,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
   RtcConnectionState _state = RtcConnectionState.idle;
   bool _publishing = false;
   bool _publishingCamera = false;
+  bool _remoteAudioEnabled = true;
 
   @override
   RtcConnectionState get state => _state;
@@ -73,6 +74,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
       _publishing = false;
       _publishingCamera = false;
       _state = RtcConnectionState.joined;
+      await _applyRemoteAudioPreference();
     } catch (error) {
       _state = RtcConnectionState.failed;
       _publishing = false;
@@ -95,6 +97,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
     _room = null;
     _publishing = false;
     _publishingCamera = false;
+    _remoteAudioEnabled = true;
 
     if (oldRoom != null) {
       try {
@@ -121,6 +124,26 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
     await participant.setMicrophoneEnabled(enabled);
     _publishing = enabled;
+  }
+
+  @override
+  Future<void> setRemoteAudioEnabled(bool enabled) async {
+    _remoteAudioEnabled = enabled;
+    await _applyRemoteAudioPreference();
+  }
+
+  Future<void> _applyRemoteAudioPreference() async {
+    final room = _room;
+    if (room == null || _state != RtcConnectionState.joined) return;
+    for (final participant in room.remoteParticipants.values) {
+      for (final publication in participant.audioTrackPublications) {
+        if (_remoteAudioEnabled) {
+          await publication.enable();
+        } else {
+          await publication.disable();
+        }
+      }
+    }
   }
 
   Future<void> setCameraPublished(bool enabled) async {
