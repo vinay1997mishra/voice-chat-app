@@ -27,7 +27,6 @@ abstract interface class ImAdapter {
 class LocalRtcAdapter implements RtcAdapter {
   RtcConnectionState _state = RtcConnectionState.idle;
   bool _publishing = false;
-  bool _remoteAudioEnabled = true;
 
   @override
   RtcConnectionState get state => _state;
@@ -64,9 +63,7 @@ class LocalRtcAdapter implements RtcAdapter {
   }
 
   @override
-  Future<void> setRemoteAudioEnabled(bool enabled) async {
-    _remoteAudioEnabled = enabled;
-  }
+  Future<void> setRemoteAudioEnabled(bool enabled) async {}
 }
 
 class LocalImAdapter implements ImAdapter {
