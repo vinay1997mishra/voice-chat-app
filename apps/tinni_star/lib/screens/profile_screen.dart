@@ -12,8 +12,8 @@ import '../ui/royal_theme.dart';
 import '../ui/animated_avatar_frame.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
-import 'feature_center_screen.dart';
 import 'vip_screen.dart';
+import 'cp_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -510,49 +510,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
           const SizedBox(height: 14),
-          // CP is intentionally kept out of Mine. Open CP from its dedicated panel.
-                    const GoldSectionTitle('Royal Center'),
-          const SizedBox(height: 10),
-          GridView.count(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            crossAxisCount: 2,
-            childAspectRatio: 1.15,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            children: [
-              _MineTile(
-                icon: Icons.workspace_premium_rounded,
-                label: 'VIP',
-                color: FeaturePalette.vip,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => VipScreen(state: widget.state),
+          const GoldSectionTitle('My CP'),
+          const SizedBox(height: 8),
+          RoyalPanel(
+            key: const Key('mine-cp-panel'),
+            gradient: FeaturePalette.glow(FeaturePalette.cp),
+            accentColor: FeaturePalette.cp,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CpScreen(state: widget.state),
+              ),
+            ).then((_) => setState(() {})),
+            child: const Row(
+              children: [
+                ShiningIcon(
+                  icon: Icons.favorite_rounded,
+                  color: FeaturePalette.cp,
+                  size: 28,
+                  boxSize: 52,
+                  glow: 0.42,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CP Panel',
+                        style: TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Request, accept, intimacy, memories and CP details',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: FeaturePalette.cp,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const GoldSectionTitle('My Account'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _MineTile(
+                  icon: Icons.groups_rounded,
+                  label: 'Family',
+                  color: FeaturePalette.family,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => widget.state.family.exists
+                          ? FamilyHomeScreen(state: widget.state)
+                          : FamilyRankingScreen(state: widget.state),
+                    ),
+                  ).then((_) => setState(() {})),
+                ),
               ),
-              _MineTile(
-                icon: Icons.groups_rounded,
-                label: 'Family',
-                color: FeaturePalette.family,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => widget.state.family.exists
-                        ? FamilyHomeScreen(state: widget.state)
-                        : FamilyRankingScreen(state: widget.state),
-                  ),
-                ).then((_) => setState(() {})),
-              ),
-              _MineTile(
-                icon: Icons.grid_view_rounded,
-                label: 'More',
-                color: FeaturePalette.social,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => FeatureCenterScreen(state: widget.state),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _MineTile(
+                  icon: Icons.workspace_premium_rounded,
+                  label: 'VIP',
+                  color: FeaturePalette.vip,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VipScreen(state: widget.state),
+                    ),
                   ),
                 ),
               ),
