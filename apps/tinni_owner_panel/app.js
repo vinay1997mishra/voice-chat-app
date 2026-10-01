@@ -1186,7 +1186,23 @@ function openAction(action, preset = {}) {
     "host-add": ["Add Host to Agency", field("host_user_id","Host user ID") + field("agency_owner_id","Agency owner ID")],
     "host-remove": ["Remove Host from Agency", field("host_user_id","Host user ID") + field("agency_owner_id","Agency owner ID")],
     "vip-grant": ["Grant / Remove VIP", field("user_id","User ID") + field("vip_level","VIP level","number") + selectField("operation","Operation",[["grant","Grant"],["remove","Remove"]])],
-    "gift-new": ["Add New Gift", field("name","Gift name") + field("coin_price","Coin price","number") + field("duration_days","Validity days (0 = permanent)","number","0") + field("asset_url","Animation / asset URL") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "gift-new": ["Add New Gift",
+      field("name","Gift name") +
+      field("coin_price","Coin price","number") +
+      checkboxField("lucky","Lucky / Rebate gift",false) +
+      field("emoji","Lucky gift emoji","text","🎁",false) +
+      field("max_multiplier","Maximum Lucky multiplier (max 1000×)","number","1000",false) +
+      field("high_win_multiplier","Big-win banner from multiplier","number","200",false) +
+      field("host_reward_percent","Lucky Host diamond % of normal gift","number","10",false) +
+      field("charm_wealth_percent","Lucky Charm / Wealth % of normal gift","number","10",false) +
+      field("prize_pool_percent","Prize pool contribution %","number","2",false) +
+      field("duration_days","Validity days (0 = permanent)","number","0") +
+      field("asset_url","Animation / asset URL","text","",false) +
+      field("order","Display order","number","0") +
+      field("countries","Country codes (comma separated, blank = all)","text","",false) +
+      field("starts_at","Effective from","datetime-local","",false) +
+      field("ends_at","Effective until","datetime-local","",false)
+    ],
     "profile-card-new": ["Add Profile Card", field("name","Profile card name") + field("asset_url","Profile card asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
@@ -1511,6 +1527,16 @@ async function handleAction(action, data) {
   if (["gift-new","entry-new","frame-new","banner-new"].includes(action)) {
     payload.order = Number(data.order || 0);
     if (action === "frame-new") payload.price = Math.max(0, Number(data.price || 0));
+    if (action === "gift-new") {
+      payload.coin_price = Math.max(0, Number(data.coin_price || 0));
+      payload.lucky = String(data.lucky || "") === "true";
+      payload.max_multiplier = Math.max(1, Math.min(1000, Number(data.max_multiplier || 1000)));
+      payload.high_win_multiplier = Math.max(1, Math.min(1000, Number(data.high_win_multiplier || 200)));
+      payload.host_reward_percent = Math.max(0, Math.min(100, Number(data.host_reward_percent || 10)));
+      payload.charm_wealth_percent = Math.max(0, Math.min(100, Number(data.charm_wealth_percent || 10)));
+      payload.prize_pool_percent = Math.max(0, Math.min(100, Number(data.prize_pool_percent || 2)));
+      payload.emoji = String(data.emoji || "🎁").trim() || "🎁";
+    }
     payload.countries = String(data.countries || "").split(",").map(v => v.trim().toUpperCase()).filter(Boolean);
   }
   if (action === "game-switch") payload.enabled = String(data.enabled) === "true";
@@ -2040,8 +2066,37 @@ document.body.addEventListener("click", async e => {
       if (price === null) return;
       const asset = prompt("Animation / asset URL", String(data.asset_url || ""));
       if (asset === null) return;
-      data.coin_price = Number(price || 0);
+      data.coin_price = Math.max(0, Number(price || 0));
       data.asset_url = asset.trim();
+
+      const lucky = confirm(
+        "Enable Lucky / Rebate behavior for this gift?\n\nOK = Lucky gift\nCancel = Normal gift"
+      );
+      data.lucky = lucky;
+      data.rebate = lucky;
+      data.category = lucky ? "Lucky" : (data.category === "Lucky" ? "" : data.category || "");
+      data.effect_kind = lucky ? "lucky" : (data.effect_kind === "lucky" ? "" : data.effect_kind || "");
+
+      if (lucky) {
+        const emoji = prompt("Lucky gift emoji", String(data.emoji || "🎁"));
+        if (emoji === null) return;
+        const maxMultiplier = prompt("Maximum multiplier (1–1000)", String(data.max_multiplier || 1000));
+        if (maxMultiplier === null) return;
+        const highWin = prompt("Big-win banner starts at multiplier", String(data.high_win_multiplier || 200));
+        if (highWin === null) return;
+        const hostPercent = prompt("Host reward % of normal gift", String(data.host_reward_percent ?? 10));
+        if (hostPercent === null) return;
+        const charmPercent = prompt("Charm / Wealth % of normal gift", String(data.charm_wealth_percent ?? 10));
+        if (charmPercent === null) return;
+        const poolPercent = prompt("Prize pool contribution %", String(data.prize_pool_percent ?? 2));
+        if (poolPercent === null) return;
+        data.emoji = emoji.trim() || "🎁";
+        data.max_multiplier = Math.max(1, Math.min(1000, Number(maxMultiplier || 1000)));
+        data.high_win_multiplier = Math.max(1, Math.min(1000, Number(highWin || 200)));
+        data.host_reward_percent = Math.max(0, Math.min(100, Number(hostPercent || 10)));
+        data.charm_wealth_percent = Math.max(0, Math.min(100, Number(charmPercent || 10)));
+        data.prize_pool_percent = Math.max(0, Math.min(100, Number(poolPercent || 2)));
+      }
     } else if (item.kind === "entry" || item.kind === "frame") {
       const asset = prompt("Asset URL", String(data.asset_url || ""));
       if (asset === null) return;
