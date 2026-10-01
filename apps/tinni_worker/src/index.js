@@ -1076,9 +1076,6 @@ export default {
     }
 
     if (url.pathname === "/app-config" && request.method === "GET") {
-      const ownerState = getAppDirectoryStore(env).ownerState();
-      const features = ownerState.features || {};
-      const gameConfig = ownerState.game_config || {};
       return json({
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
@@ -1090,19 +1087,19 @@ export default {
         effect_media_configured: Boolean(env.EFFECT_MEDIA),
         remote_config: {
           room_recommendation_enabled: true,
-          gift_effects_enabled: features.gifts !== false,
-          ktv_enabled: features.voice_rooms !== false,
-          games_enabled: features.games !== false && gameConfig.enabled !== false,
-          voice_rooms_enabled: features.voice_rooms !== false,
-          vip_enabled: features.vip !== false,
-          host_system_enabled: features.host_system !== false,
-          agency_system_enabled: features.agency_system !== false,
-          bd_system_enabled: features.bd_system !== false,
-          coin_seller_enabled: features.coin_seller !== false,
-          merchant_enabled: features.merchant !== false,
-          banners_enabled: features.banners !== false,
-          vehicle_entries_enabled: features.vehicle_entries !== false,
-          frames_enabled: features.frames !== false,
+          gift_effects_enabled: true,
+          ktv_enabled: true,
+          games_enabled: true,
+          voice_rooms_enabled: true,
+          vip_enabled: true,
+          host_system_enabled: true,
+          agency_system_enabled: true,
+          bd_system_enabled: true,
+          coin_seller_enabled: true,
+          merchant_enabled: true,
+          banners_enabled: true,
+          vehicle_entries_enabled: true,
+          frames_enabled: true,
         },
       });
     }
