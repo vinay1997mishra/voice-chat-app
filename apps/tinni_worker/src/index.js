@@ -3620,9 +3620,33 @@ export default {
       }
 
       try {
+        const rooms = await getAppDirectoryStore(env).listRooms();
+        const room = rooms.find(
+          (item) => String(item.id || item.room_id || "") === roomId,
+        );
+        if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+        const store = getRoomPresenceStore(env, roomId);
+        const actorId = String(appSession.user.user_id);
+        const isManager = await store.isManager(actorId);
+        const isMember = await store.isMember(actorId);
+        const privileged =
+          String(room.owner_id) === actorId || (isManager && isMember);
+
+        // Owner/admin must never create a request for their own room.
+        // Even if a stale client calls the request endpoint after an ID change,
+        // take the seat directly on the authoritative backend.
+        if (privileged) {
+          return json(await store.takeSeat({
+            user_id: actorId,
+            seat_index: seatIndex,
+            privileged: true,
+          }));
+        }
+
         return json(
-          await getRoomPresenceStore(env, roomId).requestSeat({
-            user_id: appSession.user.user_id,
+          await store.requestSeat({
+            user_id: actorId,
             seat_index: seatIndex,
           }),
         );
