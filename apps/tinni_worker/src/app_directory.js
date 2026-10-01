@@ -529,9 +529,11 @@ export class AppDirectoryStore extends DurableObject {
         sender_id TEXT NOT NULL,
         receiver_id TEXT NOT NULL,
         gift_id TEXT NOT NULL,
+        session_id TEXT,
         multiplier INTEGER NOT NULL DEFAULT 0,
         rebate_coins INTEGER NOT NULL DEFAULT 0,
         pool_contribution INTEGER NOT NULL DEFAULT 0,
+        social_value_coins INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_lucky_gift_results_room_time
@@ -557,6 +559,43 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_lucky_gift_daily_rank
         ON lucky_gift_daily(day_key, rebate_coins DESC, sent_coins DESC);
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        gift_id TEXT NOT NULL,
+        gift_name TEXT NOT NULL,
+        unit_price INTEGER NOT NULL,
+        send_count INTEGER NOT NULL DEFAULT 0,
+        total_sent_coins INTEGER NOT NULL DEFAULT 0,
+        total_rebate_coins INTEGER NOT NULL DEFAULT 0,
+        highest_multiplier INTEGER NOT NULL DEFAULT 0,
+        started_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lucky_gift_sessions_user_time
+        ON lucky_gift_sessions(user_id, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_pool_daily (
+        day_key TEXT PRIMARY KEY,
+        contributed_coins INTEGER NOT NULL DEFAULT 0,
+        distributed_coins INTEGER NOT NULL DEFAULT 0,
+        settled_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_settlements (
+        id TEXT PRIMARY KEY,
+        day_key TEXT NOT NULL,
+        rank INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
+        share_percent INTEGER NOT NULL,
+        coins INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lucky_gift_settlements_day
+        ON lucky_gift_settlements(day_key, rank ASC);
 
       CREATE TABLE IF NOT EXISTS room_gift_owner_daily (
         room_id TEXT NOT NULL,
@@ -1124,7 +1163,9 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE user_equipment ADD COLUMN equipped_ring_id TEXT",
       "ALTER TABLE user_equipment ADD COLUMN equipped_bubble_id TEXT",
       "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT",
-      "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''"
+      "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE lucky_gift_results ADD COLUMN session_id TEXT",
+      "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -4358,9 +4399,16 @@ export class AppDirectoryStore extends DurableObject {
       enabled: true,
       max_multiplier: 1000,
       high_win_multiplier: 200,
+      banner_multiplier: 500,
+      ultra_banner_multiplier: 1000,
       host_reward_percent: 10,
       charm_wealth_percent: 10,
       prize_pool_percent: 2,
+      rank_shares: [50, 25, 15],
+      daily_send_cap: 0,
+      banners_enabled: true,
+      testing_mode: false,
+      event_mode: false,
       multiplier_weights: {
         "0": 900000,
         "1": 45000,
@@ -4372,6 +4420,7 @@ export class AppDirectoryStore extends DurableObject {
         "22": 1800,
         "30": 900,
         "50": 450,
+        "75": 320,
         "100": 250,
         "200": 60,
         "250": 20,
@@ -4413,9 +4462,76 @@ export class AppDirectoryStore extends DurableObject {
     return 0;
   }
 
+  _settleLuckyGiftPools(nowValue = Date.now()) {
+    const now = Number(nowValue || Date.now());
+    const currentDay = new Date(now).toISOString().slice(0, 10);
+    const config = this._luckyGiftConfig();
+    const rawShares = Array.isArray(config.rank_shares) ? config.rank_shares : [50, 25, 15];
+    const shares = rawShares.slice(0, 3).map((value) =>
+      Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+    );
+    const totalShare = shares.reduce((sum, value) => sum + value, 0);
+    if (totalShare > 100) return;
+
+    const pending = this.ctx.storage.sql.exec(
+      `SELECT day_key,contributed_coins
+         FROM lucky_gift_pool_daily
+        WHERE settled_at IS NULL AND day_key < ?
+        ORDER BY day_key ASC
+        LIMIT 31`,
+      currentDay,
+    ).toArray();
+
+    for (const pool of pending) {
+      const dayKey = String(pool.day_key || "");
+      const contributed = Math.max(0, Number(pool.contributed_coins || 0));
+      const ranking = this.ctx.storage.sql.exec(
+        `SELECT user_id,rebate_coins,sent_coins
+           FROM lucky_gift_daily
+          WHERE day_key=?
+          ORDER BY rebate_coins DESC,sent_coins DESC,updated_at ASC
+          LIMIT 3`,
+        dayKey,
+      ).toArray();
+      let distributed = 0;
+      ranking.forEach((row, index) => {
+        const share = shares[index] || 0;
+        const coins = Math.floor(contributed * share / 100);
+        if (coins <= 0) return;
+        const userId = String(row.user_id || "");
+        if (!userId) return;
+        this._creditNormalWalletAuthorized(userId, coins, "lucky_daily_pool");
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
+          "wallet-" + crypto.randomUUID(), userId, "lucky_daily_pool",
+          coins, 0, "lucky-pool:" + dayKey,
+          "Lucky Day Ranking #" + (index + 1), now,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO lucky_gift_settlements (id,day_key,rank,user_id,share_percent,coins,created_at) VALUES (?,?,?,?,?,?,?)",
+          "settlement-" + crypto.randomUUID(), dayKey, index + 1, userId, share, coins, now,
+        );
+        distributed += coins;
+      });
+      if (distributed > 0) {
+        this.ctx.storage.sql.exec(
+          "UPDATE lucky_gift_pool SET balance=MAX(0,balance-?),updated_at=? WHERE singleton_id=1",
+          distributed, now,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        "UPDATE lucky_gift_pool_daily SET distributed_coins=?,settled_at=?,updated_at=? WHERE day_key=?",
+        distributed, now, now, dayKey,
+      );
+    }
+  }
+
   luckyGiftState(userIdValue = "") {
     const userId = String(userIdValue || "").trim();
-    const dayKey = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    this._settleLuckyGiftPools(now);
+    const config = this._luckyGiftConfig();
+    const dayKey = new Date(now).toISOString().slice(0, 10);
     const poolRow = this.ctx.storage.sql.exec(
       "SELECT balance,updated_at FROM lucky_gift_pool WHERE singleton_id=1 LIMIT 1",
     ).toArray()[0];
@@ -4441,17 +4557,53 @@ export class AppDirectoryStore extends DurableObject {
     const mine = userId
       ? ranking.find((row) => row.user_id === userId) || null
       : null;
+    const sessions = userId
+      ? this.ctx.storage.sql.exec(
+          `SELECT id,room_id,gift_id,gift_name,unit_price,send_count,total_sent_coins,
+                  total_rebate_coins,highest_multiplier,started_at,updated_at
+             FROM lucky_gift_sessions
+            WHERE user_id=?
+            ORDER BY updated_at DESC
+            LIMIT 20`,
+          userId,
+        ).toArray().map((row) => ({
+          id: String(row.id),
+          room_id: String(row.room_id),
+          gift_id: String(row.gift_id),
+          gift_name: String(row.gift_name),
+          unit_price: Number(row.unit_price || 0),
+          send_count: Number(row.send_count || 0),
+          total_sent_coins: Number(row.total_sent_coins || 0),
+          total_rebate_coins: Number(row.total_rebate_coins || 0),
+          highest_multiplier: Number(row.highest_multiplier || 0),
+          started_at: Number(row.started_at || 0),
+          updated_at: Number(row.updated_at || 0),
+        }))
+      : [];
+    const rawShares = Array.isArray(config.rank_shares) ? config.rank_shares : [50, 25, 15];
+    const rankShares = rawShares.slice(0, 3).map((value) =>
+      Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+    );
+    const shareTotal = rankShares.reduce((sum, value) => sum + value, 0);
+    const countdownEndsAt = Date.parse(dayKey + "T00:00:00.000Z") + 86400000;
     return {
       ok: true,
       day_key: dayKey,
       pool_balance: Math.max(0, Number(poolRow?.balance || 0)),
       pool_updated_at: Number(poolRow?.updated_at || 0),
-      max_multiplier: Math.max(1, Math.min(1000, Number(this._luckyGiftConfig().max_multiplier || 1000))),
-      high_win_multiplier: Math.max(1, Number(this._luckyGiftConfig().high_win_multiplier || 200)),
-      visible_daily_rank_shares: [50, 25, 15],
-      remaining_share_percent: 10,
+      max_multiplier: Math.max(1, Math.min(1000, Number(config.max_multiplier || 1000))),
+      high_win_multiplier: Math.max(1, Number(config.high_win_multiplier || 200)),
+      banner_multiplier: Math.max(1, Number(config.banner_multiplier || 500)),
+      ultra_banner_multiplier: Math.max(1, Number(config.ultra_banner_multiplier || 1000)),
+      visible_daily_rank_shares: rankShares,
+      remaining_share_percent: Math.max(0, 100 - shareTotal),
+      countdown_ends_at: countdownEndsAt,
+      daily_send_cap: Math.max(0, Number(config.daily_send_cap || 0)),
+      testing_mode: config.testing_mode === true,
+      event_mode: config.event_mode === true,
       ranking,
       mine,
+      recent_sessions: sessions,
     };
   }
 
@@ -4505,6 +4657,36 @@ export class AppDirectoryStore extends DurableObject {
     const luckyConfig = this._luckyGiftConfig();
     if (isLucky && luckyConfig.enabled === false) {
       throw new Error("Lucky gifts are temporarily unavailable");
+    }
+    const luckySessionId = isLucky
+      ? cleanText(input?.lucky_session_id || ("lucky-session-" + crypto.randomUUID()), 96)
+      : "";
+    const charmWealthPercent = Math.max(
+      0,
+      Math.min(100, Number(giftData.charm_wealth_percent ?? luckyConfig.charm_wealth_percent ?? 10)),
+    );
+    if (isLucky) {
+      const dailyCap = Math.max(0, Math.floor(Number(luckyConfig.daily_send_cap || 0)));
+      if (dailyCap > 0) {
+        const dayKey = new Date().toISOString().slice(0, 10);
+        const used = Number(this.ctx.storage.sql.exec(
+          "SELECT sent_count FROM lucky_gift_daily WHERE day_key=? AND user_id=? LIMIT 1",
+          dayKey, senderId,
+        ).toArray()[0]?.sent_count || 0);
+        if (used + quantity * receivers.length > dailyCap) {
+          throw new Error("Lucky Gift daily send cap reached");
+        }
+      }
+      const existingSession = this.ctx.storage.sql.exec(
+        "SELECT user_id,room_id,gift_id FROM lucky_gift_sessions WHERE id=? LIMIT 1",
+        luckySessionId,
+      ).toArray()[0];
+      if (existingSession &&
+          (String(existingSession.user_id) !== senderId ||
+           String(existingSession.room_id) !== roomId ||
+           String(existingSession.gift_id) !== giftId)) {
+        throw new Error("Invalid Lucky Gift session");
+      }
     }
 
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
@@ -4601,21 +4783,24 @@ export class AppDirectoryStore extends DurableObject {
         totalRebate += rebateCoins;
         totalPoolContribution += poolContribution;
         highestMultiplier = Math.max(highestMultiplier, multiplier);
+        const socialValueCoins = Math.floor(receiverTotal * charmWealthPercent / 100);
         const resultId = "lucky-" + crypto.randomUUID();
         this.ctx.storage.sql.exec(
           `INSERT INTO lucky_gift_results
-            (id,transaction_id,room_id,sender_id,receiver_id,gift_id,multiplier,rebate_coins,pool_contribution,created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          resultId, id, roomId, senderId, receiverId, giftId,
-          multiplier, rebateCoins, poolContribution, now,
+            (id,transaction_id,room_id,sender_id,receiver_id,gift_id,session_id,multiplier,rebate_coins,pool_contribution,social_value_coins,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          resultId, id, roomId, senderId, receiverId, giftId, luckySessionId,
+          multiplier, rebateCoins, poolContribution, socialValueCoins, now,
         );
         luckyResults.push({
           id: resultId,
           transaction_id: id,
           receiver_id: receiverId,
+          session_id: luckySessionId,
           multiplier,
           rebate_coins: rebateCoins,
           pool_contribution: poolContribution,
+          social_value_coins: socialValueCoins,
         });
       }
     }
@@ -4625,6 +4810,16 @@ export class AppDirectoryStore extends DurableObject {
         this.ctx.storage.sql.exec(
           "UPDATE lucky_gift_pool SET balance=balance+?,updated_at=? WHERE singleton_id=1",
           totalPoolContribution, now,
+        );
+        const poolDayKey = new Date(now).toISOString().slice(0, 10);
+        this.ctx.storage.sql.exec(
+          `INSERT INTO lucky_gift_pool_daily
+            (day_key,contributed_coins,distributed_coins,settled_at,updated_at)
+           VALUES (?,?,0,NULL,?)
+           ON CONFLICT(day_key) DO UPDATE SET
+             contributed_coins=lucky_gift_pool_daily.contributed_coins+excluded.contributed_coins,
+             updated_at=excluded.updated_at`,
+          poolDayKey, totalPoolContribution, now,
         );
       }
       if (totalRebate > 0) {
@@ -4655,16 +4850,43 @@ export class AppDirectoryStore extends DurableObject {
         totalRebate, highestMultiplier, now,
       );
 
+      this.ctx.storage.sql.exec(
+        `INSERT INTO lucky_gift_sessions
+          (id,user_id,room_id,gift_id,gift_name,unit_price,send_count,total_sent_coins,
+           total_rebate_coins,highest_multiplier,started_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           send_count=lucky_gift_sessions.send_count+excluded.send_count,
+           total_sent_coins=lucky_gift_sessions.total_sent_coins+excluded.total_sent_coins,
+           total_rebate_coins=lucky_gift_sessions.total_rebate_coins+excluded.total_rebate_coins,
+           highest_multiplier=MAX(lucky_gift_sessions.highest_multiplier,excluded.highest_multiplier),
+           updated_at=excluded.updated_at`,
+        luckySessionId, senderId, roomId, giftId, giftName, chargedUnitPrice,
+        quantity * receivers.length, totalCost, totalRebate, highestMultiplier, now, now,
+      );
+
       const highWinThreshold = Math.max(
         1,
         Number(giftData.high_win_multiplier ?? luckyConfig.high_win_multiplier ?? 200),
       );
-      if (highestMultiplier >= highWinThreshold && totalRebate > 0) {
+      const bannerThreshold = Math.max(
+        highWinThreshold,
+        Number(giftData.banner_multiplier ?? luckyConfig.banner_multiplier ?? 500),
+      );
+      const ultraBannerThreshold = Math.max(
+        bannerThreshold,
+        Number(giftData.ultra_banner_multiplier ?? luckyConfig.ultra_banner_multiplier ?? 1000),
+      );
+      if (luckyConfig.banners_enabled !== false &&
+          highestMultiplier >= bannerThreshold &&
+          totalRebate > 0) {
         const user = this.getUserById(senderId);
         const countryCode = String(user?.country_code || room.country_code || "").toUpperCase();
+        const ultra = highestMultiplier >= ultraBannerThreshold;
         this.ctx.storage.sql.exec(
           "INSERT INTO country_ribbons (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-          "ribbon-" + crypto.randomUUID(), countryCode, "lucky_gift", 3, roomId,
+          "ribbon-" + crypto.randomUUID(), countryCode,
+          ultra ? "lucky_gift_ultra" : "lucky_gift", ultra ? 4 : 3, roomId,
           senderId, String(user?.display_name || senderId), user?.avatar_data_url || null,
           totalRebate, giftName + " • " + highestMultiplier + "x", now, now + 120000,
         );
@@ -4694,6 +4916,18 @@ export class AppDirectoryStore extends DurableObject {
           1,
           Number(giftData.high_win_multiplier ?? luckyConfig.high_win_multiplier ?? 200),
         ),
+        banner_win: highestMultiplier >= Math.max(
+          1,
+          Number(giftData.banner_multiplier ?? luckyConfig.banner_multiplier ?? 500),
+        ),
+        ultra_win: highestMultiplier >= Math.max(
+          1,
+          Number(giftData.ultra_banner_multiplier ?? luckyConfig.ultra_banner_multiplier ?? 1000),
+        ),
+        session: this.ctx.storage.sql.exec(
+          "SELECT id,gift_name,unit_price,send_count,total_sent_coins,total_rebate_coins,highest_multiplier,started_at,updated_at FROM lucky_gift_sessions WHERE id=? LIMIT 1",
+          luckySessionId,
+        ).toArray()[0] || null,
       } : null,
     };
   }
@@ -4703,9 +4937,11 @@ export class AppDirectoryStore extends DurableObject {
     const limit = Math.max(1, Math.min(200, Number(limitValue) || 100));
     if (!roomId) return [];
     const rows = this.ctx.storage.sql.exec(
-      `SELECT g.*,l.multiplier,l.rebate_coins,l.pool_contribution
+      `SELECT g.*,l.session_id,l.multiplier,l.rebate_coins,l.pool_contribution,l.social_value_coins,
+              COALESCE(u.display_name,g.sender_id) AS sender_name,u.avatar_data_url AS sender_avatar_data_url
          FROM gift_transactions g
          LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+         LEFT JOIN app_users u ON u.user_id=g.sender_id
         WHERE g.room_id=?
         ORDER BY g.created_at DESC
         LIMIT ?`,
@@ -4717,9 +4953,13 @@ export class AppDirectoryStore extends DurableObject {
       unit_price: Number(row.unit_price),
       total_cost: Number(row.total_cost),
       created_at: Number(row.created_at),
+      session_id: row.session_id ? String(row.session_id) : null,
       multiplier: row.multiplier == null ? null : Number(row.multiplier),
       rebate_coins: row.rebate_coins == null ? null : Number(row.rebate_coins),
       pool_contribution: row.pool_contribution == null ? null : Number(row.pool_contribution),
+      social_value_coins: row.social_value_coins == null ? null : Number(row.social_value_coins),
+      sender_name: String(row.sender_name || row.sender_id),
+      sender_avatar_data_url: row.sender_avatar_data_url ? String(row.sender_avatar_data_url) : null,
     }));
   }
 
@@ -5245,10 +5485,16 @@ export class AppDirectoryStore extends DurableObject {
       "SELECT COUNT(*) AS count FROM app_follows WHERE target_id=?", userId,
     ).toArray()[0]?.count || 0);
     const sent = Number(this.ctx.storage.sql.exec(
-      "SELECT COALESCE(SUM(total_cost),0) AS total FROM gift_transactions WHERE sender_id=?", userId,
+      `SELECT COALESCE(SUM(CASE WHEN l.transaction_id IS NULL THEN g.total_cost ELSE l.social_value_coins END),0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+        WHERE g.sender_id=?`, userId,
     ).toArray()[0]?.total || 0);
     const received = Number(this.ctx.storage.sql.exec(
-      "SELECT COALESCE(SUM(total_cost),0) AS total FROM gift_transactions WHERE receiver_id=?", userId,
+      `SELECT COALESCE(SUM(CASE WHEN l.transaction_id IS NULL THEN g.total_cost ELSE l.social_value_coins END),0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+        WHERE g.receiver_id=?`, userId,
     ).toArray()[0]?.total || 0);
 
     const levelFor = (settingKey, points) => {
