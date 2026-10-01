@@ -102,12 +102,18 @@ class GiftDefinition {
     required this.name,
     required this.price,
     required this.effectKind,
+    this.lucky = false,
+    this.emoji = '🎁',
+    this.maxMultiplier = 0,
   });
 
   final String id;
   final String name;
   final int price;
   final String effectKind;
+  final bool lucky;
+  final String emoji;
+  final int maxMultiplier;
 }
 
 class GiftTransaction {
@@ -141,6 +147,99 @@ class GiftService {
       effectKind: 'pag',
     ),
     GiftDefinition(id: 'crown', name: 'Crown', price: 1000, effectKind: 'mp4'),
+  ];
+
+  static const luckyCatalog = <GiftDefinition>[
+    GiftDefinition(
+      id: 'lucky-colorful-rose',
+      name: 'Colorful Rose',
+      price: 20,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🌈🌹',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-rainbow-heart',
+      name: 'Rainbow Heart',
+      price: 50,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🌈💖',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-magic-balloon',
+      name: 'Magic Balloon',
+      price: 100,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎈',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-candy-star',
+      name: 'Candy Star',
+      price: 200,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🍭⭐',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-neon-butterfly',
+      name: 'Neon Butterfly',
+      price: 500,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🦋',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-sparkle-crown',
+      name: 'Sparkle Crown',
+      price: 1000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '👑',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-dream-cake',
+      name: 'Dream Cake',
+      price: 2000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎂',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-galaxy-ring',
+      name: 'Galaxy Ring',
+      price: 5000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '💍',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-shining-unicorn',
+      name: 'Shining Unicorn',
+      price: 10000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🦄',
+      maxMultiplier: 1000,
+    ),
+    GiftDefinition(
+      id: 'lucky-royal-treasure',
+      name: 'Royal Treasure Box',
+      price: 20000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎁',
+      maxMultiplier: 1000,
+    ),
   ];
 
   GiftTransaction? send({
