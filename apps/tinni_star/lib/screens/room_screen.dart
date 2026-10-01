@@ -7451,38 +7451,44 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   .toDouble();
                           final scale = 0.42 +
                               Curves.easeOutBack.transform(value) * 0.74;
+                          final arc =
+                              math.sin(math.pi * value) * seatDiameter * 0.55;
+                          final perspective = Matrix4.identity()
+                            ..setEntry(3, 2, 0.0018)
+                            ..rotateY((1 - value) * 2.15)
+                            ..rotateX((1 - value) * -0.48)
+                            ..rotateZ((1 - value) * 0.72)
+                            ..scale(scale, scale, 1.0);
                           return Transform.translate(
                             offset: Offset(
                               (1 - value) * seatDiameter * 2.15,
-                              (1 - value) * seatDiameter * 2.8,
+                              (1 - value) * seatDiameter * 2.8 - arc,
                             ),
-                            child: Transform.rotate(
-                              angle: (1 - value) * 0.8,
-                              child: Transform.scale(
-                                scale: scale,
-                                child: Opacity(
-                                  opacity: disappear,
-                                  child: Container(
-                                    padding: EdgeInsets.all(
-                                      math.max(1.0, seatDiameter * 0.03),
-                                    ),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      boxShadow: const <BoxShadow>[
-                                        BoxShadow(
-                                          color: Color(0xAAFFB84D),
-                                          blurRadius: 13,
-                                          spreadRadius: 2,
-                                        ),
-                                        BoxShadow(
-                                          color: Color(0x887F55FF),
-                                          blurRadius: 18,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                    child: child,
+                            child: Transform(
+                              alignment: Alignment.center,
+                              transform: perspective,
+                              child: Opacity(
+                                opacity: disappear,
+                                child: Container(
+                                  padding: EdgeInsets.all(
+                                    math.max(1.0, seatDiameter * 0.03),
                                   ),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: <BoxShadow>[
+                                      BoxShadow(
+                                        color: Color(0xAAFFB84D),
+                                        blurRadius: 13,
+                                        spreadRadius: 2,
+                                      ),
+                                      BoxShadow(
+                                        color: Color(0x887F55FF),
+                                        blurRadius: 18,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  child: child,
                                 ),
                               ),
                             ),
