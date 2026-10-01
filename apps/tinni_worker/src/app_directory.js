@@ -2357,12 +2357,38 @@ export class AppDirectoryStore extends DurableObject {
         starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
-      case "gift-new": return this.ownerCatalogCreate("gift", data.name, {
-        coin_price: Math.max(0, Number(data.coin_price || 0)), duration_days: Math.max(0, Number(data.duration_days || 0)), asset_url: String(data.asset_url || ""),
-        order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
-        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
-        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
-      });
+      case "gift-new": {
+        const lucky = data.lucky === true || String(data.lucky || "").toLowerCase() === "true";
+        return this.ownerCatalogCreate("gift", data.name, {
+          coin_price: Math.max(0, Number(data.coin_price || 0)),
+          duration_days: Math.max(0, Number(data.duration_days || 0)),
+          asset_url: String(data.asset_url || ""),
+          effect_kind: lucky ? "lucky" : String(data.effect_kind || ""),
+          category: lucky ? "Lucky" : String(data.category || ""),
+          lucky,
+          rebate: lucky,
+          emoji: cleanText(data.emoji || (lucky ? "🎁" : ""), 16),
+          max_multiplier: lucky
+            ? Math.max(1, Math.min(1000, Number(data.max_multiplier || 1000)))
+            : 0,
+          high_win_multiplier: lucky
+            ? Math.max(1, Math.min(1000, Number(data.high_win_multiplier || 200)))
+            : 0,
+          host_reward_percent: lucky
+            ? Math.max(0, Math.min(100, Number(data.host_reward_percent || 10)))
+            : 100,
+          charm_wealth_percent: lucky
+            ? Math.max(0, Math.min(100, Number(data.charm_wealth_percent || 10)))
+            : 100,
+          prize_pool_percent: lucky
+            ? Math.max(0, Math.min(100, Number(data.prize_pool_percent || 2)))
+            : 0,
+          order: Number(data.order || 0),
+          countries: Array.isArray(data.countries) ? data.countries : [],
+          starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+          ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
+        });
+      }
       case "profile-card-new": return this.ownerCatalogCreate("profile_card", data.name, {
         asset_url: String(data.asset_url || ""), price: Math.max(0, Number(data.price || data.coin_price || 0)),
         duration_days: Math.max(0, Number(data.duration_days || 0)), order: Number(data.order || 0),
