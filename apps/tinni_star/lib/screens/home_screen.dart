@@ -340,6 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _roomSyncTimer?.cancel();
+    _partyRankTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
