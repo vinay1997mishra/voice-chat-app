@@ -51,6 +51,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _roomAnnouncementOverride;
   Timer? _ribbonTimer;
   Timer? _roomSendingTimer;
+  Timer? _inboxTimer;
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
@@ -94,6 +95,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _roomSendingTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _refreshRoomSendingSummary(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshInboxBadge());
+    _inboxTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshInboxBadge(),
     );
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
@@ -531,6 +537,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _emoteExpiryTimer?.cancel();
     _ribbonTimer?.cancel();
     _roomSendingTimer?.cancel();
+    _inboxTimer?.cancel();
     chat.dispose();
     super.dispose();
   }
@@ -1563,6 +1570,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       radix: 16,
     );
     return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  int get _roomUnreadMessageCount =>
+      widget.state.social.totalUnreadMessages;
+
+  Future<void> _refreshInboxBadge() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final before = _roomUnreadMessageCount;
+      await widget.state.social.syncInbox(account.authToken);
+      if (mounted && before != _roomUnreadMessageCount) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Keep the previous badge while the inbox is temporarily unreachable.
+    }
+  }
+
+  Future<void> _openRoomInbox() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MessagesScreen(state: widget.state),
+      ),
+    );
+    await _refreshInboxBadge();
   }
 
   Future<void> _openPrivateMessage(RoomPresenceMember member) async {
@@ -7086,7 +7120,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      width: MediaQuery.sizeOf(context).width * 0.22,
                       child: TextField(
                         key: const Key('room-chat-field'),
                         controller: chat,
@@ -7178,14 +7212,74 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       iconSize: 31,
                       padding: const EdgeInsets.all(8),
                       constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
+                        minWidth: 46,
+                        minHeight: 46,
                       ),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
                       icon: _roomActionLogo(
                         label: 'Gift',
                         icon: Icons.card_giftcard_rounded,
-                        size: 42,
+                        size: 40,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-message-inbox-button'),
+                      tooltip: 'Messages',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(7),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _openRoomInbox,
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _roomActionLogo(
+                            label: 'Message',
+                            icon: Icons.mark_chat_unread_rounded,
+                            size: 40,
+                          ),
+                          if (_roomUnreadMessageCount > 0)
+                            Positioned(
+                              right: -7,
+                              top: -7,
+                              child: Container(
+                                key: const Key('room-message-unread-badge'),
+                                constraints: const BoxConstraints(
+                                  minWidth: 19,
+                                  minHeight: 19,
+                                ),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 5),
+                                decoration: BoxDecoration(
+                                  color: FeaturePalette.safety,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: RoyalPalette.nearBlack,
+                                    width: 1.4,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x66FF334D),
+                                      blurRadius: 7,
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  _roomUnreadMessageCount > 99
+                                      ? '99+'
+                                      : _roomUnreadMessageCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     IconButton(
