@@ -4206,7 +4206,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
         () {
           final enabled = controls.toggleSound();
-          _snack('Room sound ${enabled ? "enabled" : "muted"}.');
+          Future<void>.delayed(Duration.zero, () async {
+            try {
+              await widget.state.roomSession.setRoomSoundEnabled(enabled);
+              _snack('Room sound ${enabled ? "enabled" : "muted"}.');
+            } catch (error) {
+              controls.toggleSound();
+              _snack(
+                error.toString().replaceFirst('Bad state: ', ''),
+              );
+              if (mounted) setState(() {});
+            }
+          });
         },
       ),
       (
@@ -4271,6 +4282,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     ];
 
+    final visibleTools = tools.where((tool) {
+      final label = tool.$1;
+      if (!_canModerateSeats &&
+          (label == 'Room Type' || label == 'Music')) {
+        return false;
+      }
+      if (!_isRoomOwner &&
+          (label == 'Lock' ||
+              label == 'Unlock' ||
+              label == 'Public Screen' ||
+              label == 'Screen On')) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -4280,7 +4307,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(14),
           child: GridView.builder(
             shrinkWrap: true,
-            itemCount: tools.length,
+            itemCount: visibleTools.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
               childAspectRatio: 0.88,
@@ -4288,7 +4315,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               crossAxisSpacing: 6,
             ),
             itemBuilder: (_, index) {
-              final tool = tools[index];
+              final tool = visibleTools[index];
               return InkWell(
                 key: Key(
                   'room-tool-' +
