@@ -154,6 +154,11 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> guardianState(String token) async {
+    final data = await _request('GET', '/profile/guardian', token);
+    return _map(data['guardian']);
+  }
+
   Future<Map<String, dynamic>> updateProfile(
     String token,
     Map<String, dynamic> values,
