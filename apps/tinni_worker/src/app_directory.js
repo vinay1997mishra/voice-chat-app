@@ -6270,6 +6270,65 @@ export class AppDirectoryStore extends DurableObject {
       : { allowed: false };
   }
 
+  unreadMessageCount(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return 0;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS count
+         FROM direct_messages
+        WHERE to_user_id = ?
+          AND seen_at IS NULL`,
+      userId,
+    ).toArray()[0];
+    return Number(row?.count || 0);
+  }
+
+  _notifyMessageSocket(userIdValue, payload = {}) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return;
+    const message = JSON.stringify({
+      ...payload,
+      unread_count: this.unreadMessageCount(userId),
+    });
+    for (const socket of this.ctx.getWebSockets("message-user:" + userId)) {
+      try {
+        socket.send(message);
+      } catch (_) {
+        // Closed sockets are cleaned up by the Durable Object runtime.
+      }
+    }
+  }
+
+  async fetch(request) {
+    if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("WebSocket required", { status: 426 });
+    }
+    const userId = String(request.headers.get("x-tinni-user-id") || "").trim();
+    if (!userId) return new Response("Unauthorized", { status: 401 });
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.ctx.acceptWebSocket(server, ["message-user:" + userId]);
+    server.send(JSON.stringify({
+      type: "inbox_state",
+      unread_count: this.unreadMessageCount(userId),
+    }));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(socket, message) {
+    if (String(message || "") === "ping") {
+      try {
+        socket.send(JSON.stringify({ type: "pong" }));
+      } catch (_) {}
+    }
+  }
+
+  webSocketClose() {}
+
+  webSocketError() {}
+
   markConversationSeen(userIdValue, peerUserIdValue) {
     const userId = String(userIdValue || "").trim();
     const peerUserId = String(peerUserIdValue || "").trim();
@@ -6285,6 +6344,10 @@ export class AppDirectoryStore extends DurableObject {
       peerUserId,
       userId,
     );
+    this._notifyMessageSocket(userId, {
+      type: "messages_seen",
+      peer_user_id: peerUserId,
+    });
     return now;
   }
 
@@ -6717,14 +6780,20 @@ export class AppDirectoryStore extends DurableObject {
       text,
       { source_user_id: fromUserId, metadata: { message_id: id } },
     );
-    return {
+    const message = {
       id,
       from: fromUserId,
+      from_name: String(sender?.display_name || fromUserId),
       to: toUserId,
       text,
       created_at: now,
       seen_at: null,
     };
+    this._notifyMessageSocket(toUserId, {
+      type: "message_received",
+      message,
+    });
+    return message;
   }
 
 
@@ -6754,7 +6823,7 @@ export class AppDirectoryStore extends DurableObject {
       now,
     );
 
-    return {
+    const message = {
       id,
       from: "tinni-official",
       from_name: "Tinni Official",
@@ -6766,6 +6835,11 @@ export class AppDirectoryStore extends DurableObject {
         ? contextValue
         : {},
     };
+    this._notifyMessageSocket(toUserId, {
+      type: "message_received",
+      message,
+    });
+    return message;
   }
 
     async listRooms() {
