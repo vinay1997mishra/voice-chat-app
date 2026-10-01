@@ -609,7 +609,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildRibbonLane(Map<String, dynamic> ribbon, int lane) {
     final id = ribbon['id']?.toString() ?? '';
-    final isLp = ribbon['kind']?.toString() == 'lp';
+    final kind = ribbon['kind']?.toString() ?? '';
+    final isLp = kind == 'lp';
+    final isLucky = kind == 'lucky_gift' || kind == 'lucky_gift_ultra';
+    final isLuckyUltra = kind == 'lucky_gift_ultra';
     final name = ribbon['user_name']?.toString() ?? 'User';
     final amount = (ribbon['amount'] as num?)?.toInt() ?? 0;
     String amountText;
@@ -624,7 +627,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     final game =
         (ribbon['game_key']?.toString() ?? 'Game').replaceAll('_', ' ');
-    final headline = isLp ? 'LUCKY POUCH' : 'BIG WIN';
+    final headline = isLp
+        ? 'LUCKY POUCH'
+        : isLuckyUltra
+            ? 'LUCKY ULTRA'
+            : isLucky
+                ? 'LUCKY WIN'
+                : 'BIG WIN';
     final message = isLp
         ? name + ' opened ' + amountText + ' LP'
         : name + ' WIN ' + amountText + ' • ' + game;
@@ -655,11 +664,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         Color(0xFF9A151E),
                         Color(0xFF41040A),
                       ]
-                    : const <Color>[
-                        Color(0xFF050505),
-                        Color(0xFF17100A),
-                        Color(0xFF050505),
-                      ],
+                    : isLuckyUltra
+                        ? const <Color>[
+                            Color(0xFF0B0710),
+                            Color(0xFF6A3B00),
+                            Color(0xFF2F164A),
+                            Color(0xFF050505),
+                          ]
+                        : const <Color>[
+                            Color(0xFF050505),
+                            Color(0xFF17100A),
+                            Color(0xFF050505),
+                          ],
               ),
               borderRadius: BorderRadius.circular(23),
               border: Border.all(
@@ -690,9 +706,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Icon(
                     isLp
                         ? Icons.shopping_bag_rounded
-                        : Icons.sports_esports_rounded,
-                    color: const Color(0xFFFFD45A),
-                    size: 20,
+                        : isLucky
+                            ? Icons.card_giftcard_rounded
+                            : Icons.sports_esports_rounded,
+                    color: isLuckyUltra
+                        ? const Color(0xFFFFF2A8)
+                        : const Color(0xFFFFD45A),
+                    size: isLuckyUltra ? 22 : 20,
                   ),
                 ),
                 const SizedBox(width: 8),
