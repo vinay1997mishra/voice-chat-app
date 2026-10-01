@@ -1066,6 +1066,15 @@ export default {
       });
     }
 
+    if (url.pathname === "/auth-config" && request.method === "GET") {
+      return json({
+        ok: true,
+        google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
+        facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
+        email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+      });
+    }
+
     if (url.pathname === "/app-config" && request.method === "GET") {
       const ownerState = getAppDirectoryStore(env).ownerState();
       const features = ownerState.features || {};
