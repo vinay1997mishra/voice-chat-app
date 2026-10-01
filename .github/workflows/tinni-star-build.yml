@@ -2,12 +2,12 @@ name: Tinni Star Android
 
 on:
   push:
-    branches: [main, build/tinni-star-0.5.23-41, build/tinni-star-0.5.23-44-lucky-only]
+    branches: [build/tinni-star-0.5.23-44-lucky-only]
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
   pull_request:
-    branches: [main]
+    branches: [build/tinni-star-0.5.23-44-lucky-only]
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
@@ -15,6 +15,7 @@ on:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/build/tinni-star-0.5.23-44-lucky-only' || github.base_ref == 'build/tinni-star-0.5.23-44-lucky-only'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
