@@ -2787,7 +2787,11 @@ export class AppDirectoryStore extends DurableObject {
     if (avatarDataUrl && avatarDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
       throw new Error("Profile photo is too large");
     }
-    if (avatarDataUrl && !avatarDataUrl.startsWith("data:image/")) {
+    if (
+      avatarDataUrl &&
+      !avatarDataUrl.startsWith("data:image/") &&
+      !avatarDataUrl.startsWith("https://")
+    ) {
       throw new Error("Profile photo format is invalid");
     }
 
