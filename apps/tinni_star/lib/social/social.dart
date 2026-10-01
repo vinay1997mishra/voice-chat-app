@@ -73,6 +73,8 @@ class SocialService {
   final List<MessageThread> messageThreads = <MessageThread>[];
 
   final ValueNotifier<int> unreadMessages = ValueNotifier<int>(0);
+  final ValueNotifier<Map<String, dynamic>?> messageEvents =
+      ValueNotifier<Map<String, dynamic>?>(null);
   WebSocket? _messageSocket;
   StreamSubscription<dynamic>? _messageSocketSubscription;
   Timer? _messageReconnectTimer;
@@ -154,12 +156,16 @@ class SocialService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return;
-      final count = decoded['unread_count'];
+      final event = decoded.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      final count = event['unread_count'];
       if (count is num) {
         _setUnreadMessages(count.toInt());
       } else if (count != null) {
         _setUnreadMessages(int.tryParse(count.toString()) ?? 0);
       }
+      messageEvents.value = Map<String, dynamic>.from(event);
     } catch (_) {}
   }
 
@@ -596,5 +602,10 @@ class SocialService {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  void dispose() => _httpClient.close(force: true);
+  void dispose() {
+    unreadMessages.dispose();
+    messageEvents.dispose();
+    _messageReconnectTimer?.cancel();
+    _httpClient.close(force: true);
+  }
 }
