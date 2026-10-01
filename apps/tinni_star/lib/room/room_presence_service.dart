@@ -535,6 +535,7 @@ class RoomPresenceService extends ChangeNotifier {
     required int quantity,
     required int unitPrice,
     required List<String> receiverIds,
+    String? luckySessionId,
   }) =>
       _commandPost(
         '/gifts/send',
@@ -546,9 +547,43 @@ class RoomPresenceService extends ChangeNotifier {
           'quantity': quantity,
           'unit_price': unitPrice,
           'receiver_ids': receiverIds,
+          if (luckySessionId != null && luckySessionId.isNotEmpty)
+            'lucky_session_id': luckySessionId,
         },
         applyResponse: false,
       );
+
+  Future<List<Map<String, dynamic>>> roomGiftFeed({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(
+        path: '/gifts/room',
+        queryParameters: <String, String>{'room_id': roomId},
+      ),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load room gift feed',
+      );
+    }
+    final raw = data['gifts'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw
+        .whereType<Map>()
+        .map((row) => row.map(
+              (key, value) => MapEntry(key.toString(), value),
+            ))
+        .toList(growable: false);
+  }
 
   Future<Map<String, dynamic>> luckyGiftState({
     required String authToken,
