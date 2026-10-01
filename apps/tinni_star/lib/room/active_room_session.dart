@@ -140,16 +140,25 @@ class ActiveRoomSession extends ChangeNotifier {
       }
 
       await foregroundService.start();
-      await realtime.enterRoom(
-        nextRoom.id,
-        userId,
-        authToken: authToken,
-      );
       _activeAuthToken = authToken;
-      await _startPresence();
+
+      // Voice and room-presence are independent network joins. Start both
+      // together so the seat backend is ready by the time LiveKit audio is
+      // connected instead of making the user wait for them sequentially.
+      await Future.wait<void>([
+        realtime.enterRoom(
+          nextRoom.id,
+          userId,
+          authToken: authToken,
+        ),
+        _startPresence(),
+      ]);
+
       connected = true;
       connecting = false;
       connectionError = null;
+      await _applyForcedSeatChange();
+      await _enforceModerationMute();
     } catch (error) {
       connecting = false;
       connected = false;
