@@ -49,6 +49,19 @@ Color _homeFeatureColor(String title) {
 }
 
 
+String _compactNumber(int value) {
+  if (value >= 1000000000) {
+    return (value / 1000000000).toStringAsFixed(value % 1000000000 == 0 ? 0 : 1) + 'B';
+  }
+  if (value >= 1000000) {
+    return (value / 1000000).toStringAsFixed(value % 1000000 == 0 ? 0 : 1) + 'M';
+  }
+  if (value >= 1000) {
+    return (value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1) + 'K';
+  }
+  return value.toString();
+}
+
 ImageProvider? _homeAvatarProvider(String? value) {
   final source = value?.trim() ?? '';
   if (source.isEmpty) return null;
@@ -1134,6 +1147,8 @@ class _RoomArtwork extends StatelessWidget {
     final remotePhoto = room.photoDataUrl;
     final hasRemotePhoto =
         remotePhoto != null && remotePhoto.startsWith('data:image/');
+    final hasNetworkPhoto = remotePhoto != null &&
+        (remotePhoto.startsWith('https://') || remotePhoto.startsWith('http://'));
     final hasLocalPhoto =
         path != null && path.isNotEmpty && File(path).existsSync();
 
@@ -1162,14 +1177,31 @@ class _RoomArtwork extends StatelessWidget {
                   fit: BoxFit.cover,
                 ),
               )
-            : hasLocalPhoto
+            : hasNetworkPhoto
                 ? SizedBox.expand(
-                    child: Image.file(
-                      File(path),
+                    child: Image.network(
+                      remotePhoto,
                       fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Text(
+                          fallback ?? room.title.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: FeaturePalette.discover,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
                     ),
                   )
-                : fallback != null
+                : hasLocalPhoto
+                    ? SizedBox.expand(
+                        child: Image.file(
+                          File(path),
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : fallback != null
                 ? Text(
                     fallback!,
                     style: const TextStyle(
@@ -1682,38 +1714,81 @@ class _TopRoomCard extends StatelessWidget {
             alignment: Alignment.topCenter,
             children: [
               Container(
-                height: 106,
+                padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: accent, width: rank == 1 ? 3 : 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: rank == 1 ? 0.62 : 0.42),
+                      blurRadius: rank == 1 ? 18 : 12,
+                      spreadRadius: rank == 1 ? 1 : 0,
+                    ),
+                  ],
                   gradient: LinearGradient(
                     colors: rank == 1
-                        ? const [Color(0xFF614000), Color(0xFF130D03)]
-                        : const [Color(0xFF292017), Color(0xFF080706)],
+                        ? const [
+                            Color(0xFFFFD85A),
+                            Color(0xFF6E4300),
+                            Color(0xFF171008),
+                          ]
+                        : rank == 2
+                            ? const [
+                                Color(0xFFE4EDF4),
+                                Color(0xFF5D6875),
+                                Color(0xFF111418),
+                              ]
+                            : const [
+                                Color(0xFFFFB07A),
+                                Color(0xFF7A3B1D),
+                                Color(0xFF17100D),
+                              ],
                   ),
                 ),
-                child: Center(
-                  child: ShiningIcon(
-                    icon: rank == 1
-                        ? Icons.emoji_events_rounded
-                        : Icons.groups_rounded,
-                    size: 38,
-                    boxSize: 66,
-                    color: accent,
-                    glow: 0.44,
-                  ),
+                child: _RoomArtwork(
+                  room: room,
+                  width: double.infinity,
+                  height: 100,
+                  fallback: room.title.characters.first.toUpperCase(),
                 ),
               ),
               Transform.translate(
-                offset: const Offset(0, -7),
-                child: CircleAvatar(
-                  radius: 17,
-                  backgroundColor: accent,
-                  child: Text(
-                    rank.toString(),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w900,
-                    ),
+                offset: const Offset(0, -9),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.65),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        rank == 1
+                            ? Icons.workspace_premium_rounded
+                            : Icons.emoji_events_rounded,
+                        size: 12,
+                        color: Colors.black,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'TOP $rank',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1732,10 +1807,12 @@ class _TopRoomCard extends StatelessWidget {
           ),
           Text(
             (room.country == 'IN' ? '🇮🇳  ' : '🌐  ') +
-                room.online.toString(),
+                room.online.toString() +
+                '  •  EXP ' +
+                _compactNumber(room.roomExperience),
             style: const TextStyle(
               color: RoyalPalette.muted,
-              fontSize: 10,
+              fontSize: 9.5,
             ),
           ),
         ],
