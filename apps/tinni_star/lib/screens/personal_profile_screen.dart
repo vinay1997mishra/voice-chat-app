@@ -140,6 +140,7 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
     final name = TextEditingController(text: account.displayName);
     final signature = TextEditingController(text: account.signature);
     String gender = account.gender == 'female' ? 'female' : 'male';
+    String? birthday = account.birthday;
     String? avatarDataUrl = account.avatarDataUrl;
 
     final result = await showModalBottomSheet<Map<String, dynamic>>(
@@ -240,6 +241,48 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
+                  ListTile(
+                    key: const Key('profile-edit-birthday'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: const Icon(
+                      Icons.cake_rounded,
+                      color: RoyalPalette.gold,
+                    ),
+                    title: const Text(
+                      'Birthday',
+                      style: TextStyle(color: RoyalPalette.cream),
+                    ),
+                    subtitle: Text(
+                      birthday == null || birthday!.isEmpty
+                          ? 'Set birthday'
+                          : birthday!,
+                      style: const TextStyle(color: RoyalPalette.muted),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: RoyalPalette.gold,
+                    ),
+                    onTap: () async {
+                      final now = DateTime.now();
+                      DateTime initial = DateTime(now.year - account.age, 1, 1);
+                      if (birthday != null && birthday!.isNotEmpty) {
+                        initial = DateTime.tryParse(birthday!) ?? initial;
+                      }
+                      final picked = await showDatePicker(
+                        context: sheetContext,
+                        initialDate: initial,
+                        firstDate: DateTime(now.year - 100),
+                        lastDate: DateTime(now.year - 18, now.month, now.day),
+                      );
+                      if (picked == null) return;
+                      final value =
+                          '${picked.year.toString().padLeft(4, '0')}-'
+                          '${picked.month.toString().padLeft(2, '0')}-'
+                          '${picked.day.toString().padLeft(2, '0')}';
+                      setSheetState(() => birthday = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     key: const Key('profile-edit-signature'),
                     controller: signature,
@@ -263,6 +306,7 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                             'display_name': value,
                             'signature': signature.text.trim(),
                             'gender': gender,
+                            'birthday': birthday,
                             'avatar_data_url': avatarDataUrl,
                           },
                         );
@@ -519,6 +563,12 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                   const SizedBox(height: 12),
                   _InfoRow(label: 'Name', value: account.displayName),
                   _InfoRow(label: 'Age', value: account.age.toString()),
+                  _InfoRow(
+                    label: 'Birthday',
+                    value: account.birthday == null || account.birthday!.isEmpty
+                        ? 'Not set'
+                        : account.birthday!,
+                  ),
                   _InfoRow(
                     label: 'Gender',
                     value: account.gender.isEmpty ? 'Not set' : account.gender,
