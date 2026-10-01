@@ -100,7 +100,7 @@ class AppAuthApi {
 
   Future<AppAuthConfig> loadConfig() async {
     final request = await _httpClient.getUrl(
-      apiBase.replace(path: '/app-config'),
+      apiBase.replace(path: '/auth-config'),
     );
     final response = await request.close();
     final data = await _readJson(response);
