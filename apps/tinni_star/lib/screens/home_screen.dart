@@ -63,6 +63,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final PageController _pageController = PageController(initialPage: 1);
   Timer? _roomSyncTimer;
+  Timer? _partyRankTimer;
+  final List<Map<String, dynamic>> _cpTop = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> _familyTop = <Map<String, dynamic>>[];
   int _page = 1;
   bool popular = true;
   String countryFilter = '';
@@ -82,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
+    _syncPartyRankPreviews();
     _syncNotifications();
     _roomSyncTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -89,6 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _syncRooms();
         _syncNotifications();
       },
+    );
+    _partyRankTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _syncPartyRankPreviews(),
     );
   }
 
@@ -100,6 +108,32 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() {});
     } catch (_) {
       // Keep the last real server snapshot while reconnecting.
+    }
+  }
+
+  Future<void> _syncPartyRankPreviews() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.cpRanking(account.authToken, limit: 3),
+        widget.state.backend.familyList(account.authToken, limit: 3),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _cpTop
+          ..clear()
+          ..addAll(
+            List<Map<String, dynamic>>.from(results[0] as List),
+          );
+        _familyTop
+          ..clear()
+          ..addAll(
+            List<Map<String, dynamic>>.from(results[1] as List),
+          );
+      });
+    } catch (_) {
+      // Keep the last successful podium preview while reconnecting.
     }
   }
 
