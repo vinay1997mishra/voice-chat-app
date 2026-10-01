@@ -51,7 +51,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _roomAnnouncementOverride;
   Timer? _ribbonTimer;
   Timer? _roomSendingTimer;
-  Timer? _inboxTimer;
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
@@ -96,11 +95,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       const Duration(seconds: 30),
       (_) => _refreshRoomSendingSummary(),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshInboxBadge());
-    _inboxTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _refreshInboxBadge(),
-    );
+    widget.state.social.unreadMessages.addListener(_refresh);
+    final account = widget.state.auth.current;
+    if (account != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.state.social.connectMessageEvents(account.authToken);
+      });
+    }
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
@@ -537,7 +538,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _emoteExpiryTimer?.cancel();
     _ribbonTimer?.cancel();
     _roomSendingTimer?.cancel();
-    _inboxTimer?.cancel();
+    widget.state.social.unreadMessages.removeListener(_refresh);
+    widget.state.social.disconnectMessageEvents();
     chat.dispose();
     super.dispose();
   }
@@ -1575,20 +1577,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int get _roomUnreadMessageCount =>
       widget.state.social.totalUnreadMessages;
 
-  Future<void> _refreshInboxBadge() async {
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    try {
-      final before = _roomUnreadMessageCount;
-      await widget.state.social.syncInbox(account.authToken);
-      if (mounted && before != _roomUnreadMessageCount) {
-        setState(() {});
-      }
-    } catch (_) {
-      // Keep the previous badge while the inbox is temporarily unreachable.
-    }
-  }
-
   Future<void> _openRoomInbox() async {
     await Navigator.push(
       context,
@@ -1596,7 +1584,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         builder: (_) => MessagesScreen(state: widget.state),
       ),
     );
-    await _refreshInboxBadge();
   }
 
   Future<void> _openPrivateMessage(RoomPresenceMember member) async {
