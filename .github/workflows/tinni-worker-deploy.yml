@@ -3,7 +3,7 @@ name: Tinni Worker Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main, build/tinni-star-0.5.23-41, build/tinni-star-0.5.23-44-lucky-only]
+    branches: [build/tinni-star-0.5.23-44-lucky-only]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
@@ -11,6 +11,7 @@ on:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/build/tinni-star-0.5.23-44-lucky-only'
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
