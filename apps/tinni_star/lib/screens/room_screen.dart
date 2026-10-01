@@ -963,6 +963,115 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       '👌', '🤟', '🤘', '👋', '💋', '🫶', '💃', '🕺',
     ];
 
+    Future<void> sendSelectedGift(
+      BuildContext sheetContext,
+      GiftDefinition gift,
+    ) async {
+      if (_selectedGiftRecipients.isEmpty) {
+        _snack('Select at least one recipient.');
+        return;
+      }
+
+      if (gift.lucky) {
+        final selectedRecipients =
+            _selectedGiftRecipients.toList(growable: false);
+        var sentCount = 0;
+        var allSent = true;
+        for (var sendIndex = 0;
+            sendIndex < luckyQuantity;
+            sendIndex++) {
+          final sent = await _sendLuckyGift(
+            gift,
+            selectedRecipients,
+          );
+          if (!sent) {
+            allSent = false;
+            break;
+          }
+          sentCount++;
+        }
+        if (allSent &&
+            sentCount == luckyQuantity &&
+            sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        return;
+      }
+
+      if (giftCategory != 'Backpack') {
+        try {
+          await widget.state.roomSession.sendGift(
+            roomId: widget.room.id,
+            authToken: widget.state.auth.current!.authToken,
+            giftId: gift.id,
+            giftName: gift.name,
+            quantity: 1,
+            unitPrice: gift.price,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+          );
+          _refreshRoomSendingSummary();
+        } catch (error) {
+          _snack(
+            error.toString().replaceFirst('Bad state: ', ''),
+          );
+          return;
+        }
+      }
+
+      GiftTransaction? tx;
+      if (giftCategory == 'Backpack') {
+        final consumed = widget.state.backpack.consume(gift.id, 1);
+        if (consumed) {
+          tx = GiftTransaction(
+            gift: gift,
+            quantity: 1,
+            senderId: senderId,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+            totalCost:
+                gift.price * _selectedGiftRecipients.length,
+          );
+          widget.state.gifts.sent.insert(0, tx);
+        }
+      } else {
+        tx = widget.state.gifts.send(
+          gift: gift,
+          quantity: 1,
+          maxCombo: controller.config.maxGiftCombo,
+          senderId: senderId,
+          receiverIds:
+              _selectedGiftRecipients.toList(growable: false),
+        );
+      }
+      if (tx == null) {
+        _snack(
+          giftCategory == 'Backpack'
+              ? 'This gift is not available in Backpack.'
+              : 'Gift failed, select a recipient or check balance.',
+        );
+        return;
+      }
+      if (!sheetContext.mounted) return;
+      Navigator.pop(sheetContext);
+      if (widget.state.roomControls.effectsEnabled) {
+        widget.state.effects.enqueue(
+          EffectRequest(
+            id: 'gift-${widget.state.gifts.sent.length}',
+            kind: EffectKind.gift,
+            asset: '${gift.effectKind}:${gift.id}',
+            priority: 50,
+          ),
+        );
+      }
+      widget.state.activities.addGiftScore(senderId, tx.totalCost);
+      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+      _snack(
+        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
+      );
+      setState(() {});
+    }
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -3166,6 +3275,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     var giftCategory = 'Popular';
     var luckyQuantity = 1;
+    GiftDefinition? selectedGift;
     const giftCategories = <String>[
       'Popular',
       'Lucky',
@@ -3359,6 +3469,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           onSelected: (_) {
                             setSheetState(() {
                               giftCategory = value;
+                              selectedGift = null;
+                              luckyQuantity = 1;
                             });
                           },
                         );
@@ -3583,108 +3695,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         final gift = filteredGifts[index];
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
-                          onTap: () async {
-                            if (_selectedGiftRecipients.isEmpty) {
-                              _snack('Select at least one recipient.');
-                              return;
-                            }
-                            if (gift.lucky) {
-                              final recipients = _selectedGiftRecipients
-                                  .toList(growable: false);
-                              var sentCount = 0;
-                              var allSent = true;
-                              for (var sendIndex = 0;
-                                  sendIndex < luckyQuantity;
-                                  sendIndex++) {
-                                final sent = await _sendLuckyGift(
-                                  gift,
-                                  recipients,
-                                );
-                                if (!sent) {
-                                  allSent = false;
-                                  break;
-                                }
-                                sentCount++;
-                              }
-                              if (allSent &&
-                                  sentCount == luckyQuantity &&
-                                  context.mounted) {
-                                Navigator.pop(context);
-                              }
-                              return;
-                            }
-                            if (giftCategory != 'Backpack') {
-                              try {
-                                await widget.state.roomSession.sendGift(
-                                  roomId: widget.room.id,
-                                  authToken: widget.state.auth.current!.authToken,
-                                  giftId: gift.id,
-                                  giftName: gift.name,
-                                  quantity: 1,
-                                  unitPrice: gift.price,
-                                  receiverIds: _selectedGiftRecipients.toList(growable: false),
-                                );
-                                _refreshRoomSendingSummary();
-                              } catch (error) {
-                                _snack(error.toString().replaceFirst('Bad state: ', ''));
-                                return;
-                              }
-                            }
-                            GiftTransaction? tx;
-                            if (giftCategory == 'Backpack') {
-                              final consumed =
-                                  widget.state.backpack.consume(gift.id, 1);
-                              if (consumed) {
-                                tx = GiftTransaction(
-                                  gift: gift,
-                                  quantity: 1,
-                                  senderId: senderId,
-                                  receiverIds: _selectedGiftRecipients
-                                      .toList(growable: false),
-                                  totalCost: gift.price *
-                                      _selectedGiftRecipients.length,
-                                );
-                                widget.state.gifts.sent.insert(0, tx);
-                              }
-                            } else {
-                              tx = widget.state.gifts.send(
-                                gift: gift,
-                                quantity: 1,
-                                maxCombo: controller.config.maxGiftCombo,
-                                senderId: senderId,
-                                receiverIds: _selectedGiftRecipients
-                                    .toList(growable: false),
-                              );
-                            }
-                            if (tx == null) {
-                              _snack(
-                                giftCategory == 'Backpack'
-                                    ? 'This gift is not available in Backpack.'
-                                    : 'Gift failed, select a recipient or check balance.',
-                              );
-                              return;
-                            }
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            if (widget.state.roomControls.effectsEnabled) {
-                              widget.state.effects.enqueue(
-                                EffectRequest(
-                                  id:
-                                      'gift-${widget.state.gifts.sent.length}',
-                                  kind: EffectKind.gift,
-                                  asset: '${gift.effectKind}:${gift.id}',
-                                  priority: 50,
-                                ),
-                              );
-                            }
-                            widget.state.activities
-                                .addGiftScore(senderId, tx.totalCost);
-                            widget.state.identity
-                                .gainVipExperience(tx.totalCost ~/ 10);
-                            _snack(
-                              '${gift.name} sent to ${tx.receiverIds.length} user(s).',
-                            );
-                            setState(() {});
+                          onTap: () {
+                            setSheetState(() {
+                              selectedGift = gift;
+                            });
                           },
                           child: Column(
                             children: [
@@ -3735,12 +3749,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         ),
                                 ),
                               ),
-                              Text(
-                                gift.name,
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (selectedGift?.id == gift.id) ...[
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 13,
+                                      color: Color(0xFFFFD45A),
+                                    ),
+                                    const SizedBox(width: 3),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      gift.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: selectedGift?.id == gift.id
+                                            ? const Color(0xFFFFD45A)
+                                            : RoyalPalette.cream,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               Text(
                                 giftCategory == 'Backpack'
@@ -3761,6 +3794,104 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         );
                       },
+                    ),
+                  ),
+                  Container(
+                    key: const Key('room-gift-send-bar'),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                    decoration: const BoxDecoration(
+                      color: RoyalPalette.nearBlack,
+                      border: Border(
+                        top: BorderSide(
+                          color: Color(0x335C4A72),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: selectedGift == null
+                              ? const Text(
+                                  'Select a gift to send',
+                                  style: TextStyle(
+                                    color: RoyalPalette.muted,
+                                    fontSize: 11,
+                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      selectedGift!.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: RoyalPalette.cream,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text(
+                                      selectedGift!.lucky
+                                          ? '🪙 ${selectedGift!.price} × $luckyQuantity'
+                                          : giftCategory == 'Backpack'
+                                              ? 'Backpack gift'
+                                              : '🪙 ${selectedGift!.price}',
+                                      style: const TextStyle(
+                                        color: RoyalPalette.gold,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 118,
+                          height: 42,
+                          child: FilledButton.icon(
+                            key: const Key('room-gift-send-button'),
+                            onPressed: selectedGift == null ||
+                                    _selectedGiftRecipients.isEmpty ||
+                                    _luckyComboSending
+                                ? null
+                                : () => sendSelectedGift(
+                                      context,
+                                      selectedGift!,
+                                    ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  const Color(0xFFFFC247),
+                              foregroundColor:
+                                  const Color(0xFF1A111F),
+                              disabledBackgroundColor:
+                                  const Color(0xFF3A3140),
+                              disabledForegroundColor:
+                                  RoyalPalette.muted,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(22),
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.send_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              selectedGift?.lucky == true &&
+                                      luckyQuantity > 1
+                                  ? 'Send ×$luckyQuantity'
+                                  : 'Send',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
