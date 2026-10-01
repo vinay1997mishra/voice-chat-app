@@ -702,7 +702,10 @@ class DiscoveryService {
   }
 
   List<RoomSummary> recommend({String? country}) {
-    final visibleRooms = rooms.where((room) => !room.locked).toList();
+    // Party must only show active, unlocked rooms. Empty rooms stay available
+    // to Mine/Recent/Search but are hidden from the public Party feed.
+    final visibleRooms =
+        rooms.where((room) => !room.locked && room.online > 0).toList();
     final filtered = country == null
         ? visibleRooms
         : visibleRooms.where((room) => room.country == country).toList();
@@ -724,7 +727,12 @@ class DiscoveryService {
   }) {
     final reference = now ?? DateTime.now();
     final values = rooms
-        .where((room) => !room.locked && room.createdWithin(maxAge, now: reference))
+        .where(
+          (room) =>
+              !room.locked &&
+              room.online > 0 &&
+              room.createdWithin(maxAge, now: reference),
+        )
         .toList()
       ..sort(
         (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
