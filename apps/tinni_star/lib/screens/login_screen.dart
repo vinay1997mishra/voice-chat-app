@@ -935,7 +935,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in with Google or Email / Gmail.',
+            'Sign in with Google, Facebook, or Email / Gmail.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: RoyalPalette.cream,
