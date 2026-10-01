@@ -27,6 +27,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     super.dispose();
   }
 
+  Future<void> _refresh() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        if (search.text.trim().isNotEmpty) {
+          results = widget.state.discovery.search(search.text.trim());
+        }
+      });
+    } catch (_) {
+      // Keep the last loaded room list until the next manual refresh/re-entry.
+    }
+  }
+
   List<RoomSummary> _roomsForMode() {
     final discovery = widget.state.discovery;
     switch (mode) {
@@ -62,8 +78,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(14),
         children: [
           TextField(
             controller: search,
@@ -191,6 +210,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             },
           ),
         ],
+        ),
       ),
     );
   }
