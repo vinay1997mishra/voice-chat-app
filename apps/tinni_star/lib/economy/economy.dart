@@ -102,12 +102,20 @@ class GiftDefinition {
     required this.name,
     required this.price,
     required this.effectKind,
+    this.lucky = false,
+    this.emoji = '🎁',
+    this.maxMultiplier = 0,
+    this.artworkAsset,
   });
 
   final String id;
   final String name;
   final int price;
   final String effectKind;
+  final bool lucky;
+  final String emoji;
+  final int maxMultiplier;
+  final String? artworkAsset;
 }
 
 class GiftTransaction {
@@ -141,6 +149,109 @@ class GiftService {
       effectKind: 'pag',
     ),
     GiftDefinition(id: 'crown', name: 'Crown', price: 1000, effectKind: 'mp4'),
+  ];
+
+  static const luckyCatalog = <GiftDefinition>[
+    GiftDefinition(
+      id: 'lucky-colorful-rose',
+      name: 'Colorful Rose',
+      price: 20,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🌈🌹',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/colorful_rose.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-rainbow-heart',
+      name: 'Rainbow Heart',
+      price: 50,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🌈💖',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/rainbow_heart.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-magic-balloon',
+      name: 'Magic Balloon',
+      price: 100,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎈',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/magic_balloon.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-candy-star',
+      name: 'Candy Star',
+      price: 200,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🍭⭐',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/candy_star.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-neon-butterfly',
+      name: 'Neon Butterfly',
+      price: 500,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🦋',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/neon_butterfly.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-sparkle-crown',
+      name: 'Sparkle Crown',
+      price: 1000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '👑',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/sparkle_crown.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-dream-cake',
+      name: 'Dream Cake',
+      price: 2000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎂',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/dream_cake.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-galaxy-ring',
+      name: 'Galaxy Ring',
+      price: 5000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '💍',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/galaxy_ring.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-shining-unicorn',
+      name: 'Shining Unicorn',
+      price: 10000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🦄',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/shining_unicorn.webp',
+    ),
+    GiftDefinition(
+      id: 'lucky-royal-treasure',
+      name: 'Royal Treasure Box',
+      price: 20000,
+      effectKind: 'lucky',
+      lucky: true,
+      emoji: '🎁',
+      maxMultiplier: 1000,
+      artworkAsset: 'assets/lucky_gifts/royal_treasure.webp',
+    ),
   ];
 
   GiftTransaction? send({
