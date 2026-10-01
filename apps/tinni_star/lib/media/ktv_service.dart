@@ -41,6 +41,7 @@ class KtvService {
 
   AudioPlayer? _player;
   bool _completionListenerAttached = false;
+  bool _outputMuted = false;
   AudioPlayer get _audio {
     final player = _player ??= AudioPlayer();
     if (!_completionListenerAttached) {
@@ -59,12 +60,22 @@ class KtvService {
     if (next != null) await playCurrent();
   }
   bool get isPlaying => _player?.playing ?? false;
+  bool get outputMuted => _outputMuted;
+
+  Future<void> setOutputMuted(bool muted) async {
+    _outputMuted = muted;
+    final player = _player;
+    if (player != null) {
+      await player.setVolume(muted ? 0.0 : 1.0);
+    }
+  }
 
   Future<void> playCurrent() async {
     final song = current?.song;
     final path = song?.sourcePath;
     if (song == null || !song.local || path == null || path.isEmpty) return;
     await _audio.setFilePath(path);
+    await _audio.setVolume(_outputMuted ? 0.0 : 1.0);
     await _audio.play();
   }
 
