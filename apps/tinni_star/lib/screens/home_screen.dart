@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -95,8 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = ['Mine', 'Party', 'Events', 'Country'];
 
   final PageController _pageController = PageController(initialPage: 1);
-  Timer? _roomSyncTimer;
-  Timer? _partyRankTimer;
   final List<Map<String, dynamic>> _cpTop = <Map<String, dynamic>>[];
   final List<Map<String, dynamic>> _familyTop = <Map<String, dynamic>>[];
   int _page = 1;
@@ -120,17 +117,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _syncRooms();
     _syncPartyRankPreviews();
     _syncNotifications();
-    _roomSyncTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) {
-        _syncRooms();
-        _syncNotifications();
-      },
-    );
-    _partyRankTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _syncPartyRankPreviews(),
-    );
+    if (account != null) {
+      widget.state.social.connectMessageEvents(account.authToken);
+    }
   }
 
   Future<void> _syncRooms() async {
@@ -344,10 +333,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _roomSyncTimer?.cancel();
-    _partyRankTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshHomePage() async {
+    await Future.wait<void>([
+      _syncRooms(),
+      _syncPartyRankPreviews(),
+      _syncNotifications(),
+    ]);
   }
 
   Future<void> _goToPage(int index) async {
@@ -454,6 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => RoomScreen(state: widget.state, room: targetRoom),
       ),
     );
+    if (mounted) await _refreshHomePage();
   }
 
   void openVip() {
@@ -657,7 +653,9 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
     final followings = widget.state.discovery.followedRooms();
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: ListView(
       key: const Key('home-mine-page'),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
@@ -819,6 +817,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
+      ),
     );
   }
 
@@ -853,7 +852,9 @@ class _HomeScreenState extends State<HomeScreen> {
         )
         .toList(growable: false);
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: ListView(
       key: const Key('home-party-page'),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
@@ -963,6 +964,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -994,7 +996,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: ListView(
       key: const Key('home-events-page'),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
@@ -1104,6 +1108,7 @@ class _HomeScreenState extends State<HomeScreen> {
           countryFilterLabel = country.flagEmoji + ' ' + country.name;
         });
       },
+      ),
     );
   }
 
@@ -1112,7 +1117,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ? widget.state.discovery.recommend()
         : widget.state.discovery.recommend(country: countryFilter);
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: ListView(
       key: const Key('home-country-page'),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
@@ -1181,6 +1188,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
+      ),
     );
   }}
 
