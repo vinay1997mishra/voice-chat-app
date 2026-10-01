@@ -329,9 +329,19 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
 
     setState(() => savingProfile = true);
     try {
+      final values = Map<String, dynamic>.from(result);
+      final avatarValue = values['avatar_data_url']?.toString() ?? '';
+      if (avatarValue.startsWith('data:image/')) {
+        values['avatar_data_url'] =
+            await widget.state.backend.uploadProfileMedia(
+          account.authToken,
+          slot: 'avatar',
+          dataUrl: avatarValue,
+        );
+      }
       final row = await widget.state.backend.updateProfile(
         account.authToken,
-        result,
+        values,
       );
       final updated = TinniAccount.fromServer(
         row,
