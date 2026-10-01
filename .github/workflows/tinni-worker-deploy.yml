@@ -68,6 +68,16 @@ jobs:
             --file assets/premium_effects_manifest.json \
             --content-type application/json
 
+      - name: Verify premium effects R2 object
+        if: steps.creds.outputs.ready == 'true' && steps.r2.outputs.ready == 'true'
+        working-directory: apps/tinni_worker
+        run: |
+          rm -f /tmp/tinni-r2-manifest.json
+          npx wrangler r2 object get tinni-star-effects/premium/manifest.json \
+            --file /tmp/tinni-r2-manifest.json
+          cmp assets/premium_effects_manifest.json /tmp/tinni-r2-manifest.json
+          echo "R2 bucket and premium manifest verified."
+
       - name: Deploy Worker and Owner Panel
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker
