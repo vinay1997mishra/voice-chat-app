@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
+import '../ui/room_dp.dart';
 import '../ui/royal_theme.dart';
 import 'room_screen.dart';
 
@@ -135,17 +136,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 padding: const EdgeInsets.only(bottom: 9),
                 child: RoyalPanel(
                   padding: const EdgeInsets.all(10),
-                  gradient: FeaturePalette.glow(FeaturePalette.discover),
-                  accentColor: FeaturePalette.discover,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF17140F),
+                      RoyalPalette.panel,
+                      Color(0xFF080808),
+                    ],
+                  ),
+                  accentColor: RoyalPalette.deepGold,
                   onTap: () => _openRoom(room),
                   child: Row(
                     children: [
-                      const ShiningIcon(
-                        icon: Icons.graphic_eq_rounded,
-                        color: FeaturePalette.discover,
-                        size: 28,
-                        boxSize: 56,
-                        glow: 0.40,
+                      RoomDp(
+                        room: room,
+                        size: 62,
+                        radius: 14,
+                        fit: BoxFit.contain,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
