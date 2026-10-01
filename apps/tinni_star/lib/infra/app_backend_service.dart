@@ -634,6 +634,31 @@ class AppBackendService {
     return _cp(data['cp']);
   }
 
+  Future<List<Map<String, dynamic>>> cpRanking(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/cp/ranking');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load CP ranking');
+    }
+    final raw = data['ranking'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
   Future<RemoteCp> cpRequest(String token, String targetUserId) async {
     final data = await _request('POST', '/cp/request', token, body: {'target_user_id': targetUserId});
     final cp = _cp(data['cp']);
