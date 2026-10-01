@@ -53,6 +53,7 @@ class RoomDp extends StatelessWidget {
           fit: fit,
           alignment: Alignment.center,
           filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
         );
       } catch (_) {
         image = fallback();
@@ -63,6 +64,7 @@ class RoomDp extends StatelessWidget {
         fit: fit,
         alignment: Alignment.center,
         filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
         errorBuilder: (_, error, stackTrace) => fallback(),
       );
     } else if (hasLocal) {
@@ -71,6 +73,7 @@ class RoomDp extends StatelessWidget {
         fit: fit,
         alignment: Alignment.center,
         filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
         errorBuilder: (_, error, stackTrace) => fallback(),
       );
     } else {

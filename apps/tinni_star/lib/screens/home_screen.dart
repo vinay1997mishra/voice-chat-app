@@ -121,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _syncPartyRankPreviews();
     _syncNotifications();
     _roomSyncTimer = Timer.periodic(
-      const Duration(seconds: 5),
+      const Duration(seconds: 30),
       (_) {
         _syncRooms();
         _syncNotifications();
