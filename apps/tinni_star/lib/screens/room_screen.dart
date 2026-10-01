@@ -22,6 +22,7 @@ import '../room/room_models.dart';
 import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
+import '../ui/room_emotion_backdrop.dart';
 import '../ui/animated_avatar_frame.dart';
 import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
@@ -1164,6 +1165,56 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         name: 'Rose Gold',
         color: Color(0xFF17090D),
       ),
+      const _RoomThemeChoice(
+        id: 'mood-happy',
+        name: 'Happy',
+        color: Color(0xFF8F3448),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-sad',
+        name: 'Sad',
+        color: Color(0xFF173E5D),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-boring',
+        name: 'Boring',
+        color: Color(0xFF433154),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-love',
+        name: 'Love',
+        color: Color(0xFF9A1838),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-mountain-view',
+        name: 'Mountain View',
+        color: Color(0xFF536D82),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-alone',
+        name: 'Alone',
+        color: Color(0xFF142A3D),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-with-her',
+        name: 'With Her',
+        color: Color(0xFF8B462F),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-with-him',
+        name: 'With Him',
+        color: Color(0xFF173B59),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-love-scene',
+        name: 'Love Scene',
+        color: Color(0xFF3C1D58),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-rainy-love',
+        name: 'Rainy Love',
+        color: Color(0xFF4A3536),
+      ),
     ];
 
     var pending = builtIns.first;
@@ -1330,18 +1381,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             height: 58,
                             decoration: BoxDecoration(
                               color: theme.color ?? RoyalPalette.panel2,
-                              image: preview == null
-                                  ? null
-                                  : DecorationImage(
-                                      image: preview,
-                                      fit: BoxFit.cover,
-                                    ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: FeaturePalette.moments
                                     .withValues(alpha: 0.65),
                               ),
                             ),
+                            clipBehavior: Clip.antiAlias,
+                            child: isEmotionRoomTheme(theme.id)
+                                ? RoomEmotionBackdrop(themeId: theme.id)
+                                : preview == null
+                                    ? null
+                                    : Image(
+                                        image: preview,
+                                        fit: BoxFit.cover,
+                                      ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -6694,10 +6748,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         body: Stack(
           children: [
+            if (isEmotionRoomTheme(widget.state.roomControls.themeId))
+              Positioned.fill(
+                child: RoomEmotionBackdrop(
+                  themeId: widget.state.roomControls.themeId,
+                ),
+              ),
             Positioned.fill(
               child: Container(
           decoration: BoxDecoration(
-            color: _roomBackgroundColor,
+            color: isEmotionRoomTheme(widget.state.roomControls.themeId)
+                ? Colors.transparent
+                : _roomBackgroundColor,
             image: _roomThemeImage == null
                 ? null
                 : DecorationImage(
