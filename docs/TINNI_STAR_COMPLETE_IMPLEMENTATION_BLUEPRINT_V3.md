@@ -2571,3 +2571,40 @@ The successful Tinni Star `0.5.23+41` APK build keeps all previously locked room
 - Room Type → Setting remains: **Room Seats, Free mic, Only managers can speak**.
 - The reference-style room visuals and flows remain unchanged: **Room DP + Name + ID**, in-room **Daily / Weekly / Monthly Ranking**, seat self-mute red mic-off badge, right-side **Rocket above Game**, and LP/Game ribbons.
 
+
+
+### Lucky / Rebate Gift system — video reference LOCKED
+
+Tinni Star includes a server-authoritative **Lucky / Rebate Gift** category inside the room Gift panel.
+
+- Lucky gifts use the same selected recipient(s) as normal room gifts, but the rebate outcome is calculated only by the Worker/backend.
+- After the first Lucky gift is sent, a persistent **Combo** control keeps the same gift and recipient selection so the sender can continue sending without reopening the Gift sheet.
+- The Combo surface shows two different counters: the cumulative **send count** (for example ×11 / ×30 / ×55) and cumulative **coins won/returned** (for example +140 / +840). The send count must never be confused with the rebate multiplier.
+- A successful send immediately synchronizes the sender wallet from the authoritative server response. Returned coins are available for the next Combo send immediately.
+- Insufficient balance stops the send; no client-side negative balance or speculative credit is allowed.
+- The gift visually flies into the selected receiver's seat/Profile DP and disappears. A short floating multiplier bubble rises above that DP and fades out.
+- Common visible multiplier bubbles include **5×, 7×, 9×, 10×, 20× and 22×**. 30× / 50× / 100× are less common. **200× and above are rare**, with 250× / 500× / 750× / 1000× increasingly rare.
+- Maximum supported rebate is **1000×**. Default server weights are data-driven and can be changed centrally; the APK never chooses or overrides the result.
+- **200×+** results qualify for a stronger room/country big-win ribbon. Country targeting and the existing LP-first / game-next ribbon rules remain intact.
+- Every Lucky send can contribute an Owner-configurable percentage to the **Real-time Prize Pool**.
+- The Gift panel exposes a Lucky Prize Pool / **Lucky Day Ranking** view showing the real-time pool, today's ranked senders, total returned coins and highest multiplier.
+- The reference daily Top-3 shares shown in the supplied video are **50% / 25% / 15%**. The remaining 10% is not auto-assigned by this blueprint until the Owner defines that rule.
+- For a Lucky/Rebate gift sent to an active Host, the default Host diamond value is **10% of the normal gift value**. This percentage is Owner-configurable.
+- Lucky/Rebate gifts carry the reference **10% normal Charm/Wealth contribution rule** when the corresponding production social-stat counters are active.
+- All debits, rebates, Host reward, pool contribution, ranking totals and high-win ribbons are server-authoritative and auditable. The wallet anti-tamper expected-balance guard is updated together with an authorized rebate credit.
+- Owner Panel can create/edit Lucky gifts, including price, Lucky enable/disable, emoji/asset, maximum multiplier, high-win threshold, Host reward %, Charm/Wealth %, prize-pool %, schedule and country targeting.
+
+Built-in colorful test Lucky gifts:
+
+1. Colorful Rose — 20 Coins
+2. Rainbow Heart — 50 Coins
+3. Magic Balloon — 100 Coins
+4. Candy Star — 200 Coins
+5. Neon Butterfly — 500 Coins
+6. Sparkle Crown — 1,000 Coins
+7. Dream Cake — 2,000 Coins
+8. Galaxy Ring — 5,000 Coins
+9. Shining Unicorn — 10,000 Coins
+10. Royal Treasure Box — 20,000 Coins
+
+These ten gifts are testable from the room Gift panel's **Lucky** category and are seeded into the backend Owner gift catalog without overwriting later Owner edits.
