@@ -486,9 +486,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
+      backgroundColor: RoyalPalette.black,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              RoyalPalette.black,
+              RoyalPalette.nearBlack,
+              RoyalPalette.black,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
             Row(
               children: [
                 Expanded(
@@ -582,7 +595,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
