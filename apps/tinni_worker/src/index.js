@@ -1075,6 +1075,10 @@ export default {
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
         facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
         email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+        livekit_configured: Boolean(
+          env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
+        ),
+        effect_media_configured: Boolean(env.EFFECT_MEDIA),
         remote_config: {
           room_recommendation_enabled: true,
           gift_effects_enabled: features.gifts !== false,
@@ -3221,17 +3225,18 @@ export default {
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
       }
-      const targetMatches = await getAppDirectoryStore(env).searchUsers(
+      const targetUser = await getAppDirectoryStore(env).findUserByExactPublicId(
         targetUserId,
-        5,
-      );
-      const targetUser = targetMatches.find(
-        (item) => String(item.user_id || "") === targetUserId,
       );
       if (!targetUser) {
         return json({ ok: false, error: "User ID not found" }, 404);
       }
-      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
+      return json(
+        await store.setManager(
+          String(targetUser.user_id),
+          Boolean(body.enabled),
+        ),
+      );
     }
 
     if (url.pathname === "/room-presence/chat-ban" && request.method === "POST") {
