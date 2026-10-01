@@ -84,6 +84,7 @@ function rowToUser(row) {
     email: String(row.email),
     display_name: String(row.display_name),
     age: Number(row.age),
+    birthday: row.birthday ? String(row.birthday) : null,
     signature: String(row.signature || ""),
     country_code: String(row.country_code),
     country_name: String(row.country_name),
@@ -269,6 +270,7 @@ export class AppDirectoryStore extends DurableObject {
         email TEXT NOT NULL UNIQUE,
         display_name TEXT NOT NULL,
         age INTEGER NOT NULL,
+        birthday TEXT,
         signature TEXT NOT NULL DEFAULT '',
         country_code TEXT NOT NULL,
         country_name TEXT NOT NULL,
@@ -1043,6 +1045,7 @@ export class AppDirectoryStore extends DurableObject {
     `);
 
     for (const migration of [
+      "ALTER TABLE app_users ADD COLUMN birthday TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'google'",
       "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
@@ -3162,6 +3165,29 @@ export class AppDirectoryStore extends DurableObject {
 
     const displayName = input?.display_name === undefined
       ? current.display_name : cleanText(input.display_name, 40);
+    let birthday = input?.birthday === undefined
+      ? (current.birthday || null)
+      : cleanText(input.birthday, 10);
+    let age = Number(current.age || 0);
+    if (birthday) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+        throw new Error("Birthday must use YYYY-MM-DD");
+      }
+      const parsed = new Date(birthday + "T00:00:00Z");
+      if (!Number.isFinite(parsed.getTime())) {
+        throw new Error("Birthday is invalid");
+      }
+      const nowDate = new Date();
+      age = nowDate.getUTCFullYear() - parsed.getUTCFullYear();
+      const beforeBirthday =
+        nowDate.getUTCMonth() < parsed.getUTCMonth() ||
+        (nowDate.getUTCMonth() === parsed.getUTCMonth() &&
+          nowDate.getUTCDate() < parsed.getUTCDate());
+      if (beforeBirthday) age -= 1;
+      if (age < 18 || age > 100) {
+        throw new Error("Age must be between 18 and 100");
+      }
+    }
     const signature = input?.signature === undefined
       ? current.signature : cleanText(input.signature, 3000);
     const countryCode = input?.country_code === undefined
@@ -3189,11 +3215,12 @@ export class AppDirectoryStore extends DurableObject {
 
     this.ctx.storage.sql.exec(
       `UPDATE app_users
-          SET display_name = ?, signature = ?, country_code = ?, country_name = ?,
-              flag_emoji = ?, gender = ?, avatar_data_url = ?, updated_at = ?
+          SET display_name = ?, age = ?, birthday = ?, signature = ?,
+              country_code = ?, country_name = ?, flag_emoji = ?, gender = ?,
+              avatar_data_url = ?, updated_at = ?
         WHERE user_id = ?`,
-      displayName, signature, countryCode, countryName, flagEmoji, gender,
-      avatarDataUrl, Date.now(), userId,
+      displayName, age, birthday, signature, countryCode, countryName,
+      flagEmoji, gender, avatarDataUrl, Date.now(), userId,
     );
     return this.getUserById(userId);
   }
