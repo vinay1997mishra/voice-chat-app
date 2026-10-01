@@ -2174,6 +2174,192 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showLuckyGiftDetails() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    Map<String, dynamic> data;
+    try {
+      data = await widget.state.roomSession.luckyGiftState(
+        authToken: account.authToken,
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      return;
+    }
+    if (!mounted) return;
+
+    final rawRanking = data['ranking'];
+    final ranking = rawRanking is List
+        ? rawRanking.whereType<Map>().map(
+              (row) => row.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            ).toList(growable: false)
+        : const <Map<String, dynamic>>[];
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF171021),
+        title: const Row(
+          children: [
+            Text('🎁', style: TextStyle(fontSize: 24)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Lucky Gift',
+                style: TextStyle(
+                  color: Color(0xFFFFD45A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: <Color>[
+                      Color(0xFF4C175F),
+                      Color(0xFF241035),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFD45A),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'REAL-TIME PRIZE POOL',
+                      style: TextStyle(
+                        color: Color(0xFFD7C7FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '🪙 ${_giftInt(data['pool_balance'])}',
+                      style: const TextStyle(
+                        color: Color(0xFFFFD45A),
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Up to ${_giftInt(data['max_multiplier'])}× • 200×+ is rare',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Lucky Day Ranking',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (ranking.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'No Lucky Gift ranking yet today.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: math.min(10, ranking.length),
+                    itemBuilder: (_, index) {
+                      final row = ranking[index];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: const Color(0xFF2E2140),
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          row['display_name']?.toString() ??
+                              row['user_id']?.toString() ??
+                              'User',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Sent ${_giftInt(row['sent_count'])} • Highest ${_giftInt(row['highest_multiplier'])}×',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 9,
+                          ),
+                        ),
+                        trailing: Text(
+                          '+${_giftInt(row['rebate_coins'])}',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 6),
+              const Text(
+                'Visible daily Top 3 shares: 50% • 25% • 15%',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showGiftSheet({String? preselectedUserId}) {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
@@ -2320,6 +2506,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('lucky-prize-pool-button'),
+                          tooltip: 'Lucky Prize Pool & Ranking',
+                          onPressed: _showLuckyGiftDetails,
+                          icon: const Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFD45A),
                           ),
                         ),
                         TextButton.icon(
