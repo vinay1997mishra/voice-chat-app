@@ -2930,6 +2930,21 @@ export default {
       }
     }
 
+    if (url.pathname === "/messages/live" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return json({ ok: false, error: "WebSocket upgrade required" }, 426);
+      }
+      const headers = new Headers(request.headers);
+      headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      const forwarded = new Request(request.url, {
+        method: "GET",
+        headers,
+      });
+      return getAppDirectoryStore(env).fetch(forwarded);
+    }
+
     if (url.pathname === "/messages/inbox" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
