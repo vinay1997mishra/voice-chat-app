@@ -28,8 +28,8 @@ console.log("Production readiness guards passed");
 
 assert.match(
   index,
-  /FACEBOOK_LOGIN_ENABLED !== "true"/,
-  "Facebook login must be opt-in and disabled by default",
+  /facebook_configured:\\s*Boolean\\(env\\.FACEBOOK_APP_ID && env\\.FACEBOOK_APP_SECRET\\)/,
+  "Facebook login must be available when Facebook credentials are configured",
 );
 
-console.log("Facebook login default-off guard passed");
+console.log("Facebook login readiness guard passed");
