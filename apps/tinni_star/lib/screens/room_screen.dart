@@ -194,11 +194,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openRoom() async {
+    await widget.state.refreshAuthenticatedAccount(force: true);
     final account = widget.state.auth.current;
     if (account == null) return;
-    final ownerId = widget.room.ownerId ?? widget.room.id;
 
-    if (widget.room.locked && account.userId != ownerId) {
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // Keep room entry usable if directory refresh is temporarily unavailable.
+    }
+
+    final canonicalRoom = _roomSnapshot;
+    final ownerId =
+        canonicalRoom.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    widget.state.roomControls.setOwner(ownerId);
+
+    if (_selectedGiftRecipients.length == 1) {
+      _selectedGiftRecipients
+        ..clear()
+        ..add(ownerId);
+    }
+
+    if (canonicalRoom.locked && account.userId != ownerId) {
       final allowed = await _requestLockedRoomAccess(
         authToken: account.authToken,
       );
@@ -218,31 +235,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomControls.configureForRoom(ownerId);
     widget.state.roomControls.settings =
         widget.state.roomControls.settings.copyWith(
-      visibility: widget.room.locked
+      visibility: canonicalRoom.locked
           ? RoomVisibility.privateRoom
           : RoomVisibility.publicRoom,
     );
     widget.state.roomControls.roomMode =
-        widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
-    if (RoomControlService.availableSeatThemes.contains(widget.room.seatThemeId)) {
-      widget.state.roomControls.setSeatTheme(widget.room.seatThemeId);
+        canonicalRoom.partyMode == 'Event hosting mode' ? 'event' : 'friends';
+    if (RoomControlService.availableSeatThemes.contains(canonicalRoom.seatThemeId)) {
+      widget.state.roomControls.setSeatTheme(canonicalRoom.seatThemeId);
     } else {
       widget.state.roomControls.setSeatTheme('royal-gold');
     }
-    if (widget.room.themeAsset == null || widget.room.themeAsset!.isEmpty) {
-      if (RoomControlService.availableThemes.contains(widget.room.themeId)) {
-        widget.state.roomControls.setTheme(widget.room.themeId);
+    if (canonicalRoom.themeAsset == null || canonicalRoom.themeAsset!.isEmpty) {
+      if (RoomControlService.availableThemes.contains(canonicalRoom.themeId)) {
+        widget.state.roomControls.setTheme(canonicalRoom.themeId);
       } else {
         widget.state.roomControls.setTheme('royal-dark');
       }
     } else {
       widget.state.roomControls.setCustomTheme(
-        widget.room.themeId,
-        widget.room.themeAsset!,
+        canonicalRoom.themeId,
+        canonicalRoom.themeAsset!,
       );
     }
     await widget.state.roomSession.open(
-      widget.room,
+      canonicalRoom,
       userId: account.userId,
       authToken: account.authToken,
     );
@@ -549,7 +566,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (state == AppLifecycleState.resumed) {
       widget.state.lifecycle.onForeground();
+      unawaited(_refreshIdentityAndRoomOwnership(force: true));
     }
+  }
+
+  Future<void> _refreshIdentityAndRoomOwnership({
+    bool force = false,
+  }) async {
+    final before = widget.state.auth.current;
+    if (before == null) return;
+
+    await widget.state.refreshAuthenticatedAccount(force: force);
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // Existing room session remains usable while directory sync retries later.
+    }
+
+    final ownerId =
+        _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    widget.state.roomControls.setOwner(ownerId);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -6218,7 +6258,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    '🏅 ' + widget.room.id,
+                    '🏅 ' + _roomSnapshot.displayId,
                     style: const TextStyle(
                       color: Color(0xFFFFD45A),
                       fontWeight: FontWeight.w800,
@@ -7080,9 +7120,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     try {
-      if (!controller.inviteMode) {
-        // Free Mic must take the seat on the authoritative room backend
-        // immediately. Do not wait for the next presence heartbeat.
+      if (_canModerateSeats || !controller.inviteMode) {
+        // Owner/admin always take an empty seat directly. Request mode only
+        // applies to normal users.
         await widget.state.roomSession.takeMySeat(index);
         _snack('Joined seat ' + (index + 1).toString() + '.');
         if (mounted) setState(() {});
@@ -8035,7 +8075,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         Text(
-                          '🏅 ' + widget.room.id,
+                          '🏅 ' + _roomSnapshot.displayId,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
