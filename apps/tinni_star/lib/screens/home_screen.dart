@@ -1943,7 +1943,7 @@ class _RoomListCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        'ID ' + room.id,
+                        'ID ' + room.displayId,
                         style: const TextStyle(fontSize: 10),
                       ),
                     ],
