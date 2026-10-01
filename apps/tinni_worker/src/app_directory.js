@@ -4716,6 +4716,9 @@ export class AppDirectoryStore extends DurableObject {
     if (isLucky && luckyConfig.enabled === false) {
       throw new Error("Lucky gifts are temporarily unavailable");
     }
+    if (isLucky) {
+      this._settleLuckyGiftPools(Date.now());
+    }
     const luckySessionId = isLucky
       ? cleanText(input?.lucky_session_id || ("lucky-session-" + crypto.randomUUID()), 96)
       : "";
