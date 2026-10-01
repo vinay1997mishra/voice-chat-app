@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -21,37 +20,11 @@ class _RechargeScreenState extends State<RechargeScreen> {
   String? errorText;
   List<Map<String, dynamic>> providers = <Map<String, dynamic>>[];
   final Map<String, bool> _passwordConfigured = <String, bool>{};
-  Timer? _providerRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _providerRefreshTimer = Timer.periodic(
-      const Duration(seconds: 12),
-      (_) => _refreshProvidersSilently(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _providerRefreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _refreshProvidersSilently() async {
-    final account = widget.state.auth.current;
-    if (account == null || !mounted) return;
-    try {
-      final latest =
-          await widget.state.backend.rechargeProviders(account.authToken);
-      if (!mounted) return;
-      setState(() {
-        providers = List<Map<String, dynamic>>.from(latest);
-      });
-    } catch (_) {
-      // Keep the last good provider list and retry on the next refresh.
-    }
   }
 
   Future<void> _load() async {
