@@ -28,6 +28,7 @@ import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
+import 'recharge_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -50,6 +51,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyAnimationSequence = 0;
   String? _luckyAnimationReceiverId;
   bool _luckyComboSending = false;
+  String? _luckySessionId;
+  int _luckySessionHighest = 0;
+  final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
+  Timer? _luckyFeedTimer;
+  bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
@@ -105,6 +111,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       const Duration(seconds: 30),
       (_) => _refreshRoomSendingSummary(),
     );
+    _luckyFeedTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _refreshLuckyFeed(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLuckyFeed());
     widget.state.social.unreadMessages.addListener(_refresh);
     final account = widget.state.auth.current;
     if (account != null) {
@@ -547,6 +558,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
     _ribbonTimer?.cancel();
+    _luckyBubbleTimer?.cancel();
+    _luckyFeedTimer?.cancel();
     _roomSendingTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
@@ -2280,6 +2293,78 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return true;
   }
 
+  String _newLuckySessionId(String userId) =>
+      'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
+
+  ImageProvider? _luckyAvatarProvider(dynamic value) {
+    final source = value?.toString();
+    if (source == null || !source.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(source.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refreshLuckyFeed() async {
+    if (_luckyFeedLoading) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    _luckyFeedLoading = true;
+    try {
+      final rows = await widget.state.roomSession.roomGiftFeed(
+        roomId: widget.room.id,
+        authToken: account.authToken,
+      );
+      final luckyRows = rows
+          .where((row) => row['multiplier'] != null)
+          .take(8)
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _luckyFeed
+          ..clear()
+          ..addAll(luckyRows);
+      });
+    } catch (_) {
+      // Supplemental Lucky feed retries on the next timer tick.
+    } finally {
+      _luckyFeedLoading = false;
+    }
+  }
+
+  Future<void> _showLuckyRechargeDialog() async {
+    if (!mounted) return;
+    final openRecharge = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Insufficient coins'),
+        content: const Text(
+          'Do not have enough coins, please go recharge.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Recharge'),
+          ),
+        ],
+      ),
+    );
+    if (openRecharge == true && mounted) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => RechargeScreen(state: widget.state),
+        ),
+      );
+    }
+  }
+
   Future<bool> _sendLuckyGift(
     GiftDefinition gift,
     List<String> receiverIds,
@@ -2288,6 +2373,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (account == null || receiverIds.isEmpty || _luckyComboSending) {
       return false;
     }
+
+    final continuesSession = _luckyComboGift?.id == gift.id &&
+        _sameLuckyRecipients(receiverIds) &&
+        _luckySessionId != null;
+    final sessionId =
+        continuesSession ? _luckySessionId! : _newLuckySessionId(account.userId);
+
     setState(() => _luckyComboSending = true);
     try {
       final response = await widget.state.roomSession.sendGift(
@@ -2298,6 +2390,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         quantity: 1,
         unitPrice: gift.price,
         receiverIds: receiverIds,
+        luckySessionId: sessionId,
       );
       _applyGiftServerWallet(response);
 
@@ -2309,13 +2402,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final rebateCoins = _giftInt(lucky['rebate_coins']);
       final poolBalance = _giftInt(lucky['pool_balance']);
       final totalCost = _giftInt(response['total_cost']);
+      final rawSession = lucky['session'];
+      final session = rawSession is Map
+          ? rawSession.map((key, value) => MapEntry(key.toString(), value))
+          : <String, dynamic>{};
 
-      final sameCombo = _luckyComboGift?.id == gift.id &&
-          _sameLuckyRecipients(receiverIds);
+      _luckySessionId = sessionId;
       _luckyComboGift = gift;
       _luckyComboRecipients = List<String>.from(receiverIds);
-      _luckyComboCount = sameCombo ? _luckyComboCount + 1 : 1;
-      _luckyComboWon = sameCombo ? _luckyComboWon + rebateCoins : rebateCoins;
+
+      final serverCount = _giftInt(session['send_count']);
+      final serverWon = _giftInt(session['total_rebate_coins']);
+      final serverHighest = _giftInt(session['highest_multiplier']);
+      _luckyComboCount =
+          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
+      _luckyComboWon = serverWon > 0
+          ? serverWon
+          : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
+      _luckySessionHighest = continuesSession
+          ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
+          : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
       _luckyAnimationReceiverId = receiverIds.first;
@@ -2343,11 +2449,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       });
 
+      await _refreshLuckyFeed();
+      if (multiplier >= 500) {
+        await _refreshCountryRibbons();
+      }
       if (mounted) setState(() {});
       return true;
     } catch (error) {
-      if (mounted) {
-        _snack(error.toString().replaceFirst('Bad state: ', ''));
+      final message = error.toString().replaceFirst('Bad state: ', '');
+      if (message.toLowerCase().contains('insufficient coins')) {
+        await _showLuckyRechargeDialog();
+      } else if (mounted) {
+        _snack(message);
       }
       return false;
     } finally {
