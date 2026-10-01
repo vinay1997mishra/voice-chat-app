@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'realtime.dart';
@@ -21,12 +23,19 @@ class LiveKitRtcAdapter implements RtcAdapter {
   bool _publishing = false;
   bool _publishingCamera = false;
   bool _remoteAudioEnabled = true;
+  Timer? _speakingTimer;
+  final ValueNotifier<Map<String, double>> _speakingLevels =
+      ValueNotifier<Map<String, double>>(const <String, double>{});
 
   @override
   RtcConnectionState get state => _state;
 
   @override
   bool get publishingMic => _publishing;
+
+  @override
+  ValueListenable<Map<String, double>> get speakingLevelsListenable =>
+      _speakingLevels;
 
   bool get publishingCamera => _publishingCamera;
 
@@ -75,7 +84,9 @@ class LiveKitRtcAdapter implements RtcAdapter {
       _publishingCamera = false;
       _state = RtcConnectionState.joined;
       await _applyRemoteAudioPreference();
+      _startSpeakingMonitor();
     } catch (error) {
+      _stopSpeakingMonitor();
       _state = RtcConnectionState.failed;
       _publishing = false;
       if (nextRoom != null) {
@@ -93,6 +104,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
   @override
   Future<void> leave() async {
+    _stopSpeakingMonitor();
     final oldRoom = _room;
     _room = null;
     _publishing = false;
@@ -130,6 +142,62 @@ class LiveKitRtcAdapter implements RtcAdapter {
   Future<void> setRemoteAudioEnabled(bool enabled) async {
     _remoteAudioEnabled = enabled;
     await _applyRemoteAudioPreference();
+  }
+
+  void _startSpeakingMonitor() {
+    _speakingTimer?.cancel();
+    _sampleSpeakingLevels();
+    _speakingTimer = Timer.periodic(
+      const Duration(milliseconds: 120),
+      (_) => _sampleSpeakingLevels(),
+    );
+  }
+
+  void _stopSpeakingMonitor() {
+    _speakingTimer?.cancel();
+    _speakingTimer = null;
+    if (_speakingLevels.value.isNotEmpty) {
+      _speakingLevels.value = const <String, double>{};
+    }
+  }
+
+  void _sampleSpeakingLevels() {
+    final currentRoom = _room;
+    if (currentRoom == null || _state != RtcConnectionState.joined) {
+      if (_speakingLevels.value.isNotEmpty) {
+        _speakingLevels.value = const <String, double>{};
+      }
+      return;
+    }
+
+    final next = <String, double>{};
+    for (final participant in currentRoom.activeSpeakers) {
+      final identity = participant.identity.trim();
+      if (identity.isEmpty || !participant.isSpeaking || participant.isMuted) {
+        continue;
+      }
+      final level = participant.audioLevel.clamp(0.0, 1.0).toDouble();
+      if (level < 0.01) continue;
+      next[identity] = level;
+    }
+
+    final previous = _speakingLevels.value;
+    if (_sameSpeakingLevels(previous, next)) return;
+    _speakingLevels.value = Map<String, double>.unmodifiable(next);
+  }
+
+  bool _sameSpeakingLevels(
+    Map<String, double> previous,
+    Map<String, double> next,
+  ) {
+    if (previous.length != next.length) return false;
+    for (final entry in next.entries) {
+      final old = previous[entry.key];
+      if (old == null || (old - entry.value).abs() > 0.025) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _applyRemoteAudioPreference() async {
@@ -193,6 +261,8 @@ class LiveKitRtcAdapter implements RtcAdapter {
   }
 
   void dispose() {
+    _speakingTimer?.cancel();
+    _speakingLevels.dispose();
     _httpClient.close(force: true);
   }
 }
