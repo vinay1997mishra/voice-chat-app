@@ -4642,7 +4642,7 @@ export default {
         "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
-        "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create",
+        "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
         "entry-new":"assets.entries","profile-card-new":"assets.frames","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
         "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
         "feature-set":"policies.edit","pricing-set":"policies.pricing","user-price-override-set":"policies.pricing","user-price-override-remove":"policies.pricing",
