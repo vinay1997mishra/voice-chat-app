@@ -69,6 +69,11 @@ class SocialService {
   final List<ChatMessage> directMessages = <ChatMessage>[];
   final List<MessageThread> messageThreads = <MessageThread>[];
 
+  int get totalUnreadMessages => messageThreads.fold<int>(
+        0,
+        (total, thread) => total + thread.unreadCount,
+      );
+
   void follow(String userId) => following.add(userId);
   void unfollow(String userId) => following.remove(userId);
 
