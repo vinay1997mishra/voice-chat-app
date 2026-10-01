@@ -550,6 +550,27 @@ class RoomPresenceService extends ChangeNotifier {
         applyResponse: false,
       );
 
+  Future<Map<String, dynamic>> luckyGiftState({
+    required String authToken,
+  }) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(path: '/gifts/lucky/state'),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load Lucky Gift state',
+      );
+    }
+    return data;
+  }
+
   Future<void> refresh({
     required String roomId,
     required String authToken,
