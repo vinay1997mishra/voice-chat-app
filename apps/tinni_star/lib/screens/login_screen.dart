@@ -42,9 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
       TextEditingController();
 
   bool busy = false;
-  bool googleReady = false;
-  bool facebookReady = false;
-  bool emailReady = false;
+  bool googleReady = true;
+  bool facebookReady = true;
+  bool emailReady = true;
+  bool _authConfigLoaded = false;
   bool waitingFacebook = false;
   bool emailMode = false;
 
@@ -72,7 +73,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     signatureController.addListener(_refresh);
-    _prepareAuth();
     _startAuthLinkListener();
   }
 
@@ -152,50 +152,59 @@ class _LoginScreenState extends State<LoginScreen> {
     return value.split(RegExp(r'\s+')).length;
   }
 
-  Future<void> _prepareAuth() async {
-    try {
-      final config = await _api.loadConfig();
-
-      if (config.googleServerClientId != null) {
-        await GoogleSignIn.instance.initialize(
-          serverClientId: config.googleServerClientId,
-        );
+  Future<bool> _ensureAuthProviderReady(String provider) async {
+    if (!_authConfigLoaded) {
+      try {
+        final config = await _api.loadConfig();
+        if (config.googleServerClientId != null) {
+          await GoogleSignIn.instance.initialize(
+            serverClientId: config.googleServerClientId,
+          );
+        }
+        if (!mounted) return false;
+        setState(() {
+          _authConfigLoaded = true;
+          googleReady = config.googleServerClientId != null;
+          facebookReady = config.facebookConfigured;
+          emailReady = config.emailOtpConfigured;
+          googleSetupError = googleReady
+              ? null
+              : 'Google login setup is not configured yet.';
+          facebookSetupError = facebookReady
+              ? null
+              : 'Facebook login setup is not configured yet.';
+          emailSetupError = emailReady
+              ? null
+              : 'Email OTP service is not configured yet.';
+        });
+      } catch (error) {
+        if (!mounted) return false;
+        final message = error.toString().replaceFirst('Bad state: ', '');
+        setState(() {
+          googleSetupError = message;
+          facebookSetupError = message;
+          emailSetupError = message;
+        });
+        return false;
       }
-
-      if (!mounted) return;
-      setState(() {
-        googleReady = config.googleServerClientId != null;
-        facebookReady = config.facebookConfigured;
-        emailReady = config.emailOtpConfigured;
-        googleSetupError = googleReady
-            ? null
-            : 'Google login setup is not configured yet.';
-        facebookSetupError = facebookReady
-            ? null
-            : 'Facebook login setup is not configured yet.';
-        emailSetupError = emailReady
-            ? null
-            : 'Email OTP service is not configured yet.';
-      });
-    } catch (error) {
-      if (!mounted) return;
-      final message = error.toString().replaceFirst('Bad state: ', '');
-      setState(() {
-        googleReady = false;
-        facebookReady = false;
-        emailReady = false;
-        googleSetupError = message;
-        facebookSetupError = message;
-        emailSetupError = message;
-      });
     }
+
+    if (provider == 'google') return googleReady;
+    if (provider == 'facebook') return facebookReady;
+    if (provider == 'email') return emailReady;
+    return false;
   }
 
   Future<void> _googleLogin() async {
-    if (busy || waitingFacebook || !googleReady) return;
+    if (busy || waitingFacebook) return;
     setState(() => busy = true);
 
     try {
+      if (!await _ensureAuthProviderReady('google')) {
+        throw StateError(
+          googleSetupError ?? 'Google login setup is not configured yet.',
+        );
+      }
       if (!GoogleSignIn.instance.supportsAuthenticate()) {
         throw StateError('Google sign-in is not supported on this device.');
       }
@@ -231,10 +240,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _facebookLogin() async {
-    if (busy || waitingFacebook || !facebookReady) return;
+    if (busy || waitingFacebook) return;
 
     setState(() => busy = true);
     try {
+      if (!await _ensureAuthProviderReady('facebook')) {
+        throw StateError(
+          facebookSetupError ?? 'Facebook login setup is not configured yet.',
+        );
+      }
       final start = await _api.startFacebookLogin();
 
       // Prefer the installed Facebook app on Android. If Facebook is not
@@ -387,10 +401,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _sendEmailOtp() async {
     if (busy) return;
-    if (!emailReady) {
-      _snack(emailSetupError ?? 'Email OTP service is not configured yet.');
-      return;
-    }
     final email = emailController.text.trim();
 
     if (!email.contains('@')) {
@@ -400,6 +410,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => busy = true);
     try {
+      if (!await _ensureAuthProviderReady('email')) {
+        throw StateError(
+          emailSetupError ?? 'Email OTP service is not configured yet.',
+        );
+      }
       final started = await _api.startEmailOtp(email);
       if (!mounted) return;
       setState(() {
@@ -827,7 +842,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   foregroundColor: FeaturePalette.email,
                   side: const BorderSide(color: FeaturePalette.email),
                 ),
-                onPressed: busy || !emailReady ? null : _sendEmailOtp,
+                onPressed: busy ? null : _sendEmailOtp,
                 icon: const Icon(Icons.person_add_alt_1_rounded),
                 label: const Text('Create new Email ID'),
               ),
@@ -953,9 +968,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 shadowColor: FeaturePalette.google,
                 elevation: 6,
               ),
-              onPressed: googleReady && !busy && !waitingFacebook
-                  ? _googleLogin
-                  : null,
+              onPressed: !busy && !waitingFacebook ? _googleLogin : null,
               icon: const Icon(Icons.g_mobiledata_rounded),
               label: Text(
                 busy ? 'Connecting…' : 'Continue with Google',
