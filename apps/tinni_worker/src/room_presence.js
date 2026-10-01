@@ -353,6 +353,17 @@ export class RoomPresenceStore extends DurableObject {
         "DELETE FROM room_seat_mutes WHERE seat_index = ?",
         seatIndex,
       );
+      const occupant = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM room_members WHERE seat_index = ? LIMIT 1",
+        seatIndex,
+      ).toArray()[0];
+      if (occupant?.user_id) {
+        this.ctx.storage.sql.exec(
+          "DELETE FROM room_mutes WHERE user_id = ? AND seat_index = ?",
+          String(occupant.user_id),
+          seatIndex,
+        );
+      }
     }
     return {
       ok: true,
@@ -770,6 +781,10 @@ export class RoomPresenceStore extends DurableObject {
         "DELETE FROM room_mutes WHERE user_id = ?",
         targetUserId,
       );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_mutes WHERE seat_index = ?",
+        seatIndex,
+      );
     }
 
     return {
@@ -938,6 +953,8 @@ export class RoomPresenceStore extends DurableObject {
         row.seat_index === null || row.seat_index === undefined
           ? null
           : Number(row.seat_index),
+      moderation_muted: this.muteStatus(row.user_id, row.seat_index),
+      mic_enabled: Number(row.mic_enabled || 0) === 1,
       mic_muted:
         this.muteStatus(row.user_id, row.seat_index) ||
         Number(row.mic_enabled || 0) !== 1,
