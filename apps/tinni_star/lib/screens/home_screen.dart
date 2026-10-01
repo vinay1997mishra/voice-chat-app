@@ -134,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _syncRooms() async {
+    await widget.state.refreshAuthenticatedAccount();
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
@@ -359,12 +360,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> createRoom() async {
+    await widget.state.refreshAuthenticatedAccount(force: true);
     final account = widget.state.auth.current;
     if (account == null) return;
 
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // The backend still prevents a second owner room if this refresh fails.
+    }
+
     final existing = widget.state.discovery.ownedRooms(account.userId);
     if (existing.isNotEmpty) {
-      openRoom(existing.first);
+      await openRoom(existing.first);
       return;
     }
 
@@ -410,12 +418,39 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void openRoom(RoomSummary room) {
-    widget.state.discovery.visit(room.id);
-    Navigator.push(
+  Future<void> openRoom(RoomSummary room) async {
+    final previousUserId = widget.state.auth.current?.userId;
+    final idChanged =
+        await widget.state.refreshAuthenticatedAccount(force: true);
+    final account = widget.state.auth.current;
+    var targetRoom = room;
+
+    if (account != null && idChanged) {
+      try {
+        await widget.state.discovery.syncRooms(account.authToken);
+        final migratedOwnedRooms =
+            widget.state.discovery.ownedRooms(account.userId);
+        if (previousUserId != null &&
+            room.ownerId == previousUserId &&
+            migratedOwnedRooms.isNotEmpty) {
+          targetRoom = migratedOwnedRooms.first;
+        } else {
+          final refreshed = widget.state.discovery.rooms
+              .where((item) => item.id == room.id)
+              .toList();
+          if (refreshed.isNotEmpty) targetRoom = refreshed.first;
+        }
+      } catch (_) {
+        // Continue with the last room snapshot; server-side ownership remains authoritative.
+      }
+    }
+
+    if (!mounted) return;
+    widget.state.discovery.visit(targetRoom.id);
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RoomScreen(state: widget.state, room: room),
+        builder: (_) => RoomScreen(state: widget.state, room: targetRoom),
       ),
     );
   }
