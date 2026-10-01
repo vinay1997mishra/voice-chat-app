@@ -11,6 +11,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../infra/app_backend_service.dart';
 import '../core/seat_policy.dart';
+import '../ui/royal_party_artwork.dart';
 import '../ui/royal_theme.dart';
 
 import 'cp_ranking_screen.dart';
@@ -823,16 +824,16 @@ class _HomeScreenState extends State<HomeScreen> {
           child: PageView(
             children: [
               _PartyPromoCard(
-                title: 'WEEKLY STAR',
-                subtitle: 'Weekly rankings and royal rewards',
+                title: 'ROYAL PARTY',
+                subtitle: 'Live rooms, rankings and royal rewards',
                 icon: Icons.workspace_premium_rounded,
-                onTap: () => openRankings(initialTab: 1),
+                onTap: () => openRankings(initialTab: 0),
               ),
               _PartyPromoCard(
-                title: 'ROYAL PARTY',
-                subtitle: 'Live rooms, rankings and party events',
-                icon: Icons.mic_external_on_rounded,
-                onTap: () => openRankings(initialTab: 0),
+                title: 'WEEKLY STAR',
+                subtitle: 'Weekly rankings and royal rewards',
+                icon: Icons.emoji_events_rounded,
+                onTap: () => openRankings(initialTab: 1),
               ),
               _PartyPromoCard(
                 title: 'THE GREAT NAVIGATOR',
@@ -1374,57 +1375,122 @@ class _PartyPromoCard extends StatelessWidget {
       child: RoyalPanel(
         onTap: onTap,
         radius: 22,
-        gradient: FeaturePalette.glow(color),
+        padding: EdgeInsets.zero,
         accentColor: RoyalPalette.deepGold,
-        child: Row(
-          children: [
-            ShiningIcon(
-              icon: icon,
-              color: color,
-              size: 38,
-              boxSize: 70,
-              glow: 0.46,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    style: const TextStyle(
-                      color: RoyalPalette.cream,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 21,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: RoyalPalette.cream,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Swipe for more',
-                    style: TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: RoyalPartyBackdrop(
+                  accent: color,
+                  intensity: title == 'ROYAL PARTY' ? 1 : .72,
+                ),
               ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: color,
-            ),
-          ],
+              const Positioned.fill(
+                child: RoyalPanelOrnament(color: RoyalPalette.gold),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            RoyalPalette.gold.withValues(alpha: .24),
+                            RoyalPalette.nearBlack,
+                          ],
+                        ),
+                        border: Border.all(
+                          color: RoyalPalette.gold.withValues(alpha: .65),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: RoyalPalette.gold.withValues(alpha: .12),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        icon,
+                        color: RoyalPalette.gold,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 21,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: RoyalPalette.muted,
+                              height: 1.2,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: RoyalPalette.gold.withValues(alpha: .08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: RoyalPalette.gold.withValues(alpha: .28),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'VIP • LIVE',
+                                  style: TextStyle(
+                                    color: RoyalPalette.gold,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .6,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: RoyalPalette.gold,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1519,47 +1585,68 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _homeFeatureColor(title);
     return RoyalPanel(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: EdgeInsets.zero,
       onTap: onTap,
       gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      child: Column(
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
-              letterSpacing: 0.25,
+      accentColor: RoyalPalette.deepGold,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: RoyalPanelOrnament(
+                color: color.withValues(alpha: .85),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          if (rankAvatarGroups.isNotEmpty)
-            _PartyRankAvatarRow(
-              groups: rankAvatarGroups.take(3).toList(growable: false),
-              accent: color,
-            )
-          else
-            ShiningIcon(
-              icon: icon,
-              color: color,
-              size: 28,
-              boxSize: 50,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 7),
+              child: Column(
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 0.35,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  if (rankAvatarGroups.isNotEmpty)
+                    _PartyRankAvatarRow(
+                      groups: rankAvatarGroups.take(3).toList(growable: false),
+                      accent: color,
+                    )
+                  else
+                    ShiningIcon(
+                      icon: icon,
+                      color: color,
+                      size: 28,
+                      boxSize: 50,
+                      glow: .18,
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    rankAvatarGroups.isEmpty
+                        ? 'Royal ranking'
+                        : 'TOP 1  •  TOP 2  •  TOP 3',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: rankAvatarGroups.isEmpty
+                          ? RoyalPalette.muted
+                          : RoyalPalette.gold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 8.2,
+                      letterSpacing: .25,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          const SizedBox(height: 7),
-          Text(
-            rankAvatarGroups.isEmpty ? 'Top ranking' : 'TOP 1  •  TOP 2  •  TOP 3',
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-              fontSize: 8.5,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1612,71 +1699,51 @@ class _PartyRankAvatarGroup extends StatelessWidget {
         .whereType<ImageProvider>()
         .take(2)
         .toList(growable: false);
-    return SizedBox(
-      width: 52,
-      height: 50,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.bottomCenter,
-        children: [
-          for (var i = 0; i < (valid.isEmpty ? 1 : valid.length); i++)
-            Positioned(
-              left: valid.length > 1 ? 5.0 + i * 18 : 11,
-              bottom: 1,
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: accent, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.55),
-                      blurRadius: 9,
-                    ),
-                  ],
-                ),
-                child: CircleAvatar(
-                  backgroundColor: RoyalPalette.nearBlack,
-                  backgroundImage: valid.isEmpty ? null : valid[i],
-                  child: valid.isEmpty
-                      ? Icon(
-                          rank == 1
-                              ? Icons.workspace_premium_rounded
-                              : Icons.person_rounded,
-                          size: 15,
-                          color: accent,
-                        )
-                      : null,
-                ),
-              ),
-            ),
-          Positioned(
-            top: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
+
+    Widget avatar(int index) {
+      return CircleAvatar(
+        backgroundColor: RoyalPalette.nearBlack,
+        backgroundImage: valid.isEmpty ? null : valid[index],
+        child: valid.isEmpty
+            ? Icon(
+                rank == 1
+                    ? Icons.workspace_premium_rounded
+                    : Icons.person_rounded,
+                size: 15,
                 color: accent,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.55),
-                    blurRadius: 7,
-                  ),
-                ],
-              ),
-              child: Text(
-                rank.toString(),
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 8,
-                  fontWeight: FontWeight.w900,
+              )
+            : null,
+      );
+    }
+
+    final body = valid.length <= 1
+        ? avatar(0)
+        : Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: const Alignment(-.48, 0),
+                child: FractionallySizedBox(
+                  widthFactor: .72,
+                  heightFactor: .72,
+                  child: ClipOval(child: avatar(0)),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
+              Align(
+                alignment: const Alignment(.48, 0),
+                child: FractionallySizedBox(
+                  widthFactor: .72,
+                  heightFactor: .72,
+                  child: ClipOval(child: avatar(1)),
+                ),
+              ),
+            ],
+          );
+
+    return RoyalRankHalo(
+      rank: rank,
+      size: 52,
+      child: body,
     );
   }
 }
@@ -1694,122 +1761,59 @@ class _TopRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = rank == 1
+    final metal = rank == 1
         ? RoyalPalette.gold
         : rank == 2
-            ? const Color(0xFFBFC5CB)
-            : const Color(0xFFA66D43);
+            ? const Color(0xFFBEC4CB)
+            : const Color(0xFFA56C43);
     return RoyalPanel(
       key: Key('room-card-' + room.id),
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.fromLTRB(6, 9, 6, 7),
       onTap: onTap,
-      gradient: FeaturePalette.glow(accent),
-      accentColor: accent,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          metal.withValues(alpha: .10),
+          RoyalPalette.panel,
+          RoyalPalette.black,
+        ],
+      ),
+      accentColor: metal,
       child: Column(
         children: [
-          Stack(
-            alignment: Alignment.topCenter,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(17),
-                  border: Border.all(color: accent, width: rank == 1 ? 3 : 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: rank == 1 ? 0.34 : 0.22),
-                      blurRadius: rank == 1 ? 15 : 10,
-                      spreadRadius: rank == 1 ? 0.6 : 0,
-                    ),
-                  ],
-                  gradient: LinearGradient(
-                    colors: rank == 1
-                        ? const [
-                            Color(0xFFFFD85A),
-                            Color(0xFF6E4300),
-                            Color(0xFF171008),
-                          ]
-                        : rank == 2
-                            ? const [
-                                Color(0xFFE4EDF4),
-                                Color(0xFF5D6875),
-                                Color(0xFF111418),
-                              ]
-                            : const [
-                                Color(0xFFFFB07A),
-                                Color(0xFF7A3B1D),
-                                Color(0xFF17100D),
-                              ],
-                  ),
-                ),
-                child: _RoomArtwork(
-                  room: room,
-                  width: double.infinity,
-                  height: 100,
-                  fallback: room.title.characters.first.toUpperCase(),
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -9),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.34),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        rank == 1
-                            ? Icons.workspace_premium_rounded
-                            : Icons.emoji_events_rounded,
-                        size: 12,
-                        color: Colors.black,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        'TOP $rank',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          RoyalRankFrame(
+            rank: rank,
+            height: 112,
+            child: _RoomArtwork(
+              room: room,
+              width: double.infinity,
+              height: 104,
+              fallback: room.title.characters.first.toUpperCase(),
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             room.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               fontSize: 11,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
-            (room.country == 'IN' ? '🇮🇳  ' : '🌐  ') +
+            (room.country == 'IN' ? '🇮🇳 ' : '🌐 ') +
                 room.online.toString() +
                 '  •  EXP ' +
                 _compactNumber(room.roomExperience),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: RoyalPalette.muted,
-              fontSize: 9.5,
+              fontSize: 8.8,
             ),
           ),
         ],
@@ -1839,8 +1843,16 @@ class _RoomListCard extends StatelessWidget {
       child: RoyalPanel(
         padding: const EdgeInsets.all(9),
         onTap: onTap,
-        gradient: FeaturePalette.glow(FeaturePalette.discover),
-        accentColor: FeaturePalette.discover,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF18140E),
+            RoyalPalette.panel,
+            Color(0xFF0B0B0B),
+          ],
+        ),
+        accentColor: RoyalPalette.deepGold,
         child: Row(
           children: [
             _RoomArtwork(
