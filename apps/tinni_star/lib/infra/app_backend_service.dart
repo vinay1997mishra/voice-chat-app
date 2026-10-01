@@ -154,6 +154,44 @@ class AppBackendService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> profileTrends(
+    String token, {
+    int limit = 40,
+  }) async {
+    final base = apiBase.replace(path: '/profile/trends');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Trends');
+    }
+    final raw = data['trends'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> addProfileTrend(
+    String token,
+    String text,
+  ) async {
+    final data = await _request(
+      'POST',
+      '/profile/trends',
+      token,
+      body: <String, dynamic>{'text': text},
+    );
+    return _map(data['trend']);
+  }
+
   Future<Map<String, dynamic>> guardianState(String token) async {
     final data = await _request('GET', '/profile/guardian', token);
     return _map(data['guardian']);
