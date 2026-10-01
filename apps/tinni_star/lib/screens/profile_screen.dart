@@ -17,6 +17,7 @@ import 'store_screen.dart';
 import 'recharge_screen.dart';
 import 'cp_screen.dart';
 import 'privacy_policy_screen.dart';
+import 'personal_profile_screen.dart';
 import 'mine_function_screens.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -523,8 +524,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             key: const Key('reference-mine-list'),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
             children: [
-              Container(
+              InkWell(
                 key: const Key('profile-active-card'),
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => _openMineScreen(
+                  PersonalProfileScreen(state: widget.state),
+                ),
+                child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -704,6 +710,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
                   ),
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -844,6 +851,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 10),
               _mineMenuGroup([
+                _mineMenuRow(
+                  key: const Key('mine-personal-information'),
+                  icon: Icons.account_box_rounded,
+                  label: 'Personal information',
+                  onTap: () => _openMineScreen(
+                    PersonalProfileScreen(state: widget.state),
+                  ),
+                ),
                 _mineMenuRow(
                   key: const Key('mine-medal-of-honor'),
                   icon: Icons.hexagon_rounded,
