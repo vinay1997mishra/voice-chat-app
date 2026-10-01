@@ -2246,6 +2246,46 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/profile/trends" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const limit = Number(url.searchParams.get("limit") || 40);
+      try {
+        return json({
+          ok: true,
+          trends: await getAppDirectoryStore(env).profileTrends(
+            appSession.user.user_id,
+            limit,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load Trends"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/profile/trends" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          trend: await getAppDirectoryStore(env).addProfileTrend(
+            appSession.user.user_id,
+            body.text,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to add Trend"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/profile/guardian" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
