@@ -18,6 +18,7 @@ import 'recharge_screen.dart';
 import 'cp_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'personal_profile_screen.dart';
+import 'public_profile_screen.dart';
 import 'guardian_screen.dart';
 import 'mine_function_screens.dart';
 
@@ -529,7 +530,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 key: const Key('profile-active-card'),
                 borderRadius: BorderRadius.circular(14),
                 onTap: () => _openMineScreen(
-                  PersonalProfileScreen(state: widget.state),
+                  PublicProfileScreen(state: widget.state),
                 ),
                 child: Container(
                 padding: const EdgeInsets.all(10),
