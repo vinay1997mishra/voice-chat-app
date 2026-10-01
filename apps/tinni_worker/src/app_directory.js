@@ -4716,6 +4716,48 @@ export class AppDirectoryStore extends DurableObject {
     return memory;
   }
 
+  guardianState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const now = Date.now();
+    const since = now - (30 * 24 * 60 * 60 * 1000);
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT g.sender_id,
+              COALESCE(SUM(g.total_cost),0) AS points,
+              u.display_name,
+              u.avatar_data_url,
+              u.flag_emoji
+         FROM gift_transactions g
+         LEFT JOIN app_users u ON u.user_id = g.sender_id
+        WHERE g.receiver_id = ?
+          AND g.created_at >= ?
+        GROUP BY g.sender_id, u.display_name, u.avatar_data_url, u.flag_emoji
+        ORDER BY points DESC, g.sender_id ASC
+        LIMIT 50`,
+      userId, since,
+    ).toArray();
+
+    const supporters = rows.map((row, index) => ({
+      rank: index + 1,
+      user_id: String(row.sender_id),
+      display_name: String(row.display_name || row.sender_id),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      flag_emoji: String(row.flag_emoji || ""),
+      points: Math.max(0, Number(row.points || 0)),
+      guardian_eligible: Number(row.points || 0) >= 1000,
+    }));
+    const top = supporters[0] || null;
+    const guardian = top && Number(top.points || 0) >= 10000 ? top : null;
+    return {
+      guardian,
+      supporters,
+      candidate_threshold: 1000,
+      guardian_threshold: 10000,
+      window_days: 30,
+      updated_at: now,
+    };
+  }
+
   profileStats(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId || !this.getUserById(userId)) throw new Error("User not found");
