@@ -120,6 +120,55 @@ class AppBackendService {
   final Uri apiBase;
   final HttpClient _httpClient;
 
+  Future<Map<String, String?>> profileMedia(String token) async {
+    final data = await _request('GET', '/profile-media', token);
+    final raw = _map(data['media']);
+    return <String, String?>{
+      for (final entry in raw.entries)
+        entry.key: entry.value?.toString(),
+    };
+  }
+
+  Future<String> uploadProfileMedia(
+    String token, {
+    required String slot,
+    required String dataUrl,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/profile-media',
+      token,
+      body: {'slot': slot, 'data_url': dataUrl},
+    );
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) throw StateError('Server did not return profile media URL');
+    return url;
+  }
+
+  Future<void> deleteProfileMedia(String token, String slot) async {
+    await _request(
+      'DELETE',
+      '/profile-media',
+      token,
+      body: {'slot': slot},
+    );
+  }
+
+  Future<Map<String, dynamic>> updateProfile(
+    String token,
+    Map<String, dynamic> values,
+  ) async {
+    final data = await _request(
+      'PATCH',
+      '/app/profile',
+      token,
+      body: values,
+    );
+    final user = _map(data['user']);
+    if (user.isEmpty) throw StateError('Server returned invalid profile');
+    return user;
+  }
+
   Future<List<RemoteNotification>> notifications(String token) async {
     final data = await _request('GET', '/notifications', token);
     final raw = data['notifications'];
