@@ -64,6 +64,7 @@ class RoomPresenceMember {
     this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
     this.micMuted = false,
+    this.moderationMuted = false,
     this.chatBanned = false,
     this.isAdmin = false,
     this.seatEmote,
@@ -85,6 +86,7 @@ class RoomPresenceMember {
   final List<OwnerTag> ownerMedals;
   final int? seatIndex;
   final bool micMuted;
+  final bool moderationMuted;
   final bool chatBanned;
   final bool isAdmin;
   final String? seatEmote;
@@ -824,6 +826,7 @@ class RoomPresenceService extends ChangeNotifier {
                     ? null
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
+                moderationMuted: row['moderation_muted'] == true,
                 chatBanned: row['chat_banned'] == true,
                 isAdmin: row['is_admin'] == true,
                 seatEmote: row['seat_emote']?.toString(),
