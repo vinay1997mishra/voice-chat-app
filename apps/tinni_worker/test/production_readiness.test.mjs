@@ -25,3 +25,11 @@ assert.match(
 );
 
 console.log("Production readiness guards passed");
+
+assert.match(
+  index,
+  /FACEBOOK_LOGIN_ENABLED !== "true"/,
+  "Facebook login must be opt-in and disabled by default",
+);
+
+console.log("Facebook login default-off guard passed");

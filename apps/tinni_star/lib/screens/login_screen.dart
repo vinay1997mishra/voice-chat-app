@@ -935,7 +935,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in with Google, Facebook, or Email / Gmail.',
+            'Sign in with Google or Email / Gmail.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: RoyalPalette.cream,
@@ -973,61 +973,63 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          const Text(
-            'OR',
-            style: TextStyle(
-              color: RoyalPalette.muted,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              key: const Key('facebook-login-button'),
-              style: FilledButton.styleFrom(
-                backgroundColor: FeaturePalette.facebook,
-                foregroundColor: Colors.white,
-                shadowColor: FeaturePalette.facebook,
-                elevation: 6,
-              ),
-              onPressed: facebookReady && !busy && !waitingFacebook
-                  ? _facebookLogin
-                  : null,
-              icon: const Icon(Icons.facebook),
-              label: Text(
-                waitingFacebook
-                    ? 'Waiting for Facebook…'
-                    : 'Continue with Facebook',
-              ),
-            ),
-          ),
-          if (waitingFacebook) ...[
-            const SizedBox(height: 7),
+          if (facebookReady) ...[
+            const SizedBox(height: 12),
             const Text(
-              'Complete Facebook login in your browser, then return here.',
-              textAlign: TextAlign.center,
+              'OR',
               style: TextStyle(
-                color: RoyalPalette.cream,
-                fontSize: 10,
+                color: RoyalPalette.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            TextButton(
-              onPressed: _cancelFacebookWait,
-              child: const Text('Cancel'),
-            ),
-          ] else if (facebookSetupError != null) ...[
-            const SizedBox(height: 7),
-            Text(
-              facebookSetupError!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.orangeAccent,
-                fontSize: 10,
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const Key('facebook-login-button'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FeaturePalette.facebook,
+                  foregroundColor: Colors.white,
+                  shadowColor: FeaturePalette.facebook,
+                  elevation: 6,
+                ),
+                onPressed: facebookReady && !busy && !waitingFacebook
+                    ? _facebookLogin
+                    : null,
+                icon: const Icon(Icons.facebook),
+                label: Text(
+                  waitingFacebook
+                      ? 'Waiting for Facebook…'
+                      : 'Continue with Facebook',
+                ),
               ),
             ),
+            if (waitingFacebook) ...[
+              const SizedBox(height: 7),
+              const Text(
+                'Complete Facebook login in your browser, then return here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: 10,
+                ),
+              ),
+              TextButton(
+                onPressed: _cancelFacebookWait,
+                child: const Text('Cancel'),
+              ),
+            ] else if (facebookSetupError != null) ...[
+              const SizedBox(height: 7),
+              Text(
+                facebookSetupError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 10,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 12),
           const Text(
