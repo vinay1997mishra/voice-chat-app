@@ -345,6 +345,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
   }
 
+  Widget _pullRefresh(Widget child) {
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: child,
+    );
+  }
+
   Future<void> _goToPage(int index) async {
     if (!_pageController.hasClients) return;
     await _pageController.animateToPage(
@@ -624,10 +631,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _pageController,
                 onPageChanged: (index) => setState(() => _page = index),
                 children: [
-                  _buildMinePage(),
-                  _buildPartyPage(),
-                  _buildEventsPage(),
-                  _buildCountryPage(),
+                  _pullRefresh(_buildMinePage()),
+                  _pullRefresh(_buildPartyPage()),
+                  _pullRefresh(_buildEventsPage()),
+                  _pullRefresh(_buildCountryPage()),
                 ],
               ),
             ),
@@ -653,10 +660,9 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
     final followings = widget.state.discovery.followedRooms();
 
-    return RefreshIndicator(
-      onRefresh: _refreshHomePage,
-      child: ListView(
+    return ListView(
       key: const Key('home-mine-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
         const GoldSectionTitle('My room'),
@@ -817,7 +823,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
-      ),
     );
   }
 
@@ -852,10 +857,9 @@ class _HomeScreenState extends State<HomeScreen> {
         )
         .toList(growable: false);
 
-    return RefreshIndicator(
-      onRefresh: _refreshHomePage,
-      child: ListView(
+    return ListView(
       key: const Key('home-party-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
         SizedBox(
@@ -964,7 +968,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
-      ),
     );
   }
 
@@ -996,10 +999,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    return RefreshIndicator(
-      onRefresh: _refreshHomePage,
-      child: ListView(
+    return ListView(
       key: const Key('home-events-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
         RoyalPanel(
@@ -1108,7 +1110,6 @@ class _HomeScreenState extends State<HomeScreen> {
           countryFilterLabel = country.flagEmoji + ' ' + country.name;
         });
       },
-      ),
     );
   }
 
@@ -1117,10 +1118,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ? widget.state.discovery.recommend()
         : widget.state.discovery.recommend(country: countryFilter);
 
-    return RefreshIndicator(
-      onRefresh: _refreshHomePage,
-      child: ListView(
+    return ListView(
       key: const Key('home-country-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
         const GoldSectionTitle('Country Rooms'),
@@ -1188,7 +1188,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
-      ),
     );
   }}
 
