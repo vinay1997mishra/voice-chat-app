@@ -225,6 +225,8 @@ void main() {
     expect(passwordField.maxLength, 5);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
