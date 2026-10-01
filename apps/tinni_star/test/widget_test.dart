@@ -19,7 +19,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Facebook'), findsOneWidget);
+    // Facebook is shown only when the backend reports Facebook OAuth configured.
+    // Widget tests run without production backend config, so it is hidden here.
+    expect(find.text('Continue with Facebook'), findsNothing);
     expect(find.text('Login with Email / Gmail'), findsOneWidget);
     expect(find.text('Continue with Phone'), findsNothing);
 
