@@ -148,6 +148,7 @@ function rowToRoom(row) {
   const seatLayout = roomSeatLayout(row.seat_count);
   return {
     id: String(row.id),
+    public_id: row.public_id ? String(row.public_id) : String(row.id),
     owner_id: String(row.owner_id),
     title: String(row.title),
     country_code: String(row.country_code),
@@ -294,6 +295,7 @@ export class AppDirectoryStore extends DurableObject {
 
       CREATE TABLE IF NOT EXISTS app_rooms (
         id TEXT PRIMARY KEY,
+        public_id TEXT NOT NULL UNIQUE,
         owner_id TEXT NOT NULL UNIQUE,
         title TEXT NOT NULL,
         country_code TEXT NOT NULL,
@@ -1135,6 +1137,7 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
       "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
       "ALTER TABLE app_rooms ADD COLUMN seat_theme_id TEXT NOT NULL DEFAULT 'royal-gold'",
+      "ALTER TABLE app_rooms ADD COLUMN public_id TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
@@ -1177,6 +1180,12 @@ export class AppDirectoryStore extends DurableObject {
       }
     }
 
+    this.ctx.storage.sql.exec(
+      "UPDATE app_rooms SET public_id = id WHERE public_id IS NULL OR public_id = ''"
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_rooms_public_id ON app_rooms(public_id)"
+    );
     this.ctx.storage.sql.exec(
       "UPDATE app_users SET auth_subject = google_sub WHERE auth_subject IS NULL OR auth_subject = ''"
     );
@@ -2537,13 +2546,9 @@ export class AppDirectoryStore extends DurableObject {
         newId, oldId,
       );
     }
-    this.ctx.storage.sql.exec(
-      "UPDATE app_rooms SET owner_id = ? WHERE owner_id = ?", newId, oldId,
-    );
-
     if (oldRoomId) {
       const conflictingRoom = this.ctx.storage.sql.exec(
-        "SELECT id FROM app_rooms WHERE id = ? AND id <> ? LIMIT 1",
+        "SELECT id FROM app_rooms WHERE public_id = ? AND id <> ? LIMIT 1",
         newId,
         oldRoomId,
       ).toArray()[0];
@@ -2551,29 +2556,17 @@ export class AppDirectoryStore extends DurableObject {
         throw new Error("New public ID conflicts with an existing room ID");
       }
 
-      const roomColumns = [
-        ["room_locks","room_id"], ["room_lock_attempts","room_id"],
-        ["room_access_grants","room_id"], ["room_themes","room_id"],
-        ["owner_room_controls","room_id"], ["app_room_invites","room_id"],
-        ["app_recent_rooms","room_id"], ["app_user_presence","room_id"],
-        ["app_room_presence_counts","room_id"], ["room_realtime_events","room_id"],
-        ["gift_transactions","room_id"], ["lucky_gift_results","room_id"],
-        ["lucky_gift_sessions","room_id"], ["room_gift_owner_daily","room_id"],
-        ["room_follows","room_id"], ["room_memberships","room_id"],
-        ["lucky_pouches","room_id"], ["country_ribbons","room_id"],
-        ["room_game_actions","room_id"], ["ludo_room_sessions","room_id"],
-        ["ludo_room_players","room_id"],
-      ];
-      for (const pair of roomColumns) {
-        const tableName = pair[0], columnName = pair[1];
-        this.ctx.storage.sql.exec(
-          "UPDATE " + tableName + " SET " + columnName + " = ? WHERE " + columnName + " = ?",
-          newId, oldRoomId,
-        );
-      }
+      // Keep the room's internal ID stable so its live presence, settings,
+      // history and all room-linked records remain the same room. Only the
+      // public room ID follows the owner's changed public ID.
       this.ctx.storage.sql.exec(
-        "UPDATE app_rooms SET id = ?, owner_id = ?, updated_at = ? WHERE id = ?",
+        "UPDATE app_rooms SET owner_id = ?, public_id = ?, updated_at = ? WHERE id = ?",
         newId, newId, Date.now(), oldRoomId,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET owner_id = ?, public_id = ?, updated_at = ? WHERE owner_id = ?",
+        newId, newId, Date.now(), oldId,
       );
     }
 
@@ -9079,9 +9072,10 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     this.ctx.storage.sql.exec(
       `INSERT INTO app_rooms
-        (id, owner_id, title, country_code, country_name, flag_emoji,
+        (id, public_id, owner_id, title, country_code, country_name, flag_emoji,
          seat_count, party_mode, locked, photo_data_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ownerId,
       ownerId,
       ownerId,
       title,
