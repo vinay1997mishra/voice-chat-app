@@ -2195,6 +2195,24 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/profile/guardian" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          guardian: await getAppDirectoryStore(env).guardianState(
+            appSession.user.user_id,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load Guardian"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/account/stats" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok:false, error:"Unauthorized" }, 401);
