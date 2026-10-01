@@ -11,26 +11,27 @@ assert.match(
 
 assert.match(
   directory,
-  /UPDATE app_rooms SET id = \?, owner_id = \?, updated_at = \? WHERE id = \?/,
-  "Existing owner room must be renamed instead of creating a new room",
+  /public_id TEXT/,
+  "Rooms must have a public room ID separate from the stable internal room key",
 );
 
-for (const table of [
-  "app_recent_rooms",
-  "app_user_presence",
-  "app_room_presence_counts",
-  "room_realtime_events",
-  "gift_transactions",
-  "room_follows",
-  "room_memberships",
-  "ludo_room_sessions",
-]) {
-  assert.match(
-    directory,
-    new RegExp("\\[\\\"" + table + "\\\",\\\"room_id\\\"\\]"),
-    table + " must migrate to the new room ID",
-  );
-}
+assert.match(
+  directory,
+  /UPDATE app_rooms SET owner_id = \?, public_id = \?, updated_at = \? WHERE id = \?/,
+  "ID change must keep the existing room and update only its owner/public ID",
+);
+
+assert.doesNotMatch(
+  directory,
+  /UPDATE app_rooms SET id = \?, owner_id = \?, updated_at = \? WHERE id = \?/,
+  "ID change must not rename the internal room key or create a new room identity",
+);
+
+assert.match(
+  directory,
+  /public_id: row\.public_id \? String\(row\.public_id\) : String\(row\.id\)/,
+  "Room APIs must expose the changed public room ID",
+);
 
 assert.match(
   directory,
