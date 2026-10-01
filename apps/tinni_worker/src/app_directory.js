@@ -171,6 +171,22 @@ function rowToRoom(row) {
       ? String(row.owner_flag_emoji)
       : null,
     member_count: Number(row.member_count || 0),
+    online: Number(row.member_count || 0),
+    active_user_exp: Math.max(
+      0,
+      Number(row.active_user_exp ?? (Number(row.member_count || 0) * 500)),
+    ),
+    sending_exp: Math.max(0, Number(row.sending_exp || 0)),
+    receiving_exp: Math.max(0, Number(row.receiving_exp || 0)),
+    room_experience: Math.max(
+      0,
+      Number(
+        row.room_experience ??
+          (Number(row.member_count || 0) * 500) +
+            Number(row.sending_exp || 0) +
+            Number(row.receiving_exp || 0),
+      ),
+    ),
     announcement: row.announcement ? String(row.announcement) : "",
     category: row.category ? String(row.category) : "",
     privacy: row.privacy ? String(row.privacy) : "public",
@@ -4566,6 +4582,34 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, id, room_id: roomId, user_id: userId, game_key: gameKey, action, result, created_at: now };
   }
 
+  cpRanking(limitValue = 100) {
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT c.user_a,c.user_b,c.intimacy,c.level,c.updated_at,
+              ua.display_name AS user_a_name,
+              ua.avatar_data_url AS user_a_avatar,
+              ub.display_name AS user_b_name,
+              ub.avatar_data_url AS user_b_avatar
+         FROM cp_relationships c
+         LEFT JOIN app_users ua ON ua.user_id=c.user_a
+         LEFT JOIN app_users ub ON ub.user_id=c.user_b
+        WHERE c.state='accepted'
+        ORDER BY c.intimacy DESC,c.level DESC,c.updated_at ASC
+        LIMIT ?`,
+      limit,
+    ).toArray().map((row, index) => ({
+      rank: index + 1,
+      user_a: String(row.user_a),
+      user_b: String(row.user_b),
+      user_a_name: String(row.user_a_name || row.user_a),
+      user_b_name: String(row.user_b_name || row.user_b),
+      user_a_avatar: row.user_a_avatar ? String(row.user_a_avatar) : null,
+      user_b_avatar: row.user_b_avatar ? String(row.user_b_avatar) : null,
+      intimacy: Math.max(0, Number(row.intimacy || 0)),
+      level: Math.max(1, Number(row.level || 1)),
+    }));
+  }
+
   cpState(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
@@ -6848,13 +6892,25 @@ export class AppDirectoryStore extends DurableObject {
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
-              COALESCE(pc.member_count, 0) AS member_count
+              COALESCE(pc.member_count, 0) AS member_count,
+              COALESCE(pc.member_count, 0) * 500 AS active_user_exp,
+              COALESCE(gx.gift_coins, 0) AS sending_exp,
+              COALESCE(gx.gift_coins, 0) AS receiving_exp,
+              (COALESCE(pc.member_count, 0) * 500)
+                + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
          LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+         LEFT JOIN (
+           SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
+             FROM gift_transactions
+            GROUP BY room_id
+         ) gx ON gx.room_id = r.id
         WHERE COALESCE(r.closed, 0) = 0
           AND COALESCE(r.locked, 0) = 0
-        ORDER BY r.created_at DESC
+        ORDER BY room_experience DESC,
+                 COALESCE(pc.member_count, 0) DESC,
+                 r.created_at DESC
         LIMIT 500`,
     ).toArray().map(rowToRoom);
   }
@@ -7733,9 +7789,12 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       `SELECT f.id,f.name,f.tag,f.notice,f.leader_user_id,f.experience,f.wallet_coins,
               f.created_at,f.updated_at,
+              lu.display_name AS leader_name,
+              lu.avatar_data_url AS leader_avatar_data_url,
               COUNT(fm.user_id) AS member_count
          FROM families f
          LEFT JOIN family_members fm ON fm.family_id=f.id
+         LEFT JOIN app_users lu ON lu.user_id=f.leader_user_id
         GROUP BY f.id
         ORDER BY f.experience DESC, member_count DESC, f.created_at ASC
         LIMIT ?`, limit,
@@ -7745,6 +7804,10 @@ export class AppDirectoryStore extends DurableObject {
       tag: String(row.tag),
       notice: String(row.notice || ""),
       leader_user_id: String(row.leader_user_id),
+      leader_name: String(row.leader_name || row.leader_user_id),
+      leader_avatar_data_url: row.leader_avatar_data_url
+        ? String(row.leader_avatar_data_url)
+        : null,
       experience: Number(row.experience || 0),
       wallet_coins: Number(row.wallet_coins || 0),
       member_count: Number(row.member_count || 0),
