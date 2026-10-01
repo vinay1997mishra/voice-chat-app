@@ -283,6 +283,15 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_users_google_sub ON app_users(google_sub);
       CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
 
+      CREATE TABLE IF NOT EXISTS profile_trends (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_profile_trends_user
+        ON profile_trends(user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_rooms (
         id TEXT PRIMARY KEY,
         owner_id TEXT NOT NULL UNIQUE,
@@ -4745,6 +4754,39 @@ export class AppDirectoryStore extends DurableObject {
       memory.id, row.user_a, row.user_b, userId, text, memory.created_at,
     );
     return memory;
+  }
+
+  profileTrends(userIdValue, limitValue = 40) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const limit = Math.max(1, Math.min(100, Number(limitValue || 40)));
+    return this.ctx.storage.sql.exec(
+      `SELECT id,user_id,text,created_at
+         FROM profile_trends
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+      userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      text: String(row.text || ""),
+      created_at: Number(row.created_at || 0),
+    }));
+  }
+
+  addProfileTrend(userIdValue, textValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const text = cleanText(textValue, 500);
+    if (!text) throw new Error("Trend text is required");
+    const now = Date.now();
+    const id = "trend-" + now + "-" + crypto.randomUUID().slice(0, 8);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO profile_trends (id,user_id,text,created_at) VALUES (?,?,?,?)",
+      id, userId, text, now,
+    );
+    return { id, user_id: userId, text, created_at: now };
   }
 
   guardianState(userIdValue) {
