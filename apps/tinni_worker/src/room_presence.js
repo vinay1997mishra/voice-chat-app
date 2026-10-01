@@ -91,6 +91,16 @@ export class RoomPresenceStore extends DurableObject {
       );
       INSERT OR IGNORE INTO room_runtime_settings (id, mic_mode, updated_at)
       VALUES (1, 'apply', 0);
+
+      CREATE TABLE IF NOT EXISTS room_lucky_numbers (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        number_value INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_room_lucky_numbers_time
+      ON room_lucky_numbers(created_at DESC);
     `);
 
     for (const migration of [
@@ -821,6 +831,71 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
+  luckyNumberEvents(limitValue = 50) {
+    const limit = Math.max(1, Math.min(100, Number(limitValue) || 50));
+    return this.ctx.storage.sql.exec(
+      `SELECT id,user_id,display_name,number_value,created_at
+         FROM (
+           SELECT id,user_id,display_name,number_value,created_at
+             FROM room_lucky_numbers
+            ORDER BY created_at DESC
+            LIMIT ?
+         )
+        ORDER BY created_at ASC`,
+      limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      display_name: String(row.display_name),
+      number: Number(row.number_value),
+      created_at: Number(row.created_at),
+    }));
+  }
+
+  drawLuckyNumber(input) {
+    const userId = String(input?.user_id || "").trim();
+    const displayName = String(input?.display_name || "").trim() || "User";
+    if (!userId) throw new Error("user_id is required");
+    if (!this.isMember(userId)) throw new Error("User is not in the room");
+
+    const max = 0x100000000;
+    const accepted = Math.floor(max / 100) * 100;
+    const raw = new Uint32Array(1);
+    do {
+      crypto.getRandomValues(raw);
+    } while (raw[0] >= accepted);
+    const number = Number(raw[0] % 100) + 1;
+
+    const id = "lucky-" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_lucky_numbers
+        (id,user_id,display_name,number_value,created_at)
+       VALUES (?,?,?,?,?)`,
+      id, userId, displayName, number, now,
+    );
+    this.ctx.storage.sql.exec(
+      `DELETE FROM room_lucky_numbers
+        WHERE id NOT IN (
+          SELECT id FROM room_lucky_numbers
+           ORDER BY created_at DESC
+           LIMIT 100
+        )`,
+    );
+
+    return {
+      ok: true,
+      event: {
+        id,
+        user_id: userId,
+        display_name: displayName,
+        number,
+        created_at: now,
+      },
+      lucky_number_events: this.luckyNumberEvents(),
+    };
+  }
+
   _members(now = Date.now()) {
     this._prune(now);
     return this.ctx.storage.sql.exec(
@@ -1053,6 +1128,7 @@ export class RoomPresenceStore extends DurableObject {
       self_seat_forced: seatForced,
       self_forced_seat_index: seatForced ? seatIndex : null,
       pending_seat_invite: this.seatInviteFor(userId),
+      lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
       members: this._members(now),
@@ -1124,6 +1200,7 @@ export class RoomPresenceStore extends DurableObject {
       server_time: now,
       mic_mode: this.micMode(),
       member_ttl_ms: MEMBER_TTL_MS,
+      lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
       muted_seats: this.mutedSeats(),
