@@ -11,6 +11,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../infra/app_backend_service.dart';
 import '../core/seat_policy.dart';
+import '../ui/room_dp.dart';
 import '../ui/royal_party_artwork.dart';
 import '../ui/royal_theme.dart';
 
@@ -898,16 +899,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 10),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < topRooms.length; i++) ...[
+            for (var i = 0; i < 3; i++) ...[
               Expanded(
-                child: _TopRoomCard(
-                  room: topRooms[i],
-                  rank: i + 1,
-                  onTap: () => openRoom(topRooms[i]),
-                ),
+                child: i < topRooms.length
+                    ? _TopRoomCard(
+                        room: topRooms[i],
+                        rank: i + 1,
+                        onTap: () => openRoom(topRooms[i]),
+                      )
+                    : const SizedBox.shrink(),
               ),
-              if (i != topRooms.length - 1) const SizedBox(width: 8),
+              if (i != 2) const SizedBox(width: 8),
             ],
           ],
         ),
@@ -1785,11 +1789,13 @@ class _TopRoomCard extends StatelessWidget {
           RoyalRankFrame(
             rank: rank,
             height: 112,
-            child: _RoomArtwork(
-              room: room,
-              width: double.infinity,
-              height: 104,
-              fallback: room.title.characters.first.toUpperCase(),
+            child: Center(
+              child: RoomDp(
+                room: room,
+                size: 96,
+                radius: 13,
+                fit: BoxFit.contain,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1855,11 +1861,11 @@ class _RoomListCard extends StatelessWidget {
         accentColor: RoyalPalette.deepGold,
         child: Row(
           children: [
-            _RoomArtwork(
+            RoomDp(
               room: room,
-              width: 74,
-              height: 74,
-              icon: Icons.graphic_eq_rounded,
+              size: 74,
+              radius: 13,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 11),
             Expanded(
