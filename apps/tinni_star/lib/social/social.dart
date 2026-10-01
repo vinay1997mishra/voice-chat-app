@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 
 class SocialUser {
   const SocialUser({
@@ -56,7 +59,7 @@ class SocialService {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
+            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -69,10 +72,110 @@ class SocialService {
   final List<ChatMessage> directMessages = <ChatMessage>[];
   final List<MessageThread> messageThreads = <MessageThread>[];
 
-  int get totalUnreadMessages => messageThreads.fold<int>(
-        0,
-        (total, thread) => total + thread.unreadCount,
+  final ValueNotifier<int> unreadMessages = ValueNotifier<int>(0);
+  WebSocket? _messageSocket;
+  StreamSubscription<dynamic>? _messageSocketSubscription;
+  Timer? _messageReconnectTimer;
+  String? _messageAuthToken;
+  bool _messageEventsWanted = false;
+  bool _messageSocketConnecting = false;
+
+  int get totalUnreadMessages => unreadMessages.value;
+
+  void _setUnreadMessages(int value) {
+    final next = value < 0 ? 0 : value;
+    if (unreadMessages.value == next) return;
+    unreadMessages.value = next;
+  }
+
+  Future<void> connectMessageEvents(String authToken) async {
+    final token = authToken.trim();
+    if (token.isEmpty) return;
+    _messageEventsWanted = true;
+    _messageAuthToken = token;
+    await _openMessageSocket();
+  }
+
+  Future<void> disconnectMessageEvents() async {
+    _messageEventsWanted = false;
+    _messageAuthToken = null;
+    _messageReconnectTimer?.cancel();
+    _messageReconnectTimer = null;
+    final subscription = _messageSocketSubscription;
+    _messageSocketSubscription = null;
+    await subscription?.cancel();
+    final socket = _messageSocket;
+    _messageSocket = null;
+    try {
+      await socket?.close();
+    } catch (_) {}
+  }
+
+  Future<void> _openMessageSocket() async {
+    if (!_messageEventsWanted || _messageSocketConnecting) return;
+    final token = _messageAuthToken;
+    if (token == null || token.isEmpty) return;
+    final existing = _messageSocket;
+    if (existing != null && existing.readyState == WebSocket.open) return;
+
+    _messageSocketConnecting = true;
+    try {
+      final socketUri = apiBase.replace(
+        scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
+        path: '/messages/live',
+        query: null,
       );
+      final socket = await WebSocket.connect(
+        socketUri.toString(),
+        headers: <String, dynamic>{
+          HttpHeaders.authorizationHeader: 'Bearer $token',
+        },
+      );
+      if (!_messageEventsWanted || token != _messageAuthToken) {
+        await socket.close();
+        return;
+      }
+      _messageSocket = socket;
+      _messageSocketSubscription = socket.listen(
+        _handleMessageSocketData,
+        onDone: _handleMessageSocketClosed,
+        onError: (_) => _handleMessageSocketClosed(),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _scheduleMessageSocketReconnect();
+    } finally {
+      _messageSocketConnecting = false;
+    }
+  }
+
+  void _handleMessageSocketData(dynamic raw) {
+    if (raw is! String) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final count = decoded['unread_count'];
+      if (count is num) {
+        _setUnreadMessages(count.toInt());
+      } else if (count != null) {
+        _setUnreadMessages(int.tryParse(count.toString()) ?? 0);
+      }
+    } catch (_) {}
+  }
+
+  void _handleMessageSocketClosed() {
+    _messageSocket = null;
+    _messageSocketSubscription = null;
+    _scheduleMessageSocketReconnect();
+  }
+
+  void _scheduleMessageSocketReconnect() {
+    if (!_messageEventsWanted || _messageReconnectTimer != null) return;
+    _messageReconnectTimer = Timer(const Duration(seconds: 2), () {
+      _messageReconnectTimer = null;
+      _openMessageSocket();
+    });
+  }
 
   void follow(String userId) => following.add(userId);
   void unfollow(String userId) => following.remove(userId);
@@ -335,6 +438,12 @@ class SocialService {
     messageThreads
       ..clear()
       ..addAll(values);
+    _setUnreadMessages(
+      values.fold<int>(
+        0,
+        (total, thread) => total + thread.unreadCount,
+      ),
+    );
 
     final friendThreads = values.where((thread) => thread.isFriend).toList();
     friendProfiles
