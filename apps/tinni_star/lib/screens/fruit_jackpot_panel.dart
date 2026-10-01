@@ -53,7 +53,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
   ];
 
   Timer? _animationTimer;
-  Timer? _serverTimer;
   int _tick = 0;
   int _selectedBet = 5000;
 
@@ -71,10 +70,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
         setState(() => _tick += 1);
       },
     );
-    _serverTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _sync(),
-    );
   }
 
   Future<void> _sync() async {
@@ -87,7 +82,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
   @override
   void dispose() {
     _animationTimer?.cancel();
-    _serverTimer?.cancel();
     super.dispose();
   }
 
