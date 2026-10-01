@@ -120,6 +120,15 @@ class AppBackendService {
   final Uri apiBase;
   final HttpClient _httpClient;
 
+  Future<Map<String, dynamic>> currentUser(String token) async {
+    final data = await _request('GET', '/app/me', token);
+    final user = _map(data['user']);
+    if (user.isEmpty || (user['user_id']?.toString() ?? '').isEmpty) {
+      throw StateError('Server returned invalid account');
+    }
+    return user;
+  }
+
   Future<Map<String, String?>> profileMedia(String token) async {
     final data = await _request('GET', '/profile-media', token);
     final raw = _map(data['media']);
