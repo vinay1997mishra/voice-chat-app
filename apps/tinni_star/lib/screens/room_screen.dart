@@ -2085,7 +2085,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         asset,
         fit: fit,
         filterQuality: FilterQuality.high,
-        errorBuilder: (_, __, ___) => Center(
+        errorBuilder: (context, error, stackTrace) => Center(
           child: Text(
             gift.emoji,
             style: TextStyle(fontSize: size * 0.62),
