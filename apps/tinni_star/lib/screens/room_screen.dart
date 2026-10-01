@@ -2789,6 +2789,103 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildLuckyFeedOverlay() {
+    if (_luckyFeed.isEmpty) return const SizedBox.shrink();
+    final rows = _luckyFeed.take(3).toList(growable: false);
+    return Positioned(
+      key: const Key('lucky-live-feed-overlay'),
+      left: 8,
+      bottom: 220,
+      width: 220,
+      child: IgnorePointer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final row in rows)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xDD120D18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _giftInt(row['multiplier']) >= 200
+                        ? const Color(0xFFFFD45A)
+                        : const Color(0x665C4A72),
+                  ),
+                  boxShadow: _giftInt(row['multiplier']) >= 200
+                      ? const [
+                          BoxShadow(
+                            color: Color(0x66FFB52E),
+                            blurRadius: 9,
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: Row(
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        final avatar = _luckyAvatarProvider(
+                          row['sender_avatar_data_url'],
+                        );
+                        final name = row['sender_name']?.toString() ?? 'User';
+                        return CircleAvatar(
+                          radius: 12,
+                          backgroundColor: const Color(0xFF2E2140),
+                          backgroundImage: avatar,
+                          child: avatar == null
+                              ? Text(
+                                  name.isNotEmpty ? name.characters.first : '?',
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFD45A),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (row['sender_name']?.toString() ?? 'User') +
+                                ' • ' +
+                                (row['gift_name']?.toString() ?? 'Lucky Gift'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Won ${_giftInt(row['rebate_coins'])} coins • ${_giftInt(row['multiplier'])}×',
+                            style: TextStyle(
+                              color: _giftInt(row['multiplier']) >= 200
+                                  ? const Color(0xFFFFD45A)
+                                  : const Color(0xFFD8C9E9),
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showLuckyGiftDetails() async {
     final account = widget.state.auth.current;
     if (account == null) return;
@@ -2803,14 +2900,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (!mounted) return;
 
-    final rawRanking = data['ranking'];
-    final ranking = rawRanking is List
-        ? rawRanking.whereType<Map>().map(
-              (row) => row.map(
-                (key, value) => MapEntry(key.toString(), value),
-              ),
-            ).toList(growable: false)
+    List<Map<String, dynamic>> mapList(dynamic value) => value is List
+        ? value
+            .whereType<Map>()
+            .map((row) => row.map(
+                  (key, item) => MapEntry(key.toString(), item),
+                ))
+            .toList(growable: false)
         : const <Map<String, dynamic>>[];
+
+    final ranking = mapList(data['ranking']);
+    final sessions = mapList(data['recent_sessions']);
+    final rawShares = data['visible_daily_rank_shares'];
+    final shares = rawShares is List
+        ? rawShares.map(_giftInt).toList(growable: false)
+        : const <int>[50, 25, 15];
+    final countdownEndsAt = _giftInt(data['countdown_ends_at']);
+    final remainingMs = math.max(
+      0,
+      countdownEndsAt - DateTime.now().millisecondsSinceEpoch,
+    );
+    final remaining = Duration(milliseconds: remainingMs);
+    final countdownText =
+        remaining.inHours.toString().padLeft(2, '0') +
+            ':' +
+            (remaining.inMinutes % 60).toString().padLeft(2, '0') +
+            ':' +
+            (remaining.inSeconds % 60).toString().padLeft(2, '0');
 
     await showDialog<void>(
       context: context,
@@ -2833,136 +2949,199 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         content: SizedBox(
           width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: <Color>[
-                      Color(0xFF4C175F),
-                      Color(0xFF241035),
+          height: math.min(
+            MediaQuery.sizeOf(dialogContext).height * 0.68,
+            570,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: <Color>[
+                        Color(0xFF4C175F),
+                        Color(0xFF241035),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFFFD45A),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'REAL-TIME PRIZE POOL',
+                        style: TextStyle(
+                          color: Color(0xFFD7C7FF),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '🪙 ${_giftInt(data['pool_balance'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Reset $countdownText • up to ${_giftInt(data['max_multiplier'])}×',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_giftInt(data['high_win_multiplier'])}×+ rare • ${_giftInt(data['banner_multiplier'])}×+ banner',
+                        style: const TextStyle(
+                          color: Color(0xFFFFEFA8),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFFFD45A),
-                  ),
                 ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'REAL-TIME PRIZE POOL',
-                      style: TextStyle(
-                        color: Color(0xFFD7C7FF),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '🪙 ${_giftInt(data['pool_balance'])}',
-                      style: const TextStyle(
-                        color: Color(0xFFFFD45A),
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Up to ${_giftInt(data['max_multiplier'])}× • 200×+ is rare',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Lucky Day Ranking',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              if (ranking.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(12),
+                const SizedBox(height: 10),
+                const Align(
+                  alignment: Alignment.centerLeft,
                   child: Text(
-                    'No Lucky Gift ranking yet today.',
-                    style: TextStyle(color: Colors.white54),
+                    'Lucky Day Ranking',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: math.min(10, ranking.length),
-                    itemBuilder: (_, index) {
-                      final row = ranking[index];
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          radius: 15,
-                          backgroundColor: const Color(0xFF2E2140),
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              color: Color(0xFFFFD45A),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          row['display_name']?.toString() ??
-                              row['user_id']?.toString() ??
-                              'User',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'Sent ${_giftInt(row['sent_count'])} • Highest ${_giftInt(row['highest_multiplier'])}×',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 9,
-                          ),
-                        ),
-                        trailing: Text(
-                          '+${_giftInt(row['rebate_coins'])}',
+                ),
+                const SizedBox(height: 6),
+                if (ranking.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'No Lucky Gift ranking yet today.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                else
+                  for (var index = 0;
+                      index < math.min(10, ranking.length);
+                      index++)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: const Color(0xFF2E2140),
+                        child: Text(
+                          '${index + 1}',
                           style: const TextStyle(
                             color: Color(0xFFFFD45A),
+                            fontSize: 10,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      title: Text(
+                        ranking[index]['display_name']?.toString() ??
+                            ranking[index]['user_id']?.toString() ??
+                            'User',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Sent ${_giftInt(ranking[index]['sent_count'])} • Highest ${_giftInt(ranking[index]['highest_multiplier'])}×',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 9,
+                        ),
+                      ),
+                      trailing: Text(
+                        '+${_giftInt(ranking[index]['rebate_coins'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                const SizedBox(height: 4),
+                Text(
+                  'Top shares: ${shares.map((value) => value.toString() + '%').join(' • ')}',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 9,
                   ),
                 ),
-              const SizedBox(height: 6),
-              const Text(
-                'Visible daily Top 3 shares: 50% • 25% • 15%',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 9,
+                if (_giftInt(data['remaining_share_percent']) > 0)
+                  Text(
+                    'Remaining ${_giftInt(data['remaining_share_percent'])}% stays in the pool unless Owner Panel changes the shares.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 8,
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Recent Lucky Sessions',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                if (sessions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                      'No Lucky session yet.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                else
+                  for (final session in sessions.take(8))
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF21162B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _giftInt(session['highest_multiplier']) >= 200
+                              ? const Color(0xFFFFD45A)
+                              : const Color(0x554E3A5C),
+                        ),
+                      ),
+                      child: Text(
+                        'Total won ${_giftInt(session['total_rebate_coins'])} by sending '
+                        '${_giftInt(session['send_count'])}×${_giftInt(session['unit_price'])} coins'
+                        ' — Highest ×${_giftInt(session['highest_multiplier'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFEBDDF8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -8265,6 +8444,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 !_fruitJackpotOpen &&
                 !_fruitPartyOpen)
               _buildLuckyComboOverlay(),
+            if (_luckyFeed.isNotEmpty &&
+                !_fruitJackpotOpen &&
+                !_fruitPartyOpen)
+              _buildLuckyFeedOverlay(),
             if (!_fruitJackpotOpen && !_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),
