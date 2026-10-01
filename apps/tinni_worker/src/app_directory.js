@@ -1743,6 +1743,7 @@ export class AppDirectoryStore extends DurableObject {
       game_config: this._ownerSetting("game_config", {
         enabled: true, min_bet: 1, max_bet: 1000000,
       }),
+      lucky_gift_config: this._luckyGiftConfig(),
       treasury: {
         balance: Number(treasury.balance || 0),
         updated_at: Number(treasury.updated_at || 0),
@@ -2756,6 +2757,63 @@ export class AppDirectoryStore extends DurableObject {
         const policies = this.ownerState().policies;
         policies[String(data.key || "").trim()] = data.value;
         return this._setOwnerSetting("policies", policies);
+      }
+      case "lucky-gift-config": {
+        const current = this._luckyGiftConfig();
+        const sourceWeights = data.multiplier_weights &&
+            typeof data.multiplier_weights === "object"
+          ? data.multiplier_weights
+          : current.multiplier_weights;
+        const multiplierWeights = {};
+        for (const [key, value] of Object.entries(sourceWeights || {})) {
+          const multiplier = Math.max(
+            0,
+            Math.min(1000, Math.floor(Number(key) || 0)),
+          );
+          const weight = Math.max(0, Math.floor(Number(value) || 0));
+          if (weight > 0) multiplierWeights[String(multiplier)] = weight;
+        }
+        if (Object.keys(multiplierWeights).length === 0) {
+          throw new Error("Lucky multiplier weights cannot be empty");
+        }
+        const rankSharesRaw = Array.isArray(data.rank_shares)
+          ? data.rank_shares
+          : current.rank_shares;
+        const rankShares = rankSharesRaw.slice(0, 3).map((value) =>
+          Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+        );
+        while (rankShares.length < 3) rankShares.push(0);
+        if (rankShares.reduce((sum, value) => sum + value, 0) > 100) {
+          throw new Error("Lucky ranking shares cannot total more than 100%");
+        }
+        const next = {
+          enabled: data.enabled === undefined ? current.enabled !== false : data.enabled === true,
+          max_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.max_multiplier ?? current.max_multiplier ?? 1000)))),
+          high_win_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.high_win_multiplier ?? current.high_win_multiplier ?? 200)))),
+          banner_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.banner_multiplier ?? current.banner_multiplier ?? 500)))),
+          ultra_banner_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.ultra_banner_multiplier ?? current.ultra_banner_multiplier ?? 1000)))),
+          host_reward_percent: Math.max(0, Math.min(100, Number(data.host_reward_percent ?? current.host_reward_percent ?? 10))),
+          charm_wealth_percent: Math.max(0, Math.min(100, Number(data.charm_wealth_percent ?? current.charm_wealth_percent ?? 10))),
+          prize_pool_percent: Math.max(0, Math.min(100, Number(data.prize_pool_percent ?? current.prize_pool_percent ?? 2))),
+          rank_shares: rankShares,
+          daily_send_cap: Math.max(0, Math.floor(Number(data.daily_send_cap ?? current.daily_send_cap ?? 0))),
+          banners_enabled: data.banners_enabled === undefined ? current.banners_enabled !== false : data.banners_enabled === true,
+          testing_mode: data.testing_mode === true,
+          event_mode: data.event_mode === true,
+          multiplier_weights: multiplierWeights,
+        };
+        if (next.high_win_multiplier > next.max_multiplier ||
+            next.banner_multiplier > next.max_multiplier ||
+            next.ultra_banner_multiplier > next.max_multiplier) {
+          throw new Error("Lucky thresholds cannot exceed the maximum multiplier");
+        }
+        if (next.banner_multiplier < next.high_win_multiplier) {
+          throw new Error("Lucky banner multiplier must be at least the high-win multiplier");
+        }
+        if (next.ultra_banner_multiplier < next.banner_multiplier) {
+          throw new Error("Lucky ultra banner multiplier must be at least the banner multiplier");
+        }
+        return this._setOwnerSetting("lucky_gift_config", next);
       }
       case "pricing-set": {
         const policies = this.ownerState().policies;
