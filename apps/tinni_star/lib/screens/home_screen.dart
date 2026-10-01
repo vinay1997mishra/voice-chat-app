@@ -1375,7 +1375,7 @@ class _PartyPromoCard extends StatelessWidget {
         onTap: onTap,
         radius: 22,
         gradient: FeaturePalette.glow(color),
-        accentColor: color,
+        accentColor: RoyalPalette.deepGold,
         child: Row(
           children: [
             ShiningIcon(
@@ -1394,10 +1394,11 @@ class _PartyPromoCard extends StatelessWidget {
                   Text(
                     title,
                     maxLines: 2,
-                    style: TextStyle(
-                      color: color,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
                       fontWeight: FontWeight.w900,
                       fontSize: 21,
+                      letterSpacing: 0.4,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -1462,12 +1463,7 @@ class _InteractiveTopTabs extends StatelessWidget {
                         labels[i],
                         style: TextStyle(
                           color: selectedIndex == i
-                              ? <Color>[
-                                  FeaturePalette.social,
-                                  FeaturePalette.family,
-                                  FeaturePalette.fruitParty,
-                                  FeaturePalette.discover,
-                                ][i]
+                              ? RoyalPalette.gold
                               : RoyalPalette.muted,
                           fontWeight: selectedIndex == i
                               ? FontWeight.w900
@@ -1481,23 +1477,14 @@ class _InteractiveTopTabs extends StatelessWidget {
                         height: 4,
                         width: selectedIndex == i ? 28 : 0,
                         decoration: BoxDecoration(
-                          color: <Color>[
-                            FeaturePalette.social,
-                            FeaturePalette.family,
-                            FeaturePalette.fruitParty,
-                            FeaturePalette.discover,
-                          ][i],
+                          color: RoyalPalette.gold,
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: selectedIndex == i
                               ? [
                                   BoxShadow(
-                                    color: <Color>[
-                                      FeaturePalette.social,
-                                      FeaturePalette.family,
-                                      FeaturePalette.fruitParty,
-                                      FeaturePalette.discover,
-                                    ][i].withValues(alpha: 0.55),
-                                    blurRadius: 10,
+                                    color: RoyalPalette.gold
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 9,
                                   ),
                                 ]
                               : null,
@@ -1541,16 +1528,11 @@ class _FeatureCard extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: color,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
               fontWeight: FontWeight.w900,
               fontSize: 12,
-              shadows: [
-                Shadow(
-                  color: color.withValues(alpha: 0.55),
-                  blurRadius: 10,
-                ),
-              ],
+              letterSpacing: 0.25,
             ),
           ),
           const SizedBox(height: 8),
@@ -1713,10 +1695,10 @@ class _TopRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = rank == 1
-        ? FeaturePalette.rank
+        ? RoyalPalette.gold
         : rank == 2
-            ? const Color(0xFFC5D0DA)
-            : FeaturePalette.family;
+            ? const Color(0xFFBFC5CB)
+            : const Color(0xFFA66D43);
     return RoyalPanel(
       key: Key('room-card-' + room.id),
       padding: const EdgeInsets.all(6),
@@ -1735,9 +1717,9 @@ class _TopRoomCard extends StatelessWidget {
                   border: Border.all(color: accent, width: rank == 1 ? 3 : 2),
                   boxShadow: [
                     BoxShadow(
-                      color: accent.withValues(alpha: rank == 1 ? 0.62 : 0.42),
-                      blurRadius: rank == 1 ? 18 : 12,
-                      spreadRadius: rank == 1 ? 1 : 0,
+                      color: accent.withValues(alpha: rank == 1 ? 0.34 : 0.22),
+                      blurRadius: rank == 1 ? 15 : 10,
+                      spreadRadius: rank == 1 ? 0.6 : 0,
                     ),
                   ],
                   gradient: LinearGradient(
@@ -1779,8 +1761,8 @@ class _TopRoomCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: accent.withValues(alpha: 0.65),
-                        blurRadius: 10,
+                        color: accent.withValues(alpha: 0.34),
+                        blurRadius: 8,
                       ),
                     ],
                   ),
