@@ -376,6 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    if (!mounted) return;
     final result = await showModalBottomSheet<_CreateRoomResult>(
       context: context,
       isScrollControlled: true,
