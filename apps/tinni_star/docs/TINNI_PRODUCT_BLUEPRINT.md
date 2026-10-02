@@ -73,13 +73,14 @@ Room creation contains:
 
 Supported seat counts:
 
-- 8, 9, 10 → 2 rows
-- 12–18 → 3 rows
-- 19–28 → 4 rows
-- 29–35 → 5 rows
-- 36–42 → 6 rows
+- 8–10 → 2 rows
+- 11–15 → 3 rows
+- 16–24 → 4 rows
+- 25–30 → 5 rows
+- 31–36 → 6 rows
+- 37–42 → 7 rows
 
-Rows stay balanced; each row can differ by at most one seat.
+**Locked anti-regression rule:** 37–42 seat rooms use 7 rows, and a 42-seat room is exactly 6 seats × 7 rows. Do not restore the old 7 seats × 6 rows layout. High-capacity layouts must keep at most 6 seats on a row so seat circles stay visibly larger. Rows keep the existing balanced-distribution pattern for partial final rows.
 
 The room belongs to the user who created it. Creating a room must never grant platform-owner privileges.
 

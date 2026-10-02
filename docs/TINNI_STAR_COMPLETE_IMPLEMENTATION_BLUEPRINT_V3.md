@@ -225,7 +225,8 @@ Row-count rule:
 - 11–15 seats → 3 rows.
 - 16–24 seats → 4 rows.
 - 25–30 seats → 5 rows.
-- 31–42 seats → 6 rows.
+- 31–36 seats → 6 rows.
+- 37–42 seats → 7 rows.
 
 Distribution:
 - For layouts with 3 or more rows, every row above the final two rows must contain the same number of seats.
@@ -243,7 +244,7 @@ Distribution:
   - 32 = 6+6+6+6+4+4
   - 33 = 6+6+6+6+5+4
   - 37 = 7+7+7+7+5+4
-  - 42 = 7+7+7+7+7+7
+  - 42 = 6+6+6+6+6+6+6
 
 Visual rule:
 - All rows use the same left and right working edges.
@@ -251,7 +252,8 @@ Visual rule:
 - Because the final two rows usually contain fewer seats, their seats are distributed across the same width with larger gaps.
 - The leftmost and rightmost visual corners remain aligned to the same room-seat area.
 - Lower seat counts use larger seat circles/frames.
-- Higher seat counts use smaller seat circles/frames.
+- Higher seat counts use smaller seat circles/frames, but 37–42 must never return to the old 7-column/6-row layout.
+- **Anti-regression lock:** a 42-seat room is always 6 columns × 7 rows. Maximum 6 seats per row for 37–42 keeps the seats visibly larger while preserving the existing row-order/pattern.
 - Chat area must remain usable below seats.
 - Minimum target: about 4 room-message lines visible above the typing/control bar.
 

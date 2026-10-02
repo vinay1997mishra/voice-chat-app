@@ -7878,14 +7878,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
     final screenSize = MediaQuery.sizeOf(context);
     final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
-    final maxSeatAreaHeight = screenSize.height * 0.38;
-    final rowLabelSpace = widthSeatDiameter < 44 ? 34.0 : 44.0;
+    final maxSeatAreaHeight = screenSize.height * 0.55;
+    final rowLabelSpace = widthSeatDiameter < 48 ? 28.0 : 38.0;
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
             ? widthSeatDiameter
             : heightSeatDiameter)
-        .clamp(28.0, 64.0)
+        .clamp(30.0, 68.0)
         .toDouble();
     final seatAreaHeight = seatSpec
         .preferredHeight(seatDiameter)
