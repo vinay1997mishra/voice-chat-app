@@ -3357,7 +3357,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showGiftSheet({String? preselectedUserId}) {
-    final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
     if (senderId == null) return;
     if (preselectedUserId != null && preselectedUserId != senderId) {
