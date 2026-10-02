@@ -60,7 +60,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckySessionHighest = 0;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
   bool _luckyFeedLoading = false;
-  Timer? _luckyBubbleTimer;
   Timer? _luckyComboExpiryTimer;
   int _luckyComboExpiryGeneration = 0;
   Timer? _emoteExpiryTimer;
@@ -630,7 +629,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
-    _luckyBubbleTimer?.cancel();
     _giftImpactTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
