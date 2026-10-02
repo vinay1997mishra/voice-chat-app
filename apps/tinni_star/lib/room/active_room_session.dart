@@ -555,9 +555,11 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
       // Healthy rooms stay entirely on the hibernating WebSocket. HTTP is
-      // emergency fallback only while realtime is disconnected.
+      // emergency fallback only while realtime is disconnected. The long
+      // fallback interval stays well inside the server grace window while
+      // avoiding request storms when a carrier/OEM temporarily blocks WS.
       if (presence.liveConnected) return;
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
