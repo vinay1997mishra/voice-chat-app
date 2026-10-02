@@ -4077,6 +4077,7 @@ export default {
       }
 
       return json(await store.kick({
+        room_id: roomId,
         target_user_id: targetUserId,
         kicked_by: actorId,
         duration_ms: durationMs,
