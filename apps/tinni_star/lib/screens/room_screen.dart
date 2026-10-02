@@ -9173,44 +9173,22 @@ class _ReferenceGameLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x665D3BFF),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color(0x55FF4FD8),
-              blurRadius: 11,
-              spreadRadius: 1,
-            ),
-          ],
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.34),
+          width: 1,
         ),
-        child: Center(
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFFFF7CF2),
-                Color(0xFFB56CFF),
-                Color(0xFF6F7BFF),
-              ],
-            ).createShader(bounds),
-            child: Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.78,
-              color: Colors.white,
-            ),
-          ),
-        ),
+      ),
+      child: Icon(
+        Icons.sports_esports_rounded,
+        size: size * 0.68,
+        color: Colors.white,
       ),
     );
   }
