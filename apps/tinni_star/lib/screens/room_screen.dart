@@ -8188,7 +8188,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '💜' +
+                '💎' +
                     _compactRoomSending(
                       presenceMember?.receivedGiftCoins ?? 0,
                     ),
