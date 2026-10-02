@@ -61,6 +61,23 @@ class _GuardianScreenState extends State<GuardianScreen> {
     return null;
   }
 
+  String _compactCoins(int value) {
+    if (value >= 1000000000) {
+      return (value / 1000000000)
+          .toStringAsFixed(value % 1000000000 == 0 ? 0 : 1) +
+          'B';
+    }
+    if (value >= 1000000) {
+      return (value / 1000000)
+          .toStringAsFixed(value % 1000000 == 0 ? 0 : 1) +
+          'M';
+    }
+    if (value >= 1000) {
+      return (value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1) + 'K';
+    }
+    return value.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final guardian = data['guardian'] is Map
@@ -73,10 +90,10 @@ class _GuardianScreenState extends State<GuardianScreen> {
                 ),
           )
         : const <Map<String, dynamic>>[];
-    final candidateThreshold =
-        (data['candidate_threshold'] as num?)?.toInt() ?? 1000;
     final guardianThreshold =
-        (data['guardian_threshold'] as num?)?.toInt() ?? 10000;
+        (data['guardian_threshold_coins'] as num?)?.toInt() ??
+        (data['guardian_threshold'] as num?)?.toInt() ??
+        5000000;
     final windowDays = (data['window_days'] as num?)?.toInt() ?? 30;
 
     return Scaffold(
@@ -131,7 +148,12 @@ class _GuardianScreenState extends State<GuardianScreen> {
                   if (guardian != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      '${guardian['points'] ?? 0} guardian points',
+                      _compactCoins(
+                        (guardian['coins'] as num?)?.toInt() ??
+                            (guardian['points'] as num?)?.toInt() ??
+                            0,
+                      ) +
+                          ' coins',
                       style: const TextStyle(
                         color: RoyalPalette.gold,
                         fontWeight: FontWeight.w800,
@@ -156,9 +178,10 @@ class _GuardianScreenState extends State<GuardianScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Gift contribution in the last $windowDays days creates Guardian points. '
-                    'A supporter becomes eligible at $candidateThreshold points. '
-                    'The #1 supporter becomes your Guardian after reaching $guardianThreshold points.',
+                    'Gift coins sent in the last $windowDays days count toward Guardian. '
+                    'The #1 supporter becomes your Guardian after reaching ' +
+                        _compactCoins(guardianThreshold) +
+                        ' coins.',
                     style: const TextStyle(
                       color: RoyalPalette.muted,
                       height: 1.4,
@@ -193,7 +216,7 @@ class _GuardianScreenState extends State<GuardianScreen> {
             else if (supporters.isEmpty)
               const RoyalPanel(
                 child: Text(
-                  'No Guardian points in the current 30-day window.',
+                  'No Guardian gift coins in the current 30-day window.',
                   style: TextStyle(color: RoyalPalette.muted),
                 ),
               )
@@ -246,7 +269,12 @@ class _GuardianScreenState extends State<GuardianScreen> {
                           ),
                         ),
                         Text(
-                          '${row['points']}',
+                          _compactCoins(
+                                (row['coins'] as num?)?.toInt() ??
+                                    (row['points'] as num?)?.toInt() ??
+                                    0,
+                              ) +
+                              ' coins',
                           style: const TextStyle(
                             color: RoyalPalette.gold,
                             fontWeight: FontWeight.w900,
