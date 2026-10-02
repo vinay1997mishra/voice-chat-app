@@ -2501,8 +2501,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required List<String> receiverIds,
     required int quantity,
     int multiplier = 0,
+    bool forceReplay = false,
   }) {
-    if (eventId.isEmpty || _handledGiftEventIds.contains(eventId)) return;
+    if (eventId.isEmpty) return;
+    if (!forceReplay && _handledGiftEventIds.contains(eventId)) return;
     if (_handledGiftEventIds.length > 200) {
       _handledGiftEventIds.clear();
     }
@@ -2704,6 +2706,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         receiverIds: actualReceiverIds,
         quantity: quantity,
         multiplier: multiplier,
+        forceReplay: true,
       );
 
       await _refreshLuckyFeed();
@@ -3589,6 +3592,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           gift: gift,
           receiverIds: actualReceiverIds,
           quantity: 1,
+          forceReplay: true,
         );
         _refreshRoomSendingSummary();
         widget.state.activities.addGiftScore(senderId, tx.totalCost);
