@@ -2876,6 +2876,34 @@ export default {
       }
     }
 
+    if (url.pathname === "/room-presence/stream" && request.method === "GET") {
+      if (String(request.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
+        return new Response("Expected WebSocket", { status: 426 });
+      }
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const access = await directory.roomAccessState(appSession.user.user_id, roomId);
+      if (!access.allowed) {
+        return json({ ok: false, error: "Room password is required.", room_locked: true }, 403);
+      }
+
+      const store = getRoomPresenceStore(env, roomId);
+      const headers = new Headers(request.headers);
+      headers.set("X-Tinni-User-Id", String(appSession.user.user_id));
+      headers.set("X-Tinni-Room-Id", roomId);
+      headers.set(
+        "X-Tinni-Room-Owner",
+        String(room.owner_id) === String(appSession.user.user_id) ? "1" : "0",
+      );
+      return store.fetch(new Request(request.url, { method: "GET", headers }));
+    }
+
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
