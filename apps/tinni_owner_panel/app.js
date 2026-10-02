@@ -5,6 +5,7 @@ const state = {
   features: {},
   policies: {},
   gameConfig: {},
+  luckyGiftConfig: {},
   catalog: [],
   vips: [],
 };
@@ -311,6 +312,7 @@ const actionPermission = {
   "vip-new": "vip.create",
   "vip-grant": "vip.grant_remove",
   "gift-new": "gifts.create",
+  "lucky-gift-config": "gifts.edit",
   "entry-new": "assets.entries",
   "profile-card-new": "assets.frames",
   "frame-new": "assets.frames",
@@ -920,6 +922,7 @@ async function loadOwnerState() {
     state.features = serverState.features || {};
     state.policies = serverState.policies || {};
     state.gameConfig = serverState.game_config || {};
+    state.luckyGiftConfig = serverState.lucky_gift_config || {};
     state.treasury = Number(serverState.treasury?.balance || 0);
     state.catalog = Array.isArray(serverState.catalog) ? serverState.catalog : [];
     state.vips = state.catalog
@@ -1155,9 +1158,9 @@ function openAction(action, preset = {}) {
     "device-ban": ["Device Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban device"],["unban","Unban device"]])],
     "user-invisible": ["Invisible ID", field("user_id","User ID") + selectField("status","Status",[["on","Invisible ON"],["off","Invisible OFF"]])],
     "locked-bypass": ["Locked-room Bypass", field("user_id","User ID") + selectField("status","Status",[["on","Allow bypass"],["off","Remove bypass"]])],
-    "id-change": ["Change Public ID", field("user_id","Current user ID") + field("new_id","New public ID")],
-    "unique-id-new": ["Add Unique ID", field("public_id","Unique ID number (4-8 digits)") + field("price_coins","Coin price (0 = free)","number","0") + field("duration_days","Ownership days (0 = permanent)","number","0")],
-    "unique-id-price": ["Change Unique ID Price / Duration", field("public_id","Unique ID number (4-8 digits)") + field("price_coins","New coin price (0 = free)","number","0") + field("duration_days","Ownership days (0 = permanent)","number","0")],
+    "id-change": ["Change Public ID", field("user_id","Current user ID") + field("new_id","New public ID — Name ID assignment is Owner Master only")],
+    "unique-id-new": ["Add Unique ID", field("public_id","Unique ID: 4-8 digits; Name ID (3-20 letters/numbers/_) is Owner Master only") + field("price_coins","Coin price (0 = free)","number","0") + field("duration_days","Ownership days (0 = permanent)","number","0")],
+    "unique-id-price": ["Change Unique ID Price / Duration", field("public_id","Unique ID: 4-8 digits; Name ID is Owner Master only") + field("price_coins","New coin price (0 = free)","number","0") + field("duration_days","Ownership days (0 = permanent)","number","0")],
     "room-ban": ["Room Ban / Unban", field("room_id","Room ID") + selectField("status","Action",[["ban","Ban"],["unban","Unban"]])],
     "room-name": ["Change Room Name", field("room_id","Room ID") + field("room_name","New room name")],
     "room-dp": ["Change Room DP", field("room_id","Room ID") + field("asset_url","DP asset URL")],
@@ -1202,6 +1205,28 @@ function openAction(action, preset = {}) {
       field("countries","Country codes (comma separated, blank = all)","text","",false) +
       field("starts_at","Effective from","datetime-local","",false) +
       field("ends_at","Effective until","datetime-local","",false)
+    ],
+    "lucky-gift-config": ["Lucky Gift Global Settings",
+      checkboxField("enabled","Lucky Gift system enabled", state.luckyGiftConfig.enabled !== false) +
+      field("max_multiplier","Maximum multiplier","number",String(state.luckyGiftConfig.max_multiplier || 1000)) +
+      field("high_win_multiplier","Rare/high-win effect from multiplier","number",String(state.luckyGiftConfig.high_win_multiplier || 200)) +
+      field("banner_multiplier","Special banner from multiplier","number",String(state.luckyGiftConfig.banner_multiplier || 500)) +
+      field("ultra_banner_multiplier","Ultra banner from multiplier","number",String(state.luckyGiftConfig.ultra_banner_multiplier || 1000)) +
+      field("host_reward_percent","Lucky Host diamond % of normal gift","number",String(state.luckyGiftConfig.host_reward_percent ?? 10)) +
+      field("charm_wealth_percent","Lucky Charm / Wealth % of normal gift","number",String(state.luckyGiftConfig.charm_wealth_percent ?? 10)) +
+      field("prize_pool_percent","Prize pool contribution %","number",String(state.luckyGiftConfig.prize_pool_percent ?? 2)) +
+      field("rank_share_1","Daily rank #1 share %","number",String(state.luckyGiftConfig.rank_shares?.[0] ?? 50)) +
+      field("rank_share_2","Daily rank #2 share %","number",String(state.luckyGiftConfig.rank_shares?.[1] ?? 25)) +
+      field("rank_share_3","Daily rank #3 share %","number",String(state.luckyGiftConfig.rank_shares?.[2] ?? 15)) +
+      field("daily_send_cap","Daily Lucky send cap (0 = unlimited)","number",String(state.luckyGiftConfig.daily_send_cap || 0)) +
+      checkboxField("banners_enabled","Country-specific Lucky banners enabled", state.luckyGiftConfig.banners_enabled !== false) +
+      checkboxField("testing_mode","Testing mode", state.luckyGiftConfig.testing_mode === true) +
+      checkboxField("event_mode","Event mode", state.luckyGiftConfig.event_mode === true) +
+      field("multiplier_weights","Multiplier weights JSON","text",
+        JSON.stringify(state.luckyGiftConfig.multiplier_weights || {
+          "0":900000,"1":45000,"5":25000,"7":12000,"9":7000,"10":5000,"20":2500,"22":1800,
+          "30":900,"50":450,"75":320,"100":250,"200":60,"250":20,"500":12,"750":5,"1000":3
+        }))
     ],
     "profile-card-new": ["Add Profile Card", field("name","Profile card name") + field("asset_url","Profile card asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
@@ -1271,8 +1296,42 @@ function openAction(action, preset = {}) {
   dialogFields.innerHTML = item[1];
   Object.entries(preset).forEach(([k,v]) => {
     const el = dialogFields.querySelector(`[name="${k}"]`);
-    if (el) el.value = v;
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = v === true || String(v) === "true";
+    else el.value = v;
   });
+  if (action === "lucky-gift-config") {
+    const config = state.luckyGiftConfig || {};
+    const values = {
+      max_multiplier: config.max_multiplier ?? 1000,
+      high_win_multiplier: config.high_win_multiplier ?? 200,
+      banner_multiplier: config.banner_multiplier ?? 500,
+      ultra_banner_multiplier: config.ultra_banner_multiplier ?? 1000,
+      host_reward_percent: config.host_reward_percent ?? 10,
+      charm_wealth_percent: config.charm_wealth_percent ?? 10,
+      prize_pool_percent: config.prize_pool_percent ?? 2,
+      rank_share_1: config.rank_shares?.[0] ?? 50,
+      rank_share_2: config.rank_shares?.[1] ?? 25,
+      rank_share_3: config.rank_shares?.[2] ?? 15,
+      daily_send_cap: config.daily_send_cap ?? 0,
+      multiplier_weights: JSON.stringify(config.multiplier_weights || {
+        "0":900000,"1":45000,"5":25000,"7":12000,"9":7000,"10":5000,"20":2500,"22":1800,
+        "30":900,"50":450,"75":320,"100":250,"200":60,"250":20,"500":12,"750":5,"1000":3
+      }),
+    };
+    Object.entries(values).forEach(([key, value]) => {
+      const input = dialogFields.querySelector(`[name="${key}"]`);
+      if (input) input.value = value;
+    });
+    for (const key of ["enabled","banners_enabled","testing_mode","event_mode"]) {
+      const input = dialogFields.querySelector(`[name="${key}"]`);
+      if (!input) continue;
+      if (key === "enabled") input.checked = config.enabled !== false;
+      if (key === "banners_enabled") input.checked = config.banners_enabled !== false;
+      if (key === "testing_mode") input.checked = config.testing_mode === true;
+      if (key === "event_mode") input.checked = config.event_mode === true;
+    }
+  }
   dialog.showModal();
 }
 
@@ -1524,6 +1583,40 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
+  if (action === "lucky-gift-config") {
+    payload.enabled = String(data.enabled || "") === "true";
+    payload.banners_enabled = String(data.banners_enabled || "") === "true";
+    payload.testing_mode = String(data.testing_mode || "") === "true";
+    payload.event_mode = String(data.event_mode || "") === "true";
+    payload.max_multiplier = Math.max(1, Math.min(1000, Number(data.max_multiplier || 1000)));
+    payload.high_win_multiplier = Math.max(1, Math.min(1000, Number(data.high_win_multiplier || 200)));
+    payload.banner_multiplier = Math.max(1, Math.min(1000, Number(data.banner_multiplier || 500)));
+    payload.ultra_banner_multiplier = Math.max(1, Math.min(1000, Number(data.ultra_banner_multiplier || 1000)));
+    payload.host_reward_percent = Math.max(0, Math.min(100, Number(data.host_reward_percent || 0)));
+    payload.charm_wealth_percent = Math.max(0, Math.min(100, Number(data.charm_wealth_percent || 0)));
+    payload.prize_pool_percent = Math.max(0, Math.min(100, Number(data.prize_pool_percent || 0)));
+    payload.rank_shares = [
+      Math.max(0, Math.min(100, Number(data.rank_share_1 || 0))),
+      Math.max(0, Math.min(100, Number(data.rank_share_2 || 0))),
+      Math.max(0, Math.min(100, Number(data.rank_share_3 || 0))),
+    ];
+    if (payload.rank_shares.reduce((sum, value) => sum + value, 0) > 100) {
+      throw new Error("Lucky ranking shares cannot total more than 100%.");
+    }
+    payload.daily_send_cap = Math.max(0, Math.floor(Number(data.daily_send_cap || 0)));
+    try {
+      const weights = JSON.parse(String(data.multiplier_weights || "{}"));
+      if (!weights || typeof weights !== "object" || Array.isArray(weights)) {
+        throw new Error("not an object");
+      }
+      payload.multiplier_weights = weights;
+    } catch (_) {
+      throw new Error("Multiplier weights must be valid JSON, for example {\"5\":25000,\"200\":60}.");
+    }
+    delete payload.rank_share_1;
+    delete payload.rank_share_2;
+    delete payload.rank_share_3;
+  }
   if (["gift-new","entry-new","frame-new","banner-new"].includes(action)) {
     payload.order = Number(data.order || 0);
     if (action === "frame-new") payload.price = Math.max(0, Number(data.price || 0));
@@ -1578,6 +1671,11 @@ async function handleAction(action, data) {
   }
 
   const result = await runOwnerAction(action, payload);
+  if (action === "lucky-gift-config") {
+    await loadOwnerState();
+    toast("Lucky Gift settings updated.");
+    return;
+  }
 
   if (action === "user-search") {
     await renderUserInvestigation(result?.users || []);

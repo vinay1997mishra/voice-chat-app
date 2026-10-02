@@ -22,6 +22,10 @@ class ActiveRoomSession extends ChangeNotifier {
     this.hostTagProvider,
     this.agencyNameProvider,
     this.equippedFrameIdProvider,
+    this.equippedEntryIdProvider,
+    this.equippedProfileCardIdProvider,
+    this.onRoomClosed,
+    this.onSeatForcedDown,
   });
 
   final FunctionPackRuntime runtime;
@@ -33,6 +37,10 @@ class ActiveRoomSession extends ChangeNotifier {
   final String? Function()? hostTagProvider;
   final String? Function()? agencyNameProvider;
   final String? Function()? equippedFrameIdProvider;
+  final String? Function()? equippedEntryIdProvider;
+  final String? Function()? equippedProfileCardIdProvider;
+  final Future<void> Function()? onRoomClosed;
+  final Future<void> Function()? onSeatForcedDown;
 
   RoomSummary? room;
   RoomController? controller;
@@ -43,12 +51,15 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Timer? _presenceTimer;
   String? _activeAuthToken;
-  String? _activeUserId;
-  bool _seatSyncInitialized = false;
-  int? _lastSyncedSeatIndex;
+  bool _roomSoundEnabled = true;
+  bool _moderationForcedMicOff = false;
+  final Set<String> _seenLuckyNumberEventIds = <String>{};
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
+
+  ValueListenable<Map<String, double>> get speakingLevelsListenable =>
+      realtime.rtc.speakingLevelsListenable;
 
   Future<Map<String, dynamic>> sendGift({
     required String roomId,
@@ -58,6 +69,7 @@ class ActiveRoomSession extends ChangeNotifier {
     required int quantity,
     required int unitPrice,
     required List<String> receiverIds,
+    String? luckySessionId,
   }) => presence.sendGift(
         roomId: roomId,
         authToken: authToken,
@@ -66,11 +78,20 @@ class ActiveRoomSession extends ChangeNotifier {
         quantity: quantity,
         unitPrice: unitPrice,
         receiverIds: receiverIds,
+        luckySessionId: luckySessionId,
       );
 
   Future<Map<String, dynamic>> luckyGiftState({
     required String authToken,
   }) => presence.luckyGiftState(authToken: authToken);
+
+  Future<List<Map<String, dynamic>>> roomGiftFeed({
+    required String roomId,
+    required String authToken,
+  }) => presence.roomGiftFeed(
+        roomId: roomId,
+        authToken: authToken,
+      );
 
   bool get hasRoom => room != null && controller != null;
   bool get moderationMicMuted => presence.selfMicMuted;
@@ -83,6 +104,21 @@ class ActiveRoomSession extends ChangeNotifier {
   String? get _hostTag => hostTagProvider?.call();
   String? get _agencyName => agencyNameProvider?.call();
   String? get _equippedFrameId => equippedFrameIdProvider?.call();
+  String? get _equippedEntryId => equippedEntryIdProvider?.call();
+  String? get _equippedProfileCardId => equippedProfileCardIdProvider?.call();
+
+  bool get _micEnabledForPresence {
+    final roomController = controller;
+    final seatIndex = roomController?.mySeat;
+    if (roomController == null || seatIndex == null) return false;
+    final seatMuted = seatIndex >= 0 &&
+        seatIndex < roomController.seats.length &&
+        roomController.seats[seatIndex].roomMuted;
+    return roomController.micState == MicState.live &&
+        !roomController.selfMuted &&
+        !presence.selfMicMuted &&
+        !seatMuted;
+  }
 
   Future<void> open(
     RoomSummary nextRoom, {
@@ -100,6 +136,9 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     room = nextRoom;
+    _roomSoundEnabled = true;
+    _moderationForcedMicOff = false;
+    _seenLuckyNumberEventIds.clear();
     controller = RoomController(
       runtime: runtime,
       seatCountOverride: nextRoom.seatCount,
@@ -120,17 +159,25 @@ class ActiveRoomSession extends ChangeNotifier {
       }
 
       await foregroundService.start();
-      await realtime.enterRoom(
-        nextRoom.id,
-        userId,
-        authToken: authToken,
-      );
       _activeAuthToken = authToken;
-      _activeUserId = userId;
-      await _startPresence();
+
+      // Voice and room-presence are independent network joins. Start both
+      // together so the seat backend is ready by the time LiveKit audio is
+      // connected instead of making the user wait for them sequentially.
+      await Future.wait<void>([
+        realtime.enterRoom(
+          nextRoom.id,
+          userId,
+          authToken: authToken,
+        ),
+        _startPresence(),
+      ]);
+
       connected = true;
       connecting = false;
       connectionError = null;
+      await _applyForcedSeatChange();
+      await _enforceModerationMute();
     } catch (error) {
       connecting = false;
       connected = false;
@@ -153,14 +200,43 @@ class ActiveRoomSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<RoomLuckyNumberEvent> drawLuckyNumber() async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    final event = await presence.drawLuckyNumber(
+      roomId: roomId,
+      authToken: authToken,
+    );
+    _syncLuckyNumberMessages();
+    return event;
+  }
+
+  Future<void> setRoomSoundEnabled(bool enabled) async {
+    _roomSoundEnabled = enabled;
+    if (connected) {
+      await realtime.setRemoteAudioEnabled(enabled);
+    }
+    notifyListeners();
+  }
+
   Future<void> setMicFromController() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
-    if (presence.selfMicMuted && roomController.micState == MicState.live) {
+    final mySeat = roomController.mySeat;
+    final seatMuted = mySeat != null &&
+        mySeat >= 0 &&
+        mySeat < roomController.seats.length &&
+        roomController.seats[mySeat].roomMuted;
+    if ((presence.selfMicMuted || seatMuted) &&
+        roomController.micState == MicState.live) {
       roomController.forceMicMuted();
     }
     await realtime.setMic(
       !presence.selfMicMuted &&
+          !seatMuted &&
           !roomController.selfMuted &&
           roomController.micState == MicState.live,
     );
@@ -228,6 +304,49 @@ class ActiveRoomSession extends ChangeNotifier {
       targetUserId: targetUserId,
       banned: banned,
     );
+  }
+
+  Future<void> setSeatLock(int seatIndex, bool locked) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setSeatLock(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      locked: locked,
+    );
+  }
+
+  Future<void> setSeatMute(int seatIndex, bool muted) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setSeatMute(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      muted: muted,
+    );
+  }
+
+  Future<void> takeMySeat(int seatIndex) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.takeSeat(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+    );
+    await _applyForcedSeatChange();
+    await _enforceModerationMute();
   }
 
   Future<void> setRoomMicMode(String micMode) async {
@@ -326,7 +445,19 @@ class ActiveRoomSession extends ChangeNotifier {
       throw StateError('You must be on a seat to use emotes.');
     }
 
-    presence.syncRealtimeSeat(seatIndex);
+    // Push the current seat first so a just-seated user can use an emote
+    // immediately instead of waiting for the next presence heartbeat.
+    await presence.heartbeat(
+      roomId: roomId,
+      authToken: authToken,
+      seatIndex: seatIndex,
+      familyTag: _familyTag,
+      hostTag: _hostTag,
+      agencyName: _agencyName,
+      equippedFrameId: _equippedFrameId,
+      equippedEntryId: _equippedEntryId,
+      equippedProfileCardId: _equippedProfileCardId,
+    );
     await presence.setEmote(
       roomId: roomId,
       authToken: authToken,
@@ -360,6 +491,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   Future<void> close() async {
+    await onRoomClosed?.call();
     final oldRoomId = room?.id;
     final oldAuthToken = _activeAuthToken;
     final oldController = controller;
@@ -369,6 +501,8 @@ class ActiveRoomSession extends ChangeNotifier {
     connecting = false;
     connected = false;
     connectionError = null;
+    _moderationForcedMicOff = false;
+    _seenLuckyNumberEventIds.clear();
 
     oldController?.removeListener(_onRoomChanged);
     oldController?.dispose();
@@ -396,9 +530,17 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
         seatIndex: controller?.mySeat,
+        micEnabled: _micEnabledForPresence,
         familyTag: _familyTag,
         hostTag: _hostTag,
         agencyName: _agencyName,
+        equippedFrameId: _equippedFrameId,
+        equippedEntryId: _equippedEntryId,
+        equippedProfileCardId: _equippedProfileCardId,
+      );
+      await presence.connectLive(
+        roomId: roomId,
+        authToken: authToken,
       );
       await _applyForcedSeatChange();
       await _enforceModerationMute();
@@ -406,38 +548,38 @@ class ActiveRoomSession extends ChangeNotifier {
       // Keep the room open; presence will retry on the next heartbeat.
     }
 
-    await presence.connectRealtime(
-      roomId: roomId,
-      authToken: authToken,
-    );
-    _seatSyncInitialized = true;
-    _lastSyncedSeatIndex = controller?.mySeat;
-
-    // HTTP heartbeat is now emergency fallback only. In the normal path the
-    // hibernating WebSocket carries presence and seat deltas without polling.
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      if (presence.realtimeConnected) return;
+    _presenceTimer = Timer.periodic(const Duration(seconds: 25), (_) async {
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
-      if (currentRoomId == null || currentAuthToken == null) return;
+      if (currentRoomId == null || currentAuthToken == null) {
+        return;
+      }
       try {
         await presence.heartbeat(
           roomId: currentRoomId,
           authToken: currentAuthToken,
           seatIndex: controller?.mySeat,
+          micEnabled: _micEnabledForPresence,
           familyTag: _familyTag,
           hostTag: _hostTag,
           agencyName: _agencyName,
           equippedFrameId: _equippedFrameId,
+          equippedEntryId: _equippedEntryId,
+          equippedProfileCardId: _equippedProfileCardId,
         );
         await _applyForcedSeatChange();
         await _enforceModerationMute();
+        if (!_roomSoundEnabled) {
+          await realtime.setRemoteAudioEnabled(false);
+        }
       } catch (error) {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
           await close();
+          return;
         }
+        // A later heartbeat/refresh will reconnect automatically.
       }
     });
   }
@@ -447,24 +589,47 @@ class ActiveRoomSession extends ChangeNotifier {
     final roomController = controller;
     if (roomController == null) return;
 
-    roomController.forceMySeat(presence.selfForcedSeatIndex);
+    final previousSeat = roomController.mySeat;
+    final forcedSeat = presence.selfForcedSeatIndex;
+    roomController.forceMySeat(forcedSeat);
     presence.selfSeatForced = false;
     presence.selfForcedSeatIndex = null;
+
+    if (previousSeat != null && forcedSeat == null) {
+      _moderationForcedMicOff = false;
+      await onSeatForcedDown?.call();
+    }
 
     if (connected) {
       await realtime.setMic(false);
     }
   }
 
-    Future<void> _enforceModerationMute() async {
+  Future<void> _enforceModerationMute() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
-    if (!presence.selfMicMuted) return;
 
-    roomController.forceMicMuted();
-    if (realtime.rtc.publishingMic) {
-      await realtime.setMic(false);
+    if (presence.selfMicMuted) {
+      if (roomController.micState == MicState.live &&
+          !roomController.selfMuted) {
+        _moderationForcedMicOff = true;
+      }
+      roomController.forceMicMuted();
+      if (realtime.rtc.publishingMic) {
+        await realtime.setMic(false);
+      }
+      return;
     }
+
+    if (!_moderationForcedMicOff) return;
+    _moderationForcedMicOff = false;
+
+    if (roomController.mySeat == null || roomController.selfMuted) {
+      return;
+    }
+
+    roomController.restoreMicAfterModeration();
+    await realtime.setMic(roomController.micState == MicState.live);
   }
 
     Future<void> _stopPresence({
@@ -475,7 +640,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceTimer?.cancel();
     _presenceTimer = null;
     presence.removeListener(_onPresenceChanged);
-    await presence.disconnectRealtime();
+    await presence.disconnectLive();
 
     if (sendLeave && roomId != null && authToken != null) {
       try {
@@ -486,58 +651,46 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _activeAuthToken = null;
-    _activeUserId = null;
-    _seatSyncInitialized = false;
-    _lastSyncedSeatIndex = null;
   }
 
   void _onPresenceChanged() {
-    controller?.setInviteMode(presence.micMode != 'free');
-    if (presence.selfSeatForced) {
-      unawaited(_applyForcedSeatChange());
-    } else {
-      _reconcileMySeatFromPresence();
+    final roomController = controller;
+    roomController?.setInviteMode(presence.micMode != 'free');
+    _syncLuckyNumberMessages();
+    if (roomController != null) {
+      for (var index = 0; index < roomController.seats.length; index++) {
+        roomController.setSeatLocked(
+          index,
+          presence.lockedSeats.contains(index),
+        );
+        roomController.setSeatRoomMuted(
+          index,
+          presence.mutedSeats.contains(index),
+        );
+      }
     }
-    unawaited(_enforceModerationMute());
     notifyListeners();
   }
 
-  void _reconcileMySeatFromPresence() {
-    final userId = _activeUserId;
+  void _syncLuckyNumberMessages() {
     final roomController = controller;
-    if (userId == null || roomController == null) return;
-
-    RoomPresenceMember? me;
-    for (final member in presence.members) {
-      if (member.userId == userId) {
-        me = member;
-        break;
-      }
+    if (roomController == null) return;
+    for (final event in presence.luckyNumberEvents) {
+      if (!_seenLuckyNumberEventIds.add(event.id)) continue;
+      roomController.addRoomMessage(
+        event.displayName,
+        '🎲 Lucky Number: ${event.number}',
+      );
     }
-    if (me == null) return;
-    if (roomController.mySeat != me.seatIndex) {
-      roomController.forceMySeat(me.seatIndex);
-    }
-  }
-
-  void _syncRealtimeSeat() {
-    if (!presence.realtimeConnected) return;
-    final seatIndex = controller?.mySeat;
-    if (_seatSyncInitialized && _lastSyncedSeatIndex == seatIndex) return;
-    _seatSyncInitialized = true;
-    _lastSyncedSeatIndex = seatIndex;
-    presence.syncRealtimeSeat(seatIndex);
   }
 
   void _onRoomChanged() {
-    _syncRealtimeSeat();
     notifyListeners();
   }
 
   @override
   void dispose() {
     _presenceTimer?.cancel();
-    unawaited(presence.disconnectRealtime());
     presence.removeListener(_onPresenceChanged);
     controller?.removeListener(_onRoomChanged);
     controller?.dispose();

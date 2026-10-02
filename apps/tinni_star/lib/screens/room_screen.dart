@@ -22,10 +22,13 @@ import '../room/room_models.dart';
 import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
+import '../ui/room_emotion_backdrop.dart';
 import '../ui/animated_avatar_frame.dart';
+import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'messages_screen.dart';
+import 'recharge_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -48,6 +51,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyAnimationSequence = 0;
   String? _luckyAnimationReceiverId;
   bool _luckyComboSending = false;
+  String? _luckySessionId;
+  int _luckySessionHighest = 0;
+  final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
+  bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
@@ -57,12 +64,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _roomTitleOverride;
   String? _roomPhotoOverride;
   String? _roomAnnouncementOverride;
-  Timer? _ribbonTimer;
+  String? _cachedRoomPhotoSource;
+  ImageProvider? _cachedRoomPhotoProvider;
+  String? _cachedThemeSource;
+  ImageProvider? _cachedThemeProvider;
+  final Map<String, ImageProvider> _avatarProviderCache =
+      <String, ImageProvider>{};
+  Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
-  final Map<String, String> _seatAvatarSources = <String, String>{};
-  final Map<String, ImageProvider> _seatAvatarProviders =
-      <String, ImageProvider>{};
+  final Set<String> _seenEntranceKeys = <String>{};
+  final List<RoomPresenceMember> _entranceQueue = <RoomPresenceMember>[];
+  RoomPresenceMember? _activeEntrance;
+  final DateTime _screenOpenedAtUtc = DateTime.now().toUtc();
   RoomController get controller => widget.state.roomSession.controller!;
 
   RoomSummary get _roomSnapshot {
@@ -79,46 +93,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _roomAnnouncementOverride ?? _roomSnapshot.announcement;
 
   ImageProvider? get _roomPhotoProvider {
-    final value = _roomPhotoDataUrl;
-    if (value == null || !value.startsWith('data:image/')) return null;
-    try {
-      return MemoryImage(base64Decode(value.split(',').last));
-    } catch (_) {
+    final value = _roomPhotoDataUrl?.trim() ?? '';
+    if (value.isEmpty) {
+      _cachedRoomPhotoSource = null;
+      _cachedRoomPhotoProvider = null;
       return null;
     }
-  }
-
-  ImageProvider? _seatAvatarProvider(RoomPresenceMember? member) {
-    if (member == null) return null;
-    final source = member.avatarDataUrl;
-    final cached = _seatAvatarProviders[member.userId];
-    if (source == null || source.isEmpty) return cached;
-    if (_seatAvatarSources[member.userId] == source && cached != null) {
-      return cached;
+    if (_cachedRoomPhotoSource == value) {
+      return _cachedRoomPhotoProvider;
     }
 
-    try {
-      ImageProvider provider;
-      if (source.startsWith('data:image/')) {
-        provider = MemoryImage(base64Decode(source.split(',').last));
-      } else if (source.startsWith('https://') || source.startsWith('http://')) {
-        provider = NetworkImage(source);
-      } else {
-        return cached;
+    ImageProvider? provider;
+    if (value.startsWith('data:image/')) {
+      try {
+        provider = MemoryImage(base64Decode(value.split(',').last));
+      } catch (_) {
+        provider = null;
       }
-      _seatAvatarSources[member.userId] = source;
-      _seatAvatarProviders[member.userId] = provider;
-      return provider;
-    } catch (_) {
-      // Keep the last valid image instead of showing a blank frame.
-      return cached;
+    } else if (value.startsWith('https://') || value.startsWith('http://')) {
+      provider = NetworkImage(value);
     }
-  }
 
-  void _warmSeatAvatarCache() {
-    for (final member in widget.state.roomSession.liveMembers) {
-      _seatAvatarProvider(member);
-    }
+    _cachedRoomPhotoSource = value;
+    _cachedRoomPhotoProvider = provider;
+    return provider;
   }
 
   @override
@@ -126,8 +124,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
-    _ribbonTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshCountryRibbons());
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
+    _primeRoomSendingSummary();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLuckyFeed());
+    widget.state.social.unreadMessages.addListener(_refresh);
+    final account = widget.state.auth.current;
+    if (account != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.state.social.connectMessageEvents(account.authToken);
+      });
+    }
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
@@ -141,12 +147,86 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<Map<String, dynamic>> _loadRoomSendingSummary() async {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      return <String, dynamic>{
+        'lifetime_total': 0,
+        'ranking': const <Map<String, dynamic>>[],
+      };
+    }
+    try {
+      return await widget.state.discovery.roomGiftRanking(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+        period: 'day',
+      );
+    } catch (_) {
+      // Keep the room UI usable if the ranking endpoint is temporarily
+      // unavailable. The next scheduled refresh will try again.
+      return <String, dynamic>{
+        'lifetime_total': 0,
+        'ranking': const <Map<String, dynamic>>[],
+      };
+    }
+  }
+
+  void _primeRoomSendingSummary() {
+    _roomSendingSummaryFuture = _loadRoomSendingSummary();
+  }
+
+  void _refreshRoomSendingSummary() {
+    final next = _loadRoomSendingSummary();
+    if (!mounted) {
+      _roomSendingSummaryFuture = next;
+      return;
+    }
+    setState(() => _roomSendingSummaryFuture = next);
+  }
+
+  String _compactRoomSending(int value) {
+    if (value >= 1000000000) {
+      final n = value / 1000000000;
+      return n.toStringAsFixed(value % 1000000000 == 0 ? 0 : 1) + 'B';
+    }
+    if (value >= 1000000) {
+      final n = value / 1000000;
+      return n.toStringAsFixed(value % 1000000 == 0 ? 0 : 1) + 'M';
+    }
+    if (value >= 100000) {
+      final n = value / 100000;
+      return n.toStringAsFixed(value % 100000 == 0 ? 0 : 1) + 'L';
+    }
+    if (value >= 1000) {
+      final n = value / 1000;
+      return n.toStringAsFixed(value % 1000 == 0 ? 0 : 1) + 'K';
+    }
+    return value.toString();
+  }
+
   Future<void> _openRoom() async {
+    await widget.state.refreshAuthenticatedAccount(force: true);
     final account = widget.state.auth.current;
     if (account == null) return;
-    final ownerId = widget.room.ownerId ?? widget.room.id;
 
-    if (widget.room.locked && account.userId != ownerId) {
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // Keep room entry usable if directory refresh is temporarily unavailable.
+    }
+
+    final canonicalRoom = _roomSnapshot;
+    final ownerId =
+        canonicalRoom.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    widget.state.roomControls.setOwner(ownerId);
+
+    if (_selectedGiftRecipients.length == 1) {
+      _selectedGiftRecipients
+        ..clear()
+        ..add(ownerId);
+    }
+
+    if (canonicalRoom.locked && account.userId != ownerId) {
       final allowed = await _requestLockedRoomAccess(
         authToken: account.authToken,
       );
@@ -166,36 +246,43 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomControls.configureForRoom(ownerId);
     widget.state.roomControls.settings =
         widget.state.roomControls.settings.copyWith(
-      visibility: widget.room.locked
+      visibility: canonicalRoom.locked
           ? RoomVisibility.privateRoom
           : RoomVisibility.publicRoom,
     );
     widget.state.roomControls.roomMode =
-        widget.room.partyMode == 'Event hosting mode' ? 'event' : 'friends';
-    if (RoomControlService.availableSeatThemes.contains(widget.room.seatThemeId)) {
-      widget.state.roomControls.setSeatTheme(widget.room.seatThemeId);
+        canonicalRoom.partyMode == 'Event hosting mode' ? 'event' : 'friends';
+    if (RoomControlService.availableSeatThemes.contains(canonicalRoom.seatThemeId)) {
+      widget.state.roomControls.setSeatTheme(canonicalRoom.seatThemeId);
     } else {
       widget.state.roomControls.setSeatTheme('royal-gold');
     }
-    if (widget.room.themeAsset == null || widget.room.themeAsset!.isEmpty) {
-      if (RoomControlService.availableThemes.contains(widget.room.themeId)) {
-        widget.state.roomControls.setTheme(widget.room.themeId);
+    if (canonicalRoom.themeAsset == null || canonicalRoom.themeAsset!.isEmpty) {
+      if (RoomControlService.availableThemes.contains(canonicalRoom.themeId)) {
+        widget.state.roomControls.setTheme(canonicalRoom.themeId);
       } else {
         widget.state.roomControls.setTheme('royal-dark');
       }
     } else {
       widget.state.roomControls.setCustomTheme(
-        widget.room.themeId,
-        widget.room.themeAsset!,
+        canonicalRoom.themeId,
+        canonicalRoom.themeAsset!,
       );
     }
     await widget.state.roomSession.open(
-      widget.room,
+      canonicalRoom,
       userId: account.userId,
       authToken: account.authToken,
     );
-    widget.state.roomSession.controller?.setInviteMode(
-      widget.state.roomControls.settings.micMode == MicMode.apply,
+
+    // The room-presence backend is authoritative for Free mic / Request mode.
+    // Do not overwrite the freshly loaded server value with the local default
+    // when the room is reopened. Keep the local room settings mirror in sync
+    // with the server instead.
+    final serverMicMode = widget.state.roomSession.presence.micMode;
+    widget.state.roomControls.settings =
+        widget.state.roomControls.settings.copyWith(
+      micMode: serverMicMode == 'free' ? MicMode.free : MicMode.apply,
     );
   }
 
@@ -452,17 +539,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
   ImageProvider? get _roomThemeImage {
-    final source = widget.state.roomControls.customThemeAsset;
-    if (source == null || source.isEmpty) return null;
+    final source =
+        widget.state.roomControls.customThemeAsset?.trim() ?? '';
+    if (source.isEmpty) {
+      _cachedThemeSource = null;
+      _cachedThemeProvider = null;
+      return null;
+    }
+    if (_cachedThemeSource == source) {
+      return _cachedThemeProvider;
+    }
+
+    ImageProvider? provider;
     if (source.startsWith('data:image/')) {
       try {
-        return MemoryImage(base64Decode(source.split(',').last));
+        provider = MemoryImage(base64Decode(source.split(',').last));
       } catch (_) {
-        return null;
+        provider = null;
       }
+    } else if (source.startsWith('https://') ||
+        source.startsWith('http://')) {
+      provider = NetworkImage(source);
     }
-    if (source.startsWith('https://')) return NetworkImage(source);
-    return null;
+
+    _cachedThemeSource = source;
+    _cachedThemeProvider = provider;
+    return provider;
   }
 
   RoomRole? get _currentRoomRole {
@@ -490,7 +592,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (state == AppLifecycleState.resumed) {
       widget.state.lifecycle.onForeground();
+      unawaited(_refreshIdentityAndRoomOwnership(force: true));
     }
+  }
+
+  Future<void> _refreshIdentityAndRoomOwnership({
+    bool force = false,
+  }) async {
+    final before = widget.state.auth.current;
+    if (before == null) return;
+
+    await widget.state.refreshAuthenticatedAccount(force: force);
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // Existing room session remains usable while directory sync retries later.
+    }
+
+    final ownerId =
+        _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    widget.state.roomControls.setOwner(ownerId);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -498,8 +623,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
-    _ribbonTimer?.cancel();
     _luckyBubbleTimer?.cancel();
+    widget.state.social.unreadMessages.removeListener(_refresh);
+    widget.state.social.disconnectMessageEvents();
     chat.dispose();
     super.dispose();
   }
@@ -546,7 +672,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildRibbonLane(Map<String, dynamic> ribbon, int lane) {
     final id = ribbon['id']?.toString() ?? '';
-    final isLp = ribbon['kind']?.toString() == 'lp';
+    final kind = ribbon['kind']?.toString() ?? '';
+    final isLp = kind == 'lp';
+    final isLucky = kind == 'lucky_gift' || kind == 'lucky_gift_ultra';
+    final isLuckyUltra = kind == 'lucky_gift_ultra';
     final name = ribbon['user_name']?.toString() ?? 'User';
     final amount = (ribbon['amount'] as num?)?.toInt() ?? 0;
     String amountText;
@@ -561,7 +690,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     final game =
         (ribbon['game_key']?.toString() ?? 'Game').replaceAll('_', ' ');
-    final headline = isLp ? 'LUCKY POUCH' : 'BIG WIN';
+    final headline = isLp
+        ? 'LUCKY POUCH'
+        : isLuckyUltra
+            ? 'LUCKY ULTRA'
+            : isLucky
+                ? 'LUCKY WIN'
+                : 'BIG WIN';
     final message = isLp
         ? name + ' opened ' + amountText + ' LP'
         : name + ' WIN ' + amountText + ' • ' + game;
@@ -592,11 +727,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         Color(0xFF9A151E),
                         Color(0xFF41040A),
                       ]
-                    : const <Color>[
-                        Color(0xFF050505),
-                        Color(0xFF17100A),
-                        Color(0xFF050505),
-                      ],
+                    : isLuckyUltra
+                        ? const <Color>[
+                            Color(0xFF0B0710),
+                            Color(0xFF6A3B00),
+                            Color(0xFF2F164A),
+                            Color(0xFF050505),
+                          ]
+                        : const <Color>[
+                            Color(0xFF050505),
+                            Color(0xFF17100A),
+                            Color(0xFF050505),
+                          ],
               ),
               borderRadius: BorderRadius.circular(23),
               border: Border.all(
@@ -627,9 +769,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Icon(
                     isLp
                         ? Icons.shopping_bag_rounded
-                        : Icons.sports_esports_rounded,
-                    color: const Color(0xFFFFD45A),
-                    size: 20,
+                        : isLucky
+                            ? Icons.card_giftcard_rounded
+                            : Icons.sports_esports_rounded,
+                    color: isLuckyUltra
+                        ? const Color(0xFFFFF2A8)
+                        : const Color(0xFFFFD45A),
+                    size: isLuckyUltra ? 22 : 20,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -675,11 +821,40 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _refresh() {
     if (!mounted) return;
-    _warmSeatAvatarCache();
     _scheduleEmoteExpiry();
     _syncMyAdminRole();
     _maybeShowSeatInvite();
+    _syncEntranceQueue();
     setState(() {});
+  }
+
+  void _syncEntranceQueue() {
+    final currentUserId = widget.state.auth.current?.userId;
+    for (final member in widget.state.roomSession.liveMembers) {
+      final entryId = member.equippedEntryId;
+      if (entryId == null || entryId.isEmpty) continue;
+      final key =
+          member.userId + ':' + member.joinedAt.millisecondsSinceEpoch.toString();
+      if (!_seenEntranceKeys.add(key)) continue;
+      final isCurrentUser = member.userId == currentUserId;
+      final isNewJoin = member.joinedAt.toUtc().isAfter(
+            _screenOpenedAtUtc.subtract(const Duration(seconds: 4)),
+          );
+      if (isCurrentUser || isNewJoin) {
+        _entranceQueue.add(member);
+      }
+    }
+    if (_activeEntrance == null && _entranceQueue.isNotEmpty) {
+      _activeEntrance = _entranceQueue.removeAt(0);
+    }
+  }
+
+  void _finishPremiumEntrance() {
+    if (!mounted) return;
+    setState(() {
+      _activeEntrance =
+          _entranceQueue.isEmpty ? null : _entranceQueue.removeAt(0);
+    });
   }
 
   void _syncMyAdminRole() {
@@ -803,25 +978,60 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  Future<void> _toggleSelfMute() async {
-    if (controller.mySeat == null) {
-      _snack('Join a seat before using self mute.');
-      return;
-    }
-    final muted = !controller.selfMuted;
-    try {
-      await widget.state.roomSession.setSelfMute(muted);
-      if (mounted) setState(() {});
-      _snack(muted ? 'Self mute on.' : 'Self mute off.');
-    } catch (error) {
-      _snack(error.toString().replaceFirst('Bad state: ', ''));
-    }
-  }
-
   Future<void> _leaveSeatAndMute() async {
+    final userId = widget.state.auth.current?.userId ?? '';
+    await widget.state.ktv.stopForSeatDown(userId);
     controller.leaveSeat();
     await widget.state.roomSession.setMicFromController();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _showMySeatLeavePanel() async {
+    if (controller.mySeat == null) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: RoyalPalette.nearBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: RoyalPalette.gold.withValues(alpha: 0.85),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () async {
+            Navigator.pop(dialogContext);
+            await _leaveSeatAndMute();
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 34, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShiningIcon(
+                  icon: Icons.keyboard_double_arrow_down_rounded,
+                  color: FeaturePalette.safety,
+                  size: 28,
+                  boxSize: 44,
+                  glow: 0.34,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Leave Seat',
+                  style: TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showEmojiPicker() {
@@ -1070,6 +1280,56 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         name: 'Rose Gold',
         color: Color(0xFF17090D),
       ),
+      const _RoomThemeChoice(
+        id: 'mood-happy',
+        name: 'Happy',
+        color: Color(0xFF8F3448),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-sad',
+        name: 'Sad',
+        color: Color(0xFF173E5D),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-boring',
+        name: 'Boring',
+        color: Color(0xFF433154),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-love',
+        name: 'Love',
+        color: Color(0xFF9A1838),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-mountain-view',
+        name: 'Mountain View',
+        color: Color(0xFF536D82),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-alone',
+        name: 'Alone',
+        color: Color(0xFF142A3D),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-with-her',
+        name: 'With Her',
+        color: Color(0xFF8B462F),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-with-him',
+        name: 'With Him',
+        color: Color(0xFF173B59),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-love-scene',
+        name: 'Love Scene',
+        color: Color(0xFF3C1D58),
+      ),
+      const _RoomThemeChoice(
+        id: 'mood-rainy-love',
+        name: 'Rainy Love',
+        color: Color(0xFF4A3536),
+      ),
     ];
 
     var pending = builtIns.first;
@@ -1236,18 +1496,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             height: 58,
                             decoration: BoxDecoration(
                               color: theme.color ?? RoyalPalette.panel2,
-                              image: preview == null
-                                  ? null
-                                  : DecorationImage(
-                                      image: preview,
-                                      fit: BoxFit.cover,
-                                    ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: FeaturePalette.moments
                                     .withValues(alpha: 0.65),
                               ),
                             ),
+                            clipBehavior: Clip.antiAlias,
+                            child: isEmotionRoomTheme(theme.id)
+                                ? RoomEmotionBackdrop(themeId: theme.id)
+                                : preview == null
+                                    ? null
+                                    : Image(
+                                        image: preview,
+                                        fit: BoxFit.cover,
+                                      ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -1386,10 +1649,39 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     if (action == 'exit') {
+      await widget.state.ktv.stopRoomPlayback();
       await session.close();
       if (!mounted) return;
       Navigator.pop(context);
     }
+  }
+
+  ImageProvider? _roomAvatarProvider(String? value) {
+    final source = value?.trim() ?? '';
+    if (source.isEmpty) return null;
+
+    final cached = _avatarProviderCache[source];
+    if (cached != null) return cached;
+
+    ImageProvider? provider;
+    if (source.startsWith('data:image/')) {
+      try {
+        provider = MemoryImage(base64Decode(source.split(',').last));
+      } catch (_) {
+        provider = null;
+      }
+    } else if (source.startsWith('https://') ||
+        source.startsWith('http://')) {
+      provider = NetworkImage(source);
+    }
+
+    if (provider != null) {
+      if (_avatarProviderCache.length >= 128) {
+        _avatarProviderCache.clear();
+      }
+      _avatarProviderCache[source] = provider;
+    }
+    return provider;
   }
 
   Color _ownerTagColor(String colorHex) {
@@ -1398,6 +1690,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       radix: 16,
     );
     return Color(0xFF000000 | (value ?? 0xFFD54F));
+  }
+
+  int get _roomUnreadMessageCount =>
+      widget.state.social.totalUnreadMessages;
+
+  Future<void> _openRoomInbox() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MessagesScreen(state: widget.state),
+      ),
+    );
   }
 
   Future<void> _openPrivateMessage(RoomPresenceMember member) async {
@@ -1523,6 +1827,59 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  bool _adminCanControlSeatOccupant(RoomPresenceMember member) {
+    if (_isRoomOwner) return true;
+    final ownerId =
+        _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    if (member.userId == ownerId) return false;
+    if (member.isAdmin) return false;
+    return _currentRoomRole == RoomRole.admin;
+  }
+
+  RoomPresenceMember? _memberOnSeat(int seatIndex) {
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex == seatIndex) return member;
+    }
+    final mappedUserId = widget.state.roomControls.seatUsers[seatIndex];
+    if (mappedUserId != null) {
+      for (final member in widget.state.roomSession.liveMembers) {
+        if (member.userId == mappedUserId) return member;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _moveMemberSeatDown(RoomPresenceMember member) async {
+    try {
+      await widget.state.roomSession.moveUserToAudience(member.userId);
+      _snack(member.displayName + ' moved to audience.');
+      if (mounted) setState(() {});
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _setRoomAdminById({
+    required String userId,
+    required String displayName,
+    required bool enabled,
+  }) async {
+    try {
+      await widget.state.roomSession.setRoomAdmin(
+        userId,
+        enabled: enabled,
+      );
+      _snack(
+        enabled
+            ? displayName + ' is now a room admin.'
+            : displayName + ' removed from room admin.',
+      );
+    } catch (error) {
+      _snack(error.toString().replaceFirst('Bad state: ', ''));
+      rethrow;
+    }
+  }
+
   Future<void> _toggleRoomAdmin(
     RoomPresenceMember member,
     bool enabled,
@@ -1599,8 +1956,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             currentMember,
             hint: seatIndexHint,
           );
-          final micMuted = currentMember.micMuted;
-          final canModerate = !isSelf && _canModerateSeats;
+          final moderationMuted = currentMember.moderationMuted;
+          final ownerId =
+              _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+          final targetIsOwner = currentMember.userId == ownerId;
+          final canModerate = !isSelf &&
+              _canModerateSeats &&
+              !targetIsOwner &&
+              (_isRoomOwner || !currentMember.isAdmin);
           final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.44;
 
           ImageProvider? avatar;
@@ -1825,7 +2188,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   }
                                 },
                               ),
-                            if (canModerate)
+                            if (_isRoomOwner &&
+                                !isSelf &&
+                                !targetIsOwner)
                               _ProfileAction(
                                 icon: currentMember.isAdmin
                                     ? Icons.remove_moderator_rounded
@@ -1870,10 +2235,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             if (canModerate)
                               _ProfileAction(
-                                icon: micMuted
+                                icon: moderationMuted
                                     ? Icons.mic_rounded
                                     : Icons.mic_off_rounded,
-                                label: micMuted ? 'Unmute' : 'Mute',
+                                label: moderationMuted ? 'Unmute' : 'Mute',
                                 onTap: () async {
                                   if (seatIndex == null) {
                                     _snack(
@@ -1885,11 +2250,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   await _setUserSeatMute(
                                     currentMember,
                                     seatIndex,
-                                    !micMuted,
+                                    !moderationMuted,
                                   );
                                   if (sheetContext.mounted) {
                                     setSheetState(() {});
                                   }
+                                },
+                              ),
+                            if (canModerate && seatIndex != null)
+                              _ProfileAction(
+                                icon:
+                                    Icons.airline_seat_recline_normal_rounded,
+                                label: 'Seat down',
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await _moveMemberSeatDown(currentMember);
                                 },
                               ),
                             if (canModerate)
@@ -2013,6 +2388,57 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return true;
   }
 
+  String _newLuckySessionId(String userId) =>
+      'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
+
+  ImageProvider? _luckyAvatarProvider(dynamic value) {
+    final source = value?.toString();
+    if (source == null || !source.startsWith('data:image/')) return null;
+    try {
+      return MemoryImage(base64Decode(source.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refreshLuckyFeed() async {
+    if (_luckyFeedLoading) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    _luckyFeedLoading = true;
+    try {
+      final rows = await widget.state.roomSession.roomGiftFeed(
+        roomId: widget.room.id,
+        authToken: account.authToken,
+      );
+      final luckyRows = rows
+          .where((row) => row['multiplier'] != null)
+          .take(8)
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _luckyFeed
+          ..clear()
+          ..addAll(luckyRows);
+      });
+    } catch (_) {
+      // Supplemental Lucky feed retries on the next timer tick.
+    } finally {
+      _luckyFeedLoading = false;
+    }
+  }
+
+  Future<void> _openRechargeDirect() async {
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RechargeScreen(state: widget.state),
+      ),
+    );
+  }
+
   Future<bool> _sendLuckyGift(
     GiftDefinition gift,
     List<String> receiverIds,
@@ -2021,6 +2447,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (account == null || receiverIds.isEmpty || _luckyComboSending) {
       return false;
     }
+
+    final continuesSession = _luckyComboGift?.id == gift.id &&
+        _sameLuckyRecipients(receiverIds) &&
+        _luckySessionId != null;
+    final sessionId =
+        continuesSession ? _luckySessionId! : _newLuckySessionId(account.userId);
+
     setState(() => _luckyComboSending = true);
     try {
       final response = await widget.state.roomSession.sendGift(
@@ -2031,6 +2464,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         quantity: 1,
         unitPrice: gift.price,
         receiverIds: receiverIds,
+        luckySessionId: sessionId,
       );
       _applyGiftServerWallet(response);
 
@@ -2042,13 +2476,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final rebateCoins = _giftInt(lucky['rebate_coins']);
       final poolBalance = _giftInt(lucky['pool_balance']);
       final totalCost = _giftInt(response['total_cost']);
+      final rawSession = lucky['session'];
+      final session = rawSession is Map
+          ? rawSession.map((key, value) => MapEntry(key.toString(), value))
+          : <String, dynamic>{};
 
-      final sameCombo = _luckyComboGift?.id == gift.id &&
-          _sameLuckyRecipients(receiverIds);
+      _luckySessionId = sessionId;
       _luckyComboGift = gift;
       _luckyComboRecipients = List<String>.from(receiverIds);
-      _luckyComboCount = sameCombo ? _luckyComboCount + 1 : 1;
-      _luckyComboWon = sameCombo ? _luckyComboWon + rebateCoins : rebateCoins;
+
+      final serverCount = _giftInt(session['send_count']);
+      final serverWon = _giftInt(session['total_rebate_coins']);
+      final serverHighest = _giftInt(session['highest_multiplier']);
+      _luckyComboCount =
+          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
+      _luckyComboWon = serverWon > 0
+          ? serverWon
+          : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
+      _luckySessionHighest = continuesSession
+          ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
+          : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
       _luckyAnimationReceiverId = receiverIds.first;
@@ -2076,11 +2523,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       });
 
+      await _refreshLuckyFeed();
+      if (multiplier >= 500) {
+        await _refreshCountryRibbons();
+      }
       if (mounted) setState(() {});
       return true;
     } catch (error) {
-      if (mounted) {
-        _snack(error.toString().replaceFirst('Bad state: ', ''));
+      final message = error.toString().replaceFirst('Bad state: ', '');
+      if (message.toLowerCase().contains('insufficient coins')) {
+        await _openRechargeDirect();
+      } else if (mounted) {
+        _snack(message);
       }
       return false;
     } finally {
@@ -2277,6 +2731,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Builder(
+                builder: (context) {
+                  final avatar = _luckyAvatarProvider(
+                    widget.state.auth.current?.avatarDataUrl,
+                  );
+                  final name = widget.state.auth.current?.displayName ?? '';
+                  return CircleAvatar(
+                    radius: 13,
+                    backgroundColor: const Color(0xFF2E2140),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            name.isNotEmpty ? name.characters.first : '?',
+                            style: const TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          )
+                        : null,
+                  );
+                },
+              ),
+              const SizedBox(width: 5),
               Container(
                 width: 34,
                 height: 34,
@@ -2319,6 +2797,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (_luckySessionHighest > 0)
+                    Text(
+                      'Highest ×$_luckySessionHighest',
+                      style: const TextStyle(
+                        color: Color(0xFFFFEFA8),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   if (_luckyPoolBalance > 0)
                     Text(
                       'Pool $_luckyPoolBalance',
@@ -2376,6 +2863,103 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildLuckyFeedOverlay() {
+    if (_luckyFeed.isEmpty) return const SizedBox.shrink();
+    final rows = _luckyFeed.take(3).toList(growable: false);
+    return Positioned(
+      key: const Key('lucky-live-feed-overlay'),
+      left: 8,
+      bottom: 220,
+      width: 220,
+      child: IgnorePointer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final row in rows)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xDD120D18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _giftInt(row['multiplier']) >= 200
+                        ? const Color(0xFFFFD45A)
+                        : const Color(0x665C4A72),
+                  ),
+                  boxShadow: _giftInt(row['multiplier']) >= 200
+                      ? const [
+                          BoxShadow(
+                            color: Color(0x66FFB52E),
+                            blurRadius: 9,
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: Row(
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        final avatar = _luckyAvatarProvider(
+                          row['sender_avatar_data_url'],
+                        );
+                        final name = row['sender_name']?.toString() ?? 'User';
+                        return CircleAvatar(
+                          radius: 12,
+                          backgroundColor: const Color(0xFF2E2140),
+                          backgroundImage: avatar,
+                          child: avatar == null
+                              ? Text(
+                                  name.isNotEmpty ? name.characters.first : '?',
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFD45A),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (row['sender_name']?.toString() ?? 'User') +
+                                ' • ' +
+                                (row['gift_name']?.toString() ?? 'Lucky Gift'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Won ${_giftInt(row['rebate_coins'])} coins • ${_giftInt(row['multiplier'])}×',
+                            style: TextStyle(
+                              color: _giftInt(row['multiplier']) >= 200
+                                  ? const Color(0xFFFFD45A)
+                                  : const Color(0xFFD8C9E9),
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showLuckyGiftDetails() async {
     final account = widget.state.auth.current;
     if (account == null) return;
@@ -2390,14 +2974,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (!mounted) return;
 
-    final rawRanking = data['ranking'];
-    final ranking = rawRanking is List
-        ? rawRanking.whereType<Map>().map(
-              (row) => row.map(
-                (key, value) => MapEntry(key.toString(), value),
-              ),
-            ).toList(growable: false)
+    List<Map<String, dynamic>> mapList(dynamic value) => value is List
+        ? value
+            .whereType<Map>()
+            .map((row) => row.map(
+                  (key, item) => MapEntry(key.toString(), item),
+                ))
+            .toList(growable: false)
         : const <Map<String, dynamic>>[];
+
+    final ranking = mapList(data['ranking']);
+    final sessions = mapList(data['recent_sessions']);
+    final rawShares = data['visible_daily_rank_shares'];
+    final shares = rawShares is List
+        ? rawShares.map(_giftInt).toList(growable: false)
+        : const <int>[50, 25, 15];
+    final countdownEndsAt = _giftInt(data['countdown_ends_at']);
+    final remainingMs = math.max(
+      0,
+      countdownEndsAt - DateTime.now().millisecondsSinceEpoch,
+    );
+    final remaining = Duration(milliseconds: remainingMs);
+    final countdownText =
+        remaining.inHours.toString().padLeft(2, '0') +
+            ':' +
+            (remaining.inMinutes % 60).toString().padLeft(2, '0') +
+            ':' +
+            (remaining.inSeconds % 60).toString().padLeft(2, '0');
 
     await showDialog<void>(
       context: context,
@@ -2420,136 +3023,199 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         content: SizedBox(
           width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: <Color>[
-                      Color(0xFF4C175F),
-                      Color(0xFF241035),
+          height: math.min(
+            MediaQuery.sizeOf(dialogContext).height * 0.68,
+            570,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: <Color>[
+                        Color(0xFF4C175F),
+                        Color(0xFF241035),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFFFD45A),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'REAL-TIME PRIZE POOL',
+                        style: TextStyle(
+                          color: Color(0xFFD7C7FF),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '🪙 ${_giftInt(data['pool_balance'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Reset $countdownText • up to ${_giftInt(data['max_multiplier'])}×',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_giftInt(data['high_win_multiplier'])}×+ rare • ${_giftInt(data['banner_multiplier'])}×+ banner',
+                        style: const TextStyle(
+                          color: Color(0xFFFFEFA8),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFFFD45A),
-                  ),
                 ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'REAL-TIME PRIZE POOL',
-                      style: TextStyle(
-                        color: Color(0xFFD7C7FF),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '🪙 ${_giftInt(data['pool_balance'])}',
-                      style: const TextStyle(
-                        color: Color(0xFFFFD45A),
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Up to ${_giftInt(data['max_multiplier'])}× • 200×+ is rare',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Lucky Day Ranking',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              if (ranking.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(12),
+                const SizedBox(height: 10),
+                const Align(
+                  alignment: Alignment.centerLeft,
                   child: Text(
-                    'No Lucky Gift ranking yet today.',
-                    style: TextStyle(color: Colors.white54),
+                    'Lucky Day Ranking',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: math.min(10, ranking.length),
-                    itemBuilder: (_, index) {
-                      final row = ranking[index];
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          radius: 15,
-                          backgroundColor: const Color(0xFF2E2140),
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              color: Color(0xFFFFD45A),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          row['display_name']?.toString() ??
-                              row['user_id']?.toString() ??
-                              'User',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'Sent ${_giftInt(row['sent_count'])} • Highest ${_giftInt(row['highest_multiplier'])}×',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 9,
-                          ),
-                        ),
-                        trailing: Text(
-                          '+${_giftInt(row['rebate_coins'])}',
+                ),
+                const SizedBox(height: 6),
+                if (ranking.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'No Lucky Gift ranking yet today.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                else
+                  for (var index = 0;
+                      index < math.min(10, ranking.length);
+                      index++)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: const Color(0xFF2E2140),
+                        child: Text(
+                          '${index + 1}',
                           style: const TextStyle(
                             color: Color(0xFFFFD45A),
+                            fontSize: 10,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      title: Text(
+                        ranking[index]['display_name']?.toString() ??
+                            ranking[index]['user_id']?.toString() ??
+                            'User',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Sent ${_giftInt(ranking[index]['sent_count'])} • Highest ${_giftInt(ranking[index]['highest_multiplier'])}×',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 9,
+                        ),
+                      ),
+                      trailing: Text(
+                        '+${_giftInt(ranking[index]['rebate_coins'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                const SizedBox(height: 4),
+                Text(
+                  'Top shares: ${shares.map((value) => value.toString() + '%').join(' • ')}',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 9,
                   ),
                 ),
-              const SizedBox(height: 6),
-              const Text(
-                'Visible daily Top 3 shares: 50% • 25% • 15%',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 9,
+                if (_giftInt(data['remaining_share_percent']) > 0)
+                  Text(
+                    'Remaining ${_giftInt(data['remaining_share_percent'])}% stays in the pool unless Owner Panel changes the shares.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 8,
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Recent Lucky Sessions',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                if (sessions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                      'No Lucky session yet.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                else
+                  for (final session in sessions.take(8))
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF21162B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _giftInt(session['highest_multiplier']) >= 200
+                              ? const Color(0xFFFFD45A)
+                              : const Color(0x554E3A5C),
+                        ),
+                      ),
+                      child: Text(
+                        'Total won ${_giftInt(session['total_rebate_coins'])} by sending '
+                        '${_giftInt(session['send_count'])}×${_giftInt(session['unit_price'])} coins'
+                        ' — Highest ×${_giftInt(session['highest_multiplier'])}',
+                        style: const TextStyle(
+                          color: Color(0xFFEBDDF8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -2573,6 +3239,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     var giftCategory = 'Popular';
+    var luckyQuantity = 1;
+    GiftDefinition? selectedGift;
     const giftCategories = <String>[
       'Popular',
       'Lucky',
@@ -2681,6 +3349,125 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return values;
     }
 
+    Future<void> sendSelectedGift(
+      BuildContext sheetContext,
+      GiftDefinition gift,
+    ) async {
+      if (_selectedGiftRecipients.isEmpty) {
+        _snack('Select at least one recipient.');
+        return;
+      }
+
+      if (gift.lucky) {
+        final selectedRecipients =
+            _selectedGiftRecipients.toList(growable: false);
+        var sentCount = 0;
+        var allSent = true;
+        for (var sendIndex = 0;
+            sendIndex < luckyQuantity;
+            sendIndex++) {
+          final sent = await _sendLuckyGift(
+            gift,
+            selectedRecipients,
+          );
+          if (!sent) {
+            allSent = false;
+            break;
+          }
+          sentCount++;
+        }
+        if (allSent &&
+            sentCount == luckyQuantity &&
+            sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        return;
+      }
+
+      if (giftCategory != 'Backpack') {
+        try {
+          await widget.state.roomSession.sendGift(
+            roomId: widget.room.id,
+            authToken: widget.state.auth.current!.authToken,
+            giftId: gift.id,
+            giftName: gift.name,
+            quantity: 1,
+            unitPrice: gift.price,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+          );
+          _refreshRoomSendingSummary();
+        } catch (error) {
+          final message =
+              error.toString().replaceFirst('Bad state: ', '');
+          if (message.toLowerCase().contains('insufficient coins')) {
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+            await _openRechargeDirect();
+          } else {
+            _snack(message);
+          }
+          return;
+        }
+      }
+
+      GiftTransaction? tx;
+      if (giftCategory == 'Backpack') {
+        final consumed = widget.state.backpack.consume(gift.id, 1);
+        if (consumed) {
+          tx = GiftTransaction(
+            gift: gift,
+            quantity: 1,
+            senderId: senderId,
+            receiverIds:
+                _selectedGiftRecipients.toList(growable: false),
+            totalCost:
+                gift.price * _selectedGiftRecipients.length,
+          );
+          widget.state.gifts.sent.insert(0, tx);
+        }
+      } else {
+        tx = widget.state.gifts.send(
+          gift: gift,
+          quantity: 1,
+          maxCombo: controller.config.maxGiftCombo,
+          senderId: senderId,
+          receiverIds:
+              _selectedGiftRecipients.toList(growable: false),
+        );
+      }
+      if (tx == null) {
+        if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
+          await _openRechargeDirect();
+        } else {
+          _snack(
+            giftCategory == 'Backpack'
+                ? 'This gift is not available in Backpack.'
+                : 'Gift failed, select a recipient or check balance.',
+          );
+        }
+        return;
+      }
+      if (!sheetContext.mounted) return;
+      Navigator.pop(sheetContext);
+      if (widget.state.roomControls.effectsEnabled) {
+        widget.state.effects.enqueue(
+          EffectRequest(
+            id: 'gift-${widget.state.gifts.sent.length}',
+            kind: EffectKind.gift,
+            asset: '${gift.effectKind}:${gift.id}',
+            priority: 50,
+          ),
+        );
+      }
+      widget.state.activities.addGiftScore(senderId, tx.totalCost);
+      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+      _snack(
+        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
+      );
+      setState(() {});
+    }
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -2766,6 +3553,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           onSelected: (_) {
                             setSheetState(() {
                               giftCategory = value;
+                              selectedGift = null;
+                              luckyQuantity = 1;
                             });
                           },
                         );
@@ -2896,6 +3685,85 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       },
                       ),
                     ),
+                  if (giftCategory == 'Lucky')
+                    Container(
+                      key: const Key('lucky-gift-quantity-selector'),
+                      height: 38,
+                      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF21162B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x88FFD45A),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.repeat_rounded,
+                            color: Color(0xFFFFD45A),
+                            size: 17,
+                          ),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Text(
+                              'Lucky quantity • separate result per send',
+                              style: TextStyle(
+                                color: RoyalPalette.cream,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: const Key('lucky-quantity-minus'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity <= 1
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity--,
+                                    ),
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          SizedBox(
+                            width: 30,
+                            child: Text(
+                              luckyQuantity.toString(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: const Key('lucky-quantity-plus'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 20
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
@@ -2911,94 +3779,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         final gift = filteredGifts[index];
                         return RoyalPanel(
                           padding: const EdgeInsets.all(8),
-                          onTap: () async {
-                            if (_selectedGiftRecipients.isEmpty) {
-                              _snack('Select at least one recipient.');
-                              return;
-                            }
-                            if (gift.lucky) {
-                              final recipients = _selectedGiftRecipients
-                                  .toList(growable: false);
-                              final sent = await _sendLuckyGift(
-                                gift,
-                                recipients,
-                              );
-                              if (sent && context.mounted) {
-                                Navigator.pop(context);
-                              }
-                              return;
-                            }
-                            if (giftCategory != 'Backpack') {
-                              try {
-                                await widget.state.roomSession.sendGift(
-                                  roomId: widget.room.id,
-                                  authToken: widget.state.auth.current!.authToken,
-                                  giftId: gift.id,
-                                  giftName: gift.name,
-                                  quantity: 1,
-                                  unitPrice: gift.price,
-                                  receiverIds: _selectedGiftRecipients.toList(growable: false),
-                                );
-                              } catch (error) {
-                                _snack(error.toString().replaceFirst('Bad state: ', ''));
-                                return;
-                              }
-                            }
-                            GiftTransaction? tx;
-                            if (giftCategory == 'Backpack') {
-                              final consumed =
-                                  widget.state.backpack.consume(gift.id, 1);
-                              if (consumed) {
-                                tx = GiftTransaction(
-                                  gift: gift,
-                                  quantity: 1,
-                                  senderId: senderId,
-                                  receiverIds: _selectedGiftRecipients
-                                      .toList(growable: false),
-                                  totalCost: gift.price *
-                                      _selectedGiftRecipients.length,
-                                );
-                                widget.state.gifts.sent.insert(0, tx);
-                              }
-                            } else {
-                              tx = widget.state.gifts.send(
-                                gift: gift,
-                                quantity: 1,
-                                maxCombo: controller.config.maxGiftCombo,
-                                senderId: senderId,
-                                receiverIds: _selectedGiftRecipients
-                                    .toList(growable: false),
-                              );
-                            }
-                            if (tx == null) {
-                              _snack(
-                                giftCategory == 'Backpack'
-                                    ? 'This gift is not available in Backpack.'
-                                    : 'Gift failed, select a recipient or check balance.',
-                              );
-                              return;
-                            }
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            if (widget.state.roomControls.effectsEnabled) {
-                              widget.state.effects.enqueue(
-                                EffectRequest(
-                                  id:
-                                      'gift-${widget.state.gifts.sent.length}',
-                                  kind: EffectKind.gift,
-                                  asset: '${gift.effectKind}:${gift.id}',
-                                  priority: 50,
-                                ),
-                              );
-                            }
-                            widget.state.activities
-                                .addGiftScore(senderId, tx.totalCost);
-                            widget.state.identity
-                                .gainVipExperience(tx.totalCost ~/ 10);
-                            _snack(
-                              '${gift.name} sent to ${tx.receiverIds.length} user(s).',
-                            );
-                            setState(() {});
+                          onTap: () {
+                            setSheetState(() {
+                              selectedGift = gift;
+                            });
                           },
                           child: Column(
                             children: [
@@ -3049,12 +3833,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         ),
                                 ),
                               ),
-                              Text(
-                                gift.name,
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (selectedGift?.id == gift.id) ...[
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 13,
+                                      color: Color(0xFFFFD45A),
+                                    ),
+                                    const SizedBox(width: 3),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      gift.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: selectedGift?.id == gift.id
+                                            ? const Color(0xFFFFD45A)
+                                            : RoyalPalette.cream,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               Text(
                                 giftCategory == 'Backpack'
@@ -3075,6 +3878,104 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         );
                       },
+                    ),
+                  ),
+                  Container(
+                    key: const Key('room-gift-send-bar'),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+                    decoration: const BoxDecoration(
+                      color: RoyalPalette.nearBlack,
+                      border: Border(
+                        top: BorderSide(
+                          color: Color(0x335C4A72),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: selectedGift == null
+                              ? const Text(
+                                  'Select a gift to send',
+                                  style: TextStyle(
+                                    color: RoyalPalette.muted,
+                                    fontSize: 11,
+                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      selectedGift!.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: RoyalPalette.cream,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text(
+                                      selectedGift!.lucky
+                                          ? '🪙 ${selectedGift!.price} × $luckyQuantity'
+                                          : giftCategory == 'Backpack'
+                                              ? 'Backpack gift'
+                                              : '🪙 ${selectedGift!.price}',
+                                      style: const TextStyle(
+                                        color: RoyalPalette.gold,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 118,
+                          height: 42,
+                          child: FilledButton.icon(
+                            key: const Key('room-gift-send-button'),
+                            onPressed: selectedGift == null ||
+                                    _selectedGiftRecipients.isEmpty ||
+                                    _luckyComboSending
+                                ? null
+                                : () => sendSelectedGift(
+                                      context,
+                                      selectedGift!,
+                                    ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  const Color(0xFFFFC247),
+                              foregroundColor:
+                                  const Color(0xFF1A111F),
+                              disabledBackgroundColor:
+                                  const Color(0xFF3A3140),
+                              disabledForegroundColor:
+                                  RoyalPalette.muted,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(22),
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.send_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              selectedGift?.lucky == true &&
+                                      luckyQuantity > 1
+                                  ? 'Send ×$luckyQuantity'
+                                  : 'Send',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -3105,6 +4006,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final current = widget.state.ktv.current;
           final localSongCount = widget.state.ktv.localSongCount;
           final canAddLocalSong = widget.state.ktv.canAddLocalSong;
+          final onSeat = controller.mySeat != null;
           return SafeArea(
             key: const Key('room-music-panel'),
             child: SizedBox(
@@ -3175,10 +4077,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         if (current != null)
                           IconButton(
                             tooltip: 'Next',
-                            onPressed: () async {
-                              await widget.state.ktv.playNext();
-                              setSheetState(() {});
-                            },
+                            onPressed: onSeat
+                                ? () async {
+                                    await widget.state.ktv.playNext();
+                                    setSheetState(() {});
+                                  }
+                                : null,
                             icon: const Icon(Icons.skip_next_rounded),
                           ),
                       ],
@@ -3190,7 +4094,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const Key('room-add-music-button'),
-                        onPressed: canAddLocalSong
+                        onPressed: canAddLocalSong && onSeat
                             ? () async {
                           final file = await FilePicker.pickFile(
                             dialogTitle: 'Add Music',
@@ -3345,14 +4249,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     : const Icon(
                                         Icons.playlist_add_rounded,
                                       ),
-                                onTap: () async {
-                                  widget.state.ktv.addToQueue(song, account.userId);
-                                  if (widget.state.ktv.current == null) {
-                                    widget.state.ktv.startNext();
-                                    await widget.state.ktv.playCurrent();
-                                  }
-                                  setSheetState(() {});
-                                },
+                                onTap: onSeat
+                                    ? () async {
+                                        widget.state.ktv
+                                            .addToQueue(song, account.userId);
+                                        if (widget.state.ktv.current == null) {
+                                          widget.state.ktv.startNext();
+                                          await widget.state.ktv.playCurrent();
+                                        }
+                                        setSheetState(() {});
+                                      }
+                                    : () {
+                                        _snack(
+                                          'Join a room seat before playing music.',
+                                        );
+                                      },
                               );
                             },
                           ),
@@ -4382,6 +5293,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   const Icon(Icons.chevron_right_rounded),
                               onTap: _showSeatCountSelector,
                             ),
+                            if (_isRoomOwner)
+                              SwitchListTile(
+                                key: const Key('room-type-setting-lock'),
+                                secondary: Icon(
+                                  controls.settings.visibility ==
+                                          RoomVisibility.privateRoom
+                                      ? Icons.lock_rounded
+                                      : Icons.lock_open_rounded,
+                                  color: RoyalPalette.gold,
+                                ),
+                                title: const Text('Room Lock'),
+                                subtitle: Text(
+                                  controls.settings.visibility ==
+                                          RoomVisibility.privateRoom
+                                      ? 'Locked • password required to enter'
+                                      : 'Public • no room password',
+                                ),
+                                value: controls.settings.visibility ==
+                                    RoomVisibility.privateRoom,
+                                onChanged: (_) async {
+                                  await _toggleRoomLock();
+                                  setSheetState(() {});
+                                },
+                              ),
                             SwitchListTile(
                               title: const Text('Free mic'),
                               subtitle: const Text(
@@ -4667,17 +5602,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? 'Lock'
-            : 'Unlock',
-        controls.settings.visibility == RoomVisibility.publicRoom
-            ? Icons.lock_rounded
-            : Icons.lock_open_rounded,
-        () {
-          _toggleRoomLock();
-        },
-      ),
-      (
         'Lucky Bag',
         Icons.shopping_bag_rounded,
         () {
@@ -4691,18 +5615,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         controls.soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
         () {
           final enabled = controls.toggleSound();
-          _snack('Room sound ${enabled ? "enabled" : "muted"}.');
+          Future<void>.delayed(Duration.zero, () async {
+            try {
+              await widget.state.roomSession.setRoomSoundEnabled(enabled);
+              await widget.state.ktv.setOutputMuted(!enabled);
+              _snack('Room sound ${enabled ? "enabled" : "muted"}.');
+            } catch (error) {
+              controls.toggleSound();
+              await widget.state.ktv.setOutputMuted(enabled);
+              _snack(
+                error.toString().replaceFirst('Bad state: ', ''),
+              );
+              if (mounted) setState(() {});
+            }
+          });
         },
       ),
       (
-        controls.luckyNumberEnabled ? 'Lucky Number On' : 'Lucky Number',
+        'Lucky Number',
         Icons.confirmation_number_rounded,
         () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can set lucky number.');
-            return;
-          }
-          _showLuckyNumberDialog();
+          Future<void>.delayed(Duration.zero, () async {
+            try {
+              await widget.state.roomSession.drawLuckyNumber();
+            } catch (error) {
+              _snack(
+                error.toString().replaceFirst('Bad state: ', ''),
+              );
+            }
+          });
         },
       ),
       (
@@ -4756,6 +5697,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     ];
 
+    final visibleTools = tools.where((tool) {
+      final label = tool.$1;
+      if (!_canModerateSeats &&
+          (label == 'Room Type' || label == 'Music')) {
+        return false;
+      }
+      if (!_isRoomOwner &&
+          (label == 'Lock' ||
+              label == 'Unlock' ||
+              label == 'Public Screen' ||
+              label == 'Screen On')) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -4765,7 +5722,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(14),
           child: GridView.builder(
             shrinkWrap: true,
-            itemCount: tools.length,
+            itemCount: visibleTools.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
               childAspectRatio: 0.88,
@@ -4773,7 +5730,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               crossAxisSpacing: 6,
             ),
             itemBuilder: (_, index) {
-              final tool = tools[index];
+              final tool = visibleTools[index];
               return InkWell(
                 key: Key(
                   'room-tool-' +
@@ -5325,7 +6282,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    '🏅 ' + widget.room.id,
+                    '🏅 ' + _roomSnapshot.displayId,
                     style: const TextStyle(
                       color: Color(0xFFFFD45A),
                       fontWeight: FontWeight.w800,
@@ -5496,59 +6453,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showReferenceRoomMembers() {
     final room = _roomSnapshot;
     final ownerId = room.ownerId ?? room.id;
-    final members = widget.state.roomSession.liveMembers;
-    final admins = members
-        .where((member) => member.userId == ownerId || member.isAdmin)
-        .toList(growable: false);
-    final regularMembers = members
-        .where((member) => member.userId != ownerId && !member.isAdmin)
-        .toList(growable: false);
-
-    Widget memberTile(RoomPresenceMember member, {required bool admin}) {
-      ImageProvider? avatar;
-      final data = member.avatarDataUrl;
-      if (data != null && data.startsWith('data:image/')) {
-        try {
-          avatar = MemoryImage(base64Decode(data.split(',').last));
-        } catch (_) {
-          avatar = null;
-        }
-      }
-      return ListTile(
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFF171019),
-          backgroundImage: avatar,
-          child: avatar == null
-              ? Text(
-                  member.displayName.isEmpty
-                      ? '?'
-                      : member.displayName.characters.first.toUpperCase(),
-                  style: const TextStyle(color: RoyalPalette.cream),
-                )
-              : null,
-        ),
-        title: Text(
-          member.displayName,
-          style: const TextStyle(
-            color: RoyalPalette.cream,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          'ID ' + member.userId,
-          style: const TextStyle(color: RoyalPalette.muted),
-        ),
-        trailing: admin
-            ? Text(
-                member.userId == ownerId ? 'Owner' : 'Admin',
-                style: const TextStyle(
-                  color: Color(0xFFFFD45A),
-                  fontWeight: FontWeight.w800,
-                ),
-              )
-            : null,
-      );
-    }
+    final searchController = TextEditingController();
+    Map<String, dynamic>? searchedUser;
+    var searchBusy = false;
+    String? searchError;
 
     showModalBottomSheet<void>(
       context: context,
@@ -5559,103 +6467,442 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
       builder: (sheetContext) => DefaultTabController(
         length: 2,
-        child: SafeArea(
-          key: const Key('reference-room-members-panel'),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * 0.44,
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                const Text(
-                  'Room Members',
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final members = widget.state.roomSession.liveMembers;
+            final admins = members
+                .where(
+                  (member) =>
+                      member.userId == ownerId || member.isAdmin,
+                )
+                .toList(growable: false);
+            final regularMembers = members
+                .where(
+                  (member) =>
+                      member.userId != ownerId && !member.isAdmin,
+                )
+                .toList(growable: false);
+
+            ImageProvider? avatarFor(String? data) {
+              if (data == null || !data.startsWith('data:image/')) {
+                return null;
+              }
+              try {
+                return MemoryImage(base64Decode(data.split(',').last));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            Future<void> searchById() async {
+              final query = searchController.text.trim();
+              if (query.isEmpty) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError = 'Enter a user ID.';
+                });
+                return;
+              }
+              if (!RegExp(
+                r'^(?:\d{4,8}|[A-Za-z][A-Za-z0-9_]{2,19})$',
+              ).hasMatch(query)) {
+                setSheetState(() {
+                  searchedUser = null;
+                  searchError =
+                      'Enter a valid number ID or Owner-approved Name ID.';
+                });
+                return;
+              }
+              final account = widget.state.auth.current;
+              if (account == null) {
+                return;
+              }
+
+              setSheetState(() {
+                searchBusy = true;
+                searchedUser = null;
+                searchError = null;
+              });
+              try {
+                final result = await widget.state.backend.searchUserById(
+                  account.authToken,
+                  query,
+                );
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = result;
+                  searchBusy = false;
+                  searchError =
+                      result == null ? 'User ID not found.' : null;
+                });
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() {
+                  searchedUser = null;
+                  searchBusy = false;
+                  searchError =
+                      error.toString().replaceFirst('Bad state: ', '');
+                });
+              }
+            }
+
+            Widget memberTile(
+              RoomPresenceMember member, {
+              required bool admin,
+            }) {
+              final avatar = avatarFor(member.avatarDataUrl);
+              final isOwnerMember = member.userId == ownerId;
+              Widget? trailing;
+
+              if (isOwnerMember) {
+                trailing = const Text(
+                  'Owner',
                   style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              } else if (admin) {
+                trailing = _isRoomOwner
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Admin',
+                            style: TextStyle(
+                              color: Color(0xFFFFD45A),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          TextButton(
+                            key: Key(
+                              'room-member-remove-admin-' + member.userId,
+                            ),
+                            onPressed: () async {
+                              await _toggleRoomAdmin(member, false);
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                            child: const Text('Remove'),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Admin',
+                        style: TextStyle(
+                          color: Color(0xFFFFD45A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+              } else if (_isRoomOwner) {
+                trailing = TextButton(
+                  key: Key('room-member-add-admin-' + member.userId),
+                  onPressed: () async {
+                    await _toggleRoomAdmin(member, true);
+                    if (sheetContext.mounted) {
+                      setSheetState(() {});
+                    }
+                  },
+                  child: const Text('Add Admin'),
+                );
+              }
+
+              return ListTile(
+                key: Key(
+                  'room-member-row-' +
+                      (admin ? 'admin-' : 'member-') +
+                      member.userId,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          member.displayName.isEmpty
+                              ? '?'
+                              : member.displayName.characters.first
+                                  .toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  member.displayName,
+                  style: const TextStyle(
                     color: RoyalPalette.cream,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 10),
-                const TabBar(
-                  indicatorColor: Color(0xFFB52DFF),
-                  labelColor: RoyalPalette.cream,
-                  unselectedLabelColor: RoyalPalette.muted,
-                  tabs: [
-                    Tab(text: 'Administrator'),
-                    Tab(text: 'Members'),
-                  ],
+                subtitle: Text(
+                  'ID ' + member.userId,
+                  style: const TextStyle(color: RoyalPalette.muted),
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      admins.isEmpty
-                          ? ListView(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        const Color(0xFF171019),
-                                    backgroundImage: _roomPhotoProvider,
-                                    child: _roomPhotoProvider == null
-                                        ? const Icon(
-                                            Icons.person_rounded,
-                                            color: RoyalPalette.cream,
-                                          )
-                                        : null,
-                                  ),
-                                  title: Text(
-                                    room.ownerName ?? 'Room Owner',
-                                    style: const TextStyle(
-                                      color: RoyalPalette.cream,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'ID ' + ownerId,
-                                    style: const TextStyle(
-                                      color: RoyalPalette.muted,
-                                    ),
-                                  ),
-                                  trailing: const Text(
-                                    'Owner',
-                                    style: TextStyle(
-                                      color: Color(0xFFFFD45A),
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ListView(
-                              children: [
-                                for (final member in admins)
-                                  memberTile(member, admin: true),
-                              ],
+                trailing: trailing,
+              );
+            }
+
+            Widget ownerFallbackTile() {
+              return ListTile(
+                key: const Key('room-owner-admin-row'),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF171019),
+                  backgroundImage: _roomPhotoProvider,
+                  child: _roomPhotoProvider == null
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: RoyalPalette.cream,
+                        )
+                      : null,
+                ),
+                title: Text(
+                  room.ownerName ?? 'Room Owner',
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID ' + ownerId,
+                  style: const TextStyle(color: RoyalPalette.muted),
+                ),
+                trailing: const Text(
+                  'Owner',
+                  style: TextStyle(
+                    color: Color(0xFFFFD45A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }
+
+            Widget searchResultCard() {
+              if (searchBusy) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (searchedUser == null) {
+                return searchError == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+                        child: Text(
+                          searchError!,
+                          style: const TextStyle(
+                            color: Color(0xFFFF8A80),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+              }
+
+              final user = searchedUser!;
+              final userId = user['user_id']?.toString() ?? '';
+              final rawName = user['display_name']?.toString().trim() ?? '';
+              final displayName = rawName.isEmpty ? userId : rawName;
+              final avatar = avatarFor(user['avatar_data_url']?.toString());
+              final isOwnerResult = userId == ownerId;
+              final isAdminResult = members.any(
+                (member) => member.userId == userId && member.isAdmin,
+              );
+
+              return Container(
+                key: const Key('room-admin-search-result'),
+                margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E2038),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFB52DFF)),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF171019),
+                    backgroundImage: avatar,
+                    child: avatar == null
+                        ? Text(
+                            displayName.isEmpty
+                                ? '?'
+                                : displayName.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
                             ),
-                      regularMembers.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No members',
-                                style: TextStyle(
-                                  color: RoyalPalette.muted,
-                                ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'ID ' + userId,
+                    style: const TextStyle(color: RoyalPalette.muted),
+                  ),
+                  trailing: isOwnerResult
+                      ? const Text(
+                          'Owner',
+                          style: TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : isAdminResult
+                          ? const Text(
+                              'Admin',
+                              style: TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontWeight: FontWeight.w900,
                               ),
                             )
-                          : ListView(
-                              children: [
-                                for (final member in regularMembers)
-                                  memberTile(member, admin: false),
-                              ],
+                          : FilledButton(
+                              key: const Key('room-admin-search-add-button'),
+                              onPressed: () async {
+                                try {
+                                  await _setRoomAdminById(
+                                    userId: userId,
+                                    displayName: displayName,
+                                    enabled: true,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {
+                                      searchError = null;
+                                    });
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Add Admin'),
                             ),
-                    ],
-                  ),
                 ),
-              ],
-            ),
-          ),
+              );
+            }
+
+            final ownerIsLive =
+                admins.any((member) => member.userId == ownerId);
+
+            return SafeArea(
+              key: const Key('reference-room-members-panel'),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.54,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Room Members',
+                      style: TextStyle(
+                        color: RoyalPalette.cream,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const TabBar(
+                      indicatorColor: Color(0xFFB52DFF),
+                      labelColor: RoyalPalette.cream,
+                      unselectedLabelColor: RoyalPalette.muted,
+                      tabs: [
+                        Tab(text: 'Administrator'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (!ownerIsLive) ownerFallbackTile(),
+                              for (final member in admins)
+                                memberTile(member, admin: true),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              if (_isRoomOwner) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                  child: TextField(
+                                    key: const Key('room-admin-id-search-field'),
+                                    controller: searchController,
+                                    keyboardType: TextInputType.text,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[A-Za-z0-9_]'),
+                                      ),
+                                      LengthLimitingTextInputFormatter(20),
+                                    ],
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (_) => searchById(),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search number ID / Name ID',
+                                      hintStyle: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                      ),
+                                      prefixIcon:
+                                          const Icon(Icons.search_rounded),
+                                      suffixIcon: IconButton(
+                                        key: const Key('room-admin-id-search-button'),
+                                        onPressed:
+                                            searchBusy ? null : searchById,
+                                        icon: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFF2A2330),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                searchResultCard(),
+                              ],
+                              Expanded(
+                                child: regularMembers.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No members',
+                                          style: TextStyle(
+                                            color: RoyalPalette.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView(
+                                        children: [
+                                          for (final member in regularMembers)
+                                            memberTile(
+                                              member,
+                                              admin: false,
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
-    );
+    ).whenComplete(searchController.dispose);
   }
+
 
   Future<void> _showReferenceRoomSetup() async {
     if (!_isRoomOwner) {
@@ -5879,61 +7126,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     noticeController.dispose();
   }
 
-  Future<void> _showLuckyNumberDialog() async {
-    final controls = widget.state.roomControls;
-    final numberController = TextEditingController(
-      text: controls.luckyNumber?.toString() ?? '',
-    );
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Lucky Number'),
-        content: TextField(
-          controller: numberController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Enter lucky number', hintText: 'e.g. 777'),
-        ),
-        actions: [
-          if (controls.luckyNumberEnabled)
-            TextButton(
-              onPressed: () => Navigator.pop(context, -1),
-              child: const Text('Turn Off'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = int.tryParse(numberController.text.trim());
-              if (value == null || value < 0) return;
-              Navigator.pop(context, value);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    numberController.dispose();
-    if (result == null) return;
-    if (result == -1) {
-      if (controls.luckyNumberEnabled) controls.toggleLuckyNumber();
-      _snack('Lucky number disabled.');
-    } else {
-      controls.setLuckyNumber(result);
-      _snack('Lucky number set to $result.');
-    }
-    if (mounted) setState(() {});
-  }
   Future<void> _handleUserSeatTap(int index) async {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
-
-    if (!controller.inviteMode) {
-      final text = controller.requestOrJoinSeat(index);
-      _snack(text);
-      return;
-    }
 
     if (seat.locked) {
       _snack('Seat ' + (index + 1).toString() + ' is locked.');
@@ -5949,6 +7144,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     try {
+      if (_canModerateSeats || !controller.inviteMode) {
+        // Owner/admin always take an empty seat directly. Request mode only
+        // applies to normal users.
+        await widget.state.roomSession.takeMySeat(index);
+        _snack('Joined seat ' + (index + 1).toString() + '.');
+        if (mounted) setState(() {});
+        return;
+      }
+
       await widget.state.roomSession.requestMySeat(index);
       _snack('Request sent for Seat ' + (index + 1).toString() + '.');
     } catch (error) {
@@ -6089,187 +7293,74 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showReferenceSeatControl(int index) {
-    if (index < 0 || index >= controller.seats.length) return;
-    final initialSeat = controller.seats[index];
-    var micUp = controller.mySeat == index ||
-        (!initialSeat.occupied &&
-            controller.mySeat == null &&
-            !initialSeat.locked);
-    var lockMic = initialSeat.locked;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF241033),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          Widget choiceRow({
-            required Key key,
-            required String label,
-            required bool selected,
-            required VoidCallback onTap,
-          }) {
-            return InkWell(
-              key: key,
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(14),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? const Color(0xFF29405C)
-                      : const Color(0xFF3A2A43),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected
-                        ? const Color(0xFF7B11FF)
-                        : const Color(0xFF5B4A62),
-                    width: selected ? 1.4 : 0.8,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      color: selected
-                          ? const Color(0xFF9A14FF)
-                          : Colors.white,
-                      size: 26,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return SafeArea(
-            key: const Key('reference-seat-control-panel'),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 16, 14, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  choiceRow(
-                    key: const Key('reference-seat-mic-up'),
-                    label: 'Mic up',
-                    selected: micUp,
-                    onTap: () => setSheetState(() => micUp = !micUp),
-                  ),
-                  const SizedBox(height: 12),
-                  choiceRow(
-                    key: const Key('reference-seat-lock-mic'),
-                    label: 'Lock mic',
-                    selected: lockMic,
-                    onTap: initialSeat.occupied
-                        ? () {}
-                        : () =>
-                            setSheetState(() => lockMic = !lockMic),
-                  ),
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    width: 180,
-                    child: FilledButton(
-                      key: const Key('reference-seat-confirm'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B08FF),
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: const StadiumBorder(),
-                      ),
-                      onPressed: () async {
-                        Navigator.pop(sheetContext);
-
-                        var currentSeat = controller.seats[index];
-                        if (!currentSeat.occupied &&
-                            currentSeat.locked != lockMic) {
-                          controller.toggleSeatLock(index);
-                          currentSeat = controller.seats[index];
-                        }
-
-                        if (micUp && controller.mySeat != index) {
-                          if (controller.mySeat != null) {
-                            _snack('Leave your current seat first.');
-                          } else if (!currentSeat.occupied) {
-                            final text =
-                                controller.managerTakeSeat(index);
-                            await widget.state.roomSession
-                                .setMicFromController();
-                            _snack(text);
-                          }
-                        } else if (!micUp &&
-                            controller.mySeat == index) {
-                          await _leaveSeatAndMute();
-                        }
-
-                        if (mounted) setState(() {});
-                      },
-                      child: const Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
+    final occupant = _memberOnSeat(index);
+
+    if (occupant != null &&
+        _currentRoomRole == RoomRole.admin &&
+        !_adminCanControlSeatOccupant(occupant)) {
+      final ownerId =
+          _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+      _snack(
+        occupant.userId == ownerId
+            ? 'Admin cannot mute, lock or seat down the room owner.'
+            : 'Admin cannot control another admin seat.',
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (context) => SafeArea(
-        child: Wrap(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
           children: [
+            ListTile(
+              title: Text(
+                'Seat ' + (index + 1).toString(),
+                style: const TextStyle(
+                  color: RoyalPalette.cream,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              subtitle: Text(
+                occupant?.displayName ??
+                    (seat.occupied ? (seat.userName ?? 'Occupied') : 'Empty'),
+              ),
+            ),
             ListTile(
               key: const Key('seat-control-lock'),
               leading: ShiningIcon(
                 icon: seat.locked
                     ? Icons.lock_open_rounded
                     : Icons.lock_rounded,
-                color: seat.locked
-                    ? FeaturePalette.family
-                    : FeaturePalette.safety,
+                color: FeaturePalette.wallet,
                 size: 18,
                 boxSize: 34,
                 glow: 0.30,
               ),
               title: Text(seat.locked ? 'Seat Unlock' : 'Seat Lock'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatLock(index);
-                _snack(
-                  seat.locked
-                      ? 'Seat ${index + 1} unlocked.'
-                      : 'Seat ${index + 1} locked.',
-                );
+                final nextLocked = !seat.locked;
+                try {
+                  await widget.state.roomSession
+                      .setSeatLock(index, nextLocked);
+                  controller.setSeatLocked(index, nextLocked);
+                  _snack(
+                    nextLocked
+                        ? 'Seat ' + (index + 1).toString() + ' locked.'
+                        : 'Seat ' + (index + 1).toString() + ' unlocked.',
+                  );
+                } catch (error) {
+                  _snack(error.toString().replaceFirst('Bad state: ', ''));
+                }
               },
             ),
             ListTile(
@@ -6285,23 +7376,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 boxSize: 34,
                 glow: 0.30,
               ),
-              title: Text(
-                seat.roomMuted ? 'Seat Unmute' : 'Seat Mute',
-              ),
+              title: Text(seat.roomMuted ? 'Seat Unmute' : 'Seat Mute'),
               onTap: () async {
                 Navigator.pop(context);
-                controller.toggleSeatRoomMute(index);
-                if (controller.mySeat == index) {
-                  await widget.state.roomSession.setMicFromController();
+                final nextMuted = !seat.roomMuted;
+                try {
+                  await widget.state.roomSession
+                      .setSeatMute(index, nextMuted);
+                  controller.setSeatRoomMuted(index, nextMuted);
+                  if (controller.mySeat == index) {
+                    await widget.state.roomSession.setMicFromController();
+                  }
+                  _snack(
+                    nextMuted
+                        ? 'Seat ' + (index + 1).toString() + ' muted.'
+                        : 'Seat ' + (index + 1).toString() + ' unmuted.',
+                  );
+                } catch (error) {
+                  _snack(error.toString().replaceFirst('Bad state: ', ''));
                 }
-                _snack(
-                  seat.roomMuted
-                      ? 'Seat ${index + 1} unmuted.'
-                      : 'Seat ${index + 1} muted.',
-                );
               },
             ),
-            if (!seat.occupied && controller.mySeat == null)
+            if (!seat.occupied)
               ListTile(
                 key: const Key('seat-control-take'),
                 leading: const ShiningIcon(
@@ -6313,12 +7409,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
                 title: const Text('Take Seat'),
                 subtitle: const Text(
-                  'Owner/Admin can take the seat without Apply Mic.',
+                  'Owner/Admin can take this empty seat directly.',
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  final text = controller.managerTakeSeat(index);
-                  _snack(text);
+                  try {
+                    if (controller.mySeat != null &&
+                        controller.mySeat != index) {
+                      await _leaveSeatAndMute();
+                    }
+                    await widget.state.roomSession.takeMySeat(index);
+                    _snack('Joined seat ' + (index + 1).toString() + '.');
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    _snack(error.toString().replaceFirst('Bad state: ', ''));
+                  }
+                },
+              ),
+            if (seat.occupied &&
+                occupant != null &&
+                occupant.userId != widget.state.auth.current?.userId &&
+                (_isRoomOwner || _adminCanControlSeatOccupant(occupant)))
+              ListTile(
+                key: const Key('seat-control-down'),
+                leading: const ShiningIcon(
+                  icon: Icons.airline_seat_recline_normal_rounded,
+                  color: FeaturePalette.safety,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Seat Down'),
+                subtitle:
+                    Text(occupant.displayName + ' ko audience me bheje'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveMemberSeatDown(occupant);
                 },
               ),
             if (controller.mySeat == index)
@@ -6336,30 +7462,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   await _leaveSeatAndMute();
                 },
               ),
-            if (controller.mySeat != null && controller.mySeat != index)
-              ListTile(
-                key: const Key('seat-control-leave-current'),
-                leading: const ShiningIcon(
-                  icon: Icons.logout_rounded,
-                  color: FeaturePalette.safety,
-                  size: 18,
-                  boxSize: 34,
-                  glow: 0.30,
-                ),
-                title: const Text('Leave current seat'),
-                subtitle: Text(
-                  'Leave seat ' + (controller.mySeat! + 1).toString() + ' and go to audience.',
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _leaveSeatAndMute();
-                },
-              ),
           ],
-          ),
         ),
+      ),
     );
   }
+
 
   Widget _buildSeatRow({
     required int row,
@@ -6400,17 +7508,62 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       }
     }
+    if (presenceMember == null) {
+      final mappedUserId = widget.state.roomControls.seatUsers[index];
+      final currentUserId = widget.state.auth.current?.userId;
+      for (final member in widget.state.roomSession.liveMembers) {
+        final idMatch = mappedUserId != null && member.userId == mappedUserId;
+        final nameMatch =
+            seat.userName != null && member.displayName == seat.userName;
+        final selfMatch =
+            controller.mySeat == index && member.userId == currentUserId;
+        if (idMatch || nameMatch || selfMatch) {
+          presenceMember = member;
+          break;
+        }
+      }
+    }
+    final isMySeat = controller.mySeat == index;
+    final account = widget.state.auth.current;
     final occupied = seat.userName != null || presenceMember != null;
-    final displayName =
-        presenceMember?.displayName ?? seat.userName ?? 'Mic ${index + 1}';
+    final presenceName = presenceMember?.displayName.trim() ?? '';
+    final selfName = isMySeat ? (account?.displayName.trim() ?? '') : '';
+    final seatName = seat.userName?.trim() ?? '';
+    final displayName = presenceName.isNotEmpty
+        ? presenceName
+        : selfName.isNotEmpty
+            ? selfName
+            : (seatName.isNotEmpty && seatName != 'You')
+                ? seatName
+                : presenceMember?.userId ??
+                    (isMySeat ? account?.userId : null) ??
+                    'Mic ${index + 1}';
     final emoteUntil = presenceMember?.seatEmoteUntil;
     final seatEmote = presenceMember?.seatEmote != null &&
             emoteUntil != null &&
             emoteUntil.isAfter(DateTime.now())
         ? presenceMember!.seatEmote
         : null;
-    final avatar = _seatAvatarProvider(presenceMember);
+    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
+        ? presenceMember!.avatarDataUrl
+        : isMySeat
+            ? account?.avatarDataUrl
+            : null;
+    final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
+    final moderationMuted =
+        seat.roomMuted || (presenceMember?.moderationMuted ?? false);
+    final selfMuted = isMySeat && controller.selfMuted;
+    final selfMicOff =
+        isMySeat && controller.micState != MicState.live;
+    final isMicBlocked =
+        moderationMuted ||
+        selfMuted ||
+        selfMicOff ||
+        (presenceMember?.micMuted ?? false);
+    final showMuteIndicator = moderationMuted || selfMuted;
+    final speakingUserId =
+        presenceMember?.userId ?? (isMySeat ? account?.userId : null);
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
         .clamp(38.0, 78.0)
         .toDouble();
@@ -6420,6 +7573,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       width: labelWidth,
       child: GestureDetector(
         onTap: () {
+          if (isMySeat) {
+            _showMySeatLeavePanel();
+            return;
+          }
+          if (_canModerateSeats && !occupied) {
+            _showSeatControls(index);
+            return;
+          }
           if (occupied) {
             RoomPresenceMember? member = presenceMember;
             if (member == null) {
@@ -6441,7 +7602,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             }
           }
           if (_canModerateSeats) {
-            _showReferenceSeatControl(index);
+            _showSeatControls(index);
             return;
           }
           _handleUserSeatTap(index);
@@ -6468,12 +7629,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ? null
                         : Key('room-seat-user-dp-' + presenceMember.userId),
                     behavior: HitTestBehavior.opaque,
-                    onTap: presenceMember == null
-                        ? null
-                        : () => _showUserProfile(
-                              presenceMember!,
-                              seatIndexHint: index,
-                            ),
+                    onTap: isMySeat
+                        ? _showMySeatLeavePanel
+                        : presenceMember == null
+                            ? null
+                            : () => _showUserProfile(
+                                  presenceMember!,
+                                  seatIndexHint: index,
+                                ),
                     child: seat.locked && !occupied
                         ? Center(
                             child: Icon(
@@ -6488,10 +7651,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ],
                             ),
                           )
-                        : AnimatedAvatarFrame(
-                            size: seatDiameter,
-                            frameId: presenceMember?.equippedFrameId,
-                            child: Container(
+                        : RepaintBoundary(
+                            child: AnimatedAvatarFrame(
+                              size: seatDiameter,
+                              frameId: presenceMember?.equippedFrameId,
+                              child: Container(
                               width: seatDiameter,
                               height: seatDiameter,
                               padding: EdgeInsets.all(
@@ -6554,10 +7718,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+                        ),
                     ),
-                  if (seat.roomMuted ||
-                      (controller.mySeat == index && controller.selfMuted) ||
-                      (presenceMember?.micMuted ?? false))
+                  if (occupied && speakingUserId != null)
+                    Positioned(
+                      left: compact ? -15 : -19,
+                      bottom: compact ? -5 : -4,
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Map<String, double>>(
+                          valueListenable:
+                              widget.state.roomSession.speakingLevelsListenable,
+                          builder: (context, levels, child) {
+                            final level = levels[speakingUserId] ?? 0.0;
+                            if (isMicBlocked || level <= 0) {
+                              return const SizedBox.shrink();
+                            }
+                            return _LiveMicWaves(
+                              level: level,
+                              compact: compact,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  if (showMuteIndicator)
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -6607,38 +7791,44 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   .toDouble();
                           final scale = 0.42 +
                               Curves.easeOutBack.transform(value) * 0.74;
+                          final arc =
+                              math.sin(math.pi * value) * seatDiameter * 0.55;
+                          final perspective = Matrix4.identity()
+                            ..setEntry(3, 2, 0.0018)
+                            ..rotateY((1 - value) * 2.15)
+                            ..rotateX((1 - value) * -0.48)
+                            ..rotateZ((1 - value) * 0.72)
+                            ..scaleByDouble(scale, scale, 1.0, 1.0);
                           return Transform.translate(
                             offset: Offset(
                               (1 - value) * seatDiameter * 2.15,
-                              (1 - value) * seatDiameter * 2.8,
+                              (1 - value) * seatDiameter * 2.8 - arc,
                             ),
-                            child: Transform.rotate(
-                              angle: (1 - value) * 0.8,
-                              child: Transform.scale(
-                                scale: scale,
-                                child: Opacity(
-                                  opacity: disappear,
-                                  child: Container(
-                                    padding: EdgeInsets.all(
-                                      math.max(1.0, seatDiameter * 0.03),
-                                    ),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      boxShadow: const <BoxShadow>[
-                                        BoxShadow(
-                                          color: Color(0xAAFFB84D),
-                                          blurRadius: 13,
-                                          spreadRadius: 2,
-                                        ),
-                                        BoxShadow(
-                                          color: Color(0x887F55FF),
-                                          blurRadius: 18,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                    child: child,
+                            child: Transform(
+                              alignment: Alignment.center,
+                              transform: perspective,
+                              child: Opacity(
+                                opacity: disappear,
+                                child: Container(
+                                  padding: EdgeInsets.all(
+                                    math.max(1.0, seatDiameter * 0.03),
                                   ),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: <BoxShadow>[
+                                      BoxShadow(
+                                        color: Color(0xAAFFB84D),
+                                        blurRadius: 13,
+                                        spreadRadius: 2,
+                                      ),
+                                      BoxShadow(
+                                        color: Color(0x887F55FF),
+                                        blurRadius: 18,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  child: child,
                                 ),
                               ),
                             ),
@@ -6727,16 +7917,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ),
             SizedBox(height: compact ? 2 : 4),
-            Text(
-              occupied ? displayName : 'No.' + (index + 1).toString(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: RoyalPalette.cream,
-                fontSize: compact ? 7.5 : 9.5,
-                height: 1.0,
-                fontWeight: FontWeight.w700,
+            SizedBox(
+              key: Key('seat-user-name-' + index.toString()),
+              height: compact ? 11 : 14,
+              width: labelWidth,
+              child: Text(
+                occupied ? displayName : 'No.' + (index + 1).toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: compact ? 8.5 : 10.0,
+                  height: 1.05,
+                  fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 2),
@@ -6907,17 +8102,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: const Color(0xFF100A19),
-                    backgroundImage: _roomPhotoProvider,
-                    child: _roomPhotoProvider == null
-                        ? const Icon(
-                            Icons.meeting_room_rounded,
-                            color: Color(0xFFD7C7FF),
-                            size: 18,
-                          )
-                        : null,
+                  RepaintBoundary(
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: const Color(0xFF100A19),
+                      backgroundImage: _roomPhotoProvider,
+                      child: _roomPhotoProvider == null
+                          ? const Icon(
+                              Icons.meeting_room_rounded,
+                              color: Color(0xFFD7C7FF),
+                              size: 18,
+                            )
+                          : null,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -6936,7 +8133,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         Text(
-                          '🏅 ' + widget.room.id,
+                          '🏅 ' + _roomSnapshot.displayId,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -6981,10 +8178,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
         body: Stack(
           children: [
+            if (isEmotionRoomTheme(widget.state.roomControls.themeId))
+              Positioned.fill(
+                child: RoomEmotionBackdrop(
+                  themeId: widget.state.roomControls.themeId,
+                ),
+              ),
             Positioned.fill(
               child: Container(
           decoration: BoxDecoration(
-            color: _roomBackgroundColor,
+            color: isEmotionRoomTheme(widget.state.roomControls.themeId)
+                ? Colors.transparent
+                : _roomBackgroundColor,
             image: _roomThemeImage == null
                 ? null
                 : DecorationImage(
@@ -6994,54 +8199,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ),
           child: Column(
             children: [
-            if (widget.state.roomControls.noticesVisible)
-              Container(
-                margin: const EdgeInsets.fromLTRB(10, 2, 10, 7),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: FeaturePalette.glow(FeaturePalette.rank),
-                  border: Border.all(
-                    color: FeaturePalette.rank.withValues(alpha: 0.72),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: FeaturePalette.rank.withValues(alpha: 0.20),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  children: [
-                    ShiningIcon(
-                      icon: Icons.campaign_rounded,
-                      color: FeaturePalette.rank,
-                      size: 15,
-                      boxSize: 28,
-                      glow: 0.30,
-                    ),
-                    SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        'Welcome to Tinni Star Royal Party',
-                        style: TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '×250',
-                      style: TextStyle(
-                        color: FeaturePalette.rank,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
               child: Row(
@@ -7082,271 +8239,235 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  InkWell(
-                    key: const Key('room-online-members-button'),
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: _showReferenceRoomMembers,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A1D3B)
-                            .withValues(alpha: 0.86),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.group_rounded,
-                            color: Colors.white,
-                            size: 16,
+                  const SizedBox(width: 8),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: _roomSendingSummaryFuture,
+                    builder: (context, snapshot) {
+                      final total =
+                          (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+                      return Container(
+                        key: const Key('room-lifetime-sending'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17100A)
+                              .withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: const Color(0x66FFD45A),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.state.roomSession.liveMembers.length
-                                .toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              color: Color(0xFFFFC83D),
+                              size: 16,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _compactRoomSending(total),
+                              style: const TextStyle(
+                                color: Color(0xFFFFD45A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final currentAccount = widget.state.auth.current;
+                      final live = widget.state.roomSession.liveMembers;
+                      final ordered = <Map<String, String?>>[];
+
+                      if (currentAccount != null) {
+                        RoomPresenceMember? currentMember;
+                        for (final member in live) {
+                          if (member.userId == currentAccount.userId) {
+                            currentMember = member;
+                            break;
+                          }
+                        }
+                        ordered.add(<String, String?>{
+                          'id': currentAccount.userId,
+                          'name': currentMember?.displayName ??
+                              currentAccount.displayName,
+                          'avatar': currentMember?.avatarDataUrl ??
+                              currentAccount.avatarDataUrl,
+                        });
+                      }
+                      for (final member in live) {
+                        if (member.userId == currentAccount?.userId) continue;
+                        ordered.add(<String, String?>{
+                          'id': member.userId,
+                          'name': member.displayName,
+                          'avatar': member.avatarDataUrl,
+                        });
+                      }
+
+                      final currentAlreadyLive = currentAccount != null &&
+                          live.any(
+                            (member) => member.userId == currentAccount.userId,
+                          );
+                      final memberCount = live.length +
+                          (currentAccount != null &&
+                                  session.hasRoom &&
+                                  !currentAlreadyLive
+                              ? 1
+                              : 0);
+                      final visible = ordered.take(3).toList(growable: false);
+
+                      ImageProvider? avatarFor(String? data) {
+                        if (data == null ||
+                            !data.startsWith('data:image/')) {
+                          return null;
+                        }
+                        try {
+                          return MemoryImage(
+                            base64Decode(data.split(',').last),
+                          );
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      return InkWell(
+                        key: const Key('room-online-members-button'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _showReferenceRoomMembers,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(7, 4, 9, 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A1D3B)
+                                .withValues(alpha: 0.86),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (visible.isNotEmpty)
+                                SizedBox(
+                                  key: const Key('room-top-member-avatars'),
+                                  width: 27.0 +
+                                      (visible.length - 1) * 17.0,
+                                  height: 28,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      for (var i = 0; i < visible.length; i++)
+                                        Positioned(
+                                          left: i * 17.0,
+                                          top: 1,
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            padding:
+                                                const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color:
+                                                  const Color(0xFFFFD45A),
+                                            ),
+                                            child: GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () {
+                                                final memberId =
+                                                    visible[i]['id'];
+                                                if (memberId == null) {
+                                                  return;
+                                                }
+                                                for (final member in live) {
+                                                  if (member.userId ==
+                                                      memberId) {
+                                                    _showUserProfile(member);
+                                                    break;
+                                                  }
+                                                }
+                                              },
+                                              child: CircleAvatar(
+                                                key: Key(
+                                                  'room-top-member-dp-' +
+                                                      (visible[i]['id'] ??
+                                                          i.toString()),
+                                                ),
+                                                radius: 11,
+                                                backgroundColor:
+                                                    const Color(0xFF171019),
+                                                backgroundImage: avatarFor(
+                                                  visible[i]['avatar'],
+                                                ),
+                                                child: avatarFor(
+                                                          visible[i]['avatar'],
+                                                        ) ==
+                                                        null
+                                                    ? Text(
+                                                        ((visible[i]['name'] ??
+                                                                        '?')
+                                                                    .trim()
+                                                                    .isEmpty
+                                                                ? '?'
+                                                                : (visible[i][
+                                                                            'name'] ??
+                                                                        '?')
+                                                                    .trim()
+                                                                    .characters
+                                                                    .first)
+                                                            .toUpperCase(),
+                                                        style:
+                                                            const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w900,
+                                                        ),
+                                                      )
+                                                    : null,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.group_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              const SizedBox(width: 5),
+                              Text(
+                                memberCount.toString(),
+                                key: const Key('room-online-member-count'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
                 ],
               ),
             ),
-            SizedBox(
-              key: const Key('room-live-users'),
-              height: 126,
-              child: session.liveMembers.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Waiting for users…',
-                        style: TextStyle(
-                          color: RoyalPalette.muted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: session.liveMembers.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 9),
-                      itemBuilder: (_, index) {
-                        final member = session.liveMembers[index];
-                        final isMe =
-                            member.userId == widget.state.auth.current?.userId;
-                        final initial = member.displayName.trim().isEmpty
-                            ? '?'
-                            : member.displayName.trim().characters.first;
-                        ImageProvider? avatar;
-                        final avatarData = member.avatarDataUrl;
-                        if (avatarData != null &&
-                            avatarData.startsWith('data:image/')) {
-                          try {
-                            avatar = MemoryImage(
-                              base64Decode(avatarData.split(',').last),
-                            );
-                          } catch (_) {
-                            avatar = null;
-                          }
-                        }
-                        return Container(
-                          width: 104,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: RoyalPalette.panel.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isMe
-                                  ? FeaturePalette.family
-                                  : FeaturePalette.social
-                                      .withValues(alpha: 0.65),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isMe
-                                        ? FeaturePalette.family
-                                        : FeaturePalette.social)
-                                    .withValues(alpha: 0.18),
-                                blurRadius: 9,
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              GestureDetector(
-                                key: Key('room-live-user-dp-' + member.userId),
-                                onTap: () => _showUserProfile(member),
-                                child: CircleAvatar(
-                                  radius: 17,
-                                  backgroundColor: RoyalPalette.panel2,
-                                  backgroundImage: avatar,
-                                  child: avatar == null
-                                      ? Text(
-                                          initial.toUpperCase(),
-                                          style: TextStyle(
-                                            color: isMe
-                                                ? FeaturePalette.family
-                                                : FeaturePalette.social,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                (member.flagEmoji.isEmpty
-                                        ? ''
-                                        : member.flagEmoji + ' ') +
-                                    (isMe ? 'You' : member.displayName),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                'ID ' + member.userId,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: RoyalPalette.muted,
-                                  fontSize: 7.5,
-                                ),
-                              ),
-                              if (member.ownerTags.isNotEmpty) ...[
-                                const SizedBox(height: 3),
-                                SizedBox(
-                                  height: 15,
-                                  width: 94,
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
-                                      for (final tag in member.ownerTags)
-                                        Container(
-                                          key: Key(
-                                            'live-owner-tag-' +
-                                                member.userId +
-                                                '-' +
-                                                tag.name,
-                                          ),
-                                          margin:
-                                              const EdgeInsets.only(right: 3),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(7),
-                                            border: Border.all(
-                                              color: _ownerTagColor(
-                                                tag.colorHex,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            tag.name,
-                                            style: TextStyle(
-                                              color: _ownerTagColor(
-                                                tag.colorHex,
-                                              ),
-                                              fontSize: 6,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (member.ownerMedals.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                SizedBox(
-                                  height: 15,
-                                  width: 94,
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
-                                      for (final medal in member.ownerMedals)
-                                        Container(
-                                          key: Key(
-                                            'live-owner-medal-' +
-                                                member.userId +
-                                                '-' +
-                                                medal.name,
-                                          ),
-                                          margin:
-                                              const EdgeInsets.only(right: 3),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(7),
-                                            border: Border.all(
-                                              color: _ownerTagColor(
-                                                medal.colorHex,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.workspace_premium_rounded,
-                                                size: 7,
-                                                color: _ownerTagColor(
-                                                  medal.colorHex,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 1),
-                                              Text(
-                                                medal.name,
-                                                style: TextStyle(
-                                                  color: _ownerTagColor(
-                                                    medal.colorHex,
-                                                  ),
-                                                  fontSize: 6,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             SizedBox(
               key: const Key('tinni-seat-grid'),
               height: seatAreaHeight,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
                 child: Column(
                   children: [
                     for (var row = 0; row < seatSpec.rows; row++)
@@ -7437,7 +8558,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: MediaQuery.sizeOf(context).width * 0.28,
+                      width: MediaQuery.sizeOf(context).width * 0.22,
                       child: TextField(
                         key: const Key('room-chat-field'),
                         controller: chat,
@@ -7522,35 +8643,81 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         glow: controller.mySeat == null ? 0.08 : 0.34,
                       ),
                     ),
-                    IconButton(
-                      key: const Key('room-self-mute-button'),
-                      tooltip: controller.selfMuted ? 'Unmute self' : 'Mute self',
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(9),
-                      constraints: const BoxConstraints(minWidth: 46, minHeight: 46),
-                      onPressed: controller.mySeat == null ? null : _toggleSelfMute,
-                      icon: ShiningIcon(
-                        icon: controller.selfMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                        color: controller.mySeat == null ? RoyalPalette.muted : controller.selfMuted ? FeaturePalette.safety : FeaturePalette.family,
-                        size: 22,
-                        boxSize: 38,
-                        glow: controller.mySeat == null ? 0.08 : 0.34,
-                      ),
-                    ),
+
                     IconButton(
                       key: const Key('room-gift-button'),
                       tooltip: 'Gifts',
                       iconSize: 31,
                       padding: const EdgeInsets.all(8),
                       constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
+                        minWidth: 46,
+                        minHeight: 46,
                       ),
                       onPressed: config.giftsEnabled ? _showGiftSheet : null,
                       icon: _roomActionLogo(
                         label: 'Gift',
                         icon: Icons.card_giftcard_rounded,
-                        size: 42,
+                        size: 40,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('room-message-inbox-button'),
+                      tooltip: 'Messages',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(7),
+                      constraints: const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 46,
+                      ),
+                      onPressed: _openRoomInbox,
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _roomActionLogo(
+                            label: 'Message',
+                            icon: Icons.mark_chat_unread_rounded,
+                            size: 40,
+                          ),
+                          if (_roomUnreadMessageCount > 0)
+                            Positioned(
+                              right: -7,
+                              top: -7,
+                              child: Container(
+                                key: const Key('room-message-unread-badge'),
+                                constraints: const BoxConstraints(
+                                  minWidth: 19,
+                                  minHeight: 19,
+                                ),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 5),
+                                decoration: BoxDecoration(
+                                  color: FeaturePalette.safety,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: RoyalPalette.nearBlack,
+                                    width: 1.4,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x66FF334D),
+                                      blurRadius: 7,
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  _roomUnreadMessageCount > 99
+                                      ? '99+'
+                                      : _roomUnreadMessageCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     IconButton(
@@ -7611,10 +8778,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 shouldPlay: widget.state.roomControls.shouldPlayEffect,
               ),
             ),
+            if (_activeEntrance != null)
+              Positioned.fill(
+                key: const Key('premium-entrance-layer'),
+                child: PremiumEntranceOverlay(
+                  entryId: _activeEntrance!.equippedEntryId!,
+                  displayName: _activeEntrance!.displayName,
+                  avatarDataUrl: _activeEntrance!.avatarDataUrl,
+                  onFinished: _finishPremiumEntrance,
+                ),
+              ),
             if (_luckyComboGift != null &&
                 !_fruitJackpotOpen &&
                 !_fruitPartyOpen)
               _buildLuckyComboOverlay(),
+            if (_luckyFeed.isNotEmpty &&
+                !_fruitJackpotOpen &&
+                !_fruitPartyOpen)
+              _buildLuckyFeedOverlay(),
             if (!_fruitJackpotOpen && !_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),
@@ -7665,7 +8846,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.58,
+                height: MediaQuery.sizeOf(context).height * 0.50,
                 child: FruitJackpotPanel(
                   state: widget.state,
                   onClose: () => setState(
@@ -7678,7 +8859,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.58,
+                height: MediaQuery.sizeOf(context).height * 0.50,
                 child: FruitPartyPanel(
                   state: widget.state,
                   onClose: () => setState(
@@ -8275,4 +9456,160 @@ class _PremiumRoomToolPainter extends CustomPainter {
     tp.paint(canvas,center-Offset(tp.width/2,tp.height/2));
   }
   @override bool shouldRepaint(covariant _PremiumRoomToolPainter oldDelegate)=>oldDelegate.label!=label;
+}
+
+
+class _LiveMicWaves extends StatefulWidget {
+  const _LiveMicWaves({
+    required this.level,
+    required this.compact,
+  });
+
+  final double level;
+  final bool compact;
+
+  @override
+  State<_LiveMicWaves> createState() => _LiveMicWavesState();
+}
+
+class _LiveMicWavesState extends State<_LiveMicWaves>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 680),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.compact
+        ? const Size(28, 20)
+        : const Size(36, 24);
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => CustomPaint(
+          size: size,
+          painter: _LiveMicWavePainter(
+            level: widget.level,
+            phase: _controller.value,
+            compact: widget.compact,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveMicWavePainter extends CustomPainter {
+  const _LiveMicWavePainter({
+    required this.level,
+    required this.phase,
+    required this.compact,
+  });
+
+  final double level;
+  final double phase;
+  final bool compact;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final normalized = level.clamp(0.0, 1.0).toDouble();
+    final centerY = size.height * 0.50;
+    final micX = compact ? 6.0 : 7.0;
+    final liveColor = Color.lerp(
+      const Color(0xFFFFD76A),
+      const Color(0xFF56F2C2),
+      (0.35 + normalized * 0.65).clamp(0.0, 1.0),
+    )!;
+
+    final glowPaint = Paint()
+      ..color = liveColor.withValues(
+        alpha: (0.10 + normalized * 0.18).clamp(0.0, 0.30),
+      );
+    canvas.drawCircle(
+      Offset(micX + 1, centerY),
+      compact ? 6.5 : 8.0,
+      glowPaint,
+    );
+
+    final micPaint = Paint()
+      ..color = liveColor
+      ..style = PaintingStyle.fill;
+    final body = Rect.fromCenter(
+      center: Offset(micX, centerY - (compact ? 1.8 : 2.2)),
+      width: compact ? 3.8 : 4.8,
+      height: compact ? 7.2 : 9.0,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        body,
+        Radius.circular(compact ? 2.0 : 2.5),
+      ),
+      micPaint,
+    );
+
+    final linePaint = Paint()
+      ..color = liveColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = compact ? 1.15 : 1.45
+      ..strokeCap = StrokeCap.round;
+    final cradleRect = Rect.fromCenter(
+      center: Offset(micX, centerY),
+      width: compact ? 8.0 : 10.0,
+      height: compact ? 9.0 : 11.0,
+    );
+    canvas.drawArc(cradleRect, 0, math.pi, false, linePaint);
+    canvas.drawLine(
+      Offset(micX, centerY + (compact ? 4.4 : 5.4)),
+      Offset(micX, centerY + (compact ? 6.0 : 7.0)),
+      linePaint,
+    );
+    canvas.drawLine(
+      Offset(micX - (compact ? 2.4 : 3.0), centerY + (compact ? 6.0 : 7.0)),
+      Offset(micX + (compact ? 2.4 : 3.0), centerY + (compact ? 6.0 : 7.0)),
+      linePaint,
+    );
+
+    final waveCenter = Offset(micX + (compact ? 2.0 : 2.5), centerY - 1);
+    for (var index = 0; index < 3; index++) {
+      final radius =
+          (compact ? 5.2 : 6.6) + index * (compact ? 3.0 : 3.9);
+      final pulse = math
+          .sin((phase * math.pi * 2) - (index * 0.82))
+          .abs();
+      final opacity =
+          (0.28 + normalized * 0.50 + pulse * 0.18).clamp(0.20, 0.96);
+      final wavePaint = Paint()
+        ..color = liveColor.withValues(alpha: opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (compact ? 1.05 : 1.35) + normalized * 0.55
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(
+        Rect.fromCircle(center: waveCenter, radius: radius),
+        -math.pi / 3,
+        math.pi * 2 / 3,
+        false,
+        wavePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveMicWavePainter oldDelegate) {
+    return oldDelegate.level != level ||
+        oldDelegate.phase != phase ||
+        oldDelegate.compact != compact;
+  }
 }

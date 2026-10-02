@@ -30,6 +30,22 @@ class RoomSeatInvite {
   final DateTime createdAt;
 }
 
+class RoomLuckyNumberEvent {
+  const RoomLuckyNumberEvent({
+    required this.id,
+    required this.userId,
+    required this.displayName,
+    required this.number,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String userId;
+  final String displayName;
+  final int number;
+  final DateTime createdAt;
+}
+
 class RoomPresenceMember {
   const RoomPresenceMember({
     required this.userId,
@@ -43,10 +59,13 @@ class RoomPresenceMember {
     this.hostTag,
     this.agencyName,
     this.equippedFrameId,
+    this.equippedEntryId,
+    this.equippedProfileCardId,
     this.ownerTags = const <OwnerTag>[],
     this.ownerMedals = const <OwnerTag>[],
     this.seatIndex,
     this.micMuted = false,
+    this.moderationMuted = false,
     this.chatBanned = false,
     this.isAdmin = false,
     this.seatEmote,
@@ -62,10 +81,13 @@ class RoomPresenceMember {
   final String? hostTag;
   final String? agencyName;
   final String? equippedFrameId;
+  final String? equippedEntryId;
+  final String? equippedProfileCardId;
   final List<OwnerTag> ownerTags;
   final List<OwnerTag> ownerMedals;
   final int? seatIndex;
   final bool micMuted;
+  final bool moderationMuted;
   final bool chatBanned;
   final bool isAdmin;
   final String? seatEmote;
@@ -84,14 +106,13 @@ class RoomPresenceService extends ChangeNotifier {
 
   final Uri apiBase;
   final HttpClient _httpClient;
-
-  WebSocket? _realtimeSocket;
-  StreamSubscription<dynamic>? _realtimeSubscription;
-  Timer? _realtimeReconnectTimer;
-  Timer? _realtimeKeepAliveTimer;
-  String? _realtimeRoomId;
-  String? _realtimeAuthToken;
-  bool _realtimeClosing = false;
+  WebSocket? _liveSocket;
+  StreamSubscription<dynamic>? _liveSocketSubscription;
+  Timer? _liveReconnectTimer;
+  String? _liveRoomId;
+  String? _liveAuthToken;
+  bool _liveWanted = false;
+  bool _liveConnecting = false;
 
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
@@ -103,213 +124,173 @@ class RoomPresenceService extends ChangeNotifier {
   int? selfForcedSeatIndex;
   RoomSeatInvite? pendingSeatInvite;
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
+  final List<RoomLuckyNumberEvent> luckyNumberEvents =
+      <RoomLuckyNumberEvent>[];
   final Set<int> lockedSeats = <int>{};
+  final Set<int> mutedSeats = <int>{};
   String? lastError;
 
-  bool get realtimeConnected =>
-      _realtimeSocket?.readyState == WebSocket.open;
-
-  Future<void> connectRealtime({
+  Future<void> connectLive({
     required String roomId,
     required String authToken,
   }) async {
-    _realtimeRoomId = roomId;
-    _realtimeAuthToken = authToken;
-    _realtimeClosing = false;
-    _realtimeReconnectTimer?.cancel();
-    await _openRealtimeSocket();
+    final cleanRoomId = roomId.trim();
+    final token = authToken.trim();
+    if (cleanRoomId.isEmpty || token.isEmpty) return;
+    _liveWanted = true;
+    _liveRoomId = cleanRoomId;
+    _liveAuthToken = token;
+    await _openLiveSocket();
   }
 
-  Future<void> disconnectRealtime() async {
-    _realtimeClosing = true;
-    _realtimeReconnectTimer?.cancel();
-    _realtimeReconnectTimer = null;
-    _realtimeKeepAliveTimer?.cancel();
-    _realtimeKeepAliveTimer = null;
-
-    final subscription = _realtimeSubscription;
-    _realtimeSubscription = null;
-    if (subscription != null) {
-      try {
-        await subscription.cancel();
-      } catch (_) {}
-    }
-
-    final socket = _realtimeSocket;
-    _realtimeSocket = null;
-    if (socket != null) {
-      try {
-        await socket.close(WebSocketStatus.normalClosure, 'room_presence_close');
-      } catch (_) {}
-    }
-
-    _realtimeRoomId = null;
-    _realtimeAuthToken = null;
-  }
-
-  void syncRealtimeSeat(int? seatIndex) {
-    _sendRealtime(<String, Object?>{
-      'type': 'seat_state',
-      'seat_index': seatIndex,
-    });
-  }
-
-  Future<void> _openRealtimeSocket() async {
-    if (_realtimeClosing || realtimeConnected) return;
-    final roomId = _realtimeRoomId;
-    final authToken = _realtimeAuthToken;
-    if (roomId == null || authToken == null || authToken.isEmpty) return;
-
+  Future<void> disconnectLive() async {
+    _liveWanted = false;
+    _liveRoomId = null;
+    _liveAuthToken = null;
+    _liveReconnectTimer?.cancel();
+    _liveReconnectTimer = null;
+    final subscription = _liveSocketSubscription;
+    _liveSocketSubscription = null;
+    await subscription?.cancel();
+    final socket = _liveSocket;
+    _liveSocket = null;
     try {
-      final uri = apiBase.replace(
+      await socket?.close();
+    } catch (_) {}
+  }
+
+  Future<void> _openLiveSocket() async {
+    if (!_liveWanted || _liveConnecting) return;
+    final roomId = _liveRoomId;
+    final token = _liveAuthToken;
+    if (roomId == null || token == null) return;
+    final existing = _liveSocket;
+    if (existing != null && existing.readyState == WebSocket.open) return;
+
+    _liveConnecting = true;
+    try {
+      final socketUri = apiBase.replace(
         scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
-        path: '/room-presence/stream',
+        path: '/room-presence/live',
         queryParameters: <String, String>{'room_id': roomId},
       );
       final socket = await WebSocket.connect(
-        uri.toString(),
+        socketUri.toString(),
         headers: <String, dynamic>{
-          HttpHeaders.authorizationHeader: 'Bearer $authToken',
+          HttpHeaders.authorizationHeader: 'Bearer $token',
         },
       );
-      if (_realtimeClosing ||
-          roomId != _realtimeRoomId ||
-          authToken != _realtimeAuthToken) {
+      if (!_liveWanted ||
+          roomId != _liveRoomId ||
+          token != _liveAuthToken) {
         await socket.close();
         return;
       }
-
-      _realtimeSocket = socket;
-      socket.pingInterval = const Duration(seconds: 20);
-      _realtimeKeepAliveTimer?.cancel();
-      _realtimeKeepAliveTimer = Timer.periodic(
-        const Duration(seconds: 75),
-        (_) => _sendRealtime(
-          const <String, Object?>{'type': 'presence_keepalive'},
-        ),
+      _liveSocket = socket;
+      _liveSocketSubscription = socket.listen(
+        _handleLiveSocketData,
+        onDone: _handleLiveSocketClosed,
+        onError: (_) => _handleLiveSocketClosed(),
+        cancelOnError: true,
       );
-
-      _realtimeSubscription = socket.listen(
-        _handleRealtimeData,
-        onError: (Object error) {
-          lastError = error.toString();
-        },
-        onDone: () {
-          if (identical(_realtimeSocket, socket)) {
-            _realtimeSocket = null;
-            _realtimeKeepAliveTimer?.cancel();
-            _realtimeKeepAliveTimer = null;
-            _scheduleRealtimeReconnect();
-          }
-        },
-        cancelOnError: false,
-      );
-      _sendRealtime(
-        const <String, Object?>{'type': 'presence_keepalive'},
-      );
-    } catch (error) {
-      lastError = error.toString();
-      _realtimeSocket = null;
-      _scheduleRealtimeReconnect();
+    } catch (_) {
+      _scheduleLiveReconnect();
+    } finally {
+      _liveConnecting = false;
     }
   }
 
-  void _handleRealtimeData(dynamic raw) {
-    String text;
-    if (raw is String) {
-      text = raw;
-    } else if (raw is List<int>) {
-      text = utf8.decode(raw);
-    } else {
-      return;
-    }
-
+  void _handleLiveSocketData(dynamic raw) {
+    if (raw is! String) return;
     try {
-      final decoded = jsonDecode(text);
+      final decoded = jsonDecode(raw);
       if (decoded is! Map) return;
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
-      if (data['type'] == 'presence_error') {
-        lastError = data['error']?.toString();
-        return;
-      }
-      if (data['type'] == 'presence_state' || data['members'] is List) {
-        _apply(data);
-        connected = true;
-        lastError = null;
+      if (!data.containsKey('members')) return;
+      final before = _visibleStateSignature();
+      _apply(Map<String, dynamic>.from(data));
+      connected = true;
+      lastError = null;
+      if (before != _visibleStateSignature()) {
         notifyListeners();
       }
-    } catch (error) {
-      lastError = error.toString();
-    }
-  }
-
-  void _sendRealtime(Map<String, Object?> event) {
-    final socket = _realtimeSocket;
-    if (socket == null || socket.readyState != WebSocket.open) return;
-    try {
-      socket.add(jsonEncode(event));
     } catch (_) {}
   }
 
-  void _scheduleRealtimeReconnect() {
-    if (_realtimeClosing ||
-        _realtimeRoomId == null ||
-        _realtimeAuthToken == null) {
-      return;
-    }
-    _realtimeReconnectTimer?.cancel();
-    _realtimeReconnectTimer = Timer(
-      const Duration(seconds: 2),
-      () => _openRealtimeSocket(),
-    );
+  void _handleLiveSocketClosed() {
+    _liveSocket = null;
+    _liveSocketSubscription = null;
+    _scheduleLiveReconnect();
+  }
+
+  void _scheduleLiveReconnect() {
+    if (!_liveWanted || _liveReconnectTimer != null) return;
+    _liveReconnectTimer = Timer(const Duration(seconds: 2), () {
+      _liveReconnectTimer = null;
+      _openLiveSocket();
+    });
   }
 
   Future<void> join({
     required String roomId,
     required String authToken,
     int? seatIndex,
+    bool micEnabled = false,
     String? familyTag,
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
   }) =>
       _post(
         '/room-presence/join',
         roomId,
         authToken,
         seatIndex: seatIndex,
+        micEnabled: micEnabled,
         familyTag: familyTag,
         hostTag: hostTag,
         agencyName: agencyName,
         equippedFrameId: equippedFrameId,
+        equippedEntryId: equippedEntryId,
+        equippedProfileCardId: equippedProfileCardId,
       );
 
   Future<void> heartbeat({
     required String roomId,
     required String authToken,
     int? seatIndex,
+    bool micEnabled = false,
     String? familyTag,
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
   }) =>
       _post(
         '/room-presence/heartbeat',
         roomId,
         authToken,
         seatIndex: seatIndex,
+        micEnabled: micEnabled,
         familyTag: familyTag,
         hostTag: hostTag,
         agencyName: agencyName,
         equippedFrameId: equippedFrameId,
+        equippedEntryId: equippedEntryId,
+        equippedProfileCardId: equippedProfileCardId,
+        notifyOnlyOnVisibleChange: true,
       );
 
   Future<void> leave({
     required String roomId,
     required String authToken,
   }) async {
+    await disconnectLive();
     try {
       await _post('/room-presence/leave', roomId, authToken);
     } finally {
@@ -323,6 +304,7 @@ class RoomPresenceService extends ChangeNotifier {
       pendingSeatInvite = null;
       seatRequests.clear();
       lockedSeats.clear();
+      mutedSeats.clear();
       notifyListeners();
     }
   }
@@ -411,6 +393,30 @@ class RoomPresenceService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<RoomLuckyNumberEvent> drawLuckyNumber({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/lucky-number',
+      authToken,
+      <String, Object>{'room_id': roomId},
+    );
+    final raw = data['event'];
+    if (raw is! Map) {
+      throw StateError('Lucky number result is unavailable');
+    }
+    return RoomLuckyNumberEvent(
+      id: raw['id']?.toString() ?? '',
+      userId: raw['user_id']?.toString() ?? '',
+      displayName: raw['display_name']?.toString() ?? 'User',
+      number: _asInt(raw['number']),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        _asInt(raw['created_at']),
+      ),
+    );
+  }
+
   Future<void> setSeatLock({
     required String roomId,
     required String authToken,
@@ -422,6 +428,39 @@ class RoomPresenceService extends ChangeNotifier {
       authToken,
       <String, Object>{'room_id': roomId, 'seat_index': seatIndex, 'locked': locked},
     );
+  }
+
+  Future<void> setSeatMute({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+    required bool muted,
+  }) async {
+    await _commandPost(
+      '/room-presence/seat-mute',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'seat_index': seatIndex,
+        'muted': muted,
+      },
+    );
+  }
+
+  Future<void> takeSeat({
+    required String roomId,
+    required String authToken,
+    required int seatIndex,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/seat-take',
+      authToken,
+      <String, Object>{'room_id': roomId, 'seat_index': seatIndex},
+      applyResponse: false,
+    );
+    selfSeatForced = true;
+    selfForcedSeatIndex = _asInt(data['seat_index']);
+    notifyListeners();
   }
 
     Future<void> requestSeat({
@@ -611,6 +650,7 @@ class RoomPresenceService extends ChangeNotifier {
     required int quantity,
     required int unitPrice,
     required List<String> receiverIds,
+    String? luckySessionId,
   }) =>
       _commandPost(
         '/gifts/send',
@@ -622,9 +662,43 @@ class RoomPresenceService extends ChangeNotifier {
           'quantity': quantity,
           'unit_price': unitPrice,
           'receiver_ids': receiverIds,
+          if (luckySessionId != null && luckySessionId.isNotEmpty)
+            'lucky_session_id': luckySessionId,
         },
         applyResponse: false,
       );
+
+  Future<List<Map<String, dynamic>>> roomGiftFeed({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final request = await _httpClient.getUrl(
+      apiBase.replace(
+        path: '/gifts/room',
+        queryParameters: <String, String>{'room_id': roomId},
+      ),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load room gift feed',
+      );
+    }
+    final raw = data['gifts'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw
+        .whereType<Map>()
+        .map((row) => row.map(
+              (key, value) => MapEntry(key.toString(), value),
+            ))
+        .toList(growable: false);
+  }
 
   Future<Map<String, dynamic>> luckyGiftState({
     required String authToken,
@@ -684,10 +758,14 @@ class RoomPresenceService extends ChangeNotifier {
     String roomId,
     String authToken, {
     int? seatIndex,
+    bool micEnabled = false,
     String? familyTag,
     String? hostTag,
     String? agencyName,
     String? equippedFrameId,
+    String? equippedEntryId,
+    String? equippedProfileCardId,
+    bool notifyOnlyOnVisibleChange = false,
   }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
@@ -700,10 +778,13 @@ class RoomPresenceService extends ChangeNotifier {
         jsonEncode(<String, Object?>{
           'room_id': roomId,
           'seat_index': seatIndex,
+          'mic_enabled': micEnabled,
           'family_tag': familyTag,
           'host_tag': hostTag,
           'agency_name': agencyName,
           'equipped_frame_id': equippedFrameId,
+          'equipped_entry_id': equippedEntryId,
+          'equipped_profile_card_id': equippedProfileCardId,
         }),
       );
       final response = await request.close();
@@ -713,16 +794,80 @@ class RoomPresenceService extends ChangeNotifier {
           data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
         );
       }
+      final before = notifyOnlyOnVisibleChange
+          ? _visibleStateSignature()
+          : null;
+      final wasConnected = connected;
       _apply(data);
       connected = true;
       lastError = null;
-      notifyListeners();
+      if (!notifyOnlyOnVisibleChange ||
+          !wasConnected ||
+          before != _visibleStateSignature()) {
+        notifyListeners();
+      }
     } catch (error) {
       connected = false;
       lastError = error.toString();
       notifyListeners();
       rethrow;
     }
+  }
+
+  String _visibleStateSignature() {
+    final buffer = StringBuffer()
+      ..write(micMode)
+      ..write('|')
+      ..write(selfMicMuted)
+      ..write('|')
+      ..write(selfChatBanned)
+      ..write('|')
+      ..write(selfSeatForced)
+      ..write('|')
+      ..write(selfForcedSeatIndex)
+      ..write('|')
+      ..write(lockedSeats.join(','))
+      ..write('|')
+      ..write(mutedSeats.join(','));
+
+    for (final request in seatRequests) {
+      buffer
+        ..write('|rq:')
+        ..write(request.userId)
+        ..write(':')
+        ..write(request.seatIndex)
+        ..write(':')
+        ..write(request.createdAt.millisecondsSinceEpoch);
+    }
+
+    for (final member in members) {
+      buffer
+        ..write('|m:')
+        ..write(member.userId)
+        ..write(':')
+        ..write(member.displayName)
+        ..write(':')
+        ..write(member.avatarDataUrl ?? '')
+        ..write(':')
+        ..write(member.seatIndex)
+        ..write(':')
+        ..write(member.micMuted)
+        ..write(':')
+        ..write(member.moderationMuted)
+        ..write(':')
+        ..write(member.chatBanned)
+        ..write(':')
+        ..write(member.isAdmin)
+        ..write(':')
+        ..write(member.equippedFrameId ?? '')
+        ..write(':')
+        ..write(member.equippedEntryId ?? '')
+        ..write(':')
+        ..write(member.seatEmote ?? '')
+        ..write(':')
+        ..write(member.seatEmoteUntil?.millisecondsSinceEpoch ?? 0);
+    }
+    return buffer.toString();
   }
 
   void _apply(Map<String, dynamic> data) {
@@ -760,11 +905,45 @@ class RoomPresenceService extends ChangeNotifier {
       }
     }
 
+    if (data.containsKey('lucky_number_events')) {
+      final rawEvents = data['lucky_number_events'];
+      luckyNumberEvents
+        ..clear()
+        ..addAll(
+          rawEvents is List
+              ? rawEvents.whereType<Map>().map(
+                    (row) => RoomLuckyNumberEvent(
+                      id: row['id']?.toString() ?? '',
+                      userId: row['user_id']?.toString() ?? '',
+                      displayName:
+                          row['display_name']?.toString() ?? 'User',
+                      number: _asInt(row['number']),
+                      createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        _asInt(row['created_at']),
+                      ),
+                    ),
+                  ).where(
+                    (event) =>
+                        event.id.isNotEmpty &&
+                        event.number >= 1 &&
+                        event.number <= 100,
+                  )
+              : const <RoomLuckyNumberEvent>[],
+        );
+    }
+
     if (data.containsKey('locked_seats')) {
       final rawLocked = data['locked_seats'];
       lockedSeats
         ..clear()
         ..addAll(rawLocked is List ? rawLocked.map(_asInt) : const <int>[]);
+    }
+
+    if (data.containsKey('muted_seats')) {
+      final rawMuted = data['muted_seats'];
+      mutedSeats
+        ..clear()
+        ..addAll(rawMuted is List ? rawMuted.map(_asInt) : const <int>[]);
     }
 
     if (data.containsKey('seat_requests')) {
@@ -805,6 +984,8 @@ class RoomPresenceService extends ChangeNotifier {
                 hostTag: row['host_tag']?.toString(),
                 agencyName: row['agency_name']?.toString(),
                 equippedFrameId: row['equipped_frame_id']?.toString(),
+                equippedEntryId: row['equipped_entry_id']?.toString(),
+                equippedProfileCardId: row['equipped_profile_card_id']?.toString(),
                 ownerTags: row['owner_tags'] is List
                     ? (row['owner_tags'] as List)
                         .whereType<Map>()
@@ -823,6 +1004,7 @@ class RoomPresenceService extends ChangeNotifier {
                     ? null
                     : _asInt(row['seat_index']),
                 micMuted: row['mic_muted'] == true,
+                moderationMuted: row['moderation_muted'] == true,
                 chatBanned: row['chat_banned'] == true,
                 isAdmin: row['is_admin'] == true,
                 seatEmote: row['seat_emote']?.toString(),
@@ -867,12 +1049,10 @@ class RoomPresenceService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _realtimeClosing = true;
-    _realtimeReconnectTimer?.cancel();
-    _realtimeKeepAliveTimer?.cancel();
-    _realtimeSubscription?.cancel();
+    _liveReconnectTimer?.cancel();
+    _liveSocketSubscription?.cancel();
     try {
-      _realtimeSocket?.close();
+      _liveSocket?.close();
     } catch (_) {}
     _httpClient.close(force: true);
     super.dispose();

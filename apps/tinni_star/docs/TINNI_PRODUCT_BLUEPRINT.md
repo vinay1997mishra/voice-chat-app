@@ -174,23 +174,267 @@ The gift panel contains a **horizontally swipeable recipient strip**.
   - other event-related reminders
 - Event/reward notification campaigns may send up to 15 event-related notifications per day per user when applicable.
 
-## 8. Mine (profile)
+## 8. Mine / Me (personal profile) — REFERENCE VIDEO LOCKED
 
-This is the user's personal profile screen, separate from Party > Mine.
+This is the user's **bottom-navigation personal Mine/Me page**. It is separate from **Party > Mine**, which remains the room-oriented area.
 
-Contains:
+### 8.1 Visual target
 
-- Profile identity
-- Public ID
-- VIP/Noble badges
-- Coins
-- Diamonds (Host-only; hidden for non-Hosts)
-- VIP
-- Gifts
-- Family
-- More/settings
+The supplied reference videos are the visual target for this page. The final Tinni Star implementation must match the reference flow as closely as practical, including:
 
-Games and CP are intentionally not placed in Mine. Games open only from the Room Game Panel, and CP opens from its dedicated CP entry/panel.
+- the same vertical information order;
+- compact top profile identity block;
+- card proportions and row heights;
+- icon placement;
+- spacing and grouping;
+- text hierarchy;
+- VIP / Wealth card placement;
+- list-chevron behavior;
+- light profile-page background treatment;
+- reference-style gold/yellow accent treatment.
+
+Do not replace the reference layout with an unrelated generic settings/profile design. Functional labels listed below stay exactly as written unless the user explicitly changes them.
+
+### 8.2 Top profile identity block
+
+The top area contains:
+
+- Profile DP/avatar, including equipped profile frame.
+- Display name.
+- Country flag.
+- Public **UID**.
+- User level badge.
+- Family tag + Family level when the user belongs to a Family.
+- Identity/VIP badge area where applicable.
+
+Below the identity row, show live account statistics:
+
+- **Follow** — real following count.
+- **Fans** — real follower count.
+- **Charm** — real lifetime received-gift value / Charm source.
+
+These values must come from account/backend data and must not be hard-coded demo numbers.
+
+### 8.3 Wallet / VIP / Wealth cards
+
+Immediately below the account stats:
+
+- **Wallet**
+  - shows the user's current normal-wallet Coin balance;
+  - opens the existing Wallet/Recharge surface;
+  - must not mint or fabricate coins locally.
+- **VIP**
+  - shows current VIP state/level;
+  - opens the real VIP page.
+- **Wealth level**
+  - shows the current Wealth level;
+  - opens a dedicated Wealth Level page;
+  - Wealth progress is based on the user's **real lifetime gift sending**;
+  - level thresholds are data-driven and configurable from the Owner Panel;
+  - the screen shows current level, lifetime sending and next configured threshold.
+
+Charm and Wealth are separate concepts:
+- **Wealth** = lifetime eligible gift sending.
+- **Charm** = lifetime eligible gift receiving.
+
+The backend is authoritative for both totals and resulting levels.
+
+### 8.4 Mine menu — exact order
+
+The Mine menu order is locked to:
+
+1. **Medal of Honor**
+2. **Custom Center**
+3. **Shop**
+4. **Props**
+5. **Reward Records**
+6. **Task**
+7. **Host data**
+8. **Family**
+9. **CP Nest**
+10. **Feedback**
+11. **Setting**
+
+Do not silently remove, rename, duplicate or reorder these entries.
+
+### 8.5 Medal of Honor
+
+- Opens a real Medal of Honor page.
+- Loads the user's active medals from backend/account identity data.
+- Shows medal name and visual identity.
+- Empty state is **No medals yet**, not a fake medal list.
+- Owner-created/configured medals remain data-driven.
+
+### 8.6 Custom Center
+
+- Opens the existing personalization/customization center.
+- This is the entry for profile/custom visual configuration supported by Tinni Star.
+- It must not be a dead or placeholder tile.
+
+### 8.7 Shop
+
+- Opens the real Tinni Star Store.
+- Store catalog remains data-driven.
+- Reference-video behavior to preserve:
+  - category-based browsing;
+  - item cards;
+  - item price;
+  - duration/permanent status;
+  - item preview;
+  - Purchase/Send behavior where that catalog type supports it.
+- Cosmetic/content catalog may include vehicle/entry effects, profile/card items, frames/rings, bubbles and future Owner Panel-configured catalog types.
+
+### 8.8 Props
+
+- Opens the user's owned Props/Inventory surface, not the Shop placeholder.
+- Loads actual owned entitlements/inventory.
+- Shows item name/type and owned state.
+- Equippable props such as frames support **Use / Using** state through backend inventory/equip authority.
+- Future prop types must use the same entitlement model rather than creating duplicate local-only inventories.
+
+### 8.9 Reward Records
+
+- Opens real reward/wallet history.
+- Reads server wallet/reward transactions.
+- Shows transaction title/note, date/time and Coin/Diamond delta.
+- Positive and negative records are visually distinguishable.
+- No fabricated local history may be shown.
+
+### 8.10 Task
+
+- Opens the real Task page.
+- Task completion is derived from server-visible account activity.
+- Task examples may include:
+  - Complete your profile;
+  - Follow 1 user;
+  - Enter a Party room;
+  - Send your first gift;
+  - Join a Family.
+- Completed tasks can claim the configured Coin reward once.
+- Claiming is server-authoritative, writes the reward transaction and updates the wallet.
+- A claimed task cannot be claimed again.
+- Task definitions/rewards should remain extensible and Owner Panel-configurable as the production task system expands.
+
+### 8.11 Host data
+
+**Host data** must be a real role/settlement page, not an information placeholder.
+
+It shows applicable real account data:
+
+- current role: Host / Agency / BD / Not enrolled;
+- Host Diamond balance where applicable;
+- Diamond reference value;
+- Agency/BD commission balance where applicable;
+- withdrawable/transferable settlement value;
+- settlement transfer action when the account is eligible;
+- settlement transfer history;
+- recipient ID / role / amount / timestamp for completed transfers.
+
+Host/Agency/BD eligibility, balances, conversion rules and settlement authority stay server-side.
+
+### 8.12 Family
+
+- Opens the existing Family surface.
+- If the user belongs to a Family, open the Family home.
+- If the user has no Family, open the Family discovery/ranking/join path.
+- Family tag/level on Mine must stay synchronized with the same Family account state.
+
+### 8.13 CP Nest
+
+- **CP Nest stays in Mine** as its own personal CP entry.
+- It opens the real CP panel/screen.
+- CP Request / Accept / Disconnect, CP Level, Intimacy, Memories and other personal CP functions live in the CP system.
+- Public CP Ranking/Events may still appear in Party/Home where defined.
+- Games do **not** move into Mine.
+
+### 8.14 Feedback
+
+- Opens a real Feedback page.
+- User can select a category and submit a text report/request.
+- Supported categories include General, Bug, Account, Room, Payment and Safety.
+- Submitted feedback is stored server-side with status and timestamp.
+- The user can view their own feedback history.
+- Privacy/contact requests may use this Feedback route until an official Tinni Star legal/support contact is configured.
+
+### 8.15 Setting — exact order
+
+**Setting** opens a dedicated page with this exact order:
+
+1. **Message notification**
+2. **Bind account**
+3. **Language settings**
+4. **About Tinni Star**
+5. **Feedback**
+6. **Blocklist**
+7. **Privacy statement**
+8. **Sign out**
+
+All entries must be actionable; this page must not contain dead placeholder rows.
+
+#### Message notification
+
+Persist account notification preferences for:
+
+- **Voice**
+- **Vibration**
+- **Only receive floating screen in the room**
+
+The preference must survive app restart/account reload and be available to the notification layer.
+
+#### Bind account
+
+- Shows identities already linked to the current Tinni account.
+- Google binding uses a verified Google ID token and must reject an identity already owned by another Tinni account.
+- Email binding uses:
+  - email/Gmail address;
+  - email OTP verification;
+  - a Tinni password of 8–128 characters;
+  - duplicate-account protection.
+- Binding adds a login identity to the **same Tinni user ID**; it must not silently create a second user.
+- Facebook must not be shown as an active binding option unless Facebook login is deliberately re-enabled in the product.
+
+#### Language settings
+
+- Saves the user's Tinni Star language preference to the account.
+- Supported choices currently include **English, Hindi and Urdu**.
+- The selected preference must be used by localized screens as translations are implemented; it is not a device-only temporary toggle.
+
+#### About Tinni Star
+
+Shows Tinni Star product identity and current app version/build information. The page describes Tinni Star as the social live voice-room app, not another product.
+
+#### Blocklist
+
+- Loads the user's real server-side blocked-user list.
+- Shows user identity.
+- **Move out / Unblock** removes that block through the backend.
+- Blocklist state must remain synchronized with messaging/room social safety behavior.
+
+#### Privacy statement
+
+Opens the real **Service Agreement & Privacy Policy** page described in the Privacy section of this blueprint. It must never be a blank placeholder.
+
+#### Sign out
+
+- Requires user confirmation.
+- Revokes/logs out the session when network is available.
+- Leaves/closes the active room session cleanly.
+- Unregisters push for the signed-out account.
+- Clears persisted local auth/profile state.
+- Returns to the Login screen and prevents the previous authenticated Mine page from remaining in the navigation stack.
+
+### 8.16 No-placeholder rule
+
+For the Mine/Me flow, these are not acceptable final behaviors:
+
+- No content yet for a function that is defined above;
+- generic snackbars in place of the actual feature;
+- a menu row that opens an unrelated page;
+- hard-coded Follow/Fans/Charm/Wealth data;
+- local-only fake reward/transaction history;
+- local-only wallet mutation.
+
+Every listed Mine entry must either open its real feature or show a truthful empty state backed by the real data source.
 
 ## 9. Games
 
@@ -360,50 +604,25 @@ Shine rule:
 - Gold remains appropriate for brand headings, royal framing, premium rank/crown contexts and the black/gold page shell.
 
 
-### Lucky / Rebate Gift system — video reference LOCKED
+## Tinni Star Privacy & Service Agreement
 
-Tinni Star includes a server-authoritative **Lucky / Rebate Gift** category inside the room Gift panel.
-
-- Lucky gifts use the same selected recipient(s) as normal room gifts, but the rebate outcome is calculated only by the Worker/backend.
-- After the first Lucky gift is sent, a persistent **Combo** control keeps the same gift and recipient selection so the sender can continue sending without reopening the Gift sheet.
-- The Combo surface shows two different counters: the cumulative **send count** (for example ×11 / ×30 / ×55) and cumulative **coins won/returned** (for example +140 / +840). The send count must never be confused with the rebate multiplier.
-- A successful send immediately synchronizes the sender wallet from the authoritative server response. Returned coins are available for the next Combo send immediately.
-- Insufficient balance stops the send; no client-side negative balance or speculative credit is allowed.
-- The gift visually flies into the selected receiver's seat/Profile DP and disappears. A short floating multiplier bubble rises above that DP and fades out.
-- Common visible multiplier bubbles include **5×, 7×, 9×, 10×, 20× and 22×**. 30× / 50× / 100× are less common. **200× and above are rare**, with 250× / 500× / 750× / 1000× increasingly rare.
-- Maximum supported rebate is **1000×**. Default server weights are data-driven and can be changed centrally; the APK never chooses or overrides the result.
-- **200×+** results qualify for a stronger room/country big-win ribbon. Country targeting and the existing LP-first / game-next ribbon rules remain intact.
-- Every Lucky send can contribute an Owner-configurable percentage to the **Real-time Prize Pool**.
-- The Gift panel exposes a Lucky Prize Pool / **Lucky Day Ranking** view showing the real-time pool, today's ranked senders, total returned coins and highest multiplier.
-- The reference daily Top-3 shares shown in the supplied video are **50% / 25% / 15%**. The remaining 10% is not auto-assigned by this blueprint until the Owner defines that rule.
-- For a Lucky/Rebate gift sent to an active Host, the default Host diamond value is **10% of the normal gift value**. This percentage is Owner-configurable.
-- Lucky/Rebate gifts carry the reference **10% normal Charm/Wealth contribution rule** when the corresponding production social-stat counters are active.
-- All debits, rebates, Host reward, pool contribution, ranking totals and high-win ribbons are server-authoritative and auditable. The wallet anti-tamper expected-balance guard is updated together with an authorized rebate credit.
-- Owner Panel can create/edit Lucky gifts, including price, Lucky enable/disable, emoji/asset, maximum multiplier, high-win threshold, Host reward %, Charm/Wealth %, prize-pool %, schedule and country targeting.
-
-Built-in colorful test Lucky gifts:
-
-1. Colorful Rose — 20 Coins
-2. Rainbow Heart — 50 Coins
-3. Magic Balloon — 100 Coins
-4. Candy Star — 200 Coins
-5. Neon Butterfly — 500 Coins
-6. Sparkle Crown — 1,000 Coins
-7. Dream Cake — 2,000 Coins
-8. Galaxy Ring — 5,000 Coins
-9. Shining Unicorn — 10,000 Coins
-10. Royal Treasure Box — 20,000 Coins
-
-These ten gifts are testable from the room Gift panel's **Lucky** category and are seeded into the backend Owner gift catalog without overwriting later Owner edits.
+- Mine → Setting must contain **Privacy statement**.
+- Privacy statement opens a real in-app page titled **Service Agreement & Privacy Policy**; it must not be a placeholder.
+- The page has two switchable sections: **Service Agreement** and **Privacy Policy**.
+- Privacy Policy must be written specifically for Tinni Star and cover account/profile data, rooms/chat/calls, verification material, device/diagnostic data, wallet/gift/purchase records, public profile visibility, service providers, retention, security, device permissions, user privacy choices/rights, age requirements, international processing, policy updates and in-app privacy contact.
+- Service Agreement must cover account responsibility, rooms/chat/calls, virtual items/balances, purchases/refunds, safety/moderation, service availability, privacy-policy linkage, agreement updates and support contact.
+- Do not publish invented legal contact information. Until an official legal/support email is configured, privacy/contact requests route through **Mine → Feedback**.
+- Current policy effective date: **30 September 2026**. Any material future policy change must update the displayed effective date and the policy text.
 
 
-### Lucky Gift 3D artwork & send animation — LOCKED
+### Family reference coin-scale rule — LOCKED
 
-- All 10 built-in Lucky Gifts use bundled full-colour transparent 3D artwork assets instead of emoji placeholders.
-- The room Gift panel renders each Lucky Gift's own artwork, and the Combo surface reuses the same artwork.
-- On send, the selected gift performs a 3D-style fly-in toward the selected receiver seat/DP using translation, rotation, scale/depth and glow.
-- At DP impact, the gift pops with an expanding luminous ring, gold/rainbow sparkle particles, star bursts and a short artwork impact pop.
-- The Lucky multiplier floats above the receiver DP and fades upward; 200×+ uses stronger gold/orange high-win styling.
-- The client never selects the Lucky multiplier. Wallet debit, rebate credit and multiplier remain server-authoritative.
-- Backend catalog metadata stores artwork_asset, send_effect=fly_3d, impact_effect=sparkle_pop and multiplier_effect=float_multiplier for the built-in Lucky Gifts.
-- Existing Owner gift price/probability configuration is preserved when the new visual metadata is migrated.
+- The supplied Family reference uses a smaller coin denomination than Tinni Star.
+- **20,000 reference coins = 2,000,000 Tinni coins.**
+- Therefore every **coin-based Family progression / Family level / contribution target** copied from that reference is converted at **100×** into Tinni Star coins.
+- Example conversions: 20K → 2M, 50K → 5M, 100K → 10M, 500K → 50M, 1M → 100M.
+- The 100× conversion applies only to coin-denominated Family values. It does **not** multiply percentages, member limits, role counts, dates, durations or other non-coin values.
+- If a source screenshot value is not legible, do not invent it. Keep the last explicitly locked Tinni threshold until the exact reference value is confirmed.
+- Family Wallet transfer rule remains: **sender gets no Family EXP; receiver gives the Family 1 EXP per 1 Tinni coin received**.
+- Daily Family check-in also adds the configured Family EXP once per day.
+- Monthly Family Wallet bonus remains **L1 1.00% + 0.25 percentage point per level**, capped by the locked Family level rules.

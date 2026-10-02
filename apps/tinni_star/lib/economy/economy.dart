@@ -287,12 +287,20 @@ class StoreItem {
     required this.name,
     required this.price,
     required this.type,
+    this.kind = '',
+    this.durationDays = 0,
+    this.assetUrl = '',
   });
 
   final String id;
   final String name;
   final int price;
   final String type;
+  final String kind;
+  final int durationDays;
+  final String assetUrl;
+
+  bool get permanent => durationDays <= 0;
 }
 
 class InventoryService {
@@ -300,38 +308,81 @@ class InventoryService {
 
   final WalletService wallet;
   final Set<String> owned = <String>{};
+  final Map<String, Map<String, dynamic>> ownedDetails =
+      <String, Map<String, dynamic>>{};
+  final Map<String, String?> equippedByKind = <String, String?>{};
   String? equippedFrameId;
 
   void applyRemote(Map<String, dynamic> data) {
     final rawOwned = data['owned'];
+    final rows = rawOwned is List
+        ? rawOwned
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false)
+        : const <Map<String, dynamic>>[];
+
     owned
       ..clear()
       ..addAll(
-        rawOwned is List
-            ? rawOwned
-                .whereType<Map>()
-                .map((row) => row['item_id']?.toString() ?? '')
-                .where((id) => id.isNotEmpty)
-            : const <String>[],
+        rows
+            .map((row) => row['item_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty),
       );
-    final remoteFrame = data['equipped_frame_id']?.toString();
-    equippedFrameId =
-        remoteFrame != null && remoteFrame.isNotEmpty && owned.contains(remoteFrame)
-            ? remoteFrame
-            : null;
+    ownedDetails
+      ..clear()
+      ..addEntries(
+        rows.map((row) {
+          final id = row['item_id']?.toString() ?? '';
+          return MapEntry(id, row);
+        }).where((entry) => entry.key.isNotEmpty),
+      );
+
+    equippedByKind
+      ..clear()
+      ..addAll(<String, String?>{
+        'frame': _validEquipped(data['equipped_frame_id']),
+        'vehicle': _validEquipped(data['equipped_vehicle_id']),
+        'entry': _validEquipped(data['equipped_entry_id']),
+        'profile_card': _validEquipped(data['equipped_profile_card_id']),
+        'ring': _validEquipped(data['equipped_ring_id']),
+        'bubble': _validEquipped(data['equipped_bubble_id']),
+        'profile_background':
+            _validEquipped(data['equipped_profile_background_id']),
+      });
+    equippedFrameId = equippedByKind['frame'];
+  }
+
+  String? _validEquipped(dynamic value) {
+    final id = value?.toString() ?? '';
+    return id.isNotEmpty && owned.contains(id) ? id : null;
   }
 
   bool get hasEquippedFrame =>
       equippedFrameId != null && owned.contains(equippedFrameId);
 
+  String? equipped(String kind) => equippedByKind[kind];
+
+  bool isEquipped(String kind, String itemId) =>
+      equippedByKind[kind] == itemId;
+
+  void applyEquipped(String kind, String? itemId) {
+    final normalized =
+        itemId != null && itemId.isNotEmpty && owned.contains(itemId)
+            ? itemId
+            : null;
+    equippedByKind[kind] = normalized;
+    if (kind == 'frame') equippedFrameId = normalized;
+  }
+
   bool equipFrame(String frameId) {
     if (!owned.contains(frameId)) return false;
-    equippedFrameId = frameId;
+    applyEquipped('frame', frameId);
     return true;
   }
 
   void removeFrame() {
-    equippedFrameId = null;
+    applyEquipped('frame', null);
   }
 
   bool purchase(StoreItem item) {
