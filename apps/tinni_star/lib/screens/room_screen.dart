@@ -3940,43 +3940,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: Row(
                       children: [
                         Expanded(
-                          child: selectedGift == null
-                              ? const Text(
-                                  'Select a gift to send',
-                                  style: TextStyle(
-                                    color: RoyalPalette.muted,
-                                    fontSize: 11,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.monetization_on_rounded,
+                                    color: Color(0xFFFFD45A),
+                                    size: 15,
                                   ),
-                                )
-                              : Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      selectedGift!.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: RoyalPalette.cream,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    widget.state.wallet.coins.toString(),
+                                    key: const Key('room-gift-wallet-coins'),
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFD45A),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
                                     ),
-                                    Text(
-                                      selectedGift!.lucky
-                                          ? '🪙 ${selectedGift!.price} × $luckyQuantity'
+                                  ),
+                                ],
+                              ),
+                              if (selectedGift != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedGift!.name +
+                                      (selectedGift!.lucky
+                                          ? ' • 🪙 ${selectedGift!.price} × $luckyQuantity'
                                           : giftCategory == 'Backpack'
-                                              ? 'Backpack gift'
-                                              : '🪙 ${selectedGift!.price}',
-                                      style: const TextStyle(
-                                        color: RoyalPalette.gold,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
+                                              ? ' • Backpack gift'
+                                              : ' • 🪙 ${selectedGift!.price}'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: RoyalPalette.cream,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(width: 10),
                         SizedBox(
