@@ -52,6 +52,7 @@ class ActiveRoomSession extends ChangeNotifier {
   Timer? _presenceTimer;
   String? _activeAuthToken;
   bool _roomSoundEnabled = true;
+  bool _moderationForcedMicOff = false;
   final Set<String> _seenLuckyNumberEventIds = <String>{};
 
   List<RoomPresenceMember> get liveMembers =>
@@ -136,6 +137,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
     room = nextRoom;
     _roomSoundEnabled = true;
+    _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
     controller = RoomController(
       runtime: runtime,
@@ -499,6 +501,7 @@ class ActiveRoomSession extends ChangeNotifier {
     connecting = false;
     connected = false;
     connectionError = null;
+    _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
 
     oldController?.removeListener(_onRoomChanged);
@@ -589,6 +592,7 @@ class ActiveRoomSession extends ChangeNotifier {
     presence.selfForcedSeatIndex = null;
 
     if (previousSeat != null && forcedSeat == null) {
+      _moderationForcedMicOff = false;
       await onSeatForcedDown?.call();
     }
 
@@ -597,15 +601,31 @@ class ActiveRoomSession extends ChangeNotifier {
     }
   }
 
-    Future<void> _enforceModerationMute() async {
+  Future<void> _enforceModerationMute() async {
     final roomController = controller;
     if (roomController == null || !connected) return;
-    if (!presence.selfMicMuted) return;
 
-    roomController.forceMicMuted();
-    if (realtime.rtc.publishingMic) {
-      await realtime.setMic(false);
+    if (presence.selfMicMuted) {
+      if (roomController.micState == MicState.live &&
+          !roomController.selfMuted) {
+        _moderationForcedMicOff = true;
+      }
+      roomController.forceMicMuted();
+      if (realtime.rtc.publishingMic) {
+        await realtime.setMic(false);
+      }
+      return;
     }
+
+    if (!_moderationForcedMicOff) return;
+    _moderationForcedMicOff = false;
+
+    if (roomController.mySeat == null || roomController.selfMuted) {
+      return;
+    }
+
+    roomController.restoreMicAfterModeration();
+    await realtime.setMic(roomController.micState == MicState.live);
   }
 
     Future<void> _stopPresence({
