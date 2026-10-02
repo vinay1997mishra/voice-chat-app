@@ -3489,7 +3489,14 @@ export default {
       const directory = getAppDirectoryStore(env);
       const tags = await directory.listUserTags(requestedId);
       const medals = await directory.listUserMedals(requestedId);
-      return json({ ok: true, user_id: requestedId, tags, medals });
+      const identityTags = await directory.listUserIdentityTags(requestedId);
+      return json({
+        ok: true,
+        user_id: requestedId,
+        tags,
+        medals,
+        identity_tags: identityTags,
+      });
     }
 
     if (url.pathname === "/room-events" && request.method === "POST") {
@@ -4700,6 +4707,48 @@ export default {
       return json({ ok: true, users });
     }
 
+    if (url.pathname === "/api/owner/officials" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      return json({
+        ok: true,
+        officials: await getAppDirectoryStore(env).listOfficials(),
+      });
+    }
+
+    if (url.pathname === "/api/owner/user-detail" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
+      const directory = getAppDirectoryStore(env);
+      const detail = await directory.ownerUserDetail(userId);
+      if (!detail) return json({ ok: false, error: "User not found" }, 404);
+
+      let current_room = null;
+      const roomId = String(detail.presence?.room_id || "").trim();
+      if (roomId && detail.presence?.room_socket_connected === true) {
+        const room = await directory.findRoomByExactId(roomId);
+        const presenceState = await getRoomPresenceStore(env, roomId).state();
+        const member = Array.isArray(presenceState?.members)
+          ? presenceState.members.find(
+              (item) => String(item?.user_id || "") === String(detail.user?.user_id || ""),
+            )
+          : null;
+        current_room = {
+          room_id: roomId,
+          room_name: String(room?.title || roomId),
+          seat_index: member?.seat_index ?? null,
+          mic_muted: member?.mic_muted === true,
+          online: Boolean(member),
+        };
+      }
+
+      return json({ ok: true, detail: { ...detail, current_room } });
+    }
+
     if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
       if (!ownerOnly(session)) {
         return json({ ok: false, error: "Owner access required" }, 403);
@@ -4747,6 +4796,11 @@ export default {
           body.user_ids,
           body.name,
           body.color,
+          {
+            kind: body.kind,
+            designation: body.designation,
+            background_color: body.background_color,
+          },
         );
         await writeAudit(
           env,
@@ -4754,7 +4808,14 @@ export default {
           "user.tag.apply",
           "users",
           Array.isArray(body.user_ids) ? body.user_ids.join(",") : "",
-          { name: result.name, color: result.color, tagged: result.tagged },
+          {
+            name: result.name,
+            color: result.color,
+            kind: result.kind,
+            designation: result.designation,
+            background_color: result.background_color,
+            tagged: result.tagged,
+          },
         );
         return json(result);
       } catch (error) {
