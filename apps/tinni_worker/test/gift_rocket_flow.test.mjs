@@ -104,18 +104,13 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /if \(selected\) \{[\s\S]{0,220}_selectedGiftRecipients\.remove\(recipient\.\$1\)[\s\S]{0,180}\} else \{[\s\S]{0,120}_selectedGiftRecipients\.add\(recipient\.\$1\)/,
-  "Gift panel must support toggling multiple real recipient DPs without clearing prior selections",
+  /_selectedGiftRecipients\s*\.\.clear\(\)\s*\.\.add\(recipient\.\$1\);/,
+  "Tapping a recipient DP must replace the previous recipient so only that selected user receives the gift",
 );
-assert.doesNotMatch(
-  roomScreen,
-  /Exactly one DP is the gift target/,
-  "Gift recipient selection must not regress to single-select",
-);
-assert.doesNotMatch(
+assert.match(
   roomScreen,
   /Gift sending is single-target/,
-  "Reopening the gift panel must preserve the full selected-recipient set",
+  "Reopening the gift panel must collapse stale recipient selections to one target",
 );
 assert.match(
   roomScreen,
