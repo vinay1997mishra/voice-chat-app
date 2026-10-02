@@ -205,11 +205,16 @@ Gift panel:
 
 - Bottom **Mine must not show Props** as a menu option.
 - Bottom **Mine must not show Personal information / Profile Information** as a separate menu option. Profile editing remains available from the actual profile/edit flow, not as a duplicate Mine menu row.
+- Bottom **Mine must not show Custom Center**.
+- Bottom **Mine must not show Reward Records**.
+- Public Profile **About me must not show My medal**.
+- Keep a **permanent reserved tag space directly below the UID / ID area** so official/role/custom tags can appear without moving the rest of the profile layout.
 - Long-pressing the visible **UID / ID number** on Mine, self profile, or Personal information copies the exact ID to the clipboard.
-- After the long-press copy, a **floating confirmation** must appear saying **"ID copy ho gaya"**.
+- After the long-press copy, a **floating confirmation** must appear saying **"Copied"**.
 - A profile **cover photo is persistent** after it is uploaded. Refresh, reopening the profile, app restart/re-login, editing name/signature/avatar, or unrelated profile updates must not remove it.
 - The cover can change only when the user deliberately uploads a replacement, or disappear only after the user deliberately chooses **Remove cover** and confirms it.
 - Backend profile-media deletion requires an explicit removal confirmation; no automatic cleanup flow may delete the cover.
+- **Guardian qualification is based on gifted coins, not points**: the #1 supporter in the active 30-day window becomes Guardian only after reaching **5,000,000 coins (5M)**.
 - These rules are locked and must not be removed or reverted unless the user explicitly changes them.
 
 - Profile header keeps UID with small overlapping copy icon.
