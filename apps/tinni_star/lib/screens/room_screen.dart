@@ -5749,9 +5749,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  key: tool.$1 == 'Room Type'
-                      ? const Key('room-tool-lock')
-                      : null,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: LinearGradient(
