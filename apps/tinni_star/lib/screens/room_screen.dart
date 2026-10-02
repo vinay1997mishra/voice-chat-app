@@ -3759,19 +3759,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          IconButton(
+                          PopupMenuButton<int>(
                             key: const Key('lucky-quantity-plus'),
+                            tooltip: 'Lucky quantity',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
                               minWidth: 30,
                               minHeight: 30,
                             ),
-                            onPressed: luckyQuantity >= 20
-                                ? null
-                                : () => setSheetState(
-                                      () => luckyQuantity++,
+                            color: const Color(0xFF24152F),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: const BorderSide(
+                                color: Color(0x88FFD45A),
+                              ),
+                            ),
+                            onSelected: (value) {
+                              setSheetState(() => luckyQuantity = value);
+                            },
+                            itemBuilder: (context) => const <int>[
+                              9,
+                              21,
+                              51,
+                              99,
+                              199,
+                              599,
+                              899,
+                              2999,
+                              7999,
+                            ]
+                                .map(
+                                  (value) => PopupMenuItem<int>(
+                                    value: value,
+                                    height: 34,
+                                    child: Text(
+                                      '×$value',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFD45A),
+                                        fontWeight: FontWeight.w900,
+                                      ),
                                     ),
-                            icon: const Icon(
+                                  ),
+                                )
+                                .toList(growable: false),
+                            child: const Icon(
                               Icons.add_circle_outline_rounded,
                               size: 20,
                             ),
