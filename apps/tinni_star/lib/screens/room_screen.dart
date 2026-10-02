@@ -49,13 +49,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyLastMultiplier = 0;
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
-  String? _luckyAnimationReceiverId;
+  final Set<String> _luckyAnimationReceiverIds = <String>{};
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
+  Timer? _luckyComboExpiryTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -624,6 +625,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
     _luckyBubbleTimer?.cancel();
+    _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -2388,6 +2390,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return true;
   }
 
+  void _resetLuckyComboState() {
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = null;
+    _luckyComboGift = null;
+    _luckyComboRecipients = <String>[];
+    _luckyComboCount = 0;
+    _luckyComboWon = 0;
+    _luckyLastMultiplier = 0;
+    _luckyPoolBalance = 0;
+    _luckySessionId = null;
+    _luckySessionHighest = 0;
+  }
+
+  void _armLuckyComboExpiry() {
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
+      if (!mounted) return;
+      setState(_resetLuckyComboState);
+    });
+  }
+
   String _newLuckySessionId(String userId) =>
       'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
 
@@ -2441,8 +2464,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<bool> _sendLuckyGift(
     GiftDefinition gift,
-    List<String> receiverIds,
-  ) async {
+    List<String> receiverIds, {
+    int quantity = 1,
+  }) async {
     final account = widget.state.auth.current;
     if (account == null || receiverIds.isEmpty || _luckyComboSending) {
       return false;
@@ -2461,7 +2485,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         authToken: account.authToken,
         giftId: gift.id,
         giftName: gift.name,
-        quantity: 1,
+        quantity: quantity,
         unitPrice: gift.price,
         receiverIds: receiverIds,
         luckySessionId: sessionId,
@@ -2498,17 +2522,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverId = receiverIds.first;
+      _luckyAnimationReceiverIds
+        ..clear()
+        ..addAll(receiverIds);
       _luckyAnimationSequence++;
+      _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
         gift: gift,
-        quantity: 1,
+        quantity: quantity,
         senderId: account.userId,
         receiverIds: List<String>.unmodifiable(receiverIds),
         totalCost: totalCost > 0
             ? totalCost
-            : gift.price * receiverIds.length,
+            : gift.price * quantity * receiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
       widget.state.activities.addGiftScore(account.userId, tx.totalCost);
@@ -2518,7 +2545,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
         if (!mounted) return;
         setState(() {
-          _luckyAnimationReceiverId = null;
+          _luckyAnimationReceiverIds.clear();
           _luckyLastMultiplier = 0;
         });
       });
@@ -3361,24 +3388,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (gift.lucky) {
         final selectedRecipients =
             _selectedGiftRecipients.toList(growable: false);
-        var sentCount = 0;
-        var allSent = true;
-        for (var sendIndex = 0;
-            sendIndex < luckyQuantity;
-            sendIndex++) {
-          final sent = await _sendLuckyGift(
-            gift,
-            selectedRecipients,
-          );
-          if (!sent) {
-            allSent = false;
-            break;
-          }
-          sentCount++;
-        }
-        if (allSent &&
-            sentCount == luckyQuantity &&
-            sheetContext.mounted) {
+        final sent = await _sendLuckyGift(
+          gift,
+          selectedRecipients,
+          quantity: luckyQuantity,
+        );
+        if (sent && sheetContext.mounted) {
           Navigator.pop(sheetContext);
         }
         return;
@@ -3744,19 +3759,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          IconButton(
+                          PopupMenuButton<int>(
                             key: const Key('lucky-quantity-plus'),
+                            tooltip: 'Lucky quantity',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
                               minWidth: 30,
                               minHeight: 30,
                             ),
-                            onPressed: luckyQuantity >= 20
-                                ? null
-                                : () => setSheetState(
-                                      () => luckyQuantity++,
+                            color: const Color(0xFF24152F),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: const BorderSide(
+                                color: Color(0x88FFD45A),
+                              ),
+                            ),
+                            onSelected: (value) {
+                              setSheetState(() => luckyQuantity = value);
+                            },
+                            itemBuilder: (context) => const <int>[
+                              9,
+                              21,
+                              51,
+                              99,
+                              199,
+                              599,
+                              899,
+                              2999,
+                              7999,
+                            ]
+                                .map(
+                                  (value) => PopupMenuItem<int>(
+                                    value: value,
+                                    height: 34,
+                                    child: Text(
+                                      '×$value',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFD45A),
+                                        fontWeight: FontWeight.w900,
+                                      ),
                                     ),
-                            icon: const Icon(
+                                  ),
+                                )
+                                .toList(growable: false),
+                            child: const Icon(
                               Icons.add_circle_outline_rounded,
                               size: 20,
                             ),
@@ -3894,43 +3940,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: Row(
                       children: [
                         Expanded(
-                          child: selectedGift == null
-                              ? const Text(
-                                  'Select a gift to send',
-                                  style: TextStyle(
-                                    color: RoyalPalette.muted,
-                                    fontSize: 11,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.monetization_on_rounded,
+                                    color: Color(0xFFFFD45A),
+                                    size: 15,
                                   ),
-                                )
-                              : Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      selectedGift!.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: RoyalPalette.cream,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    widget.state.wallet.coins.toString(),
+                                    key: const Key('room-gift-wallet-coins'),
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFD45A),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
                                     ),
-                                    Text(
-                                      selectedGift!.lucky
-                                          ? '🪙 ${selectedGift!.price} × $luckyQuantity'
+                                  ),
+                                ],
+                              ),
+                              if (selectedGift != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedGift!.name +
+                                      (selectedGift!.lucky
+                                          ? ' • 🪙 ${selectedGift!.price} × $luckyQuantity'
                                           : giftCategory == 'Backpack'
-                                              ? 'Backpack gift'
-                                              : '🪙 ${selectedGift!.price}',
-                                      style: const TextStyle(
-                                        color: RoyalPalette.gold,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
+                                              ? ' • Backpack gift'
+                                              : ' • 🪙 ${selectedGift!.price}'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: RoyalPalette.cream,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(width: 10),
                         SizedBox(
@@ -7557,6 +7610,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final selfMuted = isMySeat && controller.selfMuted;
     final selfMicOff =
         isMySeat && controller.micState != MicState.live;
+    final authoritativeSeatUserId =
+        presenceMember?.seatIndex == index
+            ? presenceMember!.userId
+            : isMySeat
+                ? account?.userId
+                : null;
+    final showLuckySeatEffect = authoritativeSeatUserId != null &&
+        _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
         selfMuted ||
@@ -7774,7 +7835,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyComboGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
@@ -7841,13 +7902,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyComboGift != null)
                     _buildLuckyImpactEffect(
                       gift: _luckyComboGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyLastMultiplier > 0)
                     Positioned(
                       top: -(compact ? 30.0 : 38.0),
@@ -7948,7 +8009,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '💜0',
+                '💜' +
+                    _compactRoomSending(
+                      presenceMember?.receivedGiftCoins ?? 0,
+                    ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: const Color(0xFFE9DFFF),
