@@ -201,6 +201,17 @@ Gift panel:
 
 ## 12. Profile / Mine / CP
 
+### Mine/Profile anti-regression lock
+
+- Bottom **Mine must not show Props** as a menu option.
+- Bottom **Mine must not show Personal information / Profile Information** as a separate menu option. Profile editing remains available from the actual profile/edit flow, not as a duplicate Mine menu row.
+- Long-pressing the visible **UID / ID number** on Mine, self profile, or Personal information copies the exact ID to the clipboard.
+- After the long-press copy, a **floating confirmation** must appear saying **"ID copy ho gaya"**.
+- A profile **cover photo is persistent** after it is uploaded. Refresh, reopening the profile, app restart/re-login, editing name/signature/avatar, or unrelated profile updates must not remove it.
+- The cover can change only when the user deliberately uploads a replacement, or disappear only after the user deliberately chooses **Remove cover** and confirms it.
+- Backend profile-media deletion requires an explicit removal confirmation; no automatic cleanup flow may delete the cover.
+- These rules are locked and must not be removed or reverted unless the user explicitly changes them.
+
 - Profile header keeps UID with small overlapping copy icon.
 - CP partner DP/details remain near the user DP.
 - About Me keeps the decorative My CP card with both DPs/names and relationship duration/status.

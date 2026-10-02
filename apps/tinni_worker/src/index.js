@@ -1232,9 +1232,15 @@ export default {
       if (!allowed.has(slot)) {
         return json({ ok: false, error: "Invalid profile photo slot" }, 400);
       }
+      if (body.confirm_remove !== true) {
+        return json({
+          ok: false,
+          error: "Explicit profile media removal confirmation is required",
+        }, 400);
+      }
       const userId = String(appSession.user.user_id || "").trim();
       await env.EFFECT_MEDIA.delete("profiles/" + userId + "/" + slot);
-      return json({ ok: true, slot });
+      return json({ ok: true, slot, removed_explicitly: true });
     }
 
     if (url.pathname.startsWith("/media/") && request.method === "GET") {
