@@ -538,6 +538,10 @@ class ActiveRoomSession extends ChangeNotifier {
         equippedEntryId: _equippedEntryId,
         equippedProfileCardId: _equippedProfileCardId,
       );
+      await presence.connectLive(
+        roomId: roomId,
+        authToken: authToken,
+      );
       await _applyForcedSeatChange();
       await _enforceModerationMute();
     } catch (_) {
@@ -545,7 +549,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 25), (_) async {
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
       if (currentRoomId == null || currentAuthToken == null) {
@@ -636,6 +640,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceTimer?.cancel();
     _presenceTimer = null;
     presence.removeListener(_onPresenceChanged);
+    await presence.disconnectLive();
 
     if (sendLeave && roomId != null && authToken != null) {
       try {
