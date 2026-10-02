@@ -96,6 +96,16 @@ Seat-count control:
 - Existing requested mood backgrounds remain available, including sad, boring, happy, love, mountain view, alone, with-her, with-him and love-scene variants.
 - Privacy Policy Agreement remains on a **white background**; do not apply the black/gold room theme to it.
 
+## 6A. Room entry announcement / activity area — LOCKED
+
+- The permanent Lucky result-history cards such as "Colorful Rose", "Magic Balloon", sender name, "Won X coins" and multiplier history must **not** stay stacked under the seats.
+- Lucky result/history may exist in dedicated history/state surfaces, but it must not remain as a permanent room-screen overlay.
+- The old "Ask your followers to support the room." strip is removed from the under-seat room area.
+- The old automatic "System: Welcome to Tinni Star ✨" chat line is removed.
+- Immediately on room entry, a permanent **Official announcement** card is shown under the seats / above live room chat, using a dark blue-grey card with yellow announcement text in the same visual spirit as the supplied reference.
+- The official announcement remains visible as the fixed room-entry notice; normal live chat continues below it.
+- Do not restore the removed Lucky result cards or old support/welcome text unless the user explicitly asks.
+
 ## 7. Room header / tools / music
 
 - Header keeps left room DP + room name + room ID.

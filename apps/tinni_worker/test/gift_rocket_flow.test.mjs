@@ -187,4 +187,20 @@ assert.match(
   "Rocket floating action must remain present",
 );
 
+assert.doesNotMatch(
+  roomScreen,
+  /lucky-live-feed-overlay|_buildLuckyFeedOverlay|_refreshLuckyFeed/,
+  "Permanent Lucky result cards must not reappear under the seats",
+);
+assert.doesNotMatch(
+  roomScreen,
+  /Ask your followers to support the room\./,
+  "Old support/topic prompt must not reappear behind gift/result UI",
+);
+assert.match(
+  roomScreen,
+  /Key\('room-official-announcement'\)/,
+  "Room must show the permanent official announcement on entry",
+);
+
 console.log("Gift, Lucky Combo, recipient, diamond ranking, Rocket and Game guards passed");
