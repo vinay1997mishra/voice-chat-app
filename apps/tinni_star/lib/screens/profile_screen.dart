@@ -838,6 +838,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+              InkWell(
+                key: const Key('mine-cp-panel'),
+                borderRadius: BorderRadius.circular(11),
+                onTap: () => _openMineScreen(
+                  CpScreen(state: widget.state),
+                ),
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1B0A14), Color(0xFF080304)],
+                    ),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: const Color(0xFFC18A00),
+                      width: 1.2,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33C18A00),
+                        blurRadius: 7,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.favorite_rounded,
+                        size: 34,
+                        color: Color(0xFFC18A00),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'My CP',
+                              style: TextStyle(
+                                color: Color(0xFFD09A0A),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'CP Nest • intimacy • memories • details',
+                              style: TextStyle(
+                                color: Color(0xFFAA7C08),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFFC18A00),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   _mineStatusCard(
