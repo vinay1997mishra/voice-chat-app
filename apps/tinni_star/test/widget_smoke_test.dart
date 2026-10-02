@@ -324,6 +324,46 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.tap(find.byKey(const Key('room-gift-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-normal')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-lucky')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-cp')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-country')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-luxury')), findsOneWidget);
+    expect(find.text('Popular'), findsNothing);
+    expect(find.text('Backpack'), findsNothing);
+    expect(find.byKey(const Key('room-gift-wallet-coins')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('gift-category-lucky')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('lucky-gift-quantity-selector')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('lucky-quantity-plus')), findsOneWidget);
+    expect(find.byKey(const Key('lucky-quantity-presets')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lucky-quantity-presets')));
+    await tester.pumpAndSettle();
+    for (final quantity in const <int>[
+      9,
+      21,
+      51,
+      99,
+      199,
+      599,
+      899,
+      2999,
+      7999,
+    ]) {
+      expect(find.text('×' + quantity.toString()), findsOneWidget);
+    }
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('room-rank-hall-button')));
     await tester.pumpAndSettle();
     expect(
