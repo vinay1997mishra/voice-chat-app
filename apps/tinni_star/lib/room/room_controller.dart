@@ -214,6 +214,15 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void restoreMicAfterModeration() {
+    if (mySeat == null || micState == MicState.banned || selfMuted) {
+      return;
+    }
+    if (micState == MicState.live) return;
+    micState = MicState.live;
+    notifyListeners();
+  }
+
   void sendMessage(String text) {
     final value = text.trim();
     if (!config.roomChatEnabled || value.isEmpty) return;
