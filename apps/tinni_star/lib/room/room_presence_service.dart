@@ -49,6 +49,7 @@ class RoomLuckyNumberEvent {
 class RoomGiftEvent {
   const RoomGiftEvent({
     required this.id,
+    required this.senderId,
     required this.giftId,
     required this.giftName,
     required this.isLucky,
@@ -57,6 +58,7 @@ class RoomGiftEvent {
   });
 
   final String id;
+  final String senderId;
   final String giftId;
   final String giftName;
   final bool isLucky;
@@ -257,6 +259,7 @@ class RoomPresenceService extends ChangeNotifier {
         if (eventId.isNotEmpty && latestGiftEvent?.id != eventId) {
           latestGiftEvent = RoomGiftEvent(
             id: eventId,
+            senderId: event['sender_id']?.toString() ?? '',
             giftId: event['gift_id']?.toString() ?? '',
             giftName: event['gift_name']?.toString() ?? 'Gift',
             isLucky: event['is_lucky'] == true,
