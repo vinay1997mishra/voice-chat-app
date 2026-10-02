@@ -2387,13 +2387,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
 
   ImageProvider? _luckyAvatarProvider(dynamic value) {
-    final source = value?.toString();
-    if (source == null || !source.startsWith('data:image/')) return null;
-    try {
-      return MemoryImage(base64Decode(source.split(',').last));
-    } catch (_) {
-      return null;
-    }
+    final source = value?.toString().trim();
+    if (source == null || source.isEmpty) return null;
+    return _roomAvatarProvider(source);
   }
 
   Future<void> _refreshLuckyFeed() async {
@@ -3226,6 +3222,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : gift.price * selectedRecipients.length,
       );
       widget.state.gifts.sent.insert(0, tx);
+      // Sending any non-Lucky gift ends a previously armed Lucky Combo
+      // immediately so a stale Combo tab never survives unrelated gifting.
+      if (_luckyComboGift != null) {
+        setState(_resetLuckyComboState);
+      }
       _triggerSeatGiftEffect(gift, selectedRecipients);
 
       if (!sheetContext.mounted) return;
@@ -3290,6 +3291,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                         ? FeaturePalette.vip
                                         : FeaturePalette.social;
                         return ChoiceChip(
+                          key: Key(
+                            'gift-category-' + value.toLowerCase(),
+                          ),
                           label: Text(value),
                           selected: giftCategory == value,
                           selectedColor: color.withValues(alpha: 0.28),
