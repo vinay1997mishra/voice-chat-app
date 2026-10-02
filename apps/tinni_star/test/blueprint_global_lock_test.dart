@@ -5,11 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const marker = 'GLOBAL_CHANGE_LOCK_V1';
   const lockedBlueprints = <String>[
-    'docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md',
-    'docs/TINNI_STAR_YOHOO_MERGED_BLUEPRINT_V2.md',
-    'docs/TINNI_STAR_GLOBAL_CHANGE_LOCK.md',
-    'apps/tinni_star/docs/TINNI_PRODUCT_BLUEPRINT.md',
-    'apps/tinni_star/docs/BLUEPRINT_STATUS.md',
+    '../../docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md',
+    '../../docs/TINNI_STAR_YOHOO_MERGED_BLUEPRINT_V2.md',
+    '../../docs/TINNI_STAR_GLOBAL_CHANGE_LOCK.md',
+    'docs/TINNI_PRODUCT_BLUEPRINT.md',
+    'docs/BLUEPRINT_STATUS.md',
   ];
 
   test('all Tinni Star blueprints keep the global user-authority change lock', () {
