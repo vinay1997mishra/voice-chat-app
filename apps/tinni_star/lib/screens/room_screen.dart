@@ -3810,12 +3810,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          PopupMenuButton<int>(
+                          IconButton(
                             key: const Key('lucky-quantity-plus'),
-                            tooltip: 'Lucky quantity',
+                            tooltip: 'Add one',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
-                              minWidth: 30,
+                              minWidth: 28,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 7999
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          PopupMenuButton<int>(
+                            key: const Key('lucky-quantity-presets'),
+                            tooltip: 'Choose Lucky quantity',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
                               minHeight: 30,
                             ),
                             color: const Color(0xFF24152F),
@@ -3854,8 +3872,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 )
                                 .toList(growable: false),
                             child: const Icon(
-                              Icons.add_circle_outline_rounded,
-                              size: 20,
+                              Icons.arrow_drop_down_circle_outlined,
+                              size: 19,
+                              color: Color(0xFFFFD45A),
                             ),
                           ),
                         ],
@@ -4005,7 +4024,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    widget.state.wallet.coins.toString(),
+                                    'Coins ' + widget.state.wallet.coins.toString(),
                                     key: const Key('room-gift-wallet-coins'),
                                     style: const TextStyle(
                                       color: Color(0xFFFFD45A),
