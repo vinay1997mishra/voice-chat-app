@@ -1027,7 +1027,7 @@ export class RoomPresenceStore extends DurableObject {
                 (SELECT coins FROM room_gift_totals rg
                   WHERE rg.user_id = room_members.user_id),
                 0
-              ) AS received_gift_coins
+              ) AS received_gift_diamonds
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -1069,7 +1069,15 @@ export class RoomPresenceStore extends DurableObject {
         Number(row.mic_enabled || 0) !== 1,
       chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
-      received_gift_coins: Math.max(0, Number(row.received_gift_coins || 0)),
+      received_gift_diamonds: Math.max(
+        0,
+        Number(row.received_gift_diamonds || 0),
+      ),
+      // Compatibility for older APKs that still read the legacy field name.
+      received_gift_coins: Math.max(
+        0,
+        Number(row.received_gift_diamonds || 0),
+      ),
       seat_emote:
         row.seat_emote &&
         row.seat_emote_until !== null &&
@@ -1092,27 +1100,52 @@ export class RoomPresenceStore extends DurableObject {
   recordGift(input) {
     const now = Date.now();
     const rows = Array.isArray(input?.receivers) ? input.receivers : [];
-    let changed = false;
+    const giftId = String(input?.gift_id || "").trim();
+    const giftName = String(input?.gift_name || "").trim();
+    const isLucky = input?.is_lucky === true;
+    const eventId = String(
+      input?.event_id || ("gift-event-" + crypto.randomUUID()),
+    ).trim();
+
+    const appliedReceivers = [];
     for (const item of rows) {
       const userId = String(item?.user_id || "").trim();
-      const coins = Number(item?.coins || 0);
-      if (!userId || !Number.isSafeInteger(coins) || coins <= 0) continue;
-      this.ctx.storage.sql.exec(
-        `INSERT INTO room_gift_totals (user_id, coins, updated_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           coins = room_gift_totals.coins + excluded.coins,
-           updated_at = excluded.updated_at`,
-        userId,
-        coins,
-        now,
-      );
-      changed = true;
+      const diamonds = Number(item?.diamonds || 0);
+      if (!userId || !Number.isSafeInteger(diamonds) || diamonds < 0) continue;
+      if (diamonds > 0) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO room_gift_totals (user_id, coins, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             coins = room_gift_totals.coins + excluded.coins,
+             updated_at = excluded.updated_at`,
+          userId,
+          diamonds,
+          now,
+        );
+      }
+      appliedReceivers.push({
+        user_id: userId,
+        diamonds,
+      });
     }
-    if (changed) this._broadcastPresence("gift_received", now);
+
+    if (appliedReceivers.length > 0) {
+      this._broadcastPresence("gift_received", now, {
+        gift_event: {
+          id: eventId,
+          gift_id: giftId,
+          gift_name: giftName,
+          is_lucky: isLucky,
+          created_at: now,
+          receivers: appliedReceivers,
+        },
+      });
+    }
     return {
       ok: true,
       server_time: now,
+      gift_event_id: eventId,
       members: this._members(now),
     };
   }
@@ -1383,20 +1416,30 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  _sendSocketState(socket, type = "presence_state", now = Date.now()) {
+  _sendSocketState(
+    socket,
+    type = "presence_state",
+    now = Date.now(),
+    extra = null,
+  ) {
     if (!socket) return;
     const attachment = socket.deserializeAttachment?.() || {};
     try {
       socket.send(JSON.stringify({
         type,
         ...this._presenceStateFor(attachment.userId, now),
+        ...(extra && typeof extra === "object" ? extra : {}),
       }));
     } catch (_) {}
   }
 
-  _broadcastPresence(type = "presence_state", now = Date.now()) {
+  _broadcastPresence(
+    type = "presence_state",
+    now = Date.now(),
+    extra = null,
+  ) {
     for (const socket of this.ctx.getWebSockets("room-presence")) {
-      this._sendSocketState(socket, type, now);
+      this._sendSocketState(socket, type, now, extra);
     }
   }
 
