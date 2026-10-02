@@ -2450,6 +2450,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final sessionId =
         continuesSession ? _luckySessionId! : _newLuckySessionId(account.userId);
 
+    // A tap/send inside the 12-second Combo window counts as activity.
+    // Pause the old expiry immediately so it cannot remove the Combo while
+    // the gift request is in flight; a successful send starts a fresh window.
+    final hadActiveCombo = _luckyComboGift != null;
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = null;
+    _luckyComboEpoch++;
+
     setState(() => _luckyComboSending = true);
     try {
       final response = await widget.state.roomSession.sendGift(
@@ -2538,6 +2546,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         await _openRechargeDirect();
       } else if (mounted) {
         _snack(message);
+      }
+      if (mounted && hadActiveCombo && _luckyComboGift != null) {
+        _armLuckyComboExpiry();
       }
       return false;
     } finally {
@@ -3189,6 +3200,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         );
         _applyGiftServerWallet(response);
         _refreshRoomSendingSummary();
+        // Any non-Lucky send breaks the "same Lucky gift consecutively"
+        // sequence, so an older Combo must not remain actionable.
+        _resetLuckyComboState();
       } catch (error) {
         final message =
             error.toString().replaceFirst('Bad state: ', '');
