@@ -65,6 +65,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _roomTitleOverride;
   String? _roomPhotoOverride;
   String? _roomAnnouncementOverride;
+  String? _cachedRoomPhotoSource;
+  ImageProvider? _cachedRoomPhotoProvider;
+  String? _cachedThemeSource;
+  ImageProvider? _cachedThemeProvider;
+  final Map<String, ImageProvider> _avatarProviderCache =
+      <String, ImageProvider>{};
   Timer? _ribbonTimer;
   Timer? _roomSendingTimer;
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
@@ -90,13 +96,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _roomAnnouncementOverride ?? _roomSnapshot.announcement;
 
   ImageProvider? get _roomPhotoProvider {
-    final value = _roomPhotoDataUrl;
-    if (value == null || !value.startsWith('data:image/')) return null;
-    try {
-      return MemoryImage(base64Decode(value.split(',').last));
-    } catch (_) {
+    final value = _roomPhotoDataUrl?.trim() ?? '';
+    if (value.isEmpty) {
+      _cachedRoomPhotoSource = null;
+      _cachedRoomPhotoProvider = null;
       return null;
     }
+    if (_cachedRoomPhotoSource == value) {
+      return _cachedRoomPhotoProvider;
+    }
+
+    ImageProvider? provider;
+    if (value.startsWith('data:image/')) {
+      try {
+        provider = MemoryImage(base64Decode(value.split(',').last));
+      } catch (_) {
+        provider = null;
+      }
+    } else if (value.startsWith('https://') || value.startsWith('http://')) {
+      provider = NetworkImage(value);
+    }
+
+    _cachedRoomPhotoSource = value;
+    _cachedRoomPhotoProvider = provider;
+    return provider;
   }
 
   @override
@@ -528,17 +551,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
   ImageProvider? get _roomThemeImage {
-    final source = widget.state.roomControls.customThemeAsset;
-    if (source == null || source.isEmpty) return null;
+    final source =
+        widget.state.roomControls.customThemeAsset?.trim() ?? '';
+    if (source.isEmpty) {
+      _cachedThemeSource = null;
+      _cachedThemeProvider = null;
+      return null;
+    }
+    if (_cachedThemeSource == source) {
+      return _cachedThemeProvider;
+    }
+
+    ImageProvider? provider;
     if (source.startsWith('data:image/')) {
       try {
-        return MemoryImage(base64Decode(source.split(',').last));
+        provider = MemoryImage(base64Decode(source.split(',').last));
       } catch (_) {
-        return null;
+        provider = null;
       }
+    } else if (source.startsWith('https://') ||
+        source.startsWith('http://')) {
+      provider = NetworkImage(source);
     }
-    if (source.startsWith('https://')) return NetworkImage(source);
-    return null;
+
+    _cachedThemeSource = source;
+    _cachedThemeProvider = provider;
+    return provider;
   }
 
   RoomRole? get _currentRoomRole {
@@ -1636,17 +1674,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   ImageProvider? _roomAvatarProvider(String? value) {
     final source = value?.trim() ?? '';
     if (source.isEmpty) return null;
+
+    final cached = _avatarProviderCache[source];
+    if (cached != null) return cached;
+
+    ImageProvider? provider;
     if (source.startsWith('data:image/')) {
       try {
-        return MemoryImage(base64Decode(source.split(',').last));
+        provider = MemoryImage(base64Decode(source.split(',').last));
       } catch (_) {
-        return null;
+        provider = null;
       }
+    } else if (source.startsWith('https://') ||
+        source.startsWith('http://')) {
+      provider = NetworkImage(source);
     }
-    if (source.startsWith('https://') || source.startsWith('http://')) {
-      return NetworkImage(source);
+
+    if (provider != null) {
+      if (_avatarProviderCache.length >= 128) {
+        _avatarProviderCache.clear();
+      }
+      _avatarProviderCache[source] = provider;
     }
-    return null;
+    return provider;
   }
 
   Color _ownerTagColor(String colorHex) {
