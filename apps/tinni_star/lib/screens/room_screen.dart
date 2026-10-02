@@ -48,14 +48,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyComboWon = 0;
   int _luckyLastMultiplier = 0;
   int _luckyPoolBalance = 0;
-  int _luckyAnimationSequence = 0;
-  final Set<String> _luckyAnimationReceiverIds = <String>{};
+  GiftDefinition? _seatGiftAnimationGift;
+  int _seatGiftAnimationSequence = 0;
+  int _seatGiftAnimationMultiplier = 0;
+  final Set<String> _seatGiftAnimationReceiverIds = <String>{};
+  final Set<String> _seenGiftEventIds = <String>{};
+  int _handledGiftEventSequence = 0;
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
   bool _luckyFeedLoading = false;
-  Timer? _luckyBubbleTimer;
+  Timer? _seatGiftAnimationTimer;
   Timer? _luckyComboExpiryTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
@@ -624,7 +628,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
-    _luckyBubbleTimer?.cancel();
+    _seatGiftAnimationTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
@@ -827,7 +831,61 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _syncGiftEvent();
     setState(() {});
+  }
+
+  void _syncGiftEvent() {
+    final presence = widget.state.roomSession.presence;
+    final sequence = presence.lastGiftEventSequence;
+    if (sequence <= 0 || sequence == _handledGiftEventSequence) return;
+    _handledGiftEventSequence = sequence;
+    final event = presence.lastGiftEvent;
+    if (event == null) return;
+    final eventId = event['event_id']?.toString() ?? '';
+    if (eventId.isNotEmpty && !_seenGiftEventIds.add(eventId)) return;
+    final giftId = event['gift_id']?.toString() ?? '';
+    final gift = _giftDefinitionForId(giftId);
+    if (gift == null) return;
+    final rawReceivers = event['receiver_ids'];
+    final receivers = rawReceivers is List
+        ? rawReceivers
+            .map((value) => value.toString().trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false)
+        : const <String>[];
+    if (receivers.isEmpty) return;
+    _triggerSeatGiftAnimation(
+      gift,
+      receivers,
+      multiplier: _giftInt(event['multiplier']),
+    );
+  }
+
+  void _triggerSeatGiftAnimation(
+    GiftDefinition gift,
+    List<String> receiverIds, {
+    int multiplier = 0,
+    String? eventId,
+  }) {
+    if (eventId != null && eventId.isNotEmpty) {
+      _seenGiftEventIds.add(eventId);
+    }
+    _seatGiftAnimationTimer?.cancel();
+    _seatGiftAnimationGift = gift;
+    _seatGiftAnimationReceiverIds
+      ..clear()
+      ..addAll(receiverIds);
+    _seatGiftAnimationMultiplier = multiplier;
+    _seatGiftAnimationSequence++;
+    _seatGiftAnimationTimer = Timer(const Duration(milliseconds: 1900), () {
+      if (!mounted) return;
+      setState(() {
+        _seatGiftAnimationGift = null;
+        _seatGiftAnimationReceiverIds.clear();
+        _seatGiftAnimationMultiplier = 0;
+      });
+    });
   }
 
   void _syncEntranceQueue() {
