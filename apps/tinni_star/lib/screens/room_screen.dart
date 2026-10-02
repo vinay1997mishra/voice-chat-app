@@ -4061,15 +4061,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 ],
                               ),
                               Text(
-                                giftCategory == 'Backpack'
-                                    ? '🎒 x' +
-                                        (widget.state.backpack.items[gift.id]
-                                                    ?.quantity ??
-                                                0)
-                                            .toString()
-                                    : gift.lucky
-                                        ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
-                                        : '🪙 ${gift.price}',
+                                gift.lucky
+                                    ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
+                                    : '🪙 ${gift.price}',
                                 style: const TextStyle(
                                   color: RoyalPalette.gold,
                                   fontSize: 10,
@@ -4095,48 +4089,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.monetization_on_rounded,
-                                    color: Color(0xFFFFD45A),
-                                    size: 15,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    widget.state.wallet.coins.toString(),
-                                    key: const Key('room-gift-wallet-coins'),
-                                    style: const TextStyle(
-                                      color: Color(0xFFFFD45A),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.monetization_on_rounded,
+                                color: Color(0xFFFFD45A),
+                                size: 16,
                               ),
-                              if (selectedGift != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  selectedGift!.name +
-                                      (selectedGift!.lucky
-                                          ? ' • 🪙 ${selectedGift!.price} × $luckyQuantity'
-                                          : giftCategory == 'Backpack'
-                                              ? ' • Backpack gift'
-                                              : ' • 🪙 ${selectedGift!.price}'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: RoyalPalette.cream,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Wallet  ' +
+                                    widget.state.wallet.coins.toString(),
+                                key: const Key('room-gift-wallet-coins'),
+                                style: const TextStyle(
+                                  color: Color(0xFFFFD45A),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
                         ),
