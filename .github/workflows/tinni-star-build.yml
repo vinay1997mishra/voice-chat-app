@@ -2,7 +2,7 @@ name: Tinni Star Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/final-gift-rocket-flow]
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
