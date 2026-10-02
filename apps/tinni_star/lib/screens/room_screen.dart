@@ -57,6 +57,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _luckyComboExpiryTimer;
+  DateTime? _luckyComboExpiresAt;
+  int _luckyComboEpoch = 0;
+  GiftDefinition? _giftSeatAnimationGift;
+  final Set<String> _giftSeatAnimationReceiverIds = <String>{};
+  int _giftSeatAnimationSequence = 0;
+  Timer? _giftSeatAnimationTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -626,6 +632,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _emoteExpiryTimer?.cancel();
     _luckyBubbleTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
+    _giftSeatAnimationTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -2391,8 +2398,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _resetLuckyComboState() {
+    _luckyComboEpoch++;
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = null;
+    _luckyComboExpiresAt = null;
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
     _luckyComboCount = 0;
@@ -2401,13 +2410,40 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyPoolBalance = 0;
     _luckySessionId = null;
     _luckySessionHighest = 0;
+    _luckyAnimationReceiverIds.clear();
   }
 
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
+    final epoch = ++_luckyComboEpoch;
+    _luckyComboExpiresAt = DateTime.now().add(const Duration(seconds: 12));
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
-      if (!mounted) return;
+      if (!mounted || epoch != _luckyComboEpoch) return;
       setState(_resetLuckyComboState);
+    });
+  }
+
+  bool get _luckyComboExpired {
+    final deadline = _luckyComboExpiresAt;
+    return deadline == null || !DateTime.now().isBefore(deadline);
+  }
+
+  void _triggerGiftSeatAnimation(
+    GiftDefinition gift,
+    Iterable<String> receiverIds,
+  ) {
+    _giftSeatAnimationTimer?.cancel();
+    _giftSeatAnimationGift = gift;
+    _giftSeatAnimationReceiverIds
+      ..clear()
+      ..addAll(receiverIds.where((id) => id.trim().isNotEmpty));
+    _giftSeatAnimationSequence++;
+    _giftSeatAnimationTimer = Timer(const Duration(milliseconds: 1900), () {
+      if (!mounted) return;
+      setState(() {
+        _giftSeatAnimationGift = null;
+        _giftSeatAnimationReceiverIds.clear();
+      });
     });
   }
 
@@ -2570,6 +2606,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _repeatLuckyGift() async {
+    if (_luckyComboExpired) {
+      if (mounted) setState(_resetLuckyComboState);
+      return;
+    }
     final gift = _luckyComboGift;
     if (gift == null || _luckyComboRecipients.isEmpty) return;
     await _sendLuckyGift(
