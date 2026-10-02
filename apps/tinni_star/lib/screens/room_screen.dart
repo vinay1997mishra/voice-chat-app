@@ -7615,6 +7615,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : isMySeat
                 ? account?.userId
                 : null;
+    final showGiftSeatEffect = authoritativeSeatUserId != null &&
+        _seatGiftAnimationReceiverIds.contains(authoritativeSeatUserId);
     final showLuckySeatEffect = authoritativeSeatUserId != null &&
         _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
@@ -7834,71 +7836,66 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftEffectGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
-                          'lucky-flight-$_luckyAnimationSequence',
+                          'seat-gift-flight-$_seatGiftAnimationSequence-$authoritativeSeatUserId',
                         ),
                         tween: Tween<double>(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 720),
+                        duration: const Duration(milliseconds: 760),
                         curve: Curves.easeOutCubic,
                         builder: (context, value, child) {
-                          final disappear = value <= 0.86
+                          final disappear = value <= 0.88
                               ? 1.0
-                              : ((1 - value) / 0.14)
+                              : ((1 - value) / 0.12)
                                   .clamp(0.0, 1.0)
                                   .toDouble();
-                          final scale = 0.42 +
-                              Curves.easeOutBack.transform(value) * 0.74;
+                          final scale = 0.38 +
+                              Curves.easeOutBack.transform(value) * 0.78;
                           final arc =
-                              math.sin(math.pi * value) * seatDiameter * 0.55;
-                          final perspective = Matrix4.identity()
-                            ..setEntry(3, 2, 0.0018)
-                            ..rotateY((1 - value) * 2.15)
-                            ..rotateX((1 - value) * -0.48)
-                            ..rotateZ((1 - value) * 0.72)
-                            ..scaleByDouble(scale, scale, 1.0, 1.0);
+                              math.sin(math.pi * value) * seatDiameter * 0.62;
                           return Transform.translate(
                             offset: Offset(
-                              (1 - value) * seatDiameter * 2.15,
-                              (1 - value) * seatDiameter * 2.8 - arc,
+                              (1 - value) * seatDiameter * 2.6,
+                              (1 - value) * seatDiameter * 3.0 - arc,
                             ),
-                            child: Transform(
-                              alignment: Alignment.center,
-                              transform: perspective,
+                            child: Transform.scale(
+                              scale: scale,
                               child: Opacity(
                                 opacity: disappear,
                                 child: Container(
-                                  padding: EdgeInsets.all(
-                                    math.max(1.0, seatDiameter * 0.03),
-                                  ),
+                                  width: seatDiameter * 0.86,
+                                  height: seatDiameter * 0.86,
+                                  alignment: Alignment.center,
                                   decoration: const BoxDecoration(
                                     shape: BoxShape.circle,
+                                    color: Color(0xAA1A1022),
                                     boxShadow: <BoxShadow>[
                                       BoxShadow(
-                                        color: Color(0xAAFFB84D),
-                                        blurRadius: 13,
+                                        color: Color(0xAAFFD45A),
+                                        blurRadius: 14,
                                         spreadRadius: 2,
-                                      ),
-                                      BoxShadow(
-                                        color: Color(0x887F55FF),
-                                        blurRadius: 18,
-                                        spreadRadius: 1,
                                       ),
                                     ],
                                   ),
-                                  child: child,
+                                  child: _seatGiftEffectGift!.lucky
+                                      ? _luckyArtwork(
+                                          _seatGiftEffectGift!,
+                                          size: seatDiameter * 0.72,
+                                        )
+                                      : Text(
+                                          _seatGiftEffectGift!.emoji,
+                                          style: TextStyle(
+                                            fontSize: seatDiameter * 0.56,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
                           );
                         },
-                        child: _luckyArtwork(
-                          _luckyComboGift!,
-                          size: seatDiameter * 0.74,
-                        ),
                       ),
                     ),
                   if (showLuckySeatEffect &&
