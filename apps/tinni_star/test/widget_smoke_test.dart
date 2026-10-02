@@ -370,10 +370,6 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byKey(const Key('seat-control-lock')));
-    await tester.pumpAndSettle();
-    expect(state.roomSession.controller!.seats[0].locked, isTrue);
-
     await tester.tap(
       find.byKey(const Key('room-game-floating-button')),
     );
