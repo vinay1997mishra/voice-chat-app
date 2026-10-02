@@ -7742,7 +7742,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : isMySeat
                 ? account?.userId
                 : null;
-    final showLuckySeatEffect = authoritativeSeatUserId != null &&
+    final showGiftSeatEffect = authoritativeSeatUserId != null &&
         _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
@@ -7961,8 +7961,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
@@ -8023,19 +8023,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                         },
                         child: _luckyArtwork(
-                          _luckyComboGift!,
-                          size: seatDiameter * 0.74,
+                          _seatGiftAnimationGift!,
+                          size: seatDiameter * 0.86,
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     _buildLuckyImpactEffect(
-                      gift: _luckyComboGift!,
+                      gift: _seatGiftAnimationGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyLastMultiplier > 0)
+                  if (showGiftSeatEffect &&
+                      (_luckyLastMultiplier > 0 ||
+                          _seatGiftAnimationQuantity > 1))
                     Positioned(
                       top: -(compact ? 30.0 : 38.0),
                       child: IgnorePointer(
@@ -8090,7 +8091,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ],
                             ),
                             child: Text(
-                              '$_luckyLastMultiplier×',
+                              _luckyLastMultiplier > 0
+                                  ? '$_luckyLastMultiplier×'
+                                  : '×$_seatGiftAnimationQuantity',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: compact ? 11 : 14,
