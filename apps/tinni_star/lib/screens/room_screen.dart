@@ -7835,7 +7835,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyComboGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
@@ -7902,13 +7902,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyComboGift != null)
                     _buildLuckyImpactEffect(
                       gift: _luckyComboGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (presenceMember?.userId == _luckyAnimationReceiverId &&
+                  if (showLuckySeatEffect &&
                       _luckyLastMultiplier > 0)
                     Positioned(
                       top: -(compact ? 30.0 : 38.0),
