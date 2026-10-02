@@ -2660,6 +2660,60 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildSeatGiftImpactEffect({
+    required GiftDefinition gift,
+    required double seatDiameter,
+  }) {
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey<String>('seat-gift-impact-$_seatGiftEffectSequence'),
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 1180),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          final fade = value < 0.72
+              ? 1.0
+              : ((1 - value) / 0.28).clamp(0.0, 1.0).toDouble();
+          final scale = 0.38 + Curves.easeOutBack.transform(value) * 0.86;
+          final rise = math.sin(math.pi * value) * seatDiameter * 0.42;
+          return Transform.translate(
+            offset: Offset(
+              (1 - value) * seatDiameter * 1.55,
+              (1 - value) * seatDiameter * 1.9 - rise,
+            ),
+            child: Transform.scale(
+              scale: scale,
+              child: Opacity(
+                opacity: fade,
+                child: Container(
+                  padding: EdgeInsets.all(math.max(1.0, seatDiameter * 0.035)),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD45A),
+                      width: 1.2,
+                    ),
+                    boxShadow: const <BoxShadow>[
+                      BoxShadow(
+                        color: Color(0x99FFD45A),
+                        blurRadius: 14,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: _luckyArtwork(
+                    gift,
+                    size: seatDiameter * 0.76,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildLuckyImpactEffect({
     required GiftDefinition gift,
     required double seatDiameter,
@@ -7637,12 +7691,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final selfMuted = isMySeat && controller.selfMuted;
     final selfMicOff =
         isMySeat && controller.micState != MicState.live;
+    final mappedSeatUserId = widget.state.roomControls.seatUsers[index];
     final authoritativeSeatUserId =
         presenceMember?.seatIndex == index
             ? presenceMember!.userId
-            : isMySeat
-                ? account?.userId
-                : null;
+            : mappedSeatUserId ??
+                (isMySeat ? account?.userId : null);
+    final showSeatGiftEffect = authoritativeSeatUserId != null &&
+        _seatGiftEffectReceiverIds.contains(authoritativeSeatUserId);
     final showLuckySeatEffect = authoritativeSeatUserId != null &&
         _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
@@ -7861,6 +7917,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           height: 1,
                         ),
                       ),
+                    ),
+                  if (showSeatGiftEffect &&
+                      _seatGiftEffect != null)
+                    _buildSeatGiftImpactEffect(
+                      gift: _seatGiftEffect!,
+                      seatDiameter: seatDiameter,
                     ),
                   if (showLuckySeatEffect &&
                       _luckyComboGift != null)
