@@ -398,7 +398,8 @@ export class AppDirectoryStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS app_user_presence (
         user_id TEXT PRIMARY KEY,
         room_id TEXT,
-        last_seen INTEGER NOT NULL
+        last_seen INTEGER NOT NULL,
+        room_socket_connected INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_app_user_presence_seen
         ON app_user_presence(last_seen DESC);
@@ -1197,7 +1198,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT",
       "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE lucky_gift_results ADD COLUMN session_id TEXT",
-      "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0"
+      "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -3633,7 +3635,8 @@ export class AppDirectoryStore extends DurableObject {
     const direct = this.ctx.storage.sql.exec(
       `SELECT u.user_id, u.display_name, u.signature, u.country_code,
               u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
-              p.room_id AS active_room_id, p.last_seen
+              p.room_id AS active_room_id, p.last_seen,
+              p.room_socket_connected AS room_socket_connected
          FROM app_users u
          LEFT JOIN app_user_presence p ON p.user_id = u.user_id
         WHERE LOWER(u.user_id) = LOWER(?)
@@ -3651,7 +3654,8 @@ export class AppDirectoryStore extends DurableObject {
         row = this.ctx.storage.sql.exec(
           `SELECT u.user_id, u.display_name, u.signature, u.country_code,
                   u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
-                  p.room_id AS active_room_id, p.last_seen
+                  p.room_id AS active_room_id, p.last_seen,
+                  p.room_socket_connected AS room_socket_connected
              FROM app_users u
              LEFT JOIN app_user_presence p ON p.user_id = u.user_id
             WHERE u.user_id = ?
@@ -3672,11 +3676,15 @@ export class AppDirectoryStore extends DurableObject {
       flag_emoji: String(row.flag_emoji || ""),
       gender: String(row.gender || ""),
       avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
-      online: row.last_seen != null && Number(row.last_seen) >= onlineCutoff,
+      online:
+        Number(row.room_socket_connected || 0) === 1 ||
+        (row.last_seen != null && Number(row.last_seen) >= onlineCutoff),
       active_room_id:
-        row.last_seen != null &&
-        Number(row.last_seen) >= onlineCutoff &&
-        row.active_room_id
+        row.active_room_id &&
+        (
+          Number(row.room_socket_connected || 0) === 1 ||
+          (row.last_seen != null && Number(row.last_seen) >= onlineCutoff)
+        )
           ? String(row.active_room_id)
           : null,
     };
@@ -3693,7 +3701,8 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       `SELECT u.user_id, u.display_name, u.signature, u.country_code,
               u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
-              p.room_id AS active_room_id, p.last_seen
+              p.room_id AS active_room_id, p.last_seen,
+              p.room_socket_connected AS room_socket_connected
          FROM app_users u
          LEFT JOIN app_user_presence p ON p.user_id = u.user_id
         WHERE u.user_id = ? OR u.display_name LIKE ? ESCAPE '\\'
@@ -3709,10 +3718,17 @@ export class AppDirectoryStore extends DurableObject {
       flag_emoji: String(row.flag_emoji || ""),
       gender: String(row.gender || ""),
       avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
-      online: row.last_seen != null && Number(row.last_seen) >= onlineCutoff,
+      online:
+        Number(row.room_socket_connected || 0) === 1 ||
+        (row.last_seen != null && Number(row.last_seen) >= onlineCutoff),
       active_room_id:
-        row.last_seen != null && Number(row.last_seen) >= onlineCutoff && row.active_room_id
-          ? String(row.active_room_id) : null,
+        row.active_room_id &&
+        (
+          Number(row.room_socket_connected || 0) === 1 ||
+          (row.last_seen != null && Number(row.last_seen) >= onlineCutoff)
+        )
+          ? String(row.active_room_id)
+          : null,
     }));
   }
 
@@ -3733,16 +3749,40 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
-  touchPresence(userIdValue, roomIdValue, memberCountValue = null) {
+  touchPresence(
+    userIdValue,
+    roomIdValue,
+    memberCountValue = null,
+    roomSocketConnectedValue = null,
+  ) {
     const userId = String(userIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
     if (!userId) throw new Error("user_id is required");
     const now = Date.now();
+    const roomSocketConnected =
+      roomSocketConnectedValue === true
+        ? 1
+        : roomSocketConnectedValue === false
+          ? 0
+          : null;
     this.ctx.storage.sql.exec(
-      `INSERT INTO app_user_presence (user_id, room_id, last_seen)
-       VALUES (?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET room_id = excluded.room_id, last_seen = excluded.last_seen`,
-      userId, roomId || null, now,
+      `INSERT INTO app_user_presence
+        (user_id, room_id, last_seen, room_socket_connected)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         room_id = excluded.room_id,
+         last_seen = excluded.last_seen,
+         room_socket_connected =
+           CASE
+             WHEN ? IS NULL THEN app_user_presence.room_socket_connected
+             ELSE ?
+           END`,
+      userId,
+      roomId || null,
+      now,
+      roomSocketConnected ?? 0,
+      roomSocketConnected,
+      roomSocketConnected,
     );
     if (roomId && memberCountValue !== null && memberCountValue !== undefined) {
       const count = Math.max(0, Number(memberCountValue) || 0);
@@ -3784,11 +3824,17 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Room is unavailable");
     }
     const presence = this.ctx.storage.sql.exec(
-      "SELECT room_id,last_seen FROM app_user_presence WHERE user_id=? LIMIT 1",
+      "SELECT room_id,last_seen,room_socket_connected FROM app_user_presence WHERE user_id=? LIMIT 1",
       userId,
     ).toArray()[0];
-    if (!presence || String(presence.room_id || "") !== roomId ||
-        Date.now() - Number(presence.last_seen || 0) > 120000) {
+    if (
+      !presence ||
+      String(presence.room_id || "") !== roomId ||
+      (
+        Number(presence.room_socket_connected || 0) !== 1 &&
+        Date.now() - Number(presence.last_seen || 0) > 120000
+      )
+    ) {
       throw new Error("You must be active inside this room");
     }
 
@@ -3887,7 +3933,10 @@ export class AppDirectoryStore extends DurableObject {
          LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
         WHERE f.follower_id = ?
           AND p.room_id = r.id
-          AND p.last_seen >= ?
+          AND (
+            COALESCE(p.room_socket_connected, 0) = 1 OR
+            p.last_seen >= ?
+          )
           AND COALESCE(r.closed, 0) = 0
         ORDER BY p.last_seen DESC
         LIMIT 100`,
@@ -4117,7 +4166,11 @@ export class AppDirectoryStore extends DurableObject {
     const present=Number(this.ctx.storage.sql.exec(
       `SELECT COUNT(*) AS count FROM room_follows f
          JOIN app_user_presence p ON p.user_id=f.user_id
-         WHERE f.room_id=? AND p.room_id=? AND p.last_seen>=?`,
+         WHERE f.room_id=? AND p.room_id=?
+           AND (
+             COALESCE(p.room_socket_connected, 0) = 1 OR
+             p.last_seen>=?
+           )`,
       roomId,roomId,Date.now()-120000,
     ).toArray()[0]?.count||0);
     return {room_id:roomId,following,follower_count:total,present_follower_count:present};
@@ -5210,11 +5263,17 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
     const presence = this.ctx.storage.sql.exec(
-      "SELECT room_id,last_seen FROM app_user_presence WHERE user_id=? LIMIT 1",
+      "SELECT room_id,last_seen,room_socket_connected FROM app_user_presence WHERE user_id=? LIMIT 1",
       userId,
     ).toArray()[0];
-    if (!presence || String(presence.room_id || "") !== roomId ||
-        Date.now() - Number(presence.last_seen || 0) > 120000) {
+    if (
+      !presence ||
+      String(presence.room_id || "") !== roomId ||
+      (
+        Number(presence.room_socket_connected || 0) !== 1 &&
+        Date.now() - Number(presence.last_seen || 0) > 120000
+      )
+    ) {
       throw new Error("You must be active inside this room to play");
     }
     return { userId, roomId, room };
