@@ -181,6 +181,7 @@ Gift panel:
 - Owner Master Panel section name remains **Messages & Tags**. Do not rename it to Tags/Medals.
 - Existing Custom User Tag remains available.
 - Messages & Tags includes a separate **V Official Tag** assignment control for selected real User IDs.
+- **V Official management is Owner Master Panel-only.** The Tinni Star APK/app must never expose create/apply/edit/remove V Official controls, V color controls, or the Officials management list. The app may only render the currently assigned V Official identity badge/position returned by the backend.
 - V Official assignment requires a Position / Designation.
 - V Official badge visual is circular with a **gold outer ring**, **silver V** in the center, premium/official shine, and the Position / Designation written in **gold**.
 - Required V Official background presets: **Sky Blue, Light Green, Golden, Black, Red, Purple**. Existing normal custom-tag color choice remains available separately.
