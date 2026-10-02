@@ -2691,6 +2691,7 @@ Canonical current room rules:
 ## Owner Master Panel — V Official management anti-regression lock
 
 - **V Official management is Owner Master Panel-only.**
+- **Automatic Host / Agency identity tags are separate from V Official.** When a user becomes an active Host, backend identity data must expose exactly **Host** in **Sky Blue (#69C9FF)**. When a user becomes an active Agency, backend identity data must expose exactly **Agency** in **Sky Blue (#69C9FF)**. These automatic tags must never be converted into or prefixed with V Official.
 - The Tinni Star APK/app must never expose controls to create, apply, edit, remove, recolor, or list/manage V Official assignments.
 - The APK/app may only render the V Official identity badge/position returned by the backend for a user.
 - Owner Master Panel → **Messages & Tags** must keep a dedicated **V Official Tag** control with Position / Designation, the six background presets **Sky Blue, Light Green, Golden, Black, Red, Purple**, **Apply V Official to Selected**, and the **Officials** management list.
