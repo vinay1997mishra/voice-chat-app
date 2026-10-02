@@ -9205,37 +9205,35 @@ class _ReferenceRocketLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.30),
+          width: 1,
+        ),
+      ),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Icon(
             Icons.rocket_launch_rounded,
-            size: size * 0.86,
+            size: size * 0.67,
             color: const Color(0xFFFF63E6),
-            shadows: const <Shadow>[
-              Shadow(
-                color: Color(0xFF6B5CFF),
-                blurRadius: 12,
-              ),
-            ],
           ),
           Positioned(
-            bottom: 0,
+            right: size * 0.14,
+            bottom: size * 0.13,
             child: Container(
-              width: size * 0.22,
-              height: size * 0.22,
+              width: size * 0.14,
+              height: size * 0.14,
               decoration: const BoxDecoration(
-                color: Color(0xFFFFD45A),
+                color: Color(0xFFFFC247),
                 shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x88FFD45A),
-                    blurRadius: 8,
-                  ),
-                ],
               ),
             ),
           ),
