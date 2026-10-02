@@ -1110,6 +1110,42 @@ export class RoomPresenceStore extends DurableObject {
       changed = true;
     }
     if (changed) this._broadcastPresence("gift_received", now);
+
+    const rawEvent = input?.event;
+    if (rawEvent && typeof rawEvent === "object") {
+      const receiverIds = [...new Set(
+        (Array.isArray(rawEvent.receiver_ids) ? rawEvent.receiver_ids : [])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      )].slice(0, 30);
+      const eventId = String(rawEvent.id || "").trim().slice(0, 120);
+      const senderId = String(rawEvent.sender_id || "").trim().slice(0, 120);
+      const giftId = String(rawEvent.gift_id || "").trim().slice(0, 80);
+      if (eventId && senderId && giftId && receiverIds.length > 0) {
+        this._broadcastRoomEvent({
+          type: "gift_sent",
+          gift: {
+            id: eventId,
+            sender_id: senderId,
+            gift_id: giftId,
+            gift_name: String(rawEvent.gift_name || "Gift").slice(0, 80),
+            receiver_ids: receiverIds,
+            quantity: Math.max(1, Math.floor(Number(rawEvent.quantity || 1))),
+            lucky: rawEvent.lucky === true,
+            multiplier: Math.max(
+              0,
+              Math.floor(Number(rawEvent.multiplier || 0)),
+            ),
+            rebate_coins: Math.max(
+              0,
+              Math.floor(Number(rawEvent.rebate_coins || 0)),
+            ),
+            created_at: Number(rawEvent.created_at || now),
+          },
+        });
+      }
+    }
+
     return {
       ok: true,
       server_time: now,
@@ -1397,6 +1433,15 @@ export class RoomPresenceStore extends DurableObject {
   _broadcastPresence(type = "presence_state", now = Date.now()) {
     for (const socket of this.ctx.getWebSockets("room-presence")) {
       this._sendSocketState(socket, type, now);
+    }
+  }
+
+  _broadcastRoomEvent(event) {
+    const payload = JSON.stringify(event);
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      try {
+        socket.send(payload);
+      } catch (_) {}
     }
   }
 

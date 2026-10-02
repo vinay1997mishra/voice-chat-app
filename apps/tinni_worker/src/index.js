@@ -2736,13 +2736,38 @@ export default {
               Number(receiverTotals.get(receiverId) || 0) + diamonds,
             );
           }
-          if (receiverTotals.size > 0) {
-            await getRoomPresenceStore(env, roomId).recordGift({
-              receivers: [...receiverTotals.entries()].map(
-                ([user_id, diamonds]) => ({ user_id, coins: diamonds }),
+          const visualReceiverIds = [...new Set(
+            transactions
+              .map((tx) => String(tx?.receiver_id || "").trim())
+              .filter(Boolean),
+          )];
+          await getRoomPresenceStore(env, roomId).recordGift({
+            receivers: [...receiverTotals.entries()].map(
+              ([user_id, diamonds]) => ({ user_id, coins: diamonds }),
+            ),
+            event: {
+              id: String(transactions[0]?.id || crypto.randomUUID()),
+              sender_id: String(appSession.user.user_id),
+              gift_id: String(transactions[0]?.gift_id || body.gift_id || ""),
+              gift_name: String(
+                transactions[0]?.gift_name || body.gift_name || "Gift",
               ),
-            });
-          }
+              receiver_ids: visualReceiverIds,
+              quantity: Math.max(1, Number(body.quantity || 1)),
+              lucky: Boolean(result?.lucky),
+              multiplier: Math.max(
+                0,
+                Number(result?.lucky?.multiplier || 0),
+              ),
+              rebate_coins: Math.max(
+                0,
+                Number(result?.lucky?.rebate_coins || 0),
+              ),
+              created_at: Number(
+                transactions[0]?.created_at || Date.now(),
+              ),
+            },
+          });
         }
         return json(result, 201);
       } catch (error) {

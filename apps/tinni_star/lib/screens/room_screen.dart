@@ -44,6 +44,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Set<String> _selectedGiftRecipients = <String>{};
   GiftDefinition? _seatGiftEffect;
   final Set<String> _seatGiftEffectReceiverIds = <String>{};
+  GiftDefinition? _luckySeatEffectGift;
+  String? _lastHandledGiftVisualEventId;
   int _seatGiftEffectSequence = 0;
   Timer? _seatGiftEffectTimer;
   GiftDefinition? _luckyComboGift;
@@ -837,7 +839,67 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _syncGiftVisualEvent();
     setState(() {});
+  }
+
+  GiftDefinition _giftDefinitionForVisualEvent(
+    RoomGiftVisualEvent event,
+  ) {
+    for (final gift in <GiftDefinition>[
+      ...GiftService.catalog,
+      ...GiftService.luckyCatalog,
+    ]) {
+      if (gift.id == event.giftId) return gift;
+    }
+    return GiftDefinition(
+      id: event.giftId,
+      name: event.giftName,
+      price: 0,
+      effectKind: event.lucky ? 'lucky' : 'svga',
+      lucky: event.lucky,
+    );
+  }
+
+  void _syncGiftVisualEvent() {
+    final event = widget.state.roomSession.latestGiftVisualEvent;
+    if (event == null || event.id == _lastHandledGiftVisualEventId) return;
+    _lastHandledGiftVisualEventId = event.id;
+    if (event.senderId == widget.state.auth.current?.userId) return;
+
+    final gift = _giftDefinitionForVisualEvent(event);
+    if (event.lucky) {
+      _luckyBubbleTimer?.cancel();
+      _luckySeatEffectGift = gift;
+      _luckyLastMultiplier = event.multiplier;
+      _luckyAnimationReceiverIds
+        ..clear()
+        ..addAll(event.receiverIds);
+      _luckyAnimationSequence++;
+      _luckyBubbleTimer = Timer(const Duration(milliseconds: 2100), () {
+        if (!mounted) return;
+        setState(() {
+          _luckyAnimationReceiverIds.clear();
+          _luckyLastMultiplier = 0;
+          _luckySeatEffectGift = null;
+        });
+      });
+      return;
+    }
+
+    _seatGiftEffectTimer?.cancel();
+    _seatGiftEffect = gift;
+    _seatGiftEffectReceiverIds
+      ..clear()
+      ..addAll(event.receiverIds);
+    _seatGiftEffectSequence++;
+    _seatGiftEffectTimer = Timer(const Duration(milliseconds: 2100), () {
+      if (!mounted) return;
+      setState(() {
+        _seatGiftEffect = null;
+        _seatGiftEffectReceiverIds.clear();
+      });
+    });
   }
 
   void _syncEntranceQueue() {
@@ -2520,6 +2582,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
+      _luckySeatEffectGift = gift;
       _luckyAnimationReceiverIds
         ..clear()
         ..addAll(receiverIds);
@@ -2626,7 +2689,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       child: TweenAnimationBuilder<double>(
         key: ValueKey<String>('seat-gift-impact-$_seatGiftEffectSequence'),
         tween: Tween<double>(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 1180),
+        duration: const Duration(milliseconds: 1450),
         curve: Curves.easeOutCubic,
         builder: (context, value, child) {
           final fade = value < 0.72
@@ -2636,8 +2699,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final rise = math.sin(math.pi * value) * seatDiameter * 0.42;
           return Transform.translate(
             offset: Offset(
-              (1 - value) * seatDiameter * 1.55,
-              (1 - value) * seatDiameter * 1.9 - rise,
+              (1 - value) * seatDiameter * 2.35,
+              (1 - value) * seatDiameter * 5.6 - rise,
             ),
             child: Transform.scale(
               scale: scale,
@@ -7685,14 +7748,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       seatDiameter: seatDiameter,
                     ),
                   if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                      _luckySeatEffectGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
                           'lucky-flight-$_luckyAnimationSequence',
                         ),
                         tween: Tween<double>(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 720),
+                        duration: const Duration(milliseconds: 1250),
                         curve: Curves.easeOutCubic,
                         builder: (context, value, child) {
                           final disappear = value <= 0.86
@@ -7712,8 +7775,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ..scaleByDouble(scale, scale, 1.0, 1.0);
                           return Transform.translate(
                             offset: Offset(
-                              (1 - value) * seatDiameter * 2.15,
-                              (1 - value) * seatDiameter * 2.8 - arc,
+                              (1 - value) * seatDiameter * 2.8,
+                              (1 - value) * seatDiameter * 6.2 - arc,
                             ),
                             child: Transform(
                               alignment: Alignment.center,
@@ -7746,15 +7809,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                         },
                         child: _luckyArtwork(
-                          _luckyComboGift!,
-                          size: seatDiameter * 0.74,
+                          _luckySeatEffectGift!,
+                          size: seatDiameter * 0.86,
                         ),
                       ),
                     ),
                   if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                      _luckySeatEffectGift != null)
                     _buildLuckyImpactEffect(
-                      gift: _luckyComboGift!,
+                      gift: _luckySeatEffectGift!,
                       seatDiameter: seatDiameter,
                     ),
                   if (showLuckySeatEffect &&

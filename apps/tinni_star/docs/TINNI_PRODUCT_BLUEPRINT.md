@@ -151,6 +151,8 @@ The gift panel contains a **horizontally swipeable recipient strip**.
 - **Send readiness lock:** Send becomes enabled immediately when a gift and at least one recipient are selected. It may disable only while that send request is actually in flight; no backend preflight may leave a valid Send button grey.
 - Sending cost is multiplied by selected recipient count.
 - Gift effects are routed to the effect queue when room effects are enabled.
+- **Recipient flight lock:** after server acceptance, a realtime `gift_sent` room event carries the canonical gift plus the exact selected real receiver IDs. The gift visibly flies toward every selected occupied receiver seat and lands with an impact effect; multi-recipient sends fan out to all selected seats at the same time.
+- Never animate the gift on unselected seats, never substitute fake `seat-N` IDs, and never revert to an all-seat broadcast effect.
 - Production coin/diamond movement is server-authoritative.
 - **Locked Lucky send UX:** once a valid Lucky gift Send is tapped, the gift panel closes immediately; the network request continues on the room screen.
 - After a successful Lucky send, the room screen shows the bright Combo control with a visible 12-second countdown. Every successful Combo send restarts the 12-second window. Do not reintroduce the old behavior where the Lucky panel stays open and hides the Combo continuation.

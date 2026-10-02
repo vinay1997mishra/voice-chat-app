@@ -9,6 +9,10 @@ const index = fs.readFileSync(
   new URL("../src/index.js", import.meta.url),
   "utf8",
 );
+const roomPresence = fs.readFileSync(
+  new URL("../src/room_presence.js", import.meta.url),
+  "utf8",
+);
 const roomScreen = fs.readFileSync(
   new URL("../../tinni_star/lib/screens/room_screen.dart", import.meta.url),
   "utf8",
@@ -131,6 +135,26 @@ assert.match(
   roomScreen,
   /receiverIds: selectedRecipients,/,
   "Gift API calls must send only the selected recipient snapshot",
+);
+assert.match(
+  index,
+  /receiver_ids: visualReceiverIds/,
+  "Gift send route must publish the exact selected real receiver IDs for room animation",
+);
+assert.match(
+  roomPresence,
+  /type: "gift_sent"[\s\S]{0,1000}receiver_ids: receiverIds/,
+  "Room presence websocket must broadcast recipient-targeted gift visual events",
+);
+assert.match(
+  roomScreen,
+  /latestGiftVisualEvent[\s\S]{0,1800}_luckyAnimationReceiverIds[\s\S]{0,600}event\.receiverIds/,
+  "Room clients must fan Lucky visual effects only to the broadcast selected receiver IDs",
+);
+assert.match(
+  roomScreen,
+  /seatDiameter \* 6\.2 - arc/,
+  "Lucky gift flight must visibly travel from below the room toward each selected seat",
 );
 assert.match(
   roomScreen,

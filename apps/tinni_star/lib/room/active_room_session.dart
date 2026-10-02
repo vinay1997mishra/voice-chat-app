@@ -101,6 +101,8 @@ class ActiveRoomSession extends ChangeNotifier {
   bool get moderationMicMuted => presence.selfMicMuted;
   bool get moderationChatBanned => presence.selfChatBanned;
   RoomSeatInvite? get pendingSeatInvite => presence.pendingSeatInvite;
+  RoomGiftVisualEvent? get latestGiftVisualEvent =>
+      presence.latestGiftVisualEvent;
   List<RoomSeatRequest> get seatRequests =>
       List<RoomSeatRequest>.unmodifiable(presence.seatRequests);
 

@@ -661,6 +661,7 @@ Must support:
 - horizontal/swipe user recipient row.
 - **Recipient-selection anti-regression lock:** one or many real user IDs may be selected. Selected DPs are blurred/dimmed with a gold check/glow; unselected DPs stay normal. Gifts/effects must route only to the selected IDs.
 - **Send-button anti-regression lock:** once a gift and at least one recipient are locally selected, Send is immediately enabled. It is disabled only while that request is in flight (or when gift/recipient selection is missing).
+- **Gift-flight anti-regression lock:** the authoritative server emits a realtime `gift_sent` event containing the canonical gift and exact selected real receiver IDs. Every client renders a visible fly-in/impact only on those selected occupied seats; multi-recipient sends fan out to all selected seats. Fake seat IDs and all-seat animation are forbidden.
 - quantity/combo.
 - backpack/inventory.
 - balance.
