@@ -26,7 +26,7 @@ void main() {
       expect(source.contains('onLongPress:'), true);
       expect(source.contains('Clipboard.setData'), true);
       expect(source.contains('SnackBarBehavior.floating'), true);
-      expect(source.contains('ID copy ho gaya'), true);
+      expect(source.contains('Copied'), true);
     }
   });
 
@@ -54,7 +54,7 @@ void main() {
       ),
       true,
     );
-    expect(blueprint.contains('ID copy ho gaya'), true);
+    expect(blueprint.contains('Copied'), true);
     expect(blueprint.contains('cover photo is persistent'), true);
     expect(blueprint.contains('explicit removal confirmation'), true);
   });
