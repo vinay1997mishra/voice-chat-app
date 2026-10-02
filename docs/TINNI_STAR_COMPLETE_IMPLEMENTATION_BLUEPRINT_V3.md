@@ -175,6 +175,22 @@ Gift panel:
 - Settlement remains daily at midnight as currently implemented.
 - This owner share applies to gift-box gifts only unless explicitly changed later.
 
+## 11A. Messages & Tags / V Official identity — LOCKED
+
+- Owner Master Panel section name remains **Messages & Tags**. Do not rename it to Tags/Medals.
+- Existing Custom User Tag remains available.
+- Messages & Tags includes a separate **V Official Tag** assignment control for selected real User IDs.
+- V Official assignment requires a Position / Designation.
+- V Official badge visual is circular with a **gold outer ring**, **silver V** in the center, premium/official shine, and the Position / Designation written in **gold**.
+- Required V Official background presets: **Sky Blue, Light Green, Golden, Black, Red, Purple**. Existing normal custom-tag color choice remains available separately.
+- One active V Official tag per user is updated/replaced when Owner assigns a new V Official designation/background; normal custom tags remain independent.
+- Host and Agency identity tags are automatic from active backend hierarchy roles. Owner does not need to manually recreate Host/Agency tags.
+- Profile must not show placeholder **Non-VIP** or **Incomplete** identity boxes. That area is for actual identity tags only.
+- Profile tag area may show V Official + Position, automatic Host/Agency, and other current assigned identity tags with clean spacing/wrapping.
+- Message/conversation identity header shows the same current identity tags where applicable.
+- No Medal-management behavior is introduced by this Messages & Tags feature; existing medal surfaces remain separate.
+- These identity rules are server-backed and must survive reinstall/reconnect.
+
 ## 12. Profile / Mine / CP
 
 - Profile header keeps UID with small overlapping copy icon.
