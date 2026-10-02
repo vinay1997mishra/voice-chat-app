@@ -4266,15 +4266,37 @@ export class AppDirectoryStore extends DurableObject {
       d.setDate(d.getDate() - delta); start = d.getTime();
     } else start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const rows = this.ctx.storage.sql.exec(
-      `SELECT g.sender_id, SUM(g.total_cost) AS sending, u.display_name, u.avatar_data_url
+      `SELECT g.sender_id,
+              SUM(
+                CASE
+                  WHEN l.transaction_id IS NOT NULL
+                    THEN CAST(g.total_cost * 10 / 100 AS INTEGER)
+                  ELSE g.total_cost
+                END
+              ) AS sending,
+              u.display_name,
+              u.avatar_data_url
          FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id = g.id
          LEFT JOIN app_users u ON u.user_id = g.sender_id
          WHERE g.room_id = ? AND g.created_at >= ?
          GROUP BY g.sender_id, u.display_name, u.avatar_data_url
          ORDER BY sending DESC, g.sender_id ASC LIMIT 100`, roomId, start,
     ).toArray();
     const lifetimeRow = this.ctx.storage.sql.exec(
-      "SELECT COALESCE(SUM(total_cost), 0) AS total FROM gift_transactions WHERE room_id = ?",
+      `SELECT COALESCE(
+          SUM(
+            CASE
+              WHEN l.transaction_id IS NOT NULL
+                THEN CAST(g.total_cost * 10 / 100 AS INTEGER)
+              ELSE g.total_cost
+            END
+          ),
+          0
+        ) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id = g.id
+        WHERE g.room_id = ?`,
       roomId,
     ).toArray()[0];
     return {
@@ -4851,14 +4873,31 @@ export class AppDirectoryStore extends DurableObject {
       giftName = cleanText(catalogRow.name, 80);
       unitPrice = Number(giftData.coin_price ?? giftData.price ?? 0);
     } else {
+      const luckyDefaults = { category: "lucky", lucky: true, rebate: true };
       const builtIn = {
         rose: { name: "Rose", price: 100 },
         crystal: { name: "Crystal", price: 500 },
         crown: { name: "Crown", price: 1000 },
+        "gold-dragon": { name: "Golden Dragon", price: 5000 },
+        "royal-crown": { name: "Royal Crown", price: 2500 },
+        "star-castle": { name: "Star Castle", price: 12000 },
+        "heart-ring": { name: "Heart Ring", price: 1800 },
+        "country-pride": { name: "Country Pride", price: 100 },
+        "lucky-colorful-rose": { name: "Colorful Rose", price: 20, data: luckyDefaults },
+        "lucky-rainbow-heart": { name: "Rainbow Heart", price: 50, data: luckyDefaults },
+        "lucky-magic-balloon": { name: "Magic Balloon", price: 100, data: luckyDefaults },
+        "lucky-candy-star": { name: "Candy Star", price: 200, data: luckyDefaults },
+        "lucky-neon-butterfly": { name: "Neon Butterfly", price: 500, data: luckyDefaults },
+        "lucky-sparkle-crown": { name: "Sparkle Crown", price: 1000, data: luckyDefaults },
+        "lucky-dream-cake": { name: "Dream Cake", price: 2000, data: luckyDefaults },
+        "lucky-galaxy-ring": { name: "Galaxy Ring", price: 5000, data: luckyDefaults },
+        "lucky-shining-unicorn": { name: "Shining Unicorn", price: 10000, data: luckyDefaults },
+        "lucky-royal-treasure": { name: "Royal Treasure Box", price: 20000, data: luckyDefaults },
       }[giftId];
       if (builtIn) {
         giftName = builtIn.name;
         unitPrice = builtIn.price;
+        giftData = builtIn.data || {};
       }
     }
     if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 0) {
@@ -4947,10 +4986,7 @@ export class AppDirectoryStore extends DurableObject {
     let totalRebate = 0;
     let highestMultiplier = 0;
     let totalPoolContribution = 0;
-    const hostRewardPercent = Math.max(
-      0,
-      Math.min(100, Number(giftData.host_reward_percent ?? luckyConfig.host_reward_percent ?? 10)),
-    );
+    const receiverDiamondPercent = isLucky ? 10 : 100;
     const prizePoolPercent = Math.max(
       0,
       Math.min(100, Number(giftData.prize_pool_percent ?? luckyConfig.prize_pool_percent ?? 2)),
@@ -4965,6 +5001,9 @@ export class AppDirectoryStore extends DurableObject {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, roomId, senderId, receiverId, giftId, giftName, quantity, chargedUnitPrice, receiverTotal, now,
       );
+      const receiverDiamonds = Math.floor(
+        receiverTotal * receiverDiamondPercent / 100,
+      );
       transactions.push({
         id,
         room_id: roomId,
@@ -4975,28 +5014,27 @@ export class AppDirectoryStore extends DurableObject {
         quantity,
         unit_price: chargedUnitPrice,
         total_cost: receiverTotal,
+        receiver_diamonds: receiverDiamonds,
         created_at: now,
       });
 
-      if (receiverTotal > 0 && this._isActiveHost(receiverId)) {
-        const hostCredit = isLucky
-          ? Math.floor(receiverTotal * hostRewardPercent / 100)
-          : receiverTotal;
-        if (hostCredit > 0) {
-          this.ctx.storage.sql.exec(
-            "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
-            receiverId, now,
-          );
-          this.ctx.storage.sql.exec(
-            "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
-            hostCredit, now, receiverId,
-          );
-          this.ctx.storage.sql.exec(
-            "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?)",
-            "wallet-" + crypto.randomUUID(), receiverId, hostCredit, id,
-            (isLucky ? "Lucky host gift 10%: " : "Host gift: ") + giftName, now,
-          );
-          this._recordHostEligibleGift(receiverId, hostCredit, now);
+      if (receiverDiamonds > 0) {
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
+          receiverId, now,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
+          receiverDiamonds, now, receiverId,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'gift_diamonds',0,?,?,?,?)",
+          "wallet-" + crypto.randomUUID(), receiverId, receiverDiamonds, id,
+          (isLucky ? "Lucky gift 10% diamonds: " : "Gift diamonds: ") + giftName,
+          now,
+        );
+        if (this._isActiveHost(receiverId)) {
+          this._recordHostEligibleGift(receiverId, receiverDiamonds, now);
         }
       }
 
