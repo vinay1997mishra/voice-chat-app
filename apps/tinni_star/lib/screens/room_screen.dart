@@ -9123,56 +9123,59 @@ class _ReferenceGameLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x665D3BFF),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color(0x55FF4FD8),
-              blurRadius: 11,
-              spreadRadius: 1,
-            ),
-          ],
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0x66FFFFFF),
+          width: 1,
         ),
-        child: Center(
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFFFF7CF2),
-                Color(0xFFB56CFF),
-                Color(0xFF6F7BFF),
-              ],
-            ).createShader(bounds),
-            child: Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.78,
-              color: Colors.white,
-            ),
-          ),
-        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.sports_esports_rounded,
+        size: size * 0.58,
+        color: Colors.white,
       ),
     );
   }
 }
 
 class _ReferenceRocketLogo extends StatelessWidget {
-  const _ReferenceRocketLogo({required this.size});
+  const _ReferenceRocketLogo({
+    required this.size,
+    this.buttonStyle = false,
+  });
 
   final double size;
+  final bool buttonStyle;
 
   @override
   Widget build(BuildContext context) {
+    if (buttonStyle) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: const Color(0x66FFFFFF),
+            width: 1,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.rocket_launch_rounded,
+          size: size * 0.58,
+          color: Colors.white,
+        ),
+      );
+    }
+
     return SizedBox(
       width: size,
       height: size,
@@ -9181,30 +9184,25 @@ class _ReferenceRocketLogo extends StatelessWidget {
         children: [
           Icon(
             Icons.rocket_launch_rounded,
-            size: size * 0.86,
-            color: const Color(0xFFFF63E6),
+            size: size * 0.82,
+            color: const Color(0xFFFFD45A),
             shadows: const <Shadow>[
               Shadow(
-                color: Color(0xFF6B5CFF),
-                blurRadius: 12,
+                color: Color(0xAAFF9E2C),
+                blurRadius: 14,
+              ),
+              Shadow(
+                color: Color(0x66FFFFFF),
+                blurRadius: 4,
               ),
             ],
           ),
           Positioned(
-            bottom: 0,
-            child: Container(
-              width: size * 0.22,
-              height: size * 0.22,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFD45A),
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x88FFD45A),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
+            bottom: size * 0.02,
+            child: Icon(
+              Icons.local_fire_department_rounded,
+              size: size * 0.24,
+              color: const Color(0xFFFF8A33),
             ),
           ),
         ],
