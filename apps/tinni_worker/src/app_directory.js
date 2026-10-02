@@ -4880,10 +4880,21 @@ export class AppDirectoryStore extends DurableObject {
         "star-castle": { name: "Star Castle", price: 12000 },
         "heart-ring": { name: "Heart Ring", price: 1800 },
         "country-pride": { name: "Country Pride", price: 500 },
+        "lucky-colorful-rose": { name: "Colorful Rose", price: 20, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-rainbow-heart": { name: "Rainbow Heart", price: 50, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-magic-balloon": { name: "Magic Balloon", price: 100, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-candy-star": { name: "Candy Star", price: 200, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-neon-butterfly": { name: "Neon Butterfly", price: 500, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-sparkle-crown": { name: "Sparkle Crown", price: 1000, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-dream-cake": { name: "Dream Cake", price: 2000, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-galaxy-ring": { name: "Galaxy Ring", price: 5000, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-shining-unicorn": { name: "Shining Unicorn", price: 10000, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
+        "lucky-royal-treasure": { name: "Royal Treasure Box", price: 20000, data: { lucky: true, rebate: true, category: "lucky", charm_wealth_percent: 10, host_reward_percent: 10, max_multiplier: 1000 } },
       }[giftId];
       if (builtIn) {
         giftName = builtIn.name;
         unitPrice = builtIn.price;
+        giftData = builtIn.data || {};
       }
     }
     if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 0) {
