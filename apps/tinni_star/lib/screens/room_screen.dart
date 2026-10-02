@@ -9063,31 +9063,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         key: const Key('room-rocket-floating-button'),
                         radius: 24,
                         onTap: _showRocketPanel,
-                        child: const _ReferenceRocketLogo(size: 32),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Container(
-                      width: 28,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1430),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: const Color(0xFF7E67D9),
-                          width: 0.8,
+                        child: const _ReferenceRocketLogo(
+                          size: 42,
+                          buttonStyle: true,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 7),
                     Semantics(
                       button: true,
                       label: 'Game Center',
                       child: InkResponse(
                         key: const Key('room-game-floating-button'),
-                        radius: 32,
+                        radius: 26,
                         onTap: _showGamePanel,
-                        child: const _ReferenceGameLogo(size: 54),
+                        child: const _ReferenceGameLogo(size: 42),
                       ),
                     ),
                   ],
