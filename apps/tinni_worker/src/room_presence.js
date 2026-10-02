@@ -1095,8 +1095,12 @@ export class RoomPresenceStore extends DurableObject {
     let changed = false;
     for (const item of rows) {
       const userId = String(item?.user_id || "").trim();
-      const coins = Number(item?.coins || 0);
-      if (!userId || !Number.isSafeInteger(coins) || coins <= 0) continue;
+      const diamonds = Number(item?.diamonds ?? item?.coins ?? 0);
+      if (!userId ||
+          !Number.isSafeInteger(diamonds) ||
+          diamonds <= 0) continue;
+      // Keep the existing storage column for compatibility with old APKs,
+      // but its value now represents receiver gift diamonds.
       this.ctx.storage.sql.exec(
         `INSERT INTO room_gift_totals (user_id, coins, updated_at)
          VALUES (?, ?, ?)
@@ -1104,7 +1108,7 @@ export class RoomPresenceStore extends DurableObject {
            coins = room_gift_totals.coins + excluded.coins,
            updated_at = excluded.updated_at`,
         userId,
-        coins,
+        diamonds,
         now,
       );
       changed = true;
