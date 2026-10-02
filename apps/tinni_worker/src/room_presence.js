@@ -793,6 +793,8 @@ export class RoomPresenceStore extends DurableObject {
       target_user_id: targetUserId,
       seat_index: seatIndex,
       muted,
+      muted_seats: this.mutedSeats(),
+      locked_seats: this.lockedSeats(),
       members: this._members(now),
     };
   }
@@ -1148,6 +1150,7 @@ export class RoomPresenceStore extends DurableObject {
       lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
+      muted_seats: this.mutedSeats(),
       members: this._members(now),
     };
   }
