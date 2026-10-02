@@ -8,6 +8,7 @@ This file is the **only product-behavior source of truth** for Tinni Star.
 - All older/legacy Tinni Star blueprints are retired and must not be used to restore layouts, functions, rules, or UI.
 - The current app behavior plus the latest explicit user-confirmed rules are locked.
 - If the user has not explicitly asked to change something, keep it exactly as it is.
+- If the user has not asked to change it, keep it as it is.
 - A new feature request is additive by default. Do not silently remove, replace, rename, resize, reorder, restyle, weaken, or revert an existing function.
 - The **latest explicit user instruction wins** over any older note, branch, screenshot, test, comment, or implementation.
 - Any intentional behavior change must update this file in the same change set.
