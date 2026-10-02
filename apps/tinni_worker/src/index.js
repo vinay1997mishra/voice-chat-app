@@ -4187,14 +4187,24 @@ export default {
         const directory = getAppDirectoryStore(env);
         if (url.pathname.endsWith("/join")) {
           const result = await store.join(presenceBody);
-          await directory.touchPresence(user.user_id, roomId, result.members?.length || 0);
+          await directory.touchPresence(
+            user.user_id,
+            roomId,
+            result.members?.length || 0,
+            false,
+          );
           await directory.markRecentRoom(user.user_id, roomId);
           await directory.notifyFollowersOnline(user.user_id, roomId);
           return json(result, 201);
         }
         if (url.pathname.endsWith("/heartbeat")) {
           const result = await store.heartbeat(presenceBody);
-          await directory.touchPresence(user.user_id, roomId, result.members?.length || 0);
+          await directory.touchPresence(
+            user.user_id,
+            roomId,
+            result.members?.length || 0,
+            false,
+          );
           return json(result);
         }
         const result = await store.leave(presenceBody);
