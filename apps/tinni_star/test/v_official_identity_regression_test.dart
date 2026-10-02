@@ -61,6 +61,14 @@ void main() {
     }
   });
 
+  test('public profile keeps identity tags when another request fails', () {
+    final profile =
+        File('lib/screens/public_profile_screen.dart').readAsStringSync();
+    expect(profile.contains('_safeProfileLoad'), true);
+    expect(profile.contains("tagData['identity_tags']"), true);
+    expect(profile.contains("Key('profile-identity-tags')"), true);
+  });
+
   test('backend keeps V tag metadata and automatic Host Agency identity', () {
     final directory =
         File('../tinni_worker/src/app_directory.js').readAsStringSync();
