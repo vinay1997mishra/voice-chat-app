@@ -219,6 +219,7 @@ class RoomController extends ChangeNotifier {
   void setSeatRoomMuted(int index, bool muted) {
     if (index < 0 || index >= seats.length) return;
     final seat = seats[index];
+    if (seat.roomMuted == muted) return;
     seats[index] = seat.copyWith(roomMuted: muted);
     if (mySeat == index && muted) {
       micState = MicState.muted;
