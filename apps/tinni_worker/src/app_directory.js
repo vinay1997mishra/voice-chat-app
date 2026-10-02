@@ -4875,6 +4875,11 @@ export class AppDirectoryStore extends DurableObject {
         rose: { name: "Rose", price: 100 },
         crystal: { name: "Crystal", price: 500 },
         crown: { name: "Crown", price: 1000 },
+        "gold-dragon": { name: "Golden Dragon", price: 5000 },
+        "royal-crown": { name: "Royal Crown", price: 2500 },
+        "star-castle": { name: "Star Castle", price: 12000 },
+        "heart-ring": { name: "Heart Ring", price: 1800 },
+        "country-pride": { name: "Country Pride", price: 500 },
       }[giftId];
       if (builtIn) {
         giftName = builtIn.name;
