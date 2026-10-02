@@ -1100,6 +1100,7 @@ export class RoomPresenceStore extends DurableObject {
   recordGift(input) {
     const now = Date.now();
     const rows = Array.isArray(input?.receivers) ? input.receivers : [];
+    const senderId = String(input?.sender_id || "").trim();
     const giftId = String(input?.gift_id || "").trim();
     const giftName = String(input?.gift_name || "").trim();
     const isLucky = input?.is_lucky === true;
@@ -1134,6 +1135,7 @@ export class RoomPresenceStore extends DurableObject {
       this._broadcastPresence("gift_received", now, {
         gift_event: {
           id: eventId,
+          sender_id: senderId,
           gift_id: giftId,
           gift_name: giftName,
           is_lucky: isLucky,
