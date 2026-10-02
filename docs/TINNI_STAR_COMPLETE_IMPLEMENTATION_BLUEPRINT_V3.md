@@ -2687,3 +2687,13 @@ Canonical current room rules:
 - Family Wallet transfer rule remains: **sender gets no Family EXP; receiver gives the Family 1 EXP per 1 Tinni coin received**.
 - Daily Family check-in also adds the configured Family EXP once per day.
 - Monthly Family Wallet bonus remains **L1 1.00% + 0.25 percentage point per level**, capped by the locked Family level rules.
+
+## Owner Master Panel — V Official management anti-regression lock
+
+- **V Official management is Owner Master Panel-only.**
+- The Tinni Star APK/app must never expose controls to create, apply, edit, remove, recolor, or list/manage V Official assignments.
+- The APK/app may only render the V Official identity badge/position returned by the backend for a user.
+- Owner Master Panel → **Messages & Tags** must keep a dedicated **V Official Tag** control with Position / Designation, the six background presets **Sky Blue, Light Green, Golden, Black, Red, Purple**, **Apply V Official to Selected**, and the **Officials** management list.
+- Every active V Official must be manageable from the Owner Master Panel, including edit position and remove official.
+- These rules must not be moved into the app or removed by future merges, refactors, APK rebuilds, or UI cleanups unless the owner explicitly changes this rule.
+
