@@ -1428,6 +1428,30 @@ export class RoomPresenceStore extends DurableObject {
     const previousMicEnabled = Number(current.mic_enabled || 0) === 1;
     const nextMicEnabled = nextSeat !== null && micEnabledValue === true;
 
+    // room_seat_forces is a one-shot server instruction. Once the client
+    // acknowledges exactly the forced target seat (including forced-down
+    // null), clear it before broadcasting the next presence state. Leaving
+    // this row behind makes every later presence broadcast look "forced"
+    // again, which resets the local mic back to muted immediately after the
+    // user turns it on.
+    const forceRow = this.ctx.storage.sql.exec(
+      "SELECT seat_index FROM room_seat_forces WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (forceRow) {
+      const forcedSeat = forceRow.seat_index === null ||
+          forceRow.seat_index === undefined
+        ? null
+        : Number(forceRow.seat_index);
+      if (forcedSeat !== nextSeat) {
+        throw new Error("Seat change must acknowledge the owner/admin action first");
+      }
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_forces WHERE user_id = ?",
+        userId,
+      );
+    }
+
     if (previousSeat !== nextSeat && nextSeat !== null) {
       this._assertSeatAvailable(nextSeat, userId);
       const privileged = isOwner || this.isManager(userId);
