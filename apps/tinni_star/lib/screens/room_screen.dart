@@ -2538,8 +2538,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return false;
     }
 
+    final activeReceiverIds =
+        _filterGiftRecipientsToCurrentSeats(receiverIds);
+    if (activeReceiverIds.isEmpty) {
+      if (mounted) {
+        setState(_resetLuckyComboState);
+        _snack('Selected user is no longer on a seat.');
+      }
+      return false;
+    }
+
     final continuesSession = _luckyComboGift?.id == gift.id &&
-        _sameLuckyRecipients(receiverIds) &&
+        _sameLuckyRecipients(activeReceiverIds) &&
         _luckySessionId != null;
     final sessionId =
         continuesSession ? _luckySessionId! : _newLuckySessionId(account.userId);
@@ -2553,7 +2563,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         giftName: gift.name,
         quantity: quantity,
         unitPrice: gift.price,
-        receiverIds: receiverIds,
+        receiverIds: activeReceiverIds,
         luckySessionId: sessionId,
       );
       _applyGiftServerWallet(response);
@@ -2573,13 +2583,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
       _luckySessionId = sessionId;
       _luckyComboGift = gift;
-      _luckyComboRecipients = List<String>.from(receiverIds);
+      _luckyComboRecipients = List<String>.from(activeReceiverIds);
 
       final serverCount = _giftInt(session['send_count']);
       final serverWon = _giftInt(session['total_rebate_coins']);
       final serverHighest = _giftInt(session['highest_multiplier']);
-      _luckyComboCount =
-          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
+      _luckyComboCount = serverCount > 0
+          ? serverCount
+          : (continuesSession ? _luckyComboCount + quantity : quantity);
       _luckyComboWon = serverWon > 0
           ? serverWon
           : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
@@ -2590,21 +2601,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _luckyPoolBalance = poolBalance;
       _luckyAnimationReceiverIds
         ..clear()
-        ..addAll(receiverIds);
+        ..addAll(activeReceiverIds);
       _luckyAnimationSequence++;
+      _startSeatGiftAnimation(gift, activeReceiverIds);
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
         gift: gift,
         quantity: quantity,
         senderId: account.userId,
-        receiverIds: List<String>.unmodifiable(receiverIds),
+        receiverIds: List<String>.unmodifiable(activeReceiverIds),
         totalCost: totalCost > 0
             ? totalCost
-            : gift.price * quantity * receiverIds.length,
+            : gift.price * quantity * activeReceiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
-      widget.state.activities.addGiftScore(account.userId, tx.totalCost);
+      widget.state.activities.addGiftScore(
+        account.userId,
+        tx.totalCost ~/ 10,
+      );
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
 
       _luckyBubbleTimer?.cancel();
@@ -2616,6 +2631,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       });
 
+      _refreshRoomSendingSummary();
       await _refreshLuckyFeed();
       if (multiplier >= 500) {
         await _refreshCountryRibbons();
@@ -2638,9 +2654,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<void> _repeatLuckyGift() async {
     final gift = _luckyComboGift;
     if (gift == null || _luckyComboRecipients.isEmpty) return;
+    final active =
+        _filterGiftRecipientsToCurrentSeats(_luckyComboRecipients);
+    if (active.isEmpty) {
+      if (!mounted) return;
+      setState(_resetLuckyComboState);
+      _snack('Recipient left the seat. Combo stopped.');
+      return;
+    }
     await _sendLuckyGift(
       gift,
-      List<String>.from(_luckyComboRecipients),
+      active,
     );
   }
 
