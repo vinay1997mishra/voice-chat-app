@@ -7566,10 +7566,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : null;
     final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
-    final isMicBlocked = seat.roomMuted ||
-        (isMySeat &&
-            (controller.selfMuted || controller.micState != MicState.live)) ||
-        (presenceMember?.micMuted ?? false);
+    final moderationMuted =
+        seat.roomMuted || (presenceMember?.moderationMuted ?? false);
+    final selfMicOff = isMySeat &&
+        (controller.selfMuted || controller.micState != MicState.live);
+    final isMicBlocked =
+        moderationMuted || selfMicOff || (presenceMember?.micMuted ?? false);
+    final showMuteIndicator = moderationMuted || selfMicOff;
     final speakingUserId =
         presenceMember?.userId ?? (isMySeat ? account?.userId : null);
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
@@ -7747,7 +7750,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (isMicBlocked)
+                  if (showMuteIndicator)
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -8850,7 +8853,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.58,
+                height: MediaQuery.sizeOf(context).height * 0.50,
                 child: FruitJackpotPanel(
                   state: widget.state,
                   onClose: () => setState(
@@ -8863,7 +8866,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 4,
                 right: 4,
                 top: 4,
-                height: MediaQuery.sizeOf(context).height * 0.58,
+                height: MediaQuery.sizeOf(context).height * 0.50,
                 child: FruitPartyPanel(
                   state: widget.state,
                   onClose: () => setState(
