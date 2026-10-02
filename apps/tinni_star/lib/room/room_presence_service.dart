@@ -46,6 +46,24 @@ class RoomLuckyNumberEvent {
   final DateTime createdAt;
 }
 
+class RoomGiftEvent {
+  const RoomGiftEvent({
+    required this.id,
+    required this.giftId,
+    required this.giftName,
+    required this.isLucky,
+    required this.createdAt,
+    required this.receiverDiamonds,
+  });
+
+  final String id;
+  final String giftId;
+  final String giftName;
+  final bool isLucky;
+  final DateTime createdAt;
+  final Map<String, int> receiverDiamonds;
+}
+
 class RoomPresenceMember {
   const RoomPresenceMember({
     required this.userId,
@@ -131,6 +149,7 @@ class RoomPresenceService extends ChangeNotifier {
       <RoomLuckyNumberEvent>[];
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
+  RoomGiftEvent? latestGiftEvent;
   String? lastError;
 
   bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
@@ -218,12 +237,45 @@ class RoomPresenceService extends ChangeNotifier {
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
-      if (!data.containsKey('members')) return;
       final before = _visibleStateSignature();
-      _apply(Map<String, dynamic>.from(data));
-      connected = true;
-      lastError = null;
-      if (before != _visibleStateSignature()) {
+      var giftEventChanged = false;
+      final rawGiftEvent = data['gift_event'];
+      if (rawGiftEvent is Map) {
+        final event = rawGiftEvent.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final receivers = <String, int>{};
+        final rawReceivers = event['receivers'];
+        if (rawReceivers is List) {
+          for (final rawReceiver in rawReceivers.whereType<Map>()) {
+            final userId = rawReceiver['user_id']?.toString().trim() ?? '';
+            if (userId.isEmpty) continue;
+            receivers[userId] = _asInt(rawReceiver['diamonds']);
+          }
+        }
+        final eventId = event['id']?.toString() ?? '';
+        if (eventId.isNotEmpty && latestGiftEvent?.id != eventId) {
+          latestGiftEvent = RoomGiftEvent(
+            id: eventId,
+            giftId: event['gift_id']?.toString() ?? '',
+            giftName: event['gift_name']?.toString() ?? 'Gift',
+            isLucky: event['is_lucky'] == true,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(
+              _asInt(event['created_at']),
+              isUtc: true,
+            ),
+            receiverDiamonds:
+                Map<String, int>.unmodifiable(receivers),
+          );
+          giftEventChanged = true;
+        }
+      }
+      if (data.containsKey('members')) {
+        _apply(Map<String, dynamic>.from(data));
+        connected = true;
+        lastError = null;
+      }
+      if (giftEventChanged || before != _visibleStateSignature()) {
         notifyListeners();
       }
     } catch (_) {}
@@ -891,6 +943,8 @@ class RoomPresenceService extends ChangeNotifier {
         ..write(':')
         ..write(member.isAdmin)
         ..write(':')
+        ..write(member.receivedGiftCoins)
+        ..write(':')
         ..write(member.equippedFrameId ?? '')
         ..write(':')
         ..write(member.equippedEntryId ?? '')
@@ -1039,7 +1093,10 @@ class RoomPresenceService extends ChangeNotifier {
                 moderationMuted: row['moderation_muted'] == true,
                 chatBanned: row['chat_banned'] == true,
                 isAdmin: row['is_admin'] == true,
-                receivedGiftCoins: _asInt(row['received_gift_coins']),
+                receivedGiftCoins: _asInt(
+                  row['received_gift_diamonds'] ??
+                      row['received_gift_coins'],
+                ),
                 seatEmote: row['seat_emote']?.toString(),
                 seatEmoteUntil: row['seat_emote_until'] == null
                     ? null
