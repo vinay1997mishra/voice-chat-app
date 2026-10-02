@@ -2687,3 +2687,75 @@ Canonical current room rules:
 - Family Wallet transfer rule remains: **sender gets no Family EXP; receiver gives the Family 1 EXP per 1 Tinni coin received**.
 - Daily Family check-in also adds the configured Family EXP once per day.
 - Monthly Family Wallet bonus remains **L1 1.00% + 0.25 percentage point per level**, capped by the locked Family level rules.
+
+
+## Canonical gift system + Rocket/Game regression lock — 2026-10-02
+
+**Status: LOCKED / regression-protected.** This section is the canonical rule set for the current room gift flow. If any older blueprint text conflicts with this section, this section wins. Future UI, backend, room, ranking, wallet, or game updates must preserve these rules unless the owner explicitly changes them.
+
+### Gift Box structure
+- The room Gift Box has exactly these gift categories: **Normal / Lucky / CP / Country / Luxury**.
+- Do not re-add removed/legacy gift tabs or duplicate gift controls elsewhere in the room.
+- The Gift Box shows the sender's **current total wallet coin balance** in the header/coin area; do not replace it with generic "Select a gift" text.
+- Recipient selection is authoritative: only the selected user DP(s)/seat(s) are receivers for that send.
+- Sending to one selected receiver must never broadcast the gift/effect to every occupied seat.
+- Recipient DPs use the real selected users' avatars and remain horizontally scrollable when more users exist than fit on screen.
+
+### Lucky quantity and send behavior
+- Lucky quantity has the normal **+** control and a separate small arrow/preset control.
+- The preset panel contains exactly: **9 / 21 / 51 / 99 / 199 / 599 / 899 / 2999 / 7999**.
+- A Lucky send uses the selected gift + selected recipient(s) + chosen quantity.
+- After a successful initial Lucky send, the Gift Box closes automatically, matching the single-gift send behavior.
+- The same selected Lucky gift and selected recipient(s) are preserved for Combo.
+- Insufficient balance stops the send and shows the insufficient-coins/recharge flow; it must not create a fake send or effect.
+
+### 12-second Combo lifecycle
+- A successful Lucky send exposes the floating **Combo** action.
+- Combo is valid for **12 seconds after the most recent successful Lucky send**.
+- Every successful Combo send resets the 12-second window.
+- If the user does not successfully send again within 12 seconds, the Combo control disappears automatically and the combo session ends.
+- Combo must not remain stuck on screen after expiry, recipient/gift invalidation, room exit, or session termination.
+- Combo resends the same Lucky gift to the same selected recipient(s); it must not silently switch targets.
+
+### Lucky rebate/result UI
+- Lucky/Rebate gifts can return coins directly to the **sender wallet immediately**, so returned coins can be reused for continued sending.
+- Maximum displayed Lucky return is **up to 1000×**. Do not invent or hard-code an unconfirmed probability table.
+- Keep two different counters:
+  - **×N** = consecutive sends in the current Lucky combo session.
+  - **+N** = cumulative returned coins in the current combo session.
+- These counters must not be merged or treated as the payout multiplier.
+- Room/feed entries may show the individual send and returned-coin result for that send.
+
+### Receiver credit, room ranking, and seat received counter
+- **Normal / CP / Country / Luxury** gifts credit the receiver at **100% of the gift coin value as diamonds**.
+- **Lucky** gifts credit the receiver at **10% of the gift coin value as diamonds**.
+- Room gift ranking / received-value accounting follows the same rule: non-Lucky **100%**, Lucky **10%**.
+- The selected receiver seat's received-gift counter updates in realtime from the authoritative gift event.
+- Gift effects/animations play only on the selected receiver seat(s), not on unrelated seats.
+- Sender Lucky rebate and receiver diamond credit are separate accounting paths; one must not overwrite the other.
+
+### Room-owner share
+- **10% of gifts sent in the room** is allocated to the room owner's wallet as coins under the room-owner gift-share rule.
+- Settlement is performed at the locked daily midnight settlement point.
+- This share applies to Gift Box sends and must remain server-authoritative to prevent duplicate or client-forged settlement.
+
+### Rocket / Game floating controls
+- **Rocket** and **Game** remain floating room controls on the right side and stay **outside the 4-box**.
+- Rocket stays above Game, with the small progress indicator/bar between them as defined by the room reference.
+- Rocket keeps the final clearer **gold/blue** visual treatment.
+- Game's floating logo is a **white game controller with black buttons**; do not reintroduce duplicate labels/panels or move it into the 4-box.
+
+### Regression gate for future updates
+Before accepting a future room/gift update, verify all of the following still pass together:
+1. Gift categories remain exactly Normal/Lucky/CP/Country/Luxury.
+2. Wallet total coins are visible in the Gift Box.
+3. Lucky presets are exactly 9/21/51/99/199/599/899/2999/7999.
+4. Initial Lucky send closes the Gift Box and exposes Combo.
+5. Combo preserves selected gift + recipient(s), resets on successful resend, and expires at 12 seconds.
+6. Gift routing/effect reaches only selected receiver seat(s).
+7. Receiver diamonds and room ranking use Lucky 10% / all other gift categories 100%.
+8. Receiver seat received counter updates in realtime.
+9. Sender Lucky rebate remains separate and immediately reusable.
+10. Rocket/Game stay outside the 4-box with the locked final visual/position rules.
+
+Do not mark a future gift/room build "complete" if any item above is missing, stubbed, routed only in UI, or not enforced by the backend where money/ranking authority is required.

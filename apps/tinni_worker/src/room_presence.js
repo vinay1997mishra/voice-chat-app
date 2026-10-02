@@ -1092,6 +1092,9 @@ export class RoomPresenceStore extends DurableObject {
   recordGift(input) {
     const now = Date.now();
     const rows = Array.isArray(input?.receivers) ? input.receivers : [];
+    const giftEvent = input?.gift_event && typeof input.gift_event === "object"
+      ? input.gift_event
+      : null;
     let changed = false;
     for (const item of rows) {
       const userId = String(item?.user_id || "").trim();
@@ -1110,6 +1113,21 @@ export class RoomPresenceStore extends DurableObject {
       changed = true;
     }
     if (changed) this._broadcastPresence("gift_received", now);
+    if (giftEvent) {
+      this._broadcastEvent({
+        type: "gift_event",
+        event_id: String(giftEvent.event_id || ""),
+        gift_id: String(giftEvent.gift_id || ""),
+        gift_name: String(giftEvent.gift_name || ""),
+        sender_id: String(giftEvent.sender_id || ""),
+        receiver_ids: Array.isArray(giftEvent.receiver_ids)
+          ? giftEvent.receiver_ids.map((value) => String(value || "")).filter(Boolean)
+          : [],
+        lucky: giftEvent.lucky === true,
+        multiplier: Math.max(0, Number(giftEvent.multiplier || 0)),
+        created_at: now,
+      });
+    }
     return {
       ok: true,
       server_time: now,
@@ -1397,6 +1415,15 @@ export class RoomPresenceStore extends DurableObject {
   _broadcastPresence(type = "presence_state", now = Date.now()) {
     for (const socket of this.ctx.getWebSockets("room-presence")) {
       this._sendSocketState(socket, type, now);
+    }
+  }
+
+  _broadcastEvent(event) {
+    const payload = JSON.stringify(event || {});
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      try {
+        socket.send(payload);
+      } catch (_) {}
     }
   }
 

@@ -131,6 +131,8 @@ class RoomPresenceService extends ChangeNotifier {
       <RoomLuckyNumberEvent>[];
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
+  Map<String, dynamic>? lastGiftEvent;
+  int lastGiftEventSequence = 0;
   String? lastError;
 
   bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
@@ -218,6 +220,12 @@ class RoomPresenceService extends ChangeNotifier {
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
+      if (data['type']?.toString() == 'gift_event') {
+        lastGiftEvent = Map<String, dynamic>.from(data);
+        lastGiftEventSequence++;
+        notifyListeners();
+        return;
+      }
       if (!data.containsKey('members')) return;
       final before = _visibleStateSignature();
       _apply(Map<String, dynamic>.from(data));
@@ -328,6 +336,8 @@ class RoomPresenceService extends ChangeNotifier {
     } finally {
       members.clear();
       connected = false;
+      lastGiftEvent = null;
+      lastGiftEventSequence = 0;
       micMode = 'apply';
       selfMicMuted = false;
       selfChatBanned = false;

@@ -2723,13 +2723,19 @@ export default {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const coins = Number(tx?.total_cost || 0);
-            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+            const rankingValue = Number(
+              tx?.ranking_value ?? tx?.receiver_diamonds ?? tx?.total_cost ?? 0,
+            );
+            if (
+              !receiverId ||
+              !Number.isSafeInteger(rankingValue) ||
+              rankingValue <= 0
+            ) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + coins,
+              Number(receiverTotals.get(receiverId) || 0) + rankingValue,
             );
           }
           if (receiverTotals.size > 0) {
@@ -2737,6 +2743,17 @@ export default {
               receivers: [...receiverTotals.entries()].map(
                 ([user_id, coins]) => ({ user_id, coins }),
               ),
+              gift_event: {
+                event_id: String(transactions[0]?.id || ""),
+                gift_id: String(transactions[0]?.gift_id || body.gift_id || ""),
+                gift_name: String(transactions[0]?.gift_name || body.gift_name || ""),
+                sender_id: String(appSession.user.user_id || ""),
+                receiver_ids: transactions
+                  .map((tx) => String(tx?.receiver_id || "").trim())
+                  .filter(Boolean),
+                lucky: Boolean(result?.lucky),
+                multiplier: Number(result?.lucky?.multiplier || 0),
+              },
             });
           }
         }
