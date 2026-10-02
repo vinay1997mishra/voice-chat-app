@@ -62,6 +62,8 @@ class ActiveRoomSession extends ChangeNotifier {
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
 
+  RoomGiftLiveEvent? get lastGiftEvent => presence.lastGiftEvent;
+
   ValueListenable<Map<String, double>> get speakingLevelsListenable =>
       realtime.rtc.speakingLevelsListenable;
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -43,6 +44,32 @@ class RoomLuckyNumberEvent {
   final String userId;
   final String displayName;
   final int number;
+  final DateTime createdAt;
+}
+
+class RoomGiftLiveEvent {
+  const RoomGiftLiveEvent({
+    required this.id,
+    required this.senderId,
+    required this.giftId,
+    required this.giftName,
+    required this.giftCategory,
+    required this.receiverIds,
+    required this.quantity,
+    required this.lucky,
+    required this.multiplier,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String senderId;
+  final String giftId;
+  final String giftName;
+  final String giftCategory;
+  final List<String> receiverIds;
+  final int quantity;
+  final bool lucky;
+  final int multiplier;
   final DateTime createdAt;
 }
 
@@ -129,6 +156,7 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
   final List<RoomLuckyNumberEvent> luckyNumberEvents =
       <RoomLuckyNumberEvent>[];
+  RoomGiftLiveEvent? lastGiftEvent;
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
@@ -221,6 +249,7 @@ class RoomPresenceService extends ChangeNotifier {
       if (!data.containsKey('members')) return;
       final before = _visibleStateSignature();
       _apply(Map<String, dynamic>.from(data));
+      _applyGiftEvent(data);
       connected = true;
       lastError = null;
       if (before != _visibleStateSignature()) {
@@ -335,6 +364,7 @@ class RoomPresenceService extends ChangeNotifier {
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
       seatRequests.clear();
+      lastGiftEvent = null;
       lockedSeats.clear();
       mutedSeats.clear();
       notifyListeners();
@@ -846,6 +876,36 @@ class RoomPresenceService extends ChangeNotifier {
     }
   }
 
+  void _applyGiftEvent(Map<String, dynamic> data) {
+    final raw = data['gift_event'];
+    if (raw is! Map) return;
+    final row = raw.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    final receiverIds = (row['receiver_ids'] is List)
+        ? (row['receiver_ids'] as List)
+            .map((value) => value.toString().trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false)
+        : const <String>[];
+    final id = row['id']?.toString().trim() ?? '';
+    if (id.isEmpty || receiverIds.isEmpty) return;
+    lastGiftEvent = RoomGiftLiveEvent(
+      id: id,
+      senderId: row['sender_id']?.toString() ?? '',
+      giftId: row['gift_id']?.toString() ?? '',
+      giftName: row['gift_name']?.toString() ?? 'Gift',
+      giftCategory: row['gift_category']?.toString() ?? 'normal',
+      receiverIds: receiverIds,
+      quantity: math.max(1, _asInt(row['quantity'])),
+      lucky: row['lucky'] == true,
+      multiplier: math.max(0, _asInt(row['multiplier'])),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        _asInt(row['created_at']),
+      ),
+    );
+  }
+
   String _visibleStateSignature() {
     final buffer = StringBuffer()
       ..write(micMode)
@@ -860,7 +920,9 @@ class RoomPresenceService extends ChangeNotifier {
       ..write('|')
       ..write(lockedSeats.join(','))
       ..write('|')
-      ..write(mutedSeats.join(','));
+      ..write(mutedSeats.join(','))
+      ..write('|gift:')
+      ..write(lastGiftEvent?.id ?? '');
 
     for (final request in seatRequests) {
       buffer

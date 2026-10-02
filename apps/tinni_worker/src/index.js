@@ -2711,34 +2711,65 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
+        const roomId = String(body.room_id || "").trim();
+        const requestedReceiverIds = Array.isArray(body.receiver_ids)
+          ? body.receiver_ids.map((value) => String(value || "").trim()).filter(Boolean)
+          : [];
+        if (!roomId || requestedReceiverIds.length === 0) {
+          throw new Error("Select at least one recipient on a seat");
+        }
+
+        // Re-resolve recipients at the exact send moment. A selected user who
+        // left the room or moved down from a seat is removed immediately, and a
+        // different user taking the old seat never inherits the gift target.
+        const recipientState = await getRoomPresenceStore(env, roomId).validGiftRecipients({
+          user_ids: requestedReceiverIds,
+        });
+        const validReceiverIds = Array.isArray(recipientState?.user_ids)
+          ? recipientState.user_ids.map(String)
+          : [];
+        if (validReceiverIds.length === 0) {
+          throw new Error("Selected recipient is no longer on a seat");
+        }
+        body.receiver_ids = validReceiverIds;
+
         const result = await getAppDirectoryStore(env).sendGift(
           appSession.user.user_id,
           body,
         );
-        const roomId = String(body.room_id || "").trim();
         const transactions = Array.isArray(result?.transactions)
           ? result.transactions
           : [];
-        if (roomId && transactions.length > 0) {
+        if (transactions.length > 0) {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const coins = Number(tx?.total_cost || 0);
-            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+            const rankingValue = Number(tx?.ranking_value ?? tx?.total_cost ?? 0);
+            if (!receiverId ||
+                !Number.isSafeInteger(rankingValue) ||
+                rankingValue <= 0) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + coins,
+              Number(receiverTotals.get(receiverId) || 0) + rankingValue,
             );
           }
-          if (receiverTotals.size > 0) {
-            await getRoomPresenceStore(env, roomId).recordGift({
-              receivers: [...receiverTotals.entries()].map(
-                ([user_id, coins]) => ({ user_id, coins }),
-              ),
-            });
-          }
+
+          await getRoomPresenceStore(env, roomId).recordGift({
+            event_id: String(transactions[0]?.id || ("gift-event-" + crypto.randomUUID())),
+            sender_id: appSession.user.user_id,
+            gift_id: String(body.gift_id || ""),
+            gift_name: String(transactions[0]?.gift_name || body.gift_name || "Gift"),
+            gift_category: String(result?.gift_category || "normal"),
+            receiver_ids: transactions.map((tx) => String(tx?.receiver_id || "")).filter(Boolean),
+            quantity: Number(body.quantity || 1),
+            lucky: result?.is_lucky === true,
+            multiplier: Number(result?.lucky?.multiplier || 0),
+            receivers: [...receiverTotals.entries()].map(
+              ([user_id, coins]) => ({ user_id, coins }),
+            ),
+          });
         }
         return json(result, 201);
       } catch (error) {

@@ -50,6 +50,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
   final Set<String> _luckyAnimationReceiverIds = <String>{};
+  GiftDefinition? _seatGiftAnimationGift;
+  int _seatGiftAnimationQuantity = 1;
+  final Set<String> _handledGiftEventIds = <String>{};
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
@@ -135,7 +138,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         widget.state.social.connectMessageEvents(account.authToken);
       });
     }
-    _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -220,12 +222,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final ownerId =
         canonicalRoom.ownerId ?? widget.room.ownerId ?? widget.room.id;
     widget.state.roomControls.setOwner(ownerId);
-
-    if (_selectedGiftRecipients.length == 1) {
-      _selectedGiftRecipients
-        ..clear()
-        ..add(ownerId);
-    }
 
     if (canonicalRoom.locked && account.userId != ownerId) {
       final allowed = await _requestLockedRoomAccess(
@@ -827,6 +823,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _syncGiftLiveEvent();
     setState(() {});
   }
 
@@ -2414,6 +2411,154 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String _newLuckySessionId(String userId) =>
       'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
 
+  List<String> _giftResponseReceiverIds(
+    Map<String, dynamic> response,
+    List<String> fallback,
+  ) {
+    final raw = response['transactions'];
+    if (raw is! List) return List<String>.from(fallback);
+    final values = <String>[];
+    for (final item in raw.whereType<Map>()) {
+      final id = item['receiver_id']?.toString().trim() ?? '';
+      if (id.isNotEmpty && !values.contains(id)) values.add(id);
+    }
+    return values.isEmpty ? List<String>.from(fallback) : values;
+  }
+
+  String _giftResponseEventId(Map<String, dynamic> response) {
+    final raw = response['transactions'];
+    if (raw is List && raw.isNotEmpty && raw.first is Map) {
+      final id = (raw.first as Map)['id']?.toString().trim() ?? '';
+      if (id.isNotEmpty) return id;
+    }
+    return 'gift-local-' + DateTime.now().microsecondsSinceEpoch.toString();
+  }
+
+  GiftDefinition _giftDefinitionForLiveEvent(RoomGiftLiveEvent event) {
+    for (final gift in GiftService.luckyCatalog) {
+      if (gift.id == event.giftId) return gift;
+    }
+    for (final gift in GiftService.catalog) {
+      if (gift.id == event.giftId) return gift;
+    }
+    switch (event.giftId) {
+      case 'gold-dragon':
+        return const GiftDefinition(
+          id: 'gold-dragon',
+          name: 'Golden Dragon',
+          price: 5000,
+          effectKind: 'mp4',
+          emoji: '🐉',
+        );
+      case 'royal-crown':
+        return const GiftDefinition(
+          id: 'royal-crown',
+          name: 'Royal Crown',
+          price: 2500,
+          effectKind: 'pag',
+          emoji: '👑',
+        );
+      case 'star-castle':
+        return const GiftDefinition(
+          id: 'star-castle',
+          name: 'Star Castle',
+          price: 12000,
+          effectKind: 'mp4',
+          emoji: '🏰',
+        );
+      case 'heart-ring':
+        return const GiftDefinition(
+          id: 'heart-ring',
+          name: 'Heart Ring',
+          price: 1800,
+          effectKind: 'svga',
+          emoji: '💍',
+        );
+      case 'country-pride':
+        return GiftDefinition(
+          id: 'country-pride',
+          name: 'Country Pride',
+          price: 100,
+          effectKind: 'svga',
+          emoji: widget.state.auth.current?.flagEmoji ?? '🌐',
+        );
+      default:
+        return GiftDefinition(
+          id: event.giftId,
+          name: event.giftName,
+          price: 0,
+          effectKind: 'remote',
+          lucky: event.lucky,
+          emoji: '🎁',
+          maxMultiplier: event.lucky ? 1000 : 0,
+        );
+    }
+  }
+
+  void _startSeatGiftAnimation({
+    required String eventId,
+    required GiftDefinition gift,
+    required List<String> receiverIds,
+    required int quantity,
+    int multiplier = 0,
+    bool forceReplay = false,
+  }) {
+    if (eventId.isEmpty) return;
+    if (!forceReplay && _handledGiftEventIds.contains(eventId)) return;
+    if (_handledGiftEventIds.length > 200) {
+      _handledGiftEventIds.clear();
+    }
+    _handledGiftEventIds.add(eventId);
+
+    final seatedIds = <String>{
+      for (final member in widget.state.roomSession.liveMembers)
+        if (member.seatIndex != null) member.userId,
+    };
+    final currentUserId = widget.state.auth.current?.userId;
+    if (currentUserId != null && controller.mySeat != null) {
+      seatedIds.add(currentUserId);
+    }
+    final activeReceivers = receiverIds
+        .where((id) => seatedIds.contains(id))
+        .toSet();
+
+    _luckyBubbleTimer?.cancel();
+    _luckyAnimationReceiverIds
+      ..clear()
+      ..addAll(activeReceivers);
+    _seatGiftAnimationGift = gift;
+    _seatGiftAnimationQuantity = math.max(1, quantity);
+    _luckyLastMultiplier = math.max(0, multiplier);
+    _luckyAnimationSequence++;
+
+    _luckyBubbleTimer = Timer(const Duration(milliseconds: 2600), () {
+      if (!mounted) return;
+      setState(() {
+        _luckyAnimationReceiverIds.clear();
+        _seatGiftAnimationGift = null;
+        _seatGiftAnimationQuantity = 1;
+        _luckyLastMultiplier = 0;
+      });
+    });
+  }
+
+  void _syncGiftLiveEvent() {
+    final event = widget.state.roomSession.lastGiftEvent;
+    if (event == null || _handledGiftEventIds.contains(event.id)) return;
+    if (DateTime.now().difference(event.createdAt).abs() >
+        const Duration(seconds: 6)) {
+      _handledGiftEventIds.add(event.id);
+      return;
+    }
+    _startSeatGiftAnimation(
+      eventId: event.id,
+      gift: _giftDefinitionForLiveEvent(event),
+      receiverIds: event.receiverIds,
+      quantity: event.quantity,
+      multiplier: event.multiplier,
+    );
+  }
+
   ImageProvider? _luckyAvatarProvider(dynamic value) {
     final source = value?.toString();
     if (source == null || !source.startsWith('data:image/')) return null;
@@ -2505,50 +2650,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ? rawSession.map((key, value) => MapEntry(key.toString(), value))
           : <String, dynamic>{};
 
+      final actualReceiverIds =
+          _giftResponseReceiverIds(response, receiverIds);
+      if (actualReceiverIds.isEmpty) {
+        _resetLuckyComboState();
+        return false;
+      }
+      final actualContinuesSession = _luckyComboGift?.id == gift.id &&
+          _sameLuckyRecipients(actualReceiverIds) &&
+          _luckySessionId != null;
+
       _luckySessionId = sessionId;
       _luckyComboGift = gift;
-      _luckyComboRecipients = List<String>.from(receiverIds);
+      _luckyComboRecipients = List<String>.from(actualReceiverIds);
 
       final serverCount = _giftInt(session['send_count']);
       final serverWon = _giftInt(session['total_rebate_coins']);
       final serverHighest = _giftInt(session['highest_multiplier']);
-      _luckyComboCount =
-          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
+      final fallbackSendCount = quantity * actualReceiverIds.length;
+      _luckyComboCount = serverCount > 0
+          ? serverCount
+          : (actualContinuesSession
+              ? _luckyComboCount + fallbackSendCount
+              : fallbackSendCount);
       _luckyComboWon = serverWon > 0
           ? serverWon
-          : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
-      _luckySessionHighest = continuesSession
+          : (actualContinuesSession
+              ? _luckyComboWon + rebateCoins
+              : rebateCoins);
+      _luckySessionHighest = actualContinuesSession
           ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
           : math.max(serverHighest, multiplier);
-      _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverIds
-        ..clear()
-        ..addAll(receiverIds);
-      _luckyAnimationSequence++;
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
         gift: gift,
         quantity: quantity,
         senderId: account.userId,
-        receiverIds: List<String>.unmodifiable(receiverIds),
+        receiverIds: List<String>.unmodifiable(actualReceiverIds),
         totalCost: totalCost > 0
             ? totalCost
-            : gift.price * quantity * receiverIds.length,
+            : gift.price * quantity * actualReceiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
-      widget.state.activities.addGiftScore(account.userId, tx.totalCost);
+      widget.state.activities.addGiftScore(
+        account.userId,
+        math.max(0, tx.totalCost ~/ 10),
+      );
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
 
-      _luckyBubbleTimer?.cancel();
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-        });
-      });
+      _startSeatGiftAnimation(
+        eventId: _giftResponseEventId(response),
+        gift: gift,
+        receiverIds: actualReceiverIds,
+        quantity: quantity,
+        multiplier: multiplier,
+        forceReplay: true,
+      );
 
       await _refreshLuckyFeed();
       if (multiplier >= 500) {
@@ -2558,8 +2717,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return true;
     } catch (error) {
       final message = error.toString().replaceFirst('Bad state: ', '');
-      if (message.toLowerCase().contains('insufficient coins')) {
+      final lower = message.toLowerCase();
+      if (lower.contains('insufficient coins')) {
         await _openRechargeDirect();
+      } else if (lower.contains('no longer on a seat') ||
+          lower.contains('select at least one recipient on a seat')) {
+        if (mounted) {
+          setState(_resetLuckyComboState);
+          _snack('Selected user left the seat. Combo stopped.');
+        }
       } else if (mounted) {
         _snack(message);
       }
@@ -3256,25 +3422,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showGiftSheet({String? preselectedUserId}) {
-    final ownerId = widget.room.ownerId ?? widget.room.id;
-    final senderId = widget.state.auth.current?.userId;
+    final account = widget.state.auth.current;
+    final senderId = account?.userId;
     if (senderId == null) return;
-    if (preselectedUserId != null && preselectedUserId != senderId) {
+    if (preselectedUserId != null && preselectedUserId.trim().isNotEmpty) {
       _selectedGiftRecipients
         ..clear()
-        ..add(preselectedUserId);
+        ..add(preselectedUserId.trim());
     }
 
-    var giftCategory = 'Popular';
+    var giftCategory = 'Normal';
     var luckyQuantity = 1;
     GiftDefinition? selectedGift;
     const giftCategories = <String>[
-      'Popular',
-      'Lucky',
       'Normal',
-      'Luxury',
+      'Lucky',
       'CP',
-      'Backpack',
+      'Country',
+      'Luxury',
     ];
 
     final roomGifts = <GiftDefinition>[
@@ -3283,24 +3448,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         name: 'Golden Dragon',
         price: 5000,
         effectKind: 'mp4',
+        emoji: '🐉',
       ),
       const GiftDefinition(
         id: 'royal-crown',
         name: 'Royal Crown',
         price: 2500,
         effectKind: 'pag',
+        emoji: '👑',
       ),
       const GiftDefinition(
         id: 'star-castle',
         name: 'Star Castle',
         price: 12000,
         effectKind: 'mp4',
+        emoji: '🏰',
       ),
       const GiftDefinition(
         id: 'heart-ring',
         name: 'Heart Ring',
         price: 1800,
         effectKind: 'svga',
+        emoji: '💍',
+      ),
+      GiftDefinition(
+        id: 'country-pride',
+        name: 'Country Pride',
+        price: 100,
+        effectKind: 'svga',
+        emoji: account?.flagEmoji.isNotEmpty == true
+            ? account!.flagEmoji
+            : '🌐',
       ),
       ...GiftService.catalog,
       ...GiftService.luckyCatalog,
@@ -3310,10 +3488,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       switch (giftCategory) {
         case 'Lucky':
           return roomGifts.where((gift) => gift.lucky).toList();
-        case 'Normal':
-          return roomGifts
-              .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
-              .toList();
+        case 'CP':
+          return roomGifts.where((gift) => gift.id == 'heart-ring').toList();
+        case 'Country':
+          return roomGifts.where((gift) => gift.id == 'country-pride').toList();
         case 'Luxury':
           return roomGifts
               .where(
@@ -3324,55 +3502,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     gift.id == 'crown',
               )
               .toList();
-        case 'CP':
-          return roomGifts
-              .where((gift) => gift.id == 'heart-ring')
-              .toList();
-        case 'Backpack':
-          return roomGifts
-              .where(
-                (gift) =>
-                    (widget.state.backpack.items[gift.id]?.quantity ?? 0) > 0,
-              )
-              .toList();
+        case 'Normal':
         default:
-          return roomGifts;
+          return roomGifts
+              .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
+              .toList();
       }
     }
 
     List<(String, String)> recipients() {
-      final account = widget.state.auth.current;
-      final values = <(String, String)>[
-        (senderId, account?.displayName ?? 'You'),
-      ];
-      if (ownerId != senderId) {
-        values.add((ownerId, 'Room Owner'));
-      }
-      for (var index = 0; index < controller.seats.length; index++) {
-        final seat = controller.seats[index];
-        final name = seat.userName;
-        if (name == null) continue;
-        final liveMatch = widget.state.roomSession.liveMembers.where(
-          (member) => member.seatIndex == index,
-        );
-        final id = name == 'You'
-            ? senderId
-            : liveMatch.isNotEmpty
-                ? liveMatch.first.userId
-                : 'seat-${index + 1}';
-        if (values.any((item) => item.$1 == id)) continue;
-        values.add((id, name));
-      }
-      for (final member in widget.state.roomSession.liveMembers) {
+      final members = widget.state.roomSession.liveMembers
+          .where((member) => member.seatIndex != null)
+          .toList()
+        ..sort((a, b) => a.seatIndex!.compareTo(b.seatIndex!));
+      final values = <(String, String)>[];
+
+      for (final member in members) {
         if (values.any((item) => item.$1 == member.userId)) continue;
         values.add((member.userId, member.displayName));
       }
-      _selectedGiftRecipients.removeWhere(
-        (id) => !values.any((item) => item.$1 == id),
-      );
-      if (_selectedGiftRecipients.isEmpty && values.isNotEmpty) {
-        _selectedGiftRecipients.add(values.first.$1);
+
+      // Presence may trail the local seat by one realtime frame. Keep self
+      // available by stable user ID only; never infer a recipient from name,
+      // avatar image, or seat number.
+      if (controller.mySeat != null &&
+          !values.any((item) => item.$1 == senderId)) {
+        values.add((senderId, account?.displayName ?? 'You'));
       }
+
+      final liveIds = values.map((item) => item.$1).toSet();
+      _selectedGiftRecipients.removeWhere((id) => !liveIds.contains(id));
       return values;
     }
 
@@ -3399,88 +3558,68 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return;
       }
 
-      if (giftCategory != 'Backpack') {
-        try {
-          await widget.state.roomSession.sendGift(
-            roomId: widget.room.id,
-            authToken: widget.state.auth.current!.authToken,
-            giftId: gift.id,
-            giftName: gift.name,
-            quantity: 1,
-            unitPrice: gift.price,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-          );
-          _refreshRoomSendingSummary();
-        } catch (error) {
-          final message =
-              error.toString().replaceFirst('Bad state: ', '');
-          if (message.toLowerCase().contains('insufficient coins')) {
-            if (sheetContext.mounted) Navigator.pop(sheetContext);
-            await _openRechargeDirect();
-          } else {
-            _snack(message);
-          }
-          return;
-        }
-      }
-
-      GiftTransaction? tx;
-      if (giftCategory == 'Backpack') {
-        final consumed = widget.state.backpack.consume(gift.id, 1);
-        if (consumed) {
-          tx = GiftTransaction(
-            gift: gift,
-            quantity: 1,
-            senderId: senderId,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-            totalCost:
-                gift.price * _selectedGiftRecipients.length,
-          );
-          widget.state.gifts.sent.insert(0, tx);
-        }
-      } else {
-        tx = widget.state.gifts.send(
-          gift: gift,
+      try {
+        final response = await widget.state.roomSession.sendGift(
+          roomId: widget.room.id,
+          authToken: widget.state.auth.current!.authToken,
+          giftId: gift.id,
+          giftName: gift.name,
           quantity: 1,
-          maxCombo: controller.config.maxGiftCombo,
-          senderId: senderId,
+          unitPrice: gift.price,
           receiverIds:
               _selectedGiftRecipients.toList(growable: false),
         );
-      }
-      if (tx == null) {
-        if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
+        _applyGiftServerWallet(response);
+
+        final actualReceiverIds = _giftResponseReceiverIds(
+          response,
+          _selectedGiftRecipients.toList(growable: false),
+        );
+        final totalCost = _giftInt(response['total_cost']);
+        final tx = GiftTransaction(
+          gift: gift,
+          quantity: 1,
+          senderId: senderId,
+          receiverIds: List<String>.unmodifiable(actualReceiverIds),
+          totalCost: totalCost > 0
+              ? totalCost
+              : gift.price * actualReceiverIds.length,
+        );
+        widget.state.gifts.sent.insert(0, tx);
+
+        _startSeatGiftAnimation(
+          eventId: _giftResponseEventId(response),
+          gift: gift,
+          receiverIds: actualReceiverIds,
+          quantity: 1,
+          forceReplay: true,
+        );
+        _refreshRoomSendingSummary();
+        widget.state.activities.addGiftScore(senderId, tx.totalCost);
+        widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+
+        if (sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        _snack(
+          '${gift.name} sent to ${actualReceiverIds.length} selected user(s).',
+        );
+        if (mounted) setState(() {});
+      } catch (error) {
+        final message =
+            error.toString().replaceFirst('Bad state: ', '');
+        final lower = message.toLowerCase();
+        if (lower.contains('insufficient coins')) {
           if (sheetContext.mounted) Navigator.pop(sheetContext);
           await _openRechargeDirect();
+        } else if (lower.contains('no longer on a seat') ||
+            lower.contains('select at least one recipient on a seat')) {
+          _selectedGiftRecipients.clear();
+          _snack('Selected user left the seat. Select a seated user again.');
         } else {
-          _snack(
-            giftCategory == 'Backpack'
-                ? 'This gift is not available in Backpack.'
-                : 'Gift failed, select a recipient or check balance.',
-          );
+          _snack(message);
         }
-        return;
       }
-      if (!sheetContext.mounted) return;
-      Navigator.pop(sheetContext);
-      if (widget.state.roomControls.effectsEnabled) {
-        widget.state.effects.enqueue(
-          EffectRequest(
-            id: 'gift-${widget.state.gifts.sent.length}',
-            kind: EffectKind.gift,
-            asset: '${gift.effectKind}:${gift.id}',
-            priority: 50,
-          ),
-        );
-      }
-      widget.state.activities.addGiftScore(senderId, tx.totalCost);
-      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-      _snack(
-        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
-      );
-      setState(() {});
     }
 
     showModalBottomSheet<void>(
@@ -3543,13 +3682,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ? const Color(0xFFFFC247)
                             : value == 'CP'
                                 ? FeaturePalette.cp
-                                : value == 'Backpack'
-                                    ? FeaturePalette.backpack
+                                : value == 'Country'
+                                    ? RoyalPalette.gold
                                     : value == 'Luxury'
                                         ? FeaturePalette.vip
-                                        : value == 'Normal'
-                                            ? FeaturePalette.social
-                                            : FeaturePalette.gift;
+                                        : FeaturePalette.social;
                         return ChoiceChip(
                           label: Text(value),
                           selected: giftCategory == value,
@@ -3582,7 +3719,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       height: 88,
                       child: Center(
                         child: Text(
-                          'No other user is available for gifting.',
+                          'No seated user is available for gifting.',
                           style: TextStyle(color: RoyalPalette.muted),
                         ),
                       ),
@@ -3605,9 +3742,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           onTap: () {
                             setSheetState(() {
                               if (selected) {
-                                if (_selectedGiftRecipients.length > 1) {
-                                  _selectedGiftRecipients.remove(recipient.$1);
-                                }
+                                _selectedGiftRecipients.remove(recipient.$1);
                               } else {
                                 _selectedGiftRecipients.add(recipient.$1);
                               }
@@ -3657,13 +3792,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             }
                                           }
                                         }
-                                        if (avatar != null && avatar.isNotEmpty) {
-                                          return Image.network(
-                                            avatar,
+                                        final provider =
+                                            _roomAvatarProvider(avatar);
+                                        if (provider != null) {
+                                          return Image(
+                                            image: provider,
                                             fit: BoxFit.cover,
+                                            gaplessPlayback: true,
                                             errorBuilder: (_, _, _) => Icon(
                                               Icons.person_rounded,
-                                              color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                              color: selected
+                                                  ? FeaturePalette.gift
+                                                  : FeaturePalette.social,
                                             ),
                                           );
                                         }
@@ -3759,12 +3899,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          PopupMenuButton<int>(
+                          IconButton(
                             key: const Key('lucky-quantity-plus'),
-                            tooltip: 'Lucky quantity',
+                            tooltip: 'Add one',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
-                              minWidth: 30,
+                              minWidth: 28,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 7999
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          PopupMenuButton<int>(
+                            key: const Key('lucky-quantity-presets'),
+                            tooltip: 'Quantity presets',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
                               minHeight: 30,
                             ),
                             color: const Color(0xFF24152F),
@@ -3803,8 +3961,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 )
                                 .toList(growable: false),
                             child: const Icon(
-                              Icons.add_circle_outline_rounded,
-                              size: 20,
+                              Icons.arrow_drop_down_circle_outlined,
+                              color: Color(0xFFFFD45A),
+                              size: 19,
                             ),
                           ),
                         ],
@@ -3906,15 +4065,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 ],
                               ),
                               Text(
-                                giftCategory == 'Backpack'
-                                    ? '🎒 x' +
-                                        (widget.state.backpack.items[gift.id]
-                                                    ?.quantity ??
-                                                0)
-                                            .toString()
-                                    : gift.lucky
-                                        ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
-                                        : '🪙 ${gift.price}',
+                                gift.lucky
+                                    ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
+                                    : '🪙 ${gift.price}',
                                 style: const TextStyle(
                                   color: RoyalPalette.gold,
                                   fontSize: 10,
@@ -3940,48 +4093,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.monetization_on_rounded,
-                                    color: Color(0xFFFFD45A),
-                                    size: 15,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    widget.state.wallet.coins.toString(),
-                                    key: const Key('room-gift-wallet-coins'),
-                                    style: const TextStyle(
-                                      color: Color(0xFFFFD45A),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.monetization_on_rounded,
+                                color: Color(0xFFFFD45A),
+                                size: 16,
                               ),
-                              if (selectedGift != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  selectedGift!.name +
-                                      (selectedGift!.lucky
-                                          ? ' • 🪙 ${selectedGift!.price} × $luckyQuantity'
-                                          : giftCategory == 'Backpack'
-                                              ? ' • Backpack gift'
-                                              : ' • 🪙 ${selectedGift!.price}'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: RoyalPalette.cream,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Wallet  ' +
+                                    widget.state.wallet.coins.toString(),
+                                key: const Key('room-gift-wallet-coins'),
+                                style: const TextStyle(
+                                  color: Color(0xFFFFD45A),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
                         ),
@@ -7616,7 +7746,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : isMySeat
                 ? account?.userId
                 : null;
-    final showLuckySeatEffect = authoritativeSeatUserId != null &&
+    final showGiftSeatEffect = authoritativeSeatUserId != null &&
         _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
@@ -7835,8 +7965,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
@@ -7897,19 +8027,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                         },
                         child: _luckyArtwork(
-                          _luckyComboGift!,
-                          size: seatDiameter * 0.74,
+                          _seatGiftAnimationGift!,
+                          size: seatDiameter * 0.86,
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     _buildLuckyImpactEffect(
-                      gift: _luckyComboGift!,
+                      gift: _seatGiftAnimationGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyLastMultiplier > 0)
+                  if (showGiftSeatEffect &&
+                      (_luckyLastMultiplier > 0 ||
+                          _seatGiftAnimationQuantity > 1))
                     Positioned(
                       top: -(compact ? 30.0 : 38.0),
                       child: IgnorePointer(
@@ -7964,7 +8095,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ],
                             ),
                             child: Text(
-                              '$_luckyLastMultiplier×',
+                              _luckyLastMultiplier > 0
+                                  ? '$_luckyLastMultiplier×'
+                                  : '×$_seatGiftAnimationQuantity',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: compact ? 11 : 14,
@@ -9044,44 +9177,22 @@ class _ReferenceGameLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x665D3BFF),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color(0x55FF4FD8),
-              blurRadius: 11,
-              spreadRadius: 1,
-            ),
-          ],
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.34),
+          width: 1,
         ),
-        child: Center(
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFFFF7CF2),
-                Color(0xFFB56CFF),
-                Color(0xFF6F7BFF),
-              ],
-            ).createShader(bounds),
-            child: Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.78,
-              color: Colors.white,
-            ),
-          ),
-        ),
+      ),
+      child: Icon(
+        Icons.sports_esports_rounded,
+        size: size * 0.68,
+        color: Colors.white,
       ),
     );
   }
@@ -9094,37 +9205,35 @@ class _ReferenceRocketLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.30),
+          width: 1,
+        ),
+      ),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Icon(
             Icons.rocket_launch_rounded,
-            size: size * 0.86,
+            size: size * 0.67,
             color: const Color(0xFFFF63E6),
-            shadows: const <Shadow>[
-              Shadow(
-                color: Color(0xFF6B5CFF),
-                blurRadius: 12,
-              ),
-            ],
           ),
           Positioned(
-            bottom: 0,
+            right: size * 0.14,
+            bottom: size * 0.13,
             child: Container(
-              width: size * 0.22,
-              height: size * 0.22,
+              width: size * 0.14,
+              height: size * 0.14,
               decoration: const BoxDecoration(
-                color: Color(0xFFFFD45A),
+                color: Color(0xFFFFC247),
                 shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x88FFD45A),
-                    blurRadius: 8,
-                  ),
-                ],
               ),
             ),
           ),
