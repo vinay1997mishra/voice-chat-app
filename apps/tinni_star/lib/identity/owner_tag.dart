@@ -32,12 +32,19 @@ class OwnerTag {
     );
   }
 
-  Map<String, String> toJson() => <String, String>{
-        'name': name,
-        'color': colorHex,
-        'kind': kind,
-        if (designation.isNotEmpty) 'designation': designation,
-        if (backgroundColorHex != null)
-          'background_color': backgroundColorHex!,
-      };
+  Map<String, String> toJson() {
+    final result = <String, String>{
+      'name': name,
+      'color': colorHex,
+      'kind': kind,
+    };
+    if (designation.isNotEmpty) {
+      result['designation'] = designation;
+    }
+    final background = backgroundColorHex;
+    if (background != null) {
+      result['background_color'] = background;
+    }
+    return result;
+  }
 }
