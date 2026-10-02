@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -84,6 +85,14 @@ class RoomPresenceService extends ChangeNotifier {
   final Uri apiBase;
   final HttpClient _httpClient;
 
+  WebSocket? _realtimeSocket;
+  StreamSubscription<dynamic>? _realtimeSubscription;
+  Timer? _realtimeReconnectTimer;
+  Timer? _realtimeKeepAliveTimer;
+  String? _realtimeRoomId;
+  String? _realtimeAuthToken;
+  bool _realtimeClosing = false;
+
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
   bool connected = false;
@@ -96,6 +105,166 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
   final Set<int> lockedSeats = <int>{};
   String? lastError;
+
+  bool get realtimeConnected =>
+      _realtimeSocket?.readyState == WebSocket.open;
+
+  Future<void> connectRealtime({
+    required String roomId,
+    required String authToken,
+  }) async {
+    _realtimeRoomId = roomId;
+    _realtimeAuthToken = authToken;
+    _realtimeClosing = false;
+    _realtimeReconnectTimer?.cancel();
+    await _openRealtimeSocket();
+  }
+
+  Future<void> disconnectRealtime() async {
+    _realtimeClosing = true;
+    _realtimeReconnectTimer?.cancel();
+    _realtimeReconnectTimer = null;
+    _realtimeKeepAliveTimer?.cancel();
+    _realtimeKeepAliveTimer = null;
+
+    final subscription = _realtimeSubscription;
+    _realtimeSubscription = null;
+    if (subscription != null) {
+      try {
+        await subscription.cancel();
+      } catch (_) {}
+    }
+
+    final socket = _realtimeSocket;
+    _realtimeSocket = null;
+    if (socket != null) {
+      try {
+        await socket.close(WebSocketStatus.normalClosure, 'room_presence_close');
+      } catch (_) {}
+    }
+
+    _realtimeRoomId = null;
+    _realtimeAuthToken = null;
+  }
+
+  void syncRealtimeSeat(int? seatIndex) {
+    _sendRealtime(<String, Object?>{
+      'type': 'seat_state',
+      'seat_index': seatIndex,
+    });
+  }
+
+  Future<void> _openRealtimeSocket() async {
+    if (_realtimeClosing || realtimeConnected) return;
+    final roomId = _realtimeRoomId;
+    final authToken = _realtimeAuthToken;
+    if (roomId == null || authToken == null || authToken.isEmpty) return;
+
+    try {
+      final uri = apiBase.replace(
+        scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
+        path: '/room-presence/stream',
+        queryParameters: <String, String>{'room_id': roomId},
+      );
+      final socket = await WebSocket.connect(
+        uri.toString(),
+        headers: <String, dynamic>{
+          HttpHeaders.authorizationHeader: 'Bearer $authToken',
+        },
+      );
+      if (_realtimeClosing ||
+          roomId != _realtimeRoomId ||
+          authToken != _realtimeAuthToken) {
+        await socket.close();
+        return;
+      }
+
+      _realtimeSocket = socket;
+      socket.pingInterval = const Duration(seconds: 20);
+      _realtimeKeepAliveTimer?.cancel();
+      _realtimeKeepAliveTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _sendRealtime(
+          const <String, Object?>{'type': 'presence_keepalive'},
+        ),
+      );
+
+      _realtimeSubscription = socket.listen(
+        _handleRealtimeData,
+        onError: (Object error) {
+          lastError = error.toString();
+        },
+        onDone: () {
+          if (identical(_realtimeSocket, socket)) {
+            _realtimeSocket = null;
+            _realtimeKeepAliveTimer?.cancel();
+            _realtimeKeepAliveTimer = null;
+            _scheduleRealtimeReconnect();
+          }
+        },
+        cancelOnError: false,
+      );
+      _sendRealtime(
+        const <String, Object?>{'type': 'presence_keepalive'},
+      );
+    } catch (error) {
+      lastError = error.toString();
+      _realtimeSocket = null;
+      _scheduleRealtimeReconnect();
+    }
+  }
+
+  void _handleRealtimeData(dynamic raw) {
+    String text;
+    if (raw is String) {
+      text = raw;
+    } else if (raw is List<int>) {
+      text = utf8.decode(raw);
+    } else {
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return;
+      final data = decoded.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      if (data['type'] == 'presence_error') {
+        lastError = data['error']?.toString();
+        return;
+      }
+      if (data['type'] == 'presence_state' || data['members'] is List) {
+        _apply(data);
+        connected = true;
+        lastError = null;
+        notifyListeners();
+      }
+    } catch (error) {
+      lastError = error.toString();
+    }
+  }
+
+  void _sendRealtime(Map<String, Object?> event) {
+    final socket = _realtimeSocket;
+    if (socket == null || socket.readyState != WebSocket.open) return;
+    try {
+      socket.add(jsonEncode(event));
+    } catch (_) {}
+  }
+
+  void _scheduleRealtimeReconnect() {
+    if (_realtimeClosing ||
+        _realtimeRoomId == null ||
+        _realtimeAuthToken == null) {
+      return;
+    }
+    _realtimeReconnectTimer?.cancel();
+    _realtimeReconnectTimer = Timer(
+      const Duration(seconds: 2),
+      () => _openRealtimeSocket(),
+    );
+  }
 
   Future<void> join({
     required String roomId,
@@ -698,6 +867,13 @@ class RoomPresenceService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _realtimeClosing = true;
+    _realtimeReconnectTimer?.cancel();
+    _realtimeKeepAliveTimer?.cancel();
+    _realtimeSubscription?.cancel();
+    try {
+      _realtimeSocket?.close();
+    } catch (_) {}
     _httpClient.close(force: true);
     super.dispose();
   }
