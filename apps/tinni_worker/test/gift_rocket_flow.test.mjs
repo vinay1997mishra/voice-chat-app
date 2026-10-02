@@ -112,6 +112,11 @@ assert.doesNotMatch(
   /Exactly one DP is the gift target/,
   "Gift recipient selection must not regress to single-select",
 );
+assert.doesNotMatch(
+  roomScreen,
+  /Gift sending is single-target/,
+  "Reopening the gift panel must preserve the full selected-recipient set",
+);
 assert.match(
   roomScreen,
   /receiverIds: selectedRecipients,/,
