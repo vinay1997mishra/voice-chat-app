@@ -21,7 +21,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, String?> media = const <String, String?>{};
   Map<String, dynamic> stats = const <String, dynamic>{};
   Map<String, dynamic> guardian = const <String, dynamic>{};
-  List<Map<String, dynamic>> medals = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> identityTags = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> trends = const <Map<String, dynamic>>[];
   bool loading = true;
@@ -58,7 +57,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       ..showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('ID copy ho gaya'),
+          content: Text('Copied'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -80,18 +79,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       ]);
       if (!mounted) return;
       final tagData = Map<String, dynamic>.from(results[3] as Map);
-      final rawMedals = tagData['medals'];
       final rawIdentityTags = tagData['identity_tags'];
       setState(() {
         media = Map<String, String?>.from(results[0] as Map);
         stats = Map<String, dynamic>.from(results[1] as Map);
         guardian = Map<String, dynamic>.from(results[2] as Map);
-        medals = rawMedals is List
-            ? rawMedals
-                .whereType<Map>()
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList(growable: false)
-            : const <Map<String, dynamic>>[];
         identityTags = rawIdentityTags is List
             ? rawIdentityTags
                 .whereType<Map>()
@@ -369,21 +361,25 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 ],
               ),
             ),
-            if (identityTags.isNotEmpty) ...[
-              Padding(
-                key: const Key('profile-identity-tags'),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 9,
-                  children: [
-                    for (final tag in identityTags)
-                      _ProfileIdentityTag(tag: tag),
-                  ],
+            Padding(
+              key: const Key('profile-identity-tags'),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 38),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 9,
+                    children: [
+                      for (final tag in identityTags)
+                        _ProfileIdentityTag(tag: tag),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-            ],
+            ),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: RoyalPanel(
@@ -504,49 +500,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   Icons.chevron_right_rounded,
                   color: RoyalPalette.gold,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          RoyalPanel(
-            accentColor: RoyalPalette.deepGold,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'My medal',
-                  style: TextStyle(
-                    color: RoyalPalette.gold,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                if (medals.isEmpty)
-                  const Text(
-                    'No medal equipped yet.',
-                    style: TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 11,
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final medal in medals.take(8))
-                        Chip(
-                          avatar: const Icon(
-                            Icons.military_tech_rounded,
-                            size: 17,
-                            color: RoyalPalette.gold,
-                          ),
-                          label: Text(
-                            medal['name']?.toString() ?? 'Medal',
-                          ),
-                        ),
-                    ],
-                  ),
               ],
             ),
           ),
