@@ -3555,88 +3555,67 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return;
       }
 
-      if (giftCategory != 'Backpack') {
-        try {
-          await widget.state.roomSession.sendGift(
-            roomId: widget.room.id,
-            authToken: widget.state.auth.current!.authToken,
-            giftId: gift.id,
-            giftName: gift.name,
-            quantity: 1,
-            unitPrice: gift.price,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-          );
-          _refreshRoomSendingSummary();
-        } catch (error) {
-          final message =
-              error.toString().replaceFirst('Bad state: ', '');
-          if (message.toLowerCase().contains('insufficient coins')) {
-            if (sheetContext.mounted) Navigator.pop(sheetContext);
-            await _openRechargeDirect();
-          } else {
-            _snack(message);
-          }
-          return;
-        }
-      }
-
-      GiftTransaction? tx;
-      if (giftCategory == 'Backpack') {
-        final consumed = widget.state.backpack.consume(gift.id, 1);
-        if (consumed) {
-          tx = GiftTransaction(
-            gift: gift,
-            quantity: 1,
-            senderId: senderId,
-            receiverIds:
-                _selectedGiftRecipients.toList(growable: false),
-            totalCost:
-                gift.price * _selectedGiftRecipients.length,
-          );
-          widget.state.gifts.sent.insert(0, tx);
-        }
-      } else {
-        tx = widget.state.gifts.send(
-          gift: gift,
+      try {
+        final response = await widget.state.roomSession.sendGift(
+          roomId: widget.room.id,
+          authToken: widget.state.auth.current!.authToken,
+          giftId: gift.id,
+          giftName: gift.name,
           quantity: 1,
-          maxCombo: controller.config.maxGiftCombo,
-          senderId: senderId,
+          unitPrice: gift.price,
           receiverIds:
               _selectedGiftRecipients.toList(growable: false),
         );
-      }
-      if (tx == null) {
-        if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
+        _applyGiftServerWallet(response);
+
+        final actualReceiverIds = _giftResponseReceiverIds(
+          response,
+          _selectedGiftRecipients.toList(growable: false),
+        );
+        final totalCost = _giftInt(response['total_cost']);
+        final tx = GiftTransaction(
+          gift: gift,
+          quantity: 1,
+          senderId: senderId,
+          receiverIds: List<String>.unmodifiable(actualReceiverIds),
+          totalCost: totalCost > 0
+              ? totalCost
+              : gift.price * actualReceiverIds.length,
+        );
+        widget.state.gifts.sent.insert(0, tx);
+
+        _startSeatGiftAnimation(
+          eventId: _giftResponseEventId(response),
+          gift: gift,
+          receiverIds: actualReceiverIds,
+          quantity: 1,
+        );
+        _refreshRoomSendingSummary();
+        widget.state.activities.addGiftScore(senderId, tx.totalCost);
+        widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
+
+        if (sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        _snack(
+          '${gift.name} sent to ${actualReceiverIds.length} selected user(s).',
+        );
+        if (mounted) setState(() {});
+      } catch (error) {
+        final message =
+            error.toString().replaceFirst('Bad state: ', '');
+        final lower = message.toLowerCase();
+        if (lower.contains('insufficient coins')) {
           if (sheetContext.mounted) Navigator.pop(sheetContext);
           await _openRechargeDirect();
+        } else if (lower.contains('no longer on a seat') ||
+            lower.contains('select at least one recipient on a seat')) {
+          _selectedGiftRecipients.clear();
+          _snack('Selected user left the seat. Select a seated user again.');
         } else {
-          _snack(
-            giftCategory == 'Backpack'
-                ? 'This gift is not available in Backpack.'
-                : 'Gift failed, select a recipient or check balance.',
-          );
+          _snack(message);
         }
-        return;
       }
-      if (!sheetContext.mounted) return;
-      Navigator.pop(sheetContext);
-      if (widget.state.roomControls.effectsEnabled) {
-        widget.state.effects.enqueue(
-          EffectRequest(
-            id: 'gift-${widget.state.gifts.sent.length}',
-            kind: EffectKind.gift,
-            asset: '${gift.effectKind}:${gift.id}',
-            priority: 50,
-          ),
-        );
-      }
-      widget.state.activities.addGiftScore(senderId, tx.totalCost);
-      widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-      _snack(
-        '${gift.name} sent to ${tx.receiverIds.length} user(s).',
-      );
-      setState(() {});
     }
 
     showModalBottomSheet<void>(
