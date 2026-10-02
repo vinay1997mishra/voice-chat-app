@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const MEMBER_TTL_MS = 30000;
+const MEMBER_TTL_MS = 180000;
 
 export class RoomPresenceStore extends DurableObject {
   constructor(ctx, env) {
@@ -1247,18 +1247,138 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  _broadcastPresence(type = "presence_state") {
-    const message = JSON.stringify({
-      type,
-      ...this._presenceState(),
-    });
+  _presenceStateFor(userIdValue, now = Date.now()) {
+    const userId = String(userIdValue || "").trim();
+    const member = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1",
+          userId,
+        ).toArray()[0]
+      : null;
+    const seatIndex = member?.seat_index === null ||
+        member?.seat_index === undefined
+      ? null
+      : Number(member.seat_index);
+    const forceRow = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT seat_index FROM room_seat_forces WHERE user_id = ? LIMIT 1",
+          userId,
+        ).toArray()[0]
+      : null;
+    const seatForced = Boolean(forceRow);
+    const forcedSeatIndex = seatForced &&
+        forceRow.seat_index !== null &&
+        forceRow.seat_index !== undefined
+      ? Number(forceRow.seat_index)
+      : null;
+
+    return {
+      ...this._presenceState(now),
+      self_mic_muted: userId ? this.muteStatus(userId, seatIndex) : false,
+      self_chat_banned: userId ? this.chatBanStatus(userId) : false,
+      self_seat_forced: seatForced,
+      self_forced_seat_index: forcedSeatIndex,
+      pending_seat_invite: userId ? this.seatInviteFor(userId) : null,
+    };
+  }
+
+  _sendSocketState(socket, type = "presence_state", now = Date.now()) {
+    if (!socket) return;
+    const attachment = socket.deserializeAttachment?.() || {};
+    try {
+      socket.send(JSON.stringify({
+        type,
+        ...this._presenceStateFor(attachment.userId, now),
+      }));
+    } catch (_) {}
+  }
+
+  _broadcastPresence(type = "presence_state", now = Date.now()) {
     for (const socket of this.ctx.getWebSockets("room-presence")) {
-      try {
-        socket.send(message);
-      } catch (_) {
-        // Hibernating WebSocket runtime cleans up closed sockets.
+      this._sendSocketState(socket, type, now);
+    }
+  }
+
+  async _touchDirectory(userId, roomId, now = Date.now()) {
+    if (!userId || !roomId) return;
+    try {
+      const directoryId = this.env.APP_DIRECTORY.idFromName("tinni-app-directory");
+      const directory = this.env.APP_DIRECTORY.get(directoryId);
+      await directory.touchPresence(userId, roomId, this._members(now).length);
+    } catch (_) {}
+  }
+
+  _touchSocketMember(userIdValue, now = Date.now()) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user_id is required");
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row) throw new Error("User is not in the room");
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET last_seen = ? WHERE user_id = ?",
+      now,
+      userId,
+    );
+  }
+
+  _applySocketState(userIdValue, rawSeatIndex, micEnabledValue, isOwner = false, now = Date.now()) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user_id is required");
+    const current = this.ctx.storage.sql.exec(
+      "SELECT seat_index, mic_enabled FROM room_members WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!current) throw new Error("User is not in the room");
+
+    const nextSeat = rawSeatIndex === null || rawSeatIndex === undefined
+      ? null
+      : Number(rawSeatIndex);
+    if (nextSeat !== null && (!Number.isInteger(nextSeat) || nextSeat < 0)) {
+      throw new Error("seat_index is invalid");
+    }
+    const previousSeat = current.seat_index === null || current.seat_index === undefined
+      ? null
+      : Number(current.seat_index);
+    const previousMicEnabled = Number(current.mic_enabled || 0) === 1;
+    const nextMicEnabled = nextSeat !== null && micEnabledValue === true;
+
+    if (previousSeat !== nextSeat && nextSeat !== null) {
+      this._assertSeatAvailable(nextSeat, userId);
+      const privileged = isOwner || this.isManager(userId);
+      if (!privileged && this.micMode() !== "free") {
+        throw new Error("Apply for mic and wait for owner/admin approval");
       }
     }
+
+    if (previousSeat === nextSeat && previousMicEnabled === nextMicEnabled) {
+      this._touchSocketMember(userId, now);
+      return false;
+    }
+
+    this.ctx.storage.sql.exec(
+      `UPDATE room_members
+          SET seat_index = ?,
+              mic_enabled = ?,
+              seat_emote = CASE WHEN seat_index IS ? THEN seat_emote ELSE NULL END,
+              seat_emote_until = CASE WHEN seat_index IS ? THEN seat_emote_until ELSE NULL END,
+              last_seen = ?
+        WHERE user_id = ?`,
+      nextSeat,
+      nextMicEnabled ? 1 : 0,
+      nextSeat,
+      nextSeat,
+      now,
+      userId,
+    );
+
+    if (previousSeat !== nextSeat) {
+      this.ctx.storage.sql.exec("DELETE FROM room_mutes WHERE user_id = ?", userId);
+      this.ctx.storage.sql.exec("DELETE FROM room_seat_requests WHERE user_id = ?", userId);
+      this.ctx.storage.sql.exec("DELETE FROM room_seat_forces WHERE user_id = ?", userId);
+    }
+    return true;
   }
 
   async fetch(request) {
@@ -1266,7 +1386,9 @@ export class RoomPresenceStore extends DurableObject {
       return new Response("WebSocket required", { status: 426 });
     }
     const userId = String(request.headers.get("x-tinni-user-id") || "").trim();
-    if (!userId || !this.isMember(userId)) {
+    const roomId = String(request.headers.get("x-tinni-room-id") || "").trim();
+    const isOwner = request.headers.get("x-tinni-room-owner") === "1";
+    if (!userId || !roomId || !this.isMember(userId)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
@@ -1274,18 +1396,62 @@ export class RoomPresenceStore extends DurableObject {
     const client = pair[0];
     const server = pair[1];
     this.ctx.acceptWebSocket(server, ["room-presence"]);
-    server.send(JSON.stringify({
-      type: "presence_state",
-      ...this._presenceState(),
-    }));
+    server.serializeAttachment({ userId, roomId, isOwner });
+    const now = Date.now();
+    this._touchSocketMember(userId, now);
+    this._sendSocketState(server, "presence_state", now);
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  webSocketMessage(socket, message) {
-    if (String(message || "") === "ping") {
+  async webSocketMessage(socket, message) {
+    const attachment = socket.deserializeAttachment?.() || {};
+    const userId = String(attachment.userId || "").trim();
+    const roomId = String(attachment.roomId || "").trim();
+    if (!userId || !roomId) {
+      try { socket.close(1008, "Invalid room presence session"); } catch (_) {}
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(
+        typeof message === "string" ? message : new TextDecoder().decode(message),
+      );
+    } catch (_) {
+      return;
+    }
+
+    const now = Date.now();
+    try {
+      if (payload?.type === "presence_keepalive") {
+        this._touchSocketMember(userId, now);
+        await this._touchDirectory(userId, roomId, now);
+        return;
+      }
+      if (payload?.type === "seat_state") {
+        const changed = this._applySocketState(
+          userId,
+          payload.seat_index,
+          payload.mic_enabled,
+          attachment.isOwner === true,
+          now,
+        );
+        await this._touchDirectory(userId, roomId, now);
+        if (changed) this._broadcastPresence("seat_changed", now);
+        return;
+      }
+      if (payload?.type === "presence_sync") {
+        this._touchSocketMember(userId, now);
+        this._sendSocketState(socket, "presence_state", now);
+      }
+    } catch (error) {
       try {
-        socket.send(JSON.stringify({ type: "pong" }));
+        socket.send(JSON.stringify({
+          type: "presence_error",
+          error: String(error?.message || "Presence update failed"),
+        }));
       } catch (_) {}
+      this._sendSocketState(socket, "presence_state", now);
     }
   }
 
@@ -1300,7 +1466,32 @@ export class RoomPresenceStore extends DurableObject {
   }
 
   async heartbeat(input) {
-    return this._upsert(input);
+    const userId = String(input?.user_id || "").trim();
+    const before = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT seat_index, mic_enabled FROM room_members WHERE user_id = ? LIMIT 1",
+          userId,
+        ).toArray()[0]
+      : null;
+    const beforeSeat = before?.seat_index === null || before?.seat_index === undefined
+      ? null
+      : Number(before.seat_index);
+    const beforeMic = Number(before?.mic_enabled || 0) === 1;
+    const result = this._upsert(input);
+    const after = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT seat_index, mic_enabled FROM room_members WHERE user_id = ? LIMIT 1",
+          userId,
+        ).toArray()[0]
+      : null;
+    const afterSeat = after?.seat_index === null || after?.seat_index === undefined
+      ? null
+      : Number(after.seat_index);
+    const afterMic = Number(after?.mic_enabled || 0) === 1;
+    if (beforeSeat !== afterSeat || beforeMic !== afterMic) {
+      this._broadcastPresence("seat_changed");
+    }
+    return result;
   }
 
   async leave(input) {
@@ -1313,6 +1504,10 @@ export class RoomPresenceStore extends DurableObject {
       );
       this.ctx.storage.sql.exec(
         "DELETE FROM room_mutes WHERE user_id = ?",
+        userId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_forces WHERE user_id = ?",
         userId,
       );
     }
