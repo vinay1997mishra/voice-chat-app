@@ -4837,7 +4837,7 @@ export class AppDirectoryStore extends DurableObject {
     const receivers = [...new Set((Array.isArray(input?.receiver_ids) ? input.receiver_ids : [])
       .map((value) => String(value || "").trim()).filter(Boolean))];
     if (!senderId || !roomId || !giftId) throw new Error("Gift details are required");
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw new Error("Invalid gift quantity");
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 7999) throw new Error("Invalid gift quantity");
 
     const catalogRow = this.ctx.storage.sql.exec(
       "SELECT name, data_json, enabled FROM owner_catalog WHERE id = ? AND kind = 'gift' LIMIT 1",
