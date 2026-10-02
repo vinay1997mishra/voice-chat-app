@@ -42,8 +42,14 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final Set<String> _selectedGiftRecipients = <String>{};
+  GiftDefinition? _seatGiftEffect;
+  final Set<String> _seatGiftEffectReceiverIds = <String>{};
+  int _seatGiftEffectSequence = 0;
+  Timer? _seatGiftEffectTimer;
   GiftDefinition? _luckyComboGift;
   List<String> _luckyComboRecipients = <String>[];
+  int _luckyComboQuantity = 1;
+  int _luckyComboEpoch = 0;
   int _luckyComboCount = 0;
   int _luckyComboWon = 0;
   int _luckyLastMultiplier = 0;
@@ -624,6 +630,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
+    _seatGiftEffectTimer?.cancel();
     _luckyBubbleTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
@@ -2393,8 +2400,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _resetLuckyComboState() {
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = null;
+    _luckyComboEpoch++;
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
+    _luckyComboQuantity = 1;
     _luckyComboCount = 0;
     _luckyComboWon = 0;
     _luckyLastMultiplier = 0;
@@ -2405,9 +2414,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
+    final epoch = ++_luckyComboEpoch;
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
+      if (!mounted || epoch != _luckyComboEpoch) return;
+      setState(() {
+        _luckyComboExpiryTimer = null;
+        _luckyComboGift = null;
+        _luckyComboRecipients = <String>[];
+        _luckyComboQuantity = 1;
+        _luckyComboCount = 0;
+        _luckyComboWon = 0;
+        _luckyLastMultiplier = 0;
+        _luckyPoolBalance = 0;
+        _luckySessionId = null;
+        _luckySessionHighest = 0;
+      });
+    });
+  }
+
+  void _triggerSeatGiftEffect(
+    GiftDefinition gift,
+    List<String> receiverIds,
+  ) {
+    _seatGiftEffectTimer?.cancel();
+    setState(() {
+      _seatGiftEffect = gift;
+      _seatGiftEffectReceiverIds
+        ..clear()
+        ..addAll(receiverIds);
+      _seatGiftEffectSequence++;
+    });
+    _seatGiftEffectTimer = Timer(const Duration(milliseconds: 1900), () {
       if (!mounted) return;
-      setState(_resetLuckyComboState);
+      setState(() {
+        _seatGiftEffect = null;
+        _seatGiftEffectReceiverIds.clear();
+      });
     });
   }
 
@@ -2508,6 +2550,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _luckySessionId = sessionId;
       _luckyComboGift = gift;
       _luckyComboRecipients = List<String>.from(receiverIds);
+      _luckyComboQuantity = quantity;
 
       final serverCount = _giftInt(session['send_count']);
       final serverWon = _giftInt(session['total_rebate_coins']);
@@ -2538,7 +2581,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : gift.price * quantity * receiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
-      widget.state.activities.addGiftScore(account.userId, tx.totalCost);
+      widget.state.activities.addGiftScore(
+        account.userId,
+        tx.totalCost ~/ 10,
+      );
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
 
       _luckyBubbleTimer?.cancel();
@@ -2575,6 +2621,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     await _sendLuckyGift(
       gift,
       List<String>.from(_luckyComboRecipients),
+      quantity: _luckyComboQuantity,
     );
   }
 
