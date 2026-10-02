@@ -3502,6 +3502,9 @@ export default {
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const store = getRoomPresenceStore(env, roomId);
       if (!(await store.isMember(appSession.user.user_id))) {
         return json({ ok: false, error: "Join the room first" }, 403);
@@ -3509,6 +3512,11 @@ export default {
 
       const headers = new Headers(request.headers);
       headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      headers.set("x-tinni-room-id", roomId);
+      headers.set(
+        "x-tinni-room-owner",
+        String(room.owner_id) === String(appSession.user.user_id) ? "1" : "0",
+      );
       const forwarded = new Request(request.url, {
         method: "GET",
         headers,
