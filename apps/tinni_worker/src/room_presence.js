@@ -1089,9 +1089,30 @@ export class RoomPresenceStore extends DurableObject {
     }));
   }
 
+  validGiftRecipients(input) {
+    const requested = [...new Set(
+      (Array.isArray(input?.user_ids) ? input.user_ids : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    )];
+    if (requested.length === 0) {
+      return { ok: true, user_ids: [] };
+    }
+    const seated = new Set(
+      this.ctx.storage.sql.exec(
+        "SELECT user_id FROM room_members WHERE seat_index IS NOT NULL",
+      ).toArray().map((row) => String(row.user_id)),
+    );
+    return {
+      ok: true,
+      user_ids: requested.filter((userId) => seated.has(userId)),
+    };
+  }
+
   recordGift(input) {
     const now = Date.now();
     const rows = Array.isArray(input?.receivers) ? input.receivers : [];
+    const creditedReceiverIds = [];
     let changed = false;
     for (const item of rows) {
       const userId = String(item?.user_id || "").trim();
@@ -1107,12 +1128,37 @@ export class RoomPresenceStore extends DurableObject {
         coins,
         now,
       );
+      creditedReceiverIds.push(userId);
       changed = true;
     }
-    if (changed) this._broadcastPresence("gift_received", now);
+
+    const eventReceiverIds = [...new Set(
+      (Array.isArray(input?.receiver_ids) ? input.receiver_ids : creditedReceiverIds)
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    )];
+    const event = {
+      id: String(input?.event_id || ("gift-event-" + crypto.randomUUID())),
+      sender_id: String(input?.sender_id || "").trim(),
+      gift_id: String(input?.gift_id || "").trim(),
+      gift_name: String(input?.gift_name || "Gift").trim().slice(0, 80),
+      gift_category: String(input?.gift_category || "normal").trim().toLowerCase(),
+      receiver_ids: eventReceiverIds,
+      quantity: Math.max(1, Math.floor(Number(input?.quantity || 1))),
+      lucky: input?.lucky === true,
+      multiplier: Math.max(0, Math.floor(Number(input?.multiplier || 0))),
+      created_at: now,
+    };
+
+    if (eventReceiverIds.length > 0) {
+      this._broadcastGiftEvent(event, now);
+    } else if (changed) {
+      this._broadcastPresence("gift_received", now);
+    }
     return {
       ok: true,
       server_time: now,
+      gift_event: event,
       members: this._members(now),
     };
   }
@@ -1397,6 +1443,19 @@ export class RoomPresenceStore extends DurableObject {
   _broadcastPresence(type = "presence_state", now = Date.now()) {
     for (const socket of this.ctx.getWebSockets("room-presence")) {
       this._sendSocketState(socket, type, now);
+    }
+  }
+
+  _broadcastGiftEvent(event, now = Date.now()) {
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      const attachment = socket.deserializeAttachment?.() || {};
+      try {
+        socket.send(JSON.stringify({
+          type: "gift_received",
+          gift_event: event,
+          ...this._presenceStateFor(attachment.userId, now),
+        }));
+      } catch (_) {}
     }
   }
 
