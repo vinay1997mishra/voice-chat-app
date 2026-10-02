@@ -7907,15 +7907,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final config = activeController.config;
     final seatSpec = SeatLayoutSpec.forCount(controller.seats.length);
     final screenSize = MediaQuery.sizeOf(context);
+    final compactVertical = screenSize.height < 700;
     final widthSeatDiameter = seatSpec.seatDiameter(screenSize.width - 8);
-    final maxSeatAreaHeight = screenSize.height * 0.55;
-    final rowLabelSpace = widthSeatDiameter < 48 ? 28.0 : 38.0;
+    // Real phone portrait layouts keep the larger 6x7 seat treatment. Short
+    // test/split-screen viewports compact vertically so the bottom controls
+    // remain reachable instead of overflowing off-screen.
+    final maxSeatAreaHeight =
+        screenSize.height * (compactVertical ? 0.45 : 0.55);
+    final rowLabelSpace = compactVertical
+        ? 20.0
+        : (widthSeatDiameter < 48 ? 28.0 : 38.0);
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
             ? widthSeatDiameter
             : heightSeatDiameter)
-        .clamp(30.0, 68.0)
+        .clamp(compactVertical ? 18.0 : 30.0, 68.0)
         .toDouble();
     final seatAreaHeight = seatSpec
         .preferredHeight(seatDiameter)
