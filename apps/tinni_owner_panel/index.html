@@ -247,7 +247,44 @@
                 <button class="btn primary" data-owner-tag-selected>Apply Tag to Selected</button>
               </div>
             </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>V Official Tag</h2><p>Premium circular official badge. Gold ring, silver V, and a gold position label.</p></div><div class="v-official-preview"><span>V</span></div></div>
+              <label><span>Position / Designation</span><input id="ownerVDesignation" maxlength="40" placeholder="e.g. Official Manager" /></label>
+              <label><span>V badge background</span>
+                <select id="ownerVBackground">
+                  <option value="#69C9FF">Sky Blue</option>
+                  <option value="#8FE6A8">Light Green</option>
+                  <option value="#D4A72C">Golden</option>
+                  <option value="#101010">Black</option>
+                  <option value="#D93636">Red</option>
+                  <option value="#7B3DBB">Purple</option>
+                </select>
+              </label>
+              <div class="v-color-swatches" aria-label="V Official background presets">
+                <button type="button" data-v-color="#69C9FF" style="--swatch:#69C9FF" aria-label="Sky Blue"></button>
+                <button type="button" data-v-color="#8FE6A8" style="--swatch:#8FE6A8" aria-label="Light Green"></button>
+                <button type="button" data-v-color="#D4A72C" style="--swatch:#D4A72C" aria-label="Golden"></button>
+                <button type="button" data-v-color="#101010" style="--swatch:#101010" aria-label="Black"></button>
+                <button type="button" data-v-color="#D93636" style="--swatch:#D93636" aria-label="Red"></button>
+                <button type="button" data-v-color="#7B3DBB" style="--swatch:#7B3DBB" aria-label="Purple"></button>
+              </div>
+              <div class="button-row">
+                <button class="btn primary" data-owner-v-official-selected>Apply V Official to Selected</button>
+              </div>
+            </article>
           </div>
+
+          <article class="panel" id="officialsPanel">
+            <div class="panel-head">
+              <div>
+                <h2>Officials</h2>
+                <p>Every V Official appears here. Each Position / Designation has its own page.</p>
+              </div>
+              <button class="btn secondary" type="button" data-owner-official-refresh>Refresh Officials</button>
+            </div>
+            <div id="officialPositionTabs" class="official-position-tabs"></div>
+            <div id="officialPositionPage" class="empty-state">Loading Officials…</div>
+          </article>
         </section>
 
         <section class="view" id="view-rooms">
@@ -386,6 +423,17 @@
       </section>
     </main>
   </div>
+
+  <dialog id="ownerProfileDialog" class="owner-profile-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3>Full User ID / Profile</h3>
+        <p>Owner-only consolidated Tinni Star account view.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-profile-close>✕</button>
+    </div>
+    <div id="ownerProfileContent" class="owner-profile-content">Loading…</div>
+  </dialog>
 
   <dialog id="actionDialog">
     <form method="dialog" id="actionForm">
