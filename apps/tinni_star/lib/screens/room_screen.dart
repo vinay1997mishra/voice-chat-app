@@ -870,7 +870,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     final currentUserId = widget.state.auth.current?.userId;
-    if (currentUserId != null) {
+    if (currentUserId != null && currentUserId != event.senderId) {
       final received = event.receiverDiamonds[currentUserId] ?? 0;
       if (received > 0) {
         widget.state.wallet.diamonds += received;
