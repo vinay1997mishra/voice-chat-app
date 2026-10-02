@@ -6340,8 +6340,11 @@ export class AppDirectoryStore extends DurableObject {
     const isAgency = roles.some((item) => item.role === "agency");
     const isBd = roles.some((item) => item.role === "bd");
     const storedDiamonds = Number(row?.diamonds || 0);
-    const visibleDiamonds = isHost ? storedDiamonds : 0;
-    const diamondUsdCents = isHost ? Math.floor(visibleDiamonds * 170 / 4000000) : 0;
+    // Gift receivers own the diamonds they receive even when they are not a
+    // Host. Host status controls settlement/USD eligibility, not whether the
+    // earned diamond balance exists or can be displayed.
+    const visibleDiamonds = storedDiamonds;
+    const diamondUsdCents = isHost ? Math.floor(storedDiamonds * 170 / 4000000) : 0;
     const settlement = this._ensureSettlementBalance(userId);
     const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
@@ -6367,7 +6370,7 @@ export class AppDirectoryStore extends DurableObject {
       user_id: userId,
       coins: coinGuard.security_frozen ? 0 : Number(row?.coins || 0),
       diamonds: visibleDiamonds,
-      diamond_wallet_visible: isHost,
+      diamond_wallet_visible: isHost || storedDiamonds > 0,
       is_host: isHost,
       is_agency: isAgency,
       is_bd: isBd,
