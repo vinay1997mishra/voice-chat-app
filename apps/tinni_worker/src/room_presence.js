@@ -99,6 +99,12 @@ export class RoomPresenceStore extends DurableObject {
         number_value INTEGER NOT NULL,
         created_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS room_gift_totals (
+        user_id TEXT PRIMARY KEY,
+        coins INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_room_lucky_numbers_time
       ON room_lucky_numbers(created_at DESC);
     `);
@@ -1016,7 +1022,12 @@ export class RoomPresenceStore extends DurableObject {
               country_code, family_tag, host_tag, agency_name, equipped_frame_id,
               equipped_entry_id, equipped_profile_card_id,
               owner_tags_json, owner_medals_json, mic_enabled,
-              seat_index, seat_emote, seat_emote_until, joined_at, last_seen
+              seat_index, seat_emote, seat_emote_until, joined_at, last_seen,
+              COALESCE(
+                (SELECT coins FROM room_gift_totals rg
+                  WHERE rg.user_id = room_members.user_id),
+                0
+              ) AS received_gift_coins
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -1058,6 +1069,7 @@ export class RoomPresenceStore extends DurableObject {
         Number(row.mic_enabled || 0) !== 1,
       chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
+      received_gift_coins: Math.max(0, Number(row.received_gift_coins || 0)),
       seat_emote:
         row.seat_emote &&
         row.seat_emote_until !== null &&
@@ -1075,6 +1087,34 @@ export class RoomPresenceStore extends DurableObject {
       joined_at: Number(row.joined_at),
       last_seen: Number(row.last_seen),
     }));
+  }
+
+  recordGift(input) {
+    const now = Date.now();
+    const rows = Array.isArray(input?.receivers) ? input.receivers : [];
+    let changed = false;
+    for (const item of rows) {
+      const userId = String(item?.user_id || "").trim();
+      const coins = Number(item?.coins || 0);
+      if (!userId || !Number.isSafeInteger(coins) || coins <= 0) continue;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_gift_totals (user_id, coins, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           coins = room_gift_totals.coins + excluded.coins,
+           updated_at = excluded.updated_at`,
+        userId,
+        coins,
+        now,
+      );
+      changed = true;
+    }
+    if (changed) this._broadcastPresence("gift_received", now);
+    return {
+      ok: true,
+      server_time: now,
+      members: this._members(now),
+    };
   }
 
   _upsert(input) {
