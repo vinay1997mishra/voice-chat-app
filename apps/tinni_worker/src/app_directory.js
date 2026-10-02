@@ -4666,27 +4666,92 @@ export class AppDirectoryStore extends DurableObject {
     return merged;
   }
 
-  _rollLuckyMultiplier(configValue = null) {
+  _luckyMultiplierTable(configValue = null) {
     const config = configValue || this._luckyGiftConfig();
-    const maxMultiplier = Math.max(1, Math.min(1000, Number(config.max_multiplier || 1000)));
-    const weights = config.multiplier_weights && typeof config.multiplier_weights === "object"
-      ? config.multiplier_weights
-      : {};
+    const maxMultiplier = Math.max(
+      1,
+      Math.min(1000, Number(config.max_multiplier || 1000)),
+    );
+    const weights =
+      config.multiplier_weights &&
+      typeof config.multiplier_weights === "object"
+        ? config.multiplier_weights
+        : {};
     const entries = Object.entries(weights)
       .map(([multiplier, weight]) => ({
-        multiplier: Math.max(0, Math.min(maxMultiplier, Math.floor(Number(multiplier) || 0))),
+        multiplier: Math.max(
+          0,
+          Math.min(maxMultiplier, Math.floor(Number(multiplier) || 0)),
+        ),
         weight: Math.max(0, Math.floor(Number(weight) || 0)),
       }))
       .filter((entry) => entry.weight > 0);
     const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
-    if (!Number.isSafeInteger(totalWeight) || totalWeight <= 0) return 0;
-    const randomValue = crypto.getRandomValues(new Uint32Array(1))[0] % totalWeight;
+    return {
+      entries,
+      totalWeight:
+        Number.isSafeInteger(totalWeight) && totalWeight > 0
+          ? totalWeight
+          : 0,
+    };
+  }
+
+  _pickLuckyMultiplier(rawValue, table) {
+    if (!table || table.totalWeight <= 0) return 0;
+    const randomValue = Number(rawValue >>> 0) % table.totalWeight;
     let cursor = 0;
-    for (const entry of entries) {
+    for (const entry of table.entries) {
       cursor += entry.weight;
       if (randomValue < cursor) return entry.multiplier;
     }
     return 0;
+  }
+
+  _rollLuckyMultiplier(configValue = null) {
+    const table = this._luckyMultiplierTable(configValue);
+    if (table.totalWeight <= 0) return 0;
+    const raw = crypto.getRandomValues(new Uint32Array(1))[0];
+    return this._pickLuckyMultiplier(raw, table);
+  }
+
+  _rollLuckyBatch(quantityValue, configValue = null) {
+    const quantity = Math.max(
+      0,
+      Math.min(7999, Math.floor(Number(quantityValue) || 0)),
+    );
+    const table = this._luckyMultiplierTable(configValue);
+    if (quantity <= 0 || table.totalWeight <= 0) {
+      return {
+        multiplier_sum: 0,
+        highest_multiplier: 0,
+        recent_multipliers: [],
+      };
+    }
+
+    // 7,999 Uint32 values are only 31,996 bytes, safely below the Web Crypto
+    // getRandomValues() 65,536-byte limit. One batch avoids thousands of
+    // separate crypto calls when the user chooses 599/899/2999/7999.
+    const randomValues = new Uint32Array(quantity);
+    crypto.getRandomValues(randomValues);
+    let multiplierSum = 0;
+    let highestMultiplier = 0;
+    const recentMultipliers = [];
+    for (let index = 0; index < randomValues.length; index += 1) {
+      const multiplier = this._pickLuckyMultiplier(
+        randomValues[index],
+        table,
+      );
+      multiplierSum += multiplier;
+      highestMultiplier = Math.max(highestMultiplier, multiplier);
+      if (recentMultipliers.length < 32) {
+        recentMultipliers.push(multiplier);
+      }
+    }
+    return {
+      multiplier_sum: multiplierSum,
+      highest_multiplier: highestMultiplier,
+      recent_multipliers: recentMultipliers,
+    };
   }
 
   _settleLuckyGiftPools(nowValue = Date.now()) {
@@ -5027,22 +5092,14 @@ export class AppDirectoryStore extends DurableObject {
       }
 
       if (isLucky && receiverTotal > 0) {
-        // Quantity is a batch UI shortcut, but each Lucky unit gets an
-        // independent rebate roll just like repeatedly tapping Combo.
-        let receiverRebateCoins = 0;
-        let receiverHighestMultiplier = 0;
-        const recentMultipliers = [];
-        for (let sendIndex = 0; sendIndex < quantity; sendIndex += 1) {
-          const multiplier = this._rollLuckyMultiplier(luckyConfig);
-          receiverHighestMultiplier = Math.max(
-            receiverHighestMultiplier,
-            multiplier,
-          );
-          receiverRebateCoins += chargedUnitPrice * multiplier;
-          if (recentMultipliers.length < 32) {
-            recentMultipliers.push(multiplier);
-          }
-        }
+        // Quantity is a batch UI shortcut, but every Lucky unit still gets an
+        // independent weighted result. The RNG is generated in one safe batch
+        // so presets up to 7,999 do not cause thousands of crypto API calls.
+        const rolled = this._rollLuckyBatch(quantity, luckyConfig);
+        const receiverHighestMultiplier = rolled.highest_multiplier;
+        const receiverRebateCoins =
+          chargedUnitPrice * rolled.multiplier_sum;
+        const recentMultipliers = rolled.recent_multipliers;
         const poolContribution = Math.floor(
           receiverTotal * prizePoolPercent / 100,
         );
