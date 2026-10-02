@@ -2648,50 +2648,63 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ? rawSession.map((key, value) => MapEntry(key.toString(), value))
           : <String, dynamic>{};
 
+      final actualReceiverIds =
+          _giftResponseReceiverIds(response, receiverIds);
+      if (actualReceiverIds.isEmpty) {
+        _resetLuckyComboState();
+        return false;
+      }
+      final actualContinuesSession = _luckyComboGift?.id == gift.id &&
+          _sameLuckyRecipients(actualReceiverIds) &&
+          _luckySessionId != null;
+
       _luckySessionId = sessionId;
       _luckyComboGift = gift;
-      _luckyComboRecipients = List<String>.from(receiverIds);
+      _luckyComboRecipients = List<String>.from(actualReceiverIds);
 
       final serverCount = _giftInt(session['send_count']);
       final serverWon = _giftInt(session['total_rebate_coins']);
       final serverHighest = _giftInt(session['highest_multiplier']);
-      _luckyComboCount =
-          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
+      final fallbackSendCount = quantity * actualReceiverIds.length;
+      _luckyComboCount = serverCount > 0
+          ? serverCount
+          : (actualContinuesSession
+              ? _luckyComboCount + fallbackSendCount
+              : fallbackSendCount);
       _luckyComboWon = serverWon > 0
           ? serverWon
-          : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
-      _luckySessionHighest = continuesSession
+          : (actualContinuesSession
+              ? _luckyComboWon + rebateCoins
+              : rebateCoins);
+      _luckySessionHighest = actualContinuesSession
           ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
           : math.max(serverHighest, multiplier);
-      _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverIds
-        ..clear()
-        ..addAll(receiverIds);
-      _luckyAnimationSequence++;
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
         gift: gift,
         quantity: quantity,
         senderId: account.userId,
-        receiverIds: List<String>.unmodifiable(receiverIds),
+        receiverIds: List<String>.unmodifiable(actualReceiverIds),
         totalCost: totalCost > 0
             ? totalCost
-            : gift.price * quantity * receiverIds.length,
+            : gift.price * quantity * actualReceiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
-      widget.state.activities.addGiftScore(account.userId, tx.totalCost);
+      widget.state.activities.addGiftScore(
+        account.userId,
+        math.max(0, tx.totalCost ~/ 10),
+      );
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
 
-      _luckyBubbleTimer?.cancel();
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-        });
-      });
+      _startSeatGiftAnimation(
+        eventId: _giftResponseEventId(response),
+        gift: gift,
+        receiverIds: actualReceiverIds,
+        quantity: quantity,
+        multiplier: multiplier,
+      );
 
       await _refreshLuckyFeed();
       if (multiplier >= 500) {
@@ -2701,8 +2714,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return true;
     } catch (error) {
       final message = error.toString().replaceFirst('Bad state: ', '');
-      if (message.toLowerCase().contains('insufficient coins')) {
+      final lower = message.toLowerCase();
+      if (lower.contains('insufficient coins')) {
         await _openRechargeDirect();
+      } else if (lower.contains('no longer on a seat') ||
+          lower.contains('select at least one recipient on a seat')) {
+        if (mounted) {
+          setState(_resetLuckyComboState);
+          _snack('Selected user left the seat. Combo stopped.');
+        }
       } else if (mounted) {
         _snack(message);
       }
