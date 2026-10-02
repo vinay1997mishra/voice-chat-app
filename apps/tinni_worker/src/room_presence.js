@@ -862,10 +862,11 @@ export class RoomPresenceStore extends DurableObject {
     return result;
   }
 
-    kick(input) {
+  async kick(input) {
     const now = Date.now();
     const targetUserId = String(input?.target_user_id || "").trim();
     const kickedBy = String(input?.kicked_by || "").trim();
+    const roomId = String(input?.room_id || "").trim();
     const durationMs = input?.duration_ms;
 
     if (!targetUserId) throw new Error("target_user_id is required");
@@ -900,7 +901,39 @@ export class RoomPresenceStore extends DurableObject {
       "DELETE FROM room_seat_requests WHERE user_id = ?",
       targetUserId,
     );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_mutes WHERE user_id = ?",
+      targetUserId,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_forces WHERE user_id = ?",
+      targetUserId,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_invites WHERE target_user_id = ?",
+      targetUserId,
+    );
 
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      const attachment = socket.deserializeAttachment?.() || {};
+      if (String(attachment.userId || "").trim() !== targetUserId) continue;
+      try {
+        socket.send(JSON.stringify({
+          type: "kicked",
+          kicked_user_id: targetUserId,
+          expires_at: expiresAt,
+        }));
+      } catch (_) {}
+      try {
+        socket.close(4003, "Kicked from room");
+      } catch (_) {}
+    }
+
+    if (roomId) {
+      await this._clearDirectoryPresence(targetUserId, roomId, now);
+    }
+
+    this._broadcastPresence("member_kicked", now);
     return {
       ok: true,
       server_time: now,
