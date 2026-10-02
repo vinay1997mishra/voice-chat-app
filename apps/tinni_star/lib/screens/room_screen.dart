@@ -49,13 +49,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyLastMultiplier = 0;
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
-  String? _luckyAnimationReceiverId;
+  final Set<String> _luckyAnimationReceiverIds = <String>{};
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
+  Timer? _luckyComboExpiryTimer;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -624,6 +625,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
     _luckyBubbleTimer?.cancel();
+    _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -2386,6 +2388,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (_luckyComboRecipients[index] != next[index]) return false;
     }
     return true;
+  }
+
+  void _resetLuckyComboState() {
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = null;
+    _luckyComboGift = null;
+    _luckyComboRecipients = <String>[];
+    _luckyComboCount = 0;
+    _luckyComboWon = 0;
+    _luckyLastMultiplier = 0;
+    _luckyPoolBalance = 0;
+    _luckySessionId = null;
+    _luckySessionHighest = 0;
+  }
+
+  void _armLuckyComboExpiry() {
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
+      if (!mounted) return;
+      setState(_resetLuckyComboState);
+    });
   }
 
   String _newLuckySessionId(String userId) =>
