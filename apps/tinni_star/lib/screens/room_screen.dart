@@ -3454,9 +3454,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return;
       }
 
+      Map<String, dynamic>? serverGiftResponse;
       if (giftCategory != 'Backpack') {
         try {
-          await widget.state.roomSession.sendGift(
+          serverGiftResponse = await widget.state.roomSession.sendGift(
             roomId: widget.room.id,
             authToken: widget.state.auth.current!.authToken,
             giftId: gift.id,
@@ -3466,6 +3467,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             receiverIds:
                 _selectedGiftRecipients.toList(growable: false),
           );
+          _applyGiftServerWallet(serverGiftResponse);
           _refreshRoomSendingSummary();
         } catch (error) {
           final message =
@@ -3496,14 +3498,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           widget.state.gifts.sent.insert(0, tx);
         }
       } else {
-        tx = widget.state.gifts.send(
+        final serverCost = _giftInt(serverGiftResponse?['total_cost']);
+        tx = GiftTransaction(
           gift: gift,
           quantity: 1,
-          maxCombo: controller.config.maxGiftCombo,
           senderId: senderId,
           receiverIds:
               _selectedGiftRecipients.toList(growable: false),
+          totalCost: serverCost > 0
+              ? serverCost
+              : gift.price * _selectedGiftRecipients.length,
         );
+        widget.state.gifts.sent.insert(0, tx);
       }
       if (tx == null) {
         if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
@@ -3520,16 +3526,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
       if (!sheetContext.mounted) return;
       Navigator.pop(sheetContext);
-      if (widget.state.roomControls.effectsEnabled) {
-        widget.state.effects.enqueue(
-          EffectRequest(
-            id: 'gift-${widget.state.gifts.sent.length}',
-            kind: EffectKind.gift,
-            asset: '${gift.effectKind}:${gift.id}',
-            priority: 50,
-          ),
-        );
-      }
       widget.state.activities.addGiftScore(senderId, tx.totalCost);
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
       _snack(
