@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
@@ -58,6 +59,20 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       return NetworkImage(source);
     }
     return null;
+  }
+
+  Future<void> _copyUserId(String userId) async {
+    await Clipboard.setData(ClipboardData(text: userId));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('ID copy ho gaya'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   Future<ImageSource?> _pickSource() {
@@ -460,11 +475,23 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                                   fontWeight: FontWeight.w900,
                                 ),
                               ),
-                              Text(
-                                'UID: ${account.userId}',
-                                style: const TextStyle(
-                                  color: RoyalPalette.muted,
-                                  fontSize: 10,
+                              GestureDetector(
+                                key: const Key(
+                                  'personal-profile-uid-long-press',
+                                ),
+                                behavior: HitTestBehavior.opaque,
+                                onLongPress: () =>
+                                    _copyUserId(account.userId),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 3),
+                                  child: Text(
+                                    'UID: ${account.userId}',
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],

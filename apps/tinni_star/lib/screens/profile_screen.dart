@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/tinni_state.dart';
 import '../identity/owner_tag.dart';
@@ -312,6 +313,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return NetworkImage(source);
     }
     return null;
+  }
+
+  Future<void> _copyUserId(String userId) async {
+    await Clipboard.setData(ClipboardData(text: userId));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('ID copy ho gaya'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   void _openMineScreen(Widget screen) {
@@ -650,14 +665,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Row(
                           children: [
                             Flexible(
-                              child: Text(
-                                'UID:' + account.userId,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF9C7000),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
+                              child: GestureDetector(
+                                key: const Key('mine-uid-long-press'),
+                                behavior: HitTestBehavior.opaque,
+                                onLongPress: () => _copyUserId(account.userId),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 3,
+                                  ),
+                                  child: Text(
+                                    'UID:' + account.userId,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF9C7000),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
