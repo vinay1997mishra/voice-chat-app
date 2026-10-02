@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const MEMBER_TTL_MS = 180000;
+const MEMBER_TTL_MS = 1800000;
 
 export class RoomPresenceStore extends DurableObject {
   constructor(ctx, env) {
@@ -131,11 +131,39 @@ export class RoomPresenceStore extends DurableObject {
     }
   }
 
+  _activeSocketUserIds() {
+    const active = new Set();
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      const attachment = socket.deserializeAttachment?.() || {};
+      const userId = String(attachment.userId || "").trim();
+      if (userId) active.add(userId);
+    }
+    return active;
+  }
+
   _prune(now = Date.now()) {
-    this.ctx.storage.sql.exec(
-      "DELETE FROM room_members WHERE last_seen < ?",
-      now - MEMBER_TTL_MS,
-    );
+    const cutoff = now - MEMBER_TTL_MS;
+    const active = this._activeSocketUserIds();
+    const stale = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM room_members WHERE last_seen < ?",
+      cutoff,
+    ).toArray();
+    for (const row of stale) {
+      const userId = String(row.user_id || "").trim();
+      if (!userId || active.has(userId)) continue;
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_members WHERE user_id = ?",
+        userId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_mutes WHERE user_id = ?",
+        userId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_seat_forces WHERE user_id = ?",
+        userId,
+      );
+    }
     this.ctx.storage.sql.exec(
       "DELETE FROM room_kicks WHERE expires_at IS NOT NULL AND expires_at <= ?",
       now,
@@ -1299,12 +1327,35 @@ export class RoomPresenceStore extends DurableObject {
     }
   }
 
-  async _touchDirectory(userId, roomId, now = Date.now()) {
+  async _touchDirectory(
+    userId,
+    roomId,
+    now = Date.now(),
+    socketConnected = null,
+  ) {
     if (!userId || !roomId) return;
     try {
       const directoryId = this.env.APP_DIRECTORY.idFromName("tinni-app-directory");
       const directory = this.env.APP_DIRECTORY.get(directoryId);
-      await directory.touchPresence(userId, roomId, this._members(now).length);
+      await directory.touchPresence(
+        userId,
+        roomId,
+        this._members(now).length,
+        socketConnected,
+      );
+    } catch (_) {}
+  }
+
+  async _clearDirectoryPresence(userId, roomId, now = Date.now()) {
+    if (!userId || !roomId) return;
+    try {
+      const directoryId = this.env.APP_DIRECTORY.idFromName("tinni-app-directory");
+      const directory = this.env.APP_DIRECTORY.get(directoryId);
+      await directory.clearPresence(
+        userId,
+        roomId,
+        this._members(now).length,
+      );
     } catch (_) {}
   }
 
@@ -1399,6 +1450,7 @@ export class RoomPresenceStore extends DurableObject {
     server.serializeAttachment({ userId, roomId, isOwner });
     const now = Date.now();
     this._touchSocketMember(userId, now);
+    await this._touchDirectory(userId, roomId, now, true);
     this._sendSocketState(server, "presence_state", now);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -1424,8 +1476,9 @@ export class RoomPresenceStore extends DurableObject {
     const now = Date.now();
     try {
       if (payload?.type === "presence_keepalive") {
+        // Backward compatibility for older APKs. This refreshes only the room
+        // member grace timestamp and deliberately avoids an App Directory RPC.
         this._touchSocketMember(userId, now);
-        await this._touchDirectory(userId, roomId, now);
         return;
       }
       if (payload?.type === "seat_state") {
@@ -1436,7 +1489,6 @@ export class RoomPresenceStore extends DurableObject {
           attachment.isOwner === true,
           now,
         );
-        await this._touchDirectory(userId, roomId, now);
         if (changed) this._broadcastPresence("seat_changed", now);
         return;
       }
@@ -1455,9 +1507,26 @@ export class RoomPresenceStore extends DurableObject {
     }
   }
 
-  webSocketClose() {}
+  async _handleSocketDisconnect(socket) {
+    const attachment = socket?.deserializeAttachment?.() || {};
+    const userId = String(attachment.userId || "").trim();
+    const roomId = String(attachment.roomId || "").trim();
+    const now = Date.now();
+    if (userId) {
+      try {
+        this._touchSocketMember(userId, now);
+      } catch (_) {}
+    }
+    await this._clearDirectoryPresence(userId, roomId, now);
+  }
 
-  webSocketError() {}
+  async webSocketClose(socket) {
+    await this._handleSocketDisconnect(socket);
+  }
+
+  async webSocketError(socket) {
+    await this._handleSocketDisconnect(socket);
+  }
 
   async join(input) {
     const result = this._upsert(input);
