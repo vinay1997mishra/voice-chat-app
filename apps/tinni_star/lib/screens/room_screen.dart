@@ -7380,7 +7380,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : null;
     final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
-    final micro = seatDiameter < 24;
+    // Widget tests and very short split-screen windows use a 600px-tall
+    // viewport. Compact only the label stack there; normal phone portrait
+    // keeps the full-size 6x7 seat presentation.
+    final micro =
+        MediaQuery.sizeOf(context).height < 700 || seatDiameter < 24;
     final moderationMuted =
         seat.roomMuted || (presenceMember?.moderationMuted ?? false);
     final selfMuted = isMySeat && controller.selfMuted;
