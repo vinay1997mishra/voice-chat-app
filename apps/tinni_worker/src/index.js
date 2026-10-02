@@ -3491,6 +3491,31 @@ export default {
       return json(await getRoomPresenceStore(env, roomId).state());
     }
 
+    if (url.pathname === "/room-presence/live" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return json({ ok: false, error: "WebSocket upgrade required" }, 426);
+      }
+
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      const store = getRoomPresenceStore(env, roomId);
+      if (!(await store.isMember(appSession.user.user_id))) {
+        return json({ ok: false, error: "Join the room first" }, 403);
+      }
+
+      const headers = new Headers(request.headers);
+      headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      const forwarded = new Request(request.url, {
+        method: "GET",
+        headers,
+      });
+      return store.fetch(forwarded);
+    }
+
     if (url.pathname === "/room-presence/mic-mode" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
