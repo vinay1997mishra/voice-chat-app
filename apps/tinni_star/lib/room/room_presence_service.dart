@@ -109,6 +109,7 @@ class RoomPresenceService extends ChangeNotifier {
   WebSocket? _liveSocket;
   StreamSubscription<dynamic>? _liveSocketSubscription;
   Timer? _liveReconnectTimer;
+  Timer? _liveKeepAliveTimer;
   String? _liveRoomId;
   String? _liveAuthToken;
   bool _liveWanted = false;
@@ -130,6 +131,8 @@ class RoomPresenceService extends ChangeNotifier {
   final Set<int> mutedSeats = <int>{};
   String? lastError;
 
+  bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
+
   Future<void> connectLive({
     required String roomId,
     required String authToken,
@@ -149,6 +152,8 @@ class RoomPresenceService extends ChangeNotifier {
     _liveAuthToken = null;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
+    _liveKeepAliveTimer?.cancel();
+    _liveKeepAliveTimer = null;
     final subscription = _liveSocketSubscription;
     _liveSocketSubscription = null;
     await subscription?.cancel();
@@ -187,11 +192,25 @@ class RoomPresenceService extends ChangeNotifier {
         return;
       }
       _liveSocket = socket;
+      socket.pingInterval = const Duration(seconds: 20);
+      _liveKeepAliveTimer?.cancel();
+      _liveKeepAliveTimer = Timer.periodic(
+        const Duration(seconds: 75),
+        (_) => _sendLiveEvent(
+          const <String, Object?>{'type': 'presence_keepalive'},
+        ),
+      );
       _liveSocketSubscription = socket.listen(
         _handleLiveSocketData,
         onDone: _handleLiveSocketClosed,
         onError: (_) => _handleLiveSocketClosed(),
         cancelOnError: true,
+      );
+      _sendLiveEvent(
+        const <String, Object?>{'type': 'presence_keepalive'},
+      );
+      _sendLiveEvent(
+        const <String, Object?>{'type': 'presence_sync'},
       );
     } catch (_) {
       _scheduleLiveReconnect();
@@ -222,7 +241,28 @@ class RoomPresenceService extends ChangeNotifier {
   void _handleLiveSocketClosed() {
     _liveSocket = null;
     _liveSocketSubscription = null;
+    _liveKeepAliveTimer?.cancel();
+    _liveKeepAliveTimer = null;
     _scheduleLiveReconnect();
+  }
+
+  void _sendLiveEvent(Map<String, Object?> event) {
+    final socket = _liveSocket;
+    if (socket == null || socket.readyState != WebSocket.open) return;
+    try {
+      socket.add(jsonEncode(event));
+    } catch (_) {}
+  }
+
+  void syncLiveState({
+    required int? seatIndex,
+    required bool micEnabled,
+  }) {
+    _sendLiveEvent(<String, Object?>{
+      'type': 'seat_state',
+      'seat_index': seatIndex,
+      'mic_enabled': micEnabled,
+    });
   }
 
   void _scheduleLiveReconnect() {
@@ -1050,6 +1090,7 @@ class RoomPresenceService extends ChangeNotifier {
   @override
   void dispose() {
     _liveReconnectTimer?.cancel();
+    _liveKeepAliveTimer?.cancel();
     _liveSocketSubscription?.cancel();
     try {
       _liveSocket?.close();
