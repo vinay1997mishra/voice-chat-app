@@ -1541,10 +1541,10 @@ export class AppDirectoryStore extends DurableObject {
       return {
         id: "auto-role-" + role,
         name: role === "agency" ? "Agency" : "Host",
-        color: role === "agency" ? "#AB47BC" : "#FFB74D",
+        color: "#69C9FF",
         kind: "auto_role",
         designation: role === "agency" ? "Agency" : "Host",
-        background_color: role === "agency" ? "#4A1761" : "#5A3512",
+        background_color: "#69C9FF",
         source: "automatic",
         created_at: 0,
       };
