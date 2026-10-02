@@ -2739,6 +2739,7 @@ export default {
           if (receiverTotals.size > 0) {
             await getRoomPresenceStore(env, roomId).recordGift({
               event_id: String(transactions[0]?.id || ""),
+              sender_id: appSession.user.user_id,
               gift_id: String(transactions[0]?.gift_id || body.gift_id || ""),
               gift_name: String(
                 transactions[0]?.gift_name || body.gift_name || "Gift",
