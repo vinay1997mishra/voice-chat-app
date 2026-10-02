@@ -60,6 +60,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Timer? _ribbonTimer;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
+  final Map<String, String> _seatAvatarSources = <String, String>{};
+  final Map<String, ImageProvider> _seatAvatarProviders =
+      <String, ImageProvider>{};
   RoomController get controller => widget.state.roomSession.controller!;
 
   RoomSummary get _roomSnapshot {
@@ -82,6 +85,39 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return MemoryImage(base64Decode(value.split(',').last));
     } catch (_) {
       return null;
+    }
+  }
+
+  ImageProvider? _seatAvatarProvider(RoomPresenceMember? member) {
+    if (member == null) return null;
+    final source = member.avatarDataUrl;
+    final cached = _seatAvatarProviders[member.userId];
+    if (source == null || source.isEmpty) return cached;
+    if (_seatAvatarSources[member.userId] == source && cached != null) {
+      return cached;
+    }
+
+    try {
+      ImageProvider provider;
+      if (source.startsWith('data:image/')) {
+        provider = MemoryImage(base64Decode(source.split(',').last));
+      } else if (source.startsWith('https://') || source.startsWith('http://')) {
+        provider = NetworkImage(source);
+      } else {
+        return cached;
+      }
+      _seatAvatarSources[member.userId] = source;
+      _seatAvatarProviders[member.userId] = provider;
+      return provider;
+    } catch (_) {
+      // Keep the last valid image instead of showing a blank frame.
+      return cached;
+    }
+  }
+
+  void _warmSeatAvatarCache() {
+    for (final member in widget.state.roomSession.liveMembers) {
+      _seatAvatarProvider(member);
     }
   }
 
@@ -639,6 +675,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _refresh() {
     if (!mounted) return;
+    _warmSeatAvatarCache();
     _scheduleEmoteExpiry();
     _syncMyAdminRole();
     _maybeShowSeatInvite();
@@ -6372,15 +6409,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             emoteUntil.isAfter(DateTime.now())
         ? presenceMember!.seatEmote
         : null;
-    ImageProvider? avatar;
-    final avatarData = presenceMember?.avatarDataUrl;
-    if (avatarData != null && avatarData.startsWith('data:image/')) {
-      try {
-        avatar = MemoryImage(base64Decode(avatarData.split(',').last));
-      } catch (_) {
-        avatar = null;
-      }
-    }
+    final avatar = _seatAvatarProvider(presenceMember);
     final compact = seatDiameter < 44;
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
         .clamp(38.0, 78.0)
