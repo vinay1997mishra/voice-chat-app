@@ -3531,21 +3531,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
-                        IconButton(
-                          key: const Key('lucky-prize-pool-button'),
-                          tooltip: 'Lucky Prize Pool & Ranking',
-                          onPressed: _showLuckyGiftDetails,
-                          icon: const Icon(
-                            Icons.emoji_events_rounded,
-                            color: Color(0xFFFFD45A),
-                          ),
-                        ),
-                        TextButton.icon(
-                          key: const Key('room-custom-gift-button'),
-                          onPressed: _createRoomCustomGift,
-                          icon: const Icon(Icons.draw_rounded),
-                          label: const Text('Custom Gift'),
-                        ),
+                        const SizedBox(width: 8),
                       ],
                     ),
                   ),
@@ -3562,13 +3548,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ? const Color(0xFFFFC247)
                             : value == 'CP'
                                 ? FeaturePalette.cp
-                                : value == 'Backpack'
-                                    ? FeaturePalette.backpack
+                                : value == 'Country'
+                                    ? FeaturePalette.family
                                     : value == 'Luxury'
                                         ? FeaturePalette.vip
-                                        : value == 'Normal'
-                                            ? FeaturePalette.social
-                                            : FeaturePalette.gift;
+                                        : FeaturePalette.social;
                         return ChoiceChip(
                           label: Text(value),
                           selected: giftCategory == value,
@@ -3676,13 +3660,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             }
                                           }
                                         }
-                                        if (avatar != null && avatar.isNotEmpty) {
-                                          return Image.network(
-                                            avatar,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => Icon(
-                                              Icons.person_rounded,
-                                              color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                        final provider =
+                                            _roomAvatarProvider(avatar);
+                                        if (provider != null) {
+                                          return DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              image: DecorationImage(
+                                                image: provider,
+                                                fit: BoxFit.cover,
+                                              ),
                                             ),
                                           );
                                         }
@@ -3690,7 +3677,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                           recipient.$1 == senderId
                                               ? Icons.account_circle_rounded
                                               : Icons.person_rounded,
-                                          color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                          color: selected
+                                              ? FeaturePalette.gift
+                                              : FeaturePalette.social,
                                         );
                                       },
                                     ),
@@ -3778,12 +3767,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          PopupMenuButton<int>(
+                          IconButton(
                             key: const Key('lucky-quantity-plus'),
-                            tooltip: 'Lucky quantity',
+                            tooltip: 'Add one',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
-                              minWidth: 30,
+                              minWidth: 28,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 7999
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          PopupMenuButton<int>(
+                            key: const Key('lucky-quantity-presets'),
+                            tooltip: 'Choose Lucky quantity',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
                               minHeight: 30,
                             ),
                             color: const Color(0xFF24152F),
@@ -3822,8 +3829,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 )
                                 .toList(growable: false),
                             child: const Icon(
-                              Icons.add_circle_outline_rounded,
-                              size: 20,
+                              Icons.arrow_drop_down_circle_outlined,
+                              size: 19,
+                              color: Color(0xFFFFD45A),
                             ),
                           ),
                         ],
