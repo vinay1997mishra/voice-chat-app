@@ -70,6 +70,8 @@ const dialogSubmit = document.getElementById("dialogSubmit");
 let pendingAction = null;
 let currentSession = null;
 const ownerSelectedUsers = new Map();
+let ownerOfficials = [];
+let ownerOfficialPosition = "";
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -605,9 +607,14 @@ async function loadVerifiedUsers(query = "") {
 
 function userTagHtml(tags) {
   const items = Array.isArray(tags) ? tags : [];
-  return items.map((tag) =>
-    `<span class="badge" style="border-color:${escapeHtml(tag.color)};color:${escapeHtml(tag.color)}">${escapeHtml(tag.name)}</span>`
-  ).join(" ");
+  return items.map((tag) => {
+    const label = String(tag.designation || tag.name || "Tag");
+    if (String(tag.kind || "") === "v_official") {
+      const bg = String(tag.background_color || tag.color || "#69C9FF");
+      return `<span class="owner-v-tag" style="--official-bg:${escapeHtml(bg)}"><i>V</i><b>${escapeHtml(label)}</b></span>`;
+    }
+    return `<span class="badge" style="border-color:${escapeHtml(tag.color || "#FFD54F")};color:${escapeHtml(tag.color || "#FFD54F")}">${escapeHtml(label)}</span>`;
+  }).join(" ");
 }
 
 async function searchDirectVerifyUsers(query) {
@@ -671,20 +678,179 @@ async function searchOwnerMessagingUsers(query) {
     root.innerHTML = users.map((user) => {
       const checked = ownerSelectedUsers.has(String(user.user_id));
       return `
-        <label class="panel" style="display:flex;align-items:center;gap:12px;margin-top:8px;cursor:pointer">
-          <input type="checkbox" data-owner-user-select="${escapeHtml(user.user_id)}" ${checked ? "checked" : ""}>
-          <div style="flex:1">
-            <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
-            <div class="muted">ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</div>
-            <div style="margin-top:4px">${userTagHtml(user.tags)}</div>
+        <div class="panel owner-search-user-row" style="margin-top:8px">
+          <label class="owner-search-user-select">
+            <input type="checkbox" data-owner-user-select="${escapeHtml(user.user_id)}" ${checked ? "checked" : ""}>
+            <div style="flex:1">
+              <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+              <div class="muted">ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</div>
+              <div style="margin-top:4px">${userTagHtml(user.identity_tags || user.tags)}</div>
+            </div>
+          </label>
+          <div class="button-row">
+            <span class="badge ${user.call_verified ? "gold" : ""}">${user.call_verified ? "Verified" : "User"}</span>
+            <button type="button" class="btn secondary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID</button>
           </div>
-          <span class="badge ${user.call_verified ? "gold" : ""}">${user.call_verified ? "Verified" : "User"}</span>
-        </label>
+        </div>
       `;
     }).join("");
   } catch (error) {
     root.className = "empty-state";
     root.textContent = error.message || "Unable to search users.";
+  }
+}
+
+function officialBadgeHtml(item) {
+  const bg = String(item?.background_color || "#69C9FF");
+  return `<span class="owner-v-tag official-large" style="--official-bg:${escapeHtml(bg)}"><i>V</i><b>${escapeHtml(item?.designation || "Official")}</b></span>`;
+}
+
+function renderOfficials() {
+  const tabs = document.getElementById("officialPositionTabs");
+  const page = document.getElementById("officialPositionPage");
+  if (!tabs || !page) return;
+
+  const positions = [...new Set(
+    ownerOfficials.map((item) => String(item.designation || "Official").trim()).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+
+  if (!ownerOfficialPosition || !positions.includes(ownerOfficialPosition)) {
+    ownerOfficialPosition = positions[0] || "";
+  }
+
+  tabs.innerHTML = positions.map((position) =>
+    `<button type="button" class="official-position-tab ${position === ownerOfficialPosition ? "active" : ""}" data-official-position="${escapeHtml(position)}">${escapeHtml(position)}</button>`
+  ).join("");
+
+  const rows = ownerOfficials.filter(
+    (item) => String(item.designation || "Official") === ownerOfficialPosition
+  );
+  if (!ownerOfficialPosition || rows.length === 0) {
+    page.className = "empty-state";
+    page.textContent = "No V Officials assigned yet.";
+    return;
+  }
+
+  page.className = "action-list";
+  page.innerHTML = rows.map((item) => `
+    <div class="panel official-user-row" data-owner-open-profile="${escapeHtml(item.user_id)}">
+      <div class="official-user-main">
+        ${item.avatar_data_url
+          ? `<img class="official-avatar" src="${escapeHtml(item.avatar_data_url)}" alt="">`
+          : `<div class="official-avatar official-avatar-fallback">◎</div>`}
+        <div>
+          <strong>${escapeHtml(item.display_name || item.user_id)}</strong>
+          <div class="muted">ID ${escapeHtml(item.user_id)} • ${escapeHtml(item.country_name || "")}</div>
+          <div style="margin-top:7px">${officialBadgeHtml(item)}</div>
+        </div>
+      </div>
+      <div class="button-row official-actions">
+        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(item.user_id)}">Full Details</button>
+        <button type="button" class="btn secondary" data-owner-official-edit="${escapeHtml(item.user_id)}"
+          data-tag-id="${escapeHtml(item.tag_id)}"
+          data-designation="${escapeHtml(item.designation)}"
+          data-background="${escapeHtml(item.background_color)}">Edit Position</button>
+        <button type="button" class="btn secondary" data-owner-official-remove="${escapeHtml(item.user_id)}"
+          data-tag-id="${escapeHtml(item.tag_id)}">Remove Official</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function loadOfficials(preferredPosition = "") {
+  const page = document.getElementById("officialPositionPage");
+  try {
+    const data = await api("/api/owner/officials");
+    ownerOfficials = Array.isArray(data.officials) ? data.officials : [];
+    if (preferredPosition) ownerOfficialPosition = preferredPosition;
+    renderOfficials();
+  } catch (error) {
+    if (page) {
+      page.className = "empty-state";
+      page.textContent = error.message || "Unable to load Officials.";
+    }
+  }
+}
+
+function ownerDetailRoleHtml(roles) {
+  const items = Array.isArray(roles) ? roles.filter((item) => item.active !== false) : [];
+  return items.length
+    ? items.map((item) => `<span class="badge gold">${escapeHtml(item.role || "Role")}</span>`).join(" ")
+    : '<span class="muted">No active hierarchy role</span>';
+}
+
+async function openOwnerUserProfile(userId) {
+  const dialog = document.getElementById("ownerProfileDialog");
+  const root = document.getElementById("ownerProfileContent");
+  if (!dialog || !root) return;
+  root.innerHTML = '<div class="empty-state">Loading full ID…</div>';
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api("/api/owner/user-detail?user_id=" + encodeURIComponent(String(userId || "")));
+    const detail = data.detail || {};
+    const user = detail.user || {};
+    const room = detail.current_room;
+    const messages = Array.isArray(detail.messages) ? detail.messages : [];
+    const calls = Array.isArray(detail.calls) ? detail.calls : [];
+    const identityTags = Array.isArray(detail.identity_tags) ? detail.identity_tags : [];
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        ${user.avatar_data_url
+          ? `<img src="${escapeHtml(user.avatar_data_url)}" alt="" class="owner-profile-avatar">`
+          : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
+        <div>
+          <h2>${escapeHtml(user.display_name || user.user_id || "User")}</h2>
+          <p>ID ${escapeHtml(user.user_id || "")} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
+          <div class="chips">${userTagHtml(identityTags)}</div>
+        </div>
+      </div>
+
+      <div class="rule-grid owner-profile-grid">
+        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
+        <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
+        <div class="rule"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
+        <div class="rule"><strong>VIP</strong><span>${Number(detail.controls?.vip_level || 0) || "None"}</span></div>
+        <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy)}</span></div>
+        <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
+        <div class="rule"><strong>Current room</strong><span>${room ? escapeHtml(room.room_name + " • " + room.room_id) : "Not in a live room"}</span></div>
+        <div class="rule"><strong>Seat</strong><span>${room ? (room.seat_index === null || room.seat_index === undefined ? "Audience" : "Seat " + (Number(room.seat_index) + 1)) : "—"}</span></div>
+      </div>
+
+      <div class="button-row" style="margin-top:12px">
+        ${room ? `<button type="button" class="btn primary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>` : ""}
+      </div>
+
+      <div class="grid two owner-detail-sections">
+        <section class="panel">
+          <div class="panel-head"><h3>Inbox / Messages</h3><span class="badge">${messages.length}</span></div>
+          <div class="owner-history-list">
+            ${messages.length ? messages.map((message) => `
+              <div class="owner-history-row">
+                <strong>${escapeHtml(message.from_user_id)} → ${escapeHtml(message.to_user_id)}</strong>
+                <span>${escapeHtml(message.text)}</span>
+                <small>${escapeHtml(formatFullTimestamp(message.created_at))}</small>
+              </div>
+            `).join("") : '<div class="empty-state">No stored Tinni messages.</div>'}
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h3>Call History</h3><span class="badge">${calls.length}</span></div>
+          <div class="owner-history-list">
+            ${calls.length ? calls.map((call) => `
+              <div class="owner-history-row">
+                <strong>${escapeHtml(call.caller_id)} → ${escapeHtml(call.receiver_id)}</strong>
+                <span>${escapeHtml(call.media)} • ${escapeHtml(call.state)}</span>
+                <small>${escapeHtml(formatFullTimestamp(call.updated_at || call.created_at))}</small>
+              </div>
+            `).join("") : '<div class="empty-state">No stored Tinni call history.</div>'}
+          </div>
+        </section>
+      </div>
+    `;
+  } catch (error) {
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to open ID.")}</div>`;
   }
 }
 
@@ -889,6 +1055,7 @@ function applySession(session) {
     loadStaffPanels();
     loadRoomThemes();
     loadOwnerNotifications();
+    loadOfficials();
     loadCallVerifications();
     loadVerifiedUsers();
     loadGameStats().catch(() => null);
@@ -1365,7 +1532,10 @@ async function renderUserInvestigation(users) {
         <div class="rule"><strong>VIP</strong><span>${Number(user.controls?.vip_level || 0) || "None"}</span></div>
         <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
       </div>
-      <div style="margin-top:8px">${userTagHtml(user.tags)}</div>
+      <div style="margin-top:8px">${userTagHtml(user.identity_tags || user.tags)}</div>
+      <div class="button-row" style="margin-top:10px">
+        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>
+      </div>
     </div>
   `).join("");
 }
@@ -1848,6 +2018,76 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
+  const profileClose = e.target.closest("[data-owner-profile-close]");
+  if (profileClose) {
+    document.getElementById("ownerProfileDialog")?.close();
+    return;
+  }
+
+  const officialRefresh = e.target.closest("[data-owner-official-refresh]");
+  if (officialRefresh) {
+    await loadOfficials(ownerOfficialPosition);
+    return;
+  }
+
+  const officialPositionButton = e.target.closest("[data-official-position]");
+  if (officialPositionButton) {
+    ownerOfficialPosition = String(officialPositionButton.dataset.officialPosition || "");
+    renderOfficials();
+    return;
+  }
+
+  const openProfileButton = e.target.closest("[data-owner-open-profile]");
+  if (openProfileButton) {
+    await openOwnerUserProfile(openProfileButton.dataset.ownerOpenProfile);
+    return;
+  }
+
+  const editOfficialButton = e.target.closest("[data-owner-official-edit]");
+  if (editOfficialButton) {
+    const userId = String(editOfficialButton.dataset.ownerOfficialEdit || "");
+    const current = String(editOfficialButton.dataset.designation || "");
+    const designation = prompt("Edit Position / Designation", current);
+    if (designation === null) return;
+    if (!designation.trim()) { toast("Position cannot be empty."); return; }
+    const background = String(editOfficialButton.dataset.background || "#69C9FF");
+    try {
+      await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          user_ids: [userId],
+          name: "V Official",
+          color: background,
+          kind: "v_official",
+          designation: designation.trim(),
+          background_color: background,
+        }),
+      });
+      toast("Official position updated.");
+      await loadOfficials(designation.trim());
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const removeOfficialButton = e.target.closest("[data-owner-official-remove]");
+  if (removeOfficialButton) {
+    const userId = String(removeOfficialButton.dataset.ownerOfficialRemove || "");
+    const tagId = String(removeOfficialButton.dataset.tagId || "");
+    if (!confirm("Remove V Official from ID " + userId + "?")) return;
+    try {
+      await api("/api/owner/tags/" + encodeURIComponent(userId) + "/" + encodeURIComponent(tagId), {
+        method: "DELETE",
+      });
+      toast("V Official removed.");
+      await loadOfficials(ownerOfficialPosition);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const verificationPageButton = e.target.closest("[data-verification-page]");
   if (verificationPageButton) {
     const page = verificationPageButton.dataset.verificationPage;
@@ -1952,6 +2192,52 @@ document.body.addEventListener("click", async e => {
       });
       toast(result.name + " tag applied to " + result.tagged + " IDs.");
       await searchOwnerMessagingUsers(document.getElementById("ownerUserSearchInput")?.value || "");
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const vColorButton = e.target.closest("[data-v-color]");
+  if (vColorButton) {
+    const value = String(vColorButton.dataset.vColor || "#69C9FF");
+    const select = document.getElementById("ownerVBackground");
+    if (select) select.value = value;
+    document.querySelectorAll("[data-v-color]").forEach((button) => {
+      button.classList.toggle("active", button === vColorButton);
+    });
+    const preview = document.querySelector(".v-official-preview");
+    if (preview) preview.style.setProperty("--v-bg", value);
+    return;
+  }
+
+  if (e.target.closest("[data-owner-v-official-selected]")) {
+    const designation = String(
+      document.getElementById("ownerVDesignation")?.value || ""
+    ).trim();
+    const background = String(
+      document.getElementById("ownerVBackground")?.value || "#69C9FF"
+    );
+    const ids = [...ownerSelectedUsers.keys()];
+    if (!designation) { toast("Write or select a Position / Designation."); return; }
+    if (ids.length === 0) { toast("Select at least one ID."); return; }
+    try {
+      const result = await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          user_ids: ids,
+          name: "V Official",
+          color: background,
+          kind: "v_official",
+          designation,
+          background_color: background,
+        }),
+      });
+      toast("V Official · " + designation + " applied to " + result.tagged + " IDs.");
+      await loadOfficials(designation);
+      await searchOwnerMessagingUsers(
+        document.getElementById("ownerUserSearchInput")?.value || ""
+      );
     } catch (error) {
       toast(error.message);
     }
