@@ -665,6 +665,7 @@ Must support:
 - insufficient-balance flow.
 - full-screen/standard/banner effects.
 - effect queue priorities.
+- **Lucky panel/Combo anti-regression lock:** a valid Lucky Send closes the gift panel immediately before waiting for the backend response. On success, Combo is shown on the room screen with a visible 12-second countdown; each successful Combo send refreshes that window. The old keep-the-panel-open behavior must not return.
 
 Economy rule:
 Backend is authoritative. Client UI never creates final balance truth.

@@ -94,8 +94,13 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /if \(sent && sheetContext\.mounted\) \{\s*Navigator\.pop\(sheetContext\);\s*\}/,
-  "Successful Lucky send must close the gift panel before Combo continues on the room screen",
+  /if \(sheetContext\.mounted\) \{\s*Navigator\.pop\(sheetContext\);\s*\}\s*await _sendLuckyGift\(/,
+  "Lucky send tap must close the gift panel immediately before awaiting the server",
+);
+assert.match(
+  roomScreen,
+  /Key\('lucky-combo-countdown'\)/,
+  "Lucky Combo must visibly show its 12-second countdown on the room screen",
 );
 assert.match(
   roomScreen,

@@ -150,6 +150,8 @@ The gift panel contains a **horizontally swipeable recipient strip**.
 - Sending cost is multiplied by selected recipient count.
 - Gift effects are routed to the effect queue when room effects are enabled.
 - Production coin/diamond movement is server-authoritative.
+- **Locked Lucky send UX:** once a valid Lucky gift Send is tapped, the gift panel closes immediately; the network request continues on the room screen.
+- After a successful Lucky send, the room screen shows the bright Combo control with a visible 12-second countdown. Every successful Combo send restarts the 12-second window. Do not reintroduce the old behavior where the Lucky panel stays open and hides the Combo continuation.
 
 ## 6. Discover
 

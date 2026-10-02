@@ -62,6 +62,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _luckyComboExpiryTimer;
+  Timer? _luckyComboCountdownTimer;
+  int _luckyComboSecondsLeft = 0;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -632,6 +634,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _seatGiftEffectTimer?.cancel();
     _luckyBubbleTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
+    _luckyComboCountdownTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -2341,6 +2344,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _resetLuckyComboState() {
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = null;
+    _luckyComboCountdownTimer?.cancel();
+    _luckyComboCountdownTimer = null;
+    _luckyComboSecondsLeft = 0;
     _luckyComboEpoch++;
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
@@ -2355,7 +2361,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
+    _luckyComboCountdownTimer?.cancel();
+    _luckyComboSecondsLeft = 12;
     final epoch = ++_luckyComboEpoch;
+    _luckyComboCountdownTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || epoch != _luckyComboEpoch) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _luckyComboSecondsLeft = math.max(0, _luckyComboSecondsLeft - 1);
+      });
+    });
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted || epoch != _luckyComboEpoch) return;
       setState(_resetLuckyComboState);
@@ -2452,6 +2470,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final hadActiveCombo = _luckyComboGift != null;
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = null;
+    _luckyComboCountdownTimer?.cancel();
+    _luckyComboCountdownTimer = null;
     _luckyComboEpoch++;
 
     setState(() => _luckyComboSending = true);
@@ -2911,13 +2931,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'Combo',
-                          style: TextStyle(
-                            color: Color(0xFF3E1400),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                          ),
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'COMBO',
+                              style: TextStyle(
+                                color: Color(0xFF3E1400),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              '${_luckyComboSecondsLeft}s',
+                              key: const Key('lucky-combo-countdown'),
+                              style: const TextStyle(
+                                color: Color(0xFF6A2100),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                 ),
               ),
@@ -3170,14 +3204,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (gift.lucky) {
         final selectedRecipients =
             _selectedGiftRecipients.toList(growable: false);
-        final sent = await _sendLuckyGift(
+        // Close the gift sheet immediately on a valid Lucky send tap. The
+        // network request continues on the room screen so the Combo control
+        // becomes the visible continuation UI instead of leaving the panel
+        // covering it while the server responds.
+        if (sheetContext.mounted) {
+          Navigator.pop(sheetContext);
+        }
+        await _sendLuckyGift(
           gift,
           selectedRecipients,
           quantity: luckyQuantity,
         );
-        if (sent && sheetContext.mounted) {
-          Navigator.pop(sheetContext);
-        }
         return;
       }
 
