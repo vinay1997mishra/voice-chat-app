@@ -1552,6 +1552,121 @@ export class AppDirectoryStore extends DurableObject {
     return [...tags, ...roles].slice(0, 16);
   }
 
+  listOfficials() {
+    return this.ctx.storage.sql.exec(
+      `SELECT t.id AS tag_id, t.user_id, t.designation, t.background_color,
+              t.color, t.created_at,
+              u.display_name, u.avatar_data_url, u.gender,
+              u.country_name, u.flag_emoji, u.email
+         FROM owner_user_tags t
+         JOIN app_users u ON u.user_id = t.user_id
+        WHERE t.kind = 'v_official'
+        ORDER BY LOWER(t.designation), u.display_name, t.created_at DESC`,
+    ).toArray().map((row) => ({
+      tag_id: String(row.tag_id),
+      user_id: String(row.user_id),
+      designation: String(row.designation || "Official"),
+      background_color: String(row.background_color || row.color || "#69C9FF"),
+      color: String(row.color || "#69C9FF"),
+      created_at: Number(row.created_at || 0),
+      display_name: String(row.display_name || row.user_id),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      gender: String(row.gender || ""),
+      country_name: String(row.country_name || ""),
+      flag_emoji: String(row.flag_emoji || ""),
+      email: String(row.email || ""),
+    }));
+  }
+
+  ownerUserDetail(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row) return null;
+
+    const presence = this.ctx.storage.sql.exec(
+      `SELECT room_id, last_seen, room_socket_connected
+         FROM app_user_presence WHERE user_id = ? LIMIT 1`,
+      userId,
+    ).toArray()[0];
+
+    const hierarchy = this.ctx.storage.sql.exec(
+      `SELECT role, parent_user_id, active, data_json, updated_at
+         FROM owner_hierarchy
+        WHERE user_id = ?
+        ORDER BY active DESC, updated_at DESC`,
+      userId,
+    ).toArray().map((item) => {
+      let data = {};
+      try { data = JSON.parse(String(item.data_json || "{}")); } catch {}
+      return {
+        role: String(item.role || ""),
+        parent_user_id: item.parent_user_id ? String(item.parent_user_id) : null,
+        active: Number(item.active || 0) === 1,
+        data,
+        updated_at: Number(item.updated_at || 0),
+      };
+    });
+
+    const messages = this.ctx.storage.sql.exec(
+      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+         FROM direct_messages
+        WHERE from_user_id = ? OR to_user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      userId, userId,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      from_user_id: String(item.from_user_id),
+      to_user_id: String(item.to_user_id),
+      text: String(item.text || ""),
+      created_at: Number(item.created_at || 0),
+      seen_at: item.seen_at == null ? null : Number(item.seen_at),
+    }));
+
+    const calls = this.ctx.storage.sql.exec(
+      `SELECT id, caller_id, receiver_id, media, state, room_id, created_at, updated_at
+         FROM app_calls
+        WHERE caller_id = ? OR receiver_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 100`,
+      userId, userId,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      caller_id: String(item.caller_id),
+      receiver_id: String(item.receiver_id),
+      media: String(item.media || ""),
+      state: String(item.state || ""),
+      room_id: String(item.room_id || ""),
+      created_at: Number(item.created_at || 0),
+      updated_at: Number(item.updated_at || 0),
+    }));
+
+    return {
+      user: rowToUser(row),
+      controls: this._userControls(userId),
+      wallet: this.getWallet(userId),
+      tags: this.listUserTags(userId),
+      identity_tags: this.listUserIdentityTags(userId),
+      medals: this.listUserMedals(userId),
+      hierarchy,
+      presence: presence ? {
+        room_id: presence.room_id ? String(presence.room_id) : null,
+        last_seen: Number(presence.last_seen || 0),
+        room_socket_connected: Number(presence.room_socket_connected || 0) === 1,
+      } : {
+        room_id: null,
+        last_seen: 0,
+        room_socket_connected: false,
+      },
+      messages,
+      calls,
+    };
+  }
+
   listUserMedals(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return [];
@@ -1661,7 +1776,19 @@ export class AppDirectoryStore extends DurableObject {
         controls: this._userControls(user.user_id),
         wallet: this.getWallet(user.user_id),
         tags: this.listUserTags(user.user_id),
+        identity_tags: this.listUserIdentityTags(user.user_id),
         medals: this.listUserMedals(user.user_id),
+        presence: (() => {
+          const current = this.ctx.storage.sql.exec(
+            "SELECT room_id, last_seen, room_socket_connected FROM app_user_presence WHERE user_id = ? LIMIT 1",
+            user.user_id,
+          ).toArray()[0];
+          return current ? {
+            room_id: current.room_id ? String(current.room_id) : null,
+            last_seen: Number(current.last_seen || 0),
+            room_socket_connected: Number(current.room_socket_connected || 0) === 1,
+          } : null;
+        })(),
       };
     });
   }

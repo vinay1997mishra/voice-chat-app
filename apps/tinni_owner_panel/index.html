@@ -273,6 +273,18 @@
               </div>
             </article>
           </div>
+
+          <article class="panel" id="officialsPanel">
+            <div class="panel-head">
+              <div>
+                <h2>Officials</h2>
+                <p>Every V Official appears here. Each Position / Designation has its own page.</p>
+              </div>
+              <button class="btn secondary" type="button" data-owner-official-refresh>Refresh Officials</button>
+            </div>
+            <div id="officialPositionTabs" class="official-position-tabs"></div>
+            <div id="officialPositionPage" class="empty-state">Loading Officials…</div>
+          </article>
         </section>
 
         <section class="view" id="view-rooms">
@@ -411,6 +423,17 @@
       </section>
     </main>
   </div>
+
+  <dialog id="ownerProfileDialog" class="owner-profile-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3>Full User ID / Profile</h3>
+        <p>Owner-only consolidated Tinni Star account view.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-profile-close>✕</button>
+    </div>
+    <div id="ownerProfileContent" class="owner-profile-content">Loading…</div>
+  </dialog>
 
   <dialog id="actionDialog">
     <form method="dialog" id="actionForm">

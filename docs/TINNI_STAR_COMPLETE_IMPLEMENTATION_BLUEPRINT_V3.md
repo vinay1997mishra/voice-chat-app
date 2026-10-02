@@ -191,6 +191,10 @@ Gift panel:
 - Message/conversation identity header shows the same current identity tags where applicable.
 - No Medal-management behavior is introduced by this Messages & Tags feature; existing medal surfaces remain separate.
 - These identity rules are server-backed and must survive reinstall/reconnect.
+- **Officials panel:** every active V Official appears in Messages & Tags → Officials. Each distinct Position / Designation gets its own page/tab automatically.
+- Touching an Official ID opens its Owner-only full user detail/profile view. Each Official row provides Full Details/Open Profile, Edit Position and Remove Official.
+- Main Owner user search also provides **Open ID / Full Profile** so any searched ID can open the same consolidated user view.
+- Consolidated Owner user view includes Tinni Star profile/account, wallet, current identity tags/roles, current live room/seat when available, stored Tinni inbox/message history and stored Tinni call history.
 
 ## 12. Profile / Mine / CP
 
