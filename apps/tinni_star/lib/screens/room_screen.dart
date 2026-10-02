@@ -11,7 +11,6 @@ import 'package:share_plus/share_plus.dart';
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
-import '../effects/effect_queue.dart';
 import '../effects/effect_overlay.dart';
 import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
@@ -46,7 +45,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   List<String> _luckyComboRecipients = <String>[];
   int _luckyComboCount = 0;
   int _luckyComboWon = 0;
-  int _luckyLastMultiplier = 0;
   int _luckyPoolBalance = 0;
   GiftDefinition? _seatGiftAnimationGift;
   int _seatGiftAnimationSequence = 0;
@@ -2371,6 +2369,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  // Kept for future owner/config access; intentionally not shown in the room gift box.
+  // ignore: unused_element
   Future<void> _createRoomCustomGift() async {
     final file = await FilePicker.pickFile(
       dialogTitle: 'Custom Gift',
@@ -2458,7 +2458,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyComboRecipients = <String>[];
     _luckyComboCount = 0;
     _luckyComboWon = 0;
-    _luckyLastMultiplier = 0;
     _luckyPoolBalance = 0;
     _luckySessionId = null;
     _luckySessionHighest = 0;
@@ -2476,7 +2475,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _luckyComboRecipients = <String>[];
         _luckyComboCount = 0;
         _luckyComboWon = 0;
-        _luckyLastMultiplier = 0;
         _luckyPoolBalance = 0;
         _luckySessionId = null;
         _luckySessionHighest = 0;
@@ -2594,7 +2592,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _luckySessionHighest = continuesSession
           ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
           : math.max(serverHighest, multiplier);
-      _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
       final rawTransactions = response['transactions'];
       String? eventId;
