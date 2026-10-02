@@ -10,6 +10,10 @@ void main() {
     expect(profile.contains("Key('profile-identity-tags')"), true);
     expect(profile.contains("Key('profile-v-official-tag')"), true);
     expect(profile.contains("RoyalPalette.gold"), true);
+    final mine = File('lib/screens/profile_screen.dart').readAsStringSync();
+    expect(mine.contains("decoded['identity_tags']"), true);
+    expect(mine.contains("Key('mine-profile-identity-tags')"), true);
+    expect(mine.contains("Key('mine-profile-v-official-tag')"), true);
   });
 
   test('Messages & Tags keeps V Official owner controls', () {
