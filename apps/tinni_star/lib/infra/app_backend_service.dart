@@ -120,6 +120,107 @@ class AppBackendService {
   final Uri apiBase;
   final HttpClient _httpClient;
 
+  Future<Map<String, dynamic>> currentUser(String token) async {
+    final data = await _request('GET', '/app/me', token);
+    final user = _map(data['user']);
+    if (user.isEmpty || (user['user_id']?.toString() ?? '').isEmpty) {
+      throw StateError('Server returned invalid account');
+    }
+    return user;
+  }
+
+  Future<Map<String, String?>> profileMedia(String token) async {
+    final data = await _request('GET', '/profile-media', token);
+    final raw = _map(data['media']);
+    return <String, String?>{
+      for (final entry in raw.entries)
+        entry.key: entry.value?.toString(),
+    };
+  }
+
+  Future<String> uploadProfileMedia(
+    String token, {
+    required String slot,
+    required String dataUrl,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/profile-media',
+      token,
+      body: {'slot': slot, 'data_url': dataUrl},
+    );
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) throw StateError('Server did not return profile media URL');
+    return url;
+  }
+
+  Future<void> deleteProfileMedia(String token, String slot) async {
+    await _request(
+      'DELETE',
+      '/profile-media',
+      token,
+      body: {'slot': slot},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> profileTrends(
+    String token, {
+    int limit = 40,
+  }) async {
+    final base = apiBase.replace(path: '/profile/trends');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Trends');
+    }
+    final raw = data['trends'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> addProfileTrend(
+    String token,
+    String text,
+  ) async {
+    final data = await _request(
+      'POST',
+      '/profile/trends',
+      token,
+      body: <String, dynamic>{'text': text},
+    );
+    return _map(data['trend']);
+  }
+
+  Future<Map<String, dynamic>> guardianState(String token) async {
+    final data = await _request('GET', '/profile/guardian', token);
+    return _map(data['guardian']);
+  }
+
+  Future<Map<String, dynamic>> updateProfile(
+    String token,
+    Map<String, dynamic> values,
+  ) async {
+    final data = await _request(
+      'PATCH',
+      '/app/profile',
+      token,
+      body: values,
+    );
+    final user = _map(data['user']);
+    if (user.isEmpty) throw StateError('Server returned invalid profile');
+    return user;
+  }
+
   Future<List<RemoteNotification>> notifications(String token) async {
     final data = await _request('GET', '/notifications', token);
     final raw = data['notifications'];
@@ -226,6 +327,386 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>?> searchUserById(
+    String token,
+    String userId,
+  ) async {
+    final id = userId.trim();
+    if (id.isEmpty) return null;
+    if (token.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+    final uri = apiBase.replace(
+      path: '/users/exact-id',
+      queryParameters: <String, String>{'id': id},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $token',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        throw StateError(
+          'Tinni Star server returned an invalid user search response.',
+        );
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to search user',
+      );
+    }
+    final row = _map(data['user']);
+    return row.isEmpty ? null : row;
+  }
+
+  Future<List<Map<String, dynamic>>> blockedProfiles(String token) async {
+    final data = await _request('GET', '/social/blocked/details', token);
+    final raw = data['blocked'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> startEmailAccountLink(
+    String token, {
+    required String email,
+  }) async {
+    return _request(
+      'POST',
+      '/account/link/email/start',
+      token,
+      body: <String, dynamic>{'email': email.trim()},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> verifyEmailAccountLink(
+    String token, {
+    required String requestId,
+    required String otp,
+    required String password,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/account/link/email/verify',
+      token,
+      body: <String, dynamic>{
+        'request_id': requestId,
+        'otp': otp.trim(),
+        'password': password,
+      },
+    );
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> linkGoogleAccount(
+    String token, {
+    required String idToken,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/account/link/google',
+      token,
+      body: <String, dynamic>{'id_token': idToken},
+    );
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<void> logout(String token) async {
+    await _request('POST', '/app/logout', token, body: const <String, dynamic>{});
+  }
+
+  Future<Map<String, dynamic>> userTagsAndMedals(
+    String token,
+    String userId,
+  ) async {
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final uri = apiBase.replace(
+      path: '/app-user/tags',
+      queryParameters: <String, String>{'user_id': userId},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load medals');
+    }
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> tasks(String token) async {
+    final data = await _request('GET', '/tasks', token);
+    final raw = data['tasks'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> claimTask(
+    String token,
+    String taskId,
+  ) async {
+    return _request(
+      'POST',
+      '/tasks/claim',
+      token,
+      body: <String, dynamic>{'task_id': taskId},
+    );
+  }
+
+  Future<Map<String, dynamic>> familyState(String token) async {
+    return _request('GET', '/family', token);
+  }
+
+  Future<List<Map<String, dynamic>>> familyList(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/family/list');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        final responseBody = text.trim();
+        if (responseBody.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable (1101). Please pull to retry.',
+          );
+        }
+        throw StateError(
+          'Tinni Star server returned an invalid Family response.',
+        );
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load Families');
+    }
+    final raw = data['families'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createFamily(
+    String token, {
+    required String name,
+    required String tag,
+  }) async {
+    return _request(
+      'POST',
+      '/family/create',
+      token,
+      body: <String, dynamic>{'name': name.trim(), 'tag': tag.trim()},
+    );
+  }
+
+  Future<void> requestFamilyJoin(
+    String token, {
+    required String familyId,
+  }) async {
+    await _request(
+      'POST',
+      '/family/join-request',
+      token,
+      body: <String, dynamic>{'family_id': familyId},
+    );
+  }
+
+  Future<void> resolveFamilyJoin(
+    String token, {
+    required String userId,
+    required bool approve,
+  }) async {
+    await _request(
+      'POST',
+      '/family/join-request/resolve',
+      token,
+      body: <String, dynamic>{'user_id': userId, 'approve': approve},
+    );
+  }
+
+  Future<void> setFamilyAdmin(
+    String token, {
+    required String userId,
+    required bool admin,
+  }) async {
+    await _request(
+      'POST',
+      '/family/admin',
+      token,
+      body: <String, dynamic>{'user_id': userId, 'admin': admin},
+    );
+  }
+
+  Future<void> removeFamilyMember(
+    String token, {
+    required String userId,
+  }) async {
+    await _request(
+      'POST',
+      '/family/member/remove',
+      token,
+      body: <String, dynamic>{'user_id': userId},
+    );
+  }
+
+  Future<void> leaveFamily(String token) async {
+    await _request(
+      'POST',
+      '/family/leave',
+      token,
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> familyCheckIn(String token) async {
+    return _request(
+      'POST',
+      '/family/check-in',
+      token,
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<void> updateFamilyNotice(
+    String token, {
+    required String notice,
+  }) async {
+    await _request(
+      'POST',
+      '/family/notice',
+      token,
+      body: <String, dynamic>{'notice': notice},
+    );
+  }
+
+  Future<Map<String, dynamic>> sendFamilyCoins(
+    String token, {
+    required String receiverUserId,
+    required int coins,
+  }) async {
+    return _request(
+      'POST',
+      '/family/wallet/send',
+      token,
+      body: <String, dynamic>{
+        'receiver_user_id': receiverUserId,
+        'coins': coins,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> familyWalletTransfers(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/family/wallet/transfers');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load Family Wallet',
+      );
+    }
+    final raw = data['transfers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> accountStats(String token) async {
+    final data = await _request('GET', '/account/stats', token);
+    return _map(data['stats']);
+  }
+
+  Future<List<Map<String, dynamic>>> settlementTransfers(String token) async {
+    final data = await _request('GET', '/wallet/settlement/transfers', token);
+    final raw = data['transfers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> accountPreferences(String token) async {
+    final data = await _request('GET', '/account/preferences', token);
+    return _map(data['preferences']);
+  }
+
+  Future<Map<String, dynamic>> updateAccountPreferences(
+    String token,
+    Map<String, dynamic> values,
+  ) async {
+    final data = await _request(
+      'POST',
+      '/account/preferences',
+      token,
+      body: values,
+    );
+    return _map(data['preferences']);
+  }
+
+  Future<List<Map<String, dynamic>>> accountIdentities(String token) async {
+    final data = await _request('GET', '/account/identities', token);
+    final raw = data['identities'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> feedbackHistory(String token) async {
+    final data = await _request('GET', '/feedback', token);
+    final raw = data['feedback'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> submitFeedback(
+    String token, {
+    required String category,
+    required String message,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/feedback',
+      token,
+      body: <String, dynamic>{
+        'category': category,
+        'message': message,
+      },
+    );
+    return _map(data['feedback']);
+  }
+
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
@@ -252,6 +733,31 @@ class AppBackendService {
   Future<RemoteCp?> cpState(String token) async {
     final data = await _request('GET', '/cp', token);
     return _cp(data['cp']);
+  }
+
+  Future<List<Map<String, dynamic>>> cpRanking(
+    String token, {
+    int limit = 100,
+  }) async {
+    final base = apiBase.replace(path: '/cp/ranking');
+    final uri = base.replace(
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load CP ranking');
+    }
+    final raw = data['ranking'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
   }
 
   Future<RemoteCp> cpRequest(String token, String targetUserId) async {
@@ -359,11 +865,110 @@ class AppBackendService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> rechargeProviders(
+    String token,
+  ) async {
+    final data = await _request('GET', '/wallet/recharge-providers', token);
+    final raw = data['providers'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.map(_map).toList(growable: false);
+  }
+
+  Future<bool> roleWalletPasswordConfigured(
+    String token, {
+    required String walletType,
+  }) async {
+    final base = apiBase.replace(path: '/wallet/role-password/status');
+    final uri = base.replace(
+      queryParameters: <String, String>{'wallet_type': walletType},
+    );
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load wallet password status',
+      );
+    }
+    return data['configured'] == true;
+  }
+
+  Future<void> setupRoleWalletPassword(
+    String token, {
+    required String walletType,
+    required String password,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/setup',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'password': password,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> startRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+  }) {
+    return _request(
+      'POST',
+      '/wallet/role-password/reset/start',
+      token,
+      body: <String, dynamic>{'wallet_type': walletType},
+    );
+  }
+
+  Future<void> verifyRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+    required String requestId,
+    required String otp,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/reset/verify',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'request_id': requestId,
+        'otp': otp,
+      },
+    );
+  }
+
+  Future<void> completeRoleWalletPasswordReset(
+    String token, {
+    required String walletType,
+    required String requestId,
+    required String newPassword,
+  }) async {
+    await _request(
+      'POST',
+      '/wallet/role-password/reset/complete',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'request_id': requestId,
+        'new_password': newPassword,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> transferCoins(
     String token, {
     required String recipientUserId,
     required int amountCoins,
     required String walletType,
+    required String password,
   }) async {
     return _request(
       'POST',
@@ -373,6 +978,7 @@ class AppBackendService {
         'recipient_user_id': recipientUserId,
         'amount_coins': amountCoins,
         'wallet_type': walletType,
+        'password': password,
       },
     );
   }
@@ -397,8 +1003,23 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty ? <String, dynamic>{} : _map(jsonDecode(text));
-    if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to load store');
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        final body = text.trim();
+        if (body.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable (1101). Please retry.',
+          );
+        }
+        throw StateError('Store server returned an invalid response.');
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load store');
+    }
     final raw = data['items'];
     if (raw is! List) return const [];
     return raw.map(_map).toList(growable: false);
@@ -406,6 +1027,40 @@ class AppBackendService {
 
   Future<Map<String, dynamic>> purchaseStoreItem(String token, String kind, String itemId, {String country = ''}) async {
     return _request('POST', '/store/purchase', token, body: {'kind': kind, 'item_id': itemId, if (country.isNotEmpty) 'country': country});
+  }
+
+  Future<Map<String, dynamic>> equipStoreItem(
+    String token, {
+    required String kind,
+    String? itemId,
+  }) async {
+    return _request(
+      'POST',
+      '/store/equip',
+      token,
+      body: <String, dynamic>{
+        'kind': kind,
+        'item_id': itemId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> sendStoreItem(
+    String token, {
+    required String recipientUserId,
+    required String kind,
+    required String itemId,
+  }) async {
+    return _request(
+      'POST',
+      '/store/send',
+      token,
+      body: <String, dynamic>{
+        'recipient_user_id': recipientUserId,
+        'kind': kind,
+        'item_id': itemId,
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> frameCatalog(String token) async {
@@ -472,7 +1127,20 @@ class AppBackendService {
     }
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty ? <String, dynamic>{} : _map(jsonDecode(text));
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (text.trim().isNotEmpty) {
+      try {
+        data = _map(jsonDecode(text));
+      } on FormatException {
+        final body = text.trim();
+        if (body.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable (1101). Please pull to retry.',
+          );
+        }
+        throw StateError('Tinni Star server returned an invalid response.');
+      }
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Server request failed');
     }

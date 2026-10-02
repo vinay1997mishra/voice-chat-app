@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 enum RtcConnectionState { idle, joining, joined, reconnecting, failed }
 
 abstract interface class RtcAdapter {
   RtcConnectionState get state;
   bool get publishingMic;
+  ValueListenable<Map<String, double>> get speakingLevelsListenable;
   Future<void> join(
     String roomId,
     String userId, {
@@ -13,6 +16,7 @@ abstract interface class RtcAdapter {
   });
   Future<void> leave();
   Future<void> setMicPublished(bool enabled);
+  Future<void> setRemoteAudioEnabled(bool enabled);
 }
 
 abstract interface class ImAdapter {
@@ -26,12 +30,18 @@ abstract interface class ImAdapter {
 class LocalRtcAdapter implements RtcAdapter {
   RtcConnectionState _state = RtcConnectionState.idle;
   bool _publishing = false;
+  final ValueNotifier<Map<String, double>> _speakingLevels =
+      ValueNotifier<Map<String, double>>(const <String, double>{});
 
   @override
   RtcConnectionState get state => _state;
 
   @override
   bool get publishingMic => _publishing;
+
+  @override
+  ValueListenable<Map<String, double>> get speakingLevelsListenable =>
+      _speakingLevels;
 
   @override
   Future<void> join(
@@ -60,6 +70,9 @@ class LocalRtcAdapter implements RtcAdapter {
     }
     _publishing = enabled;
   }
+
+  @override
+  Future<void> setRemoteAudioEnabled(bool enabled) async {}
 }
 
 class LocalImAdapter implements ImAdapter {
@@ -228,6 +241,11 @@ class RealtimeCoordinator {
       'enabled': enabled,
       'userId': userId,
     });
+  }
+
+  Future<void> setRemoteAudioEnabled(bool enabled) async {
+    if (activeRoomId == null) throw StateError('No active room');
+    await rtc.setRemoteAudioEnabled(enabled);
   }
 
   Future<void> exitRoom() async {

@@ -10,6 +10,7 @@ class AuthPersistence {
   static const _emailKey = 'tinni.auth.email';
   static const _nameKey = 'tinni.auth.name';
   static const _ageKey = 'tinni.auth.age';
+  static const _birthdayKey = 'tinni.auth.birthday';
   static const _signatureKey = 'tinni.auth.signature';
   static const _countryCodeKey = 'tinni.auth.country_code';
   static const _countryNameKey = 'tinni.auth.country_name';
@@ -26,6 +27,11 @@ class AuthPersistence {
     await _preferences.setString(_emailKey, account.email);
     await _preferences.setString(_nameKey, account.displayName);
     await _preferences.setInt(_ageKey, account.age);
+    if (account.birthday == null || account.birthday!.isEmpty) {
+      await _preferences.remove(_birthdayKey);
+    } else {
+      await _preferences.setString(_birthdayKey, account.birthday!);
+    }
     await _preferences.setString(_signatureKey, account.signature);
     await _preferences.setString(_countryCodeKey, account.countryCode);
     await _preferences.setString(_countryNameKey, account.countryName);
@@ -52,6 +58,7 @@ class AuthPersistence {
     final email = await _preferences.getString(_emailKey);
     final name = await _preferences.getString(_nameKey);
     final age = await _preferences.getInt(_ageKey);
+    final birthday = await _preferences.getString(_birthdayKey);
     final signature = await _preferences.getString(_signatureKey);
     final countryCode = await _preferences.getString(_countryCodeKey);
     final countryName = await _preferences.getString(_countryNameKey);
@@ -81,6 +88,7 @@ class AuthPersistence {
         email: email,
         displayName: name,
         age: age,
+        birthday: birthday,
         signature: signature ?? '',
         countryCode: countryCode,
         countryName: countryName,
@@ -106,6 +114,7 @@ class AuthPersistence {
       _emailKey,
       _nameKey,
       _ageKey,
+      _birthdayKey,
       _signatureKey,
       _countryCodeKey,
       _countryNameKey,

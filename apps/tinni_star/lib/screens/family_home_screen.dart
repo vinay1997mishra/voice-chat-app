@@ -1,10 +1,48 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../community/family_service.dart';
-import '../moderation/user_safety_menu.dart';
 import '../ui/royal_theme.dart';
-import 'room_screen.dart';
+
+ImageProvider? _familyAvatar(String? value) {
+  final source = value?.trim() ?? '';
+  if (source.isEmpty) return null;
+  if (source.startsWith('data:image/')) {
+    try {
+      return MemoryImage(base64Decode(source.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    return NetworkImage(source);
+  }
+  return null;
+}
+
+String _familyCompact(int value) {
+  if (value >= 1000000000) {
+    return (value / 1000000000).toStringAsFixed(1) + 'B';
+  }
+  if (value >= 1000000) {
+    return (value / 1000000).toStringAsFixed(1) + 'M';
+  }
+  if (value >= 1000) {
+    return (value / 1000).toStringAsFixed(1) + 'K';
+  }
+  return value.toString();
+}
+
+String _familyDate(dynamic value) {
+  final ms = value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
+  if (ms == null || ms <= 0) return '';
+  final dt = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+      '${two(dt.hour)}:${two(dt.minute)}';
+}
 
 class FamilyWalletScreen extends StatefulWidget {
   const FamilyWalletScreen({
@@ -21,27 +59,73 @@ class FamilyWalletScreen extends StatefulWidget {
 }
 
 class _FamilyWalletScreenState extends State<FamilyWalletScreen> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> transfers = const <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.familyState(account.authToken),
+        widget.state.backend.familyWalletTransfers(account.authToken),
+        widget.state.backend.wallet(account.authToken),
+      ]);
+      widget.state.family.applyRemote(
+        Map<String, dynamic>.from(results[0] as Map),
+      );
+      widget.state.wallet.applyRemote(results[2]);
+      if (!mounted) return;
+      setState(() {
+        transfers = List<Map<String, dynamic>>.from(results[1] as List);
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
   Future<void> _sendCoins(FamilyMember member) async {
+    final me = widget.state.auth.current;
+    if (me == null || me.userId == member.userId) return;
     final controller = TextEditingController();
     final amount = await showDialog<int>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text('Send coins to ' + member.name),
         content: TextField(
+          key: const Key('family-wallet-amount'),
           controller: controller,
-          autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Coins'),
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Coins',
+            helperText:
+                'Available: ' + widget.state.wallet.coins.toString() + ' coins',
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
               final value = int.tryParse(controller.text.trim());
-              Navigator.pop(context, value);
+              if (value == null || value <= 0) return;
+              Navigator.pop(dialogContext, value);
             },
             child: const Text('Send'),
           ),
@@ -49,104 +133,204 @@ class _FamilyWalletScreenState extends State<FamilyWalletScreen> {
       ),
     );
     controller.dispose();
-    if (amount == null || amount <= 0 || !mounted) return;
-    final sent = widget.state.wallet.spendCoins(
-      amount,
-      'Family transfer to ' + member.userId,
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          sent
-              ? amount.toString() + ' coins sent to ' + member.name
-              : 'Not enough coins.',
+    if (amount == null || !mounted) return;
+
+    try {
+      await widget.state.backend.sendFamilyCoins(
+        me.authToken,
+        receiverUserId: member.userId,
+        coins: amount,
+      );
+      final remote = await widget.state.backend.wallet(me.authToken);
+      widget.state.wallet.applyRemote(remote);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            amount.toString() +
+                ' coins sent to ' +
+                member.name +
+                '. Receiver Family EXP +' +
+                amount.toString(),
+          ),
         ),
-      ),
-    );
-    if (sent) setState(() {});
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final members = widget.state.family.members;
+    final me = widget.state.auth.current?.userId;
     return Scaffold(
       key: const Key('family-wallet-screen'),
-      appBar: AppBar(title: const Text('Family Wallet')),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          RoyalPanel(
-            key: const Key('family-wallet-balance'),
-            gradient: FeaturePalette.glow(FeaturePalette.wallet),
-            accentColor: FeaturePalette.wallet,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.familyName,
-                  style: const TextStyle(
-                    color: RoyalPalette.cream,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Family Wallet: ' +
-                      widget.state.family.walletCoins.toString() +
-                      ' coins',
-                  style: const TextStyle(color: RoyalPalette.muted),
-                ),
-              ],
-            ),
+      backgroundColor: RoyalPalette.black,
+      appBar: AppBar(
+        title: const Text(
+          'Family Wallet',
+          style: TextStyle(
+            color: FeaturePalette.family,
+            fontWeight: FontWeight.w900,
           ),
-          const SizedBox(height: 12),
-          for (final member in members)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: RoyalPanel(
-                key: Key('family-wallet-member-' + member.userId),
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      child: Text(
-                        member.name.trim().isEmpty
-                            ? '?'
-                            : member.name.trim()[0].toUpperCase(),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
+                  RoyalPanel(
+                    key: const Key('family-wallet-balance'),
+                    gradient: FeaturePalette.glow(FeaturePalette.wallet),
+                    accentColor: FeaturePalette.wallet,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.familyName,
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          'My Coins: ' +
+                              widget.state.wallet.coins.toString(),
+                          style: const TextStyle(
+                            color: FeaturePalette.wallet,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'Family Bonus Wallet: ' +
+                              widget.state.family.walletCoins.toString(),
+                          style: const TextStyle(color: RoyalPalette.muted),
+                        ),
+                        Text(
+                          'Monthly bonus: ' +
+                              widget.state.family.monthlyWalletBonusPercent
+                                  .toStringAsFixed(2) +
+                              '% of eligible received coins',
+                          style: const TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const GoldSectionTitle('Send coins to Family members'),
+                  const SizedBox(height: 8),
+                  for (final member in widget.state.family.members)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 7),
+                      child: RoyalPanel(
+                        key: Key('family-wallet-member-' + member.userId),
+                        padding: const EdgeInsets.all(9),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 21,
+                              backgroundImage:
+                                  _familyAvatar(member.avatarDataUrl),
+                              child: _familyAvatar(member.avatarDataUrl) == null
+                                  ? Text(
+                                      member.name.trim().isEmpty
+                                          ? '?'
+                                          : member.name
+                                              .trim()[0]
+                                              .toUpperCase(),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    member.name,
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Text(
+                                    'ID ' +
+                                        member.userId +
+                                        ' • Received ' +
+                                        _familyCompact(member.receivedCoins),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (member.userId != me)
+                              TextButton(
+                                key: Key(
+                                  'family-wallet-send-' + member.userId,
+                                ),
+                                onPressed: () => _sendCoins(member),
+                                child: const Text('Send Coins'),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            member.name,
-                            style: const TextStyle(
-                              color: RoyalPalette.cream,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'ID: ' + member.userId,
-                            style: const TextStyle(
-                              color: RoyalPalette.muted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
+                  const SizedBox(height: 14),
+                  const GoldSectionTitle('Transfer Records'),
+                  const SizedBox(height: 8),
+                  if (transfers.isEmpty)
+                    const RoyalPanel(
+                      child: Center(
+                        child: Text(
+                          'No Family Wallet transfers yet',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
                       ),
                     ),
-                    TextButton(
-                      key: Key('family-wallet-send-' + member.userId),
-                      onPressed: () => _sendCoins(member),
-                      child: const Text('Send Coins'),
+                  for (final row in transfers)
+                    ListTile(
+                      leading: const Icon(
+                        Icons.swap_horiz_rounded,
+                        color: FeaturePalette.family,
+                      ),
+                      title: Text(
+                        (row['sender_name']?.toString() ?? '') +
+                            ' → ' +
+                            (row['receiver_name']?.toString() ?? ''),
+                        style: const TextStyle(color: RoyalPalette.cream),
+                      ),
+                      subtitle: Text(
+                        _familyDate(row['created_at']),
+                        style: const TextStyle(color: RoyalPalette.muted),
+                      ),
+                      trailing: Text(
+                        _familyCompact(
+                          (row['coins'] as num?)?.toInt() ?? 0,
+                        ),
+                        style: const TextStyle(
+                          color: FeaturePalette.wallet,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                ],
               ),
-            ),
-        ],
       ),
     );
   }
@@ -158,128 +342,141 @@ class FamilyHomeScreen extends StatefulWidget {
     required this.state,
     this.previewName,
     this.previewTag,
+    this.previewFamilyId,
   });
 
   final TinniState state;
   final String? previewName;
   final String? previewTag;
+  final String? previewFamilyId;
 
   @override
   State<FamilyHomeScreen> createState() => _FamilyHomeScreenState();
 }
 
 class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
-  int _tab = 0;
+  bool loading = true;
+  String? error;
+  int tab = 0;
+  Map<String, dynamic>? remoteFamily;
+  List<Map<String, dynamic>> rawMembers = const <Map<String, dynamic>>[];
 
-  String get _name => widget.state.family.name ?? widget.previewName ?? 'Family';
-  String get _tag => widget.state.family.tag ?? widget.previewTag ?? 'FM';
+  bool get joined => widget.state.family.exists;
+  String get familyName =>
+      widget.state.family.name ?? widget.previewName ?? 'Family';
+  String get familyTag => widget.state.family.tag ?? widget.previewTag ?? 'FM';
 
-  List<Color> get _familyLevelColors {
-    switch (widget.state.family.visualTier) {
-      case FamilyVisualTier.emerald:
-        return const [Color(0xFF082F24), Color(0xFF0E8A62)];
-      case FamilyVisualTier.sapphire:
-        return const [Color(0xFF071D38), Color(0xFF155FA8)];
-      case FamilyVisualTier.amethyst:
-        return const [Color(0xFF241036), Color(0xFF833FB0)];
-      case FamilyVisualTier.royalGold:
-        return const [Color(0xFF3C2400), Color(0xFFD49B14)];
-      case FamilyVisualTier.bronze:
-        return const [Color(0xFF2B1A0A), Color(0xFF7A5515)];
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final data = await widget.state.backend.familyState(account.authToken);
+      widget.state.family.applyRemote(data);
+      final family = data['family'];
+      final members = data['members'];
+      if (!mounted) return;
+      setState(() {
+        remoteFamily = family is Map
+            ? Map<String, dynamic>.from(family)
+            : null;
+        rawMembers = members is List
+            ? members
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList(growable: false)
+            : const <Map<String, dynamic>>[];
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
     }
   }
 
-  Color get _familyTagColor => _familyLevelColors.last;
-
-  List<FamilyMember> _members() {
-    if (widget.state.family.members.isNotEmpty) {
-      return widget.state.family.members;
-    }
-    return const [
-      FamilyMember(
-        userId: 'f-1001',
-        name: 'Royal Leader',
-        role: FamilyRole.head,
-      ),
-      FamilyMember(
-        userId: 'f-1002',
-        name: 'Destiny',
-        role: FamilyRole.deputyHead,
-      ),
-      FamilyMember(
-        userId: 'f-1003',
-        name: 'Qureshi',
-        role: FamilyRole.assistant,
-      ),
-      FamilyMember(
-        userId: 'f-1004',
-        name: 'Sanvi',
-        role: FamilyRole.member,
-      ),
-      FamilyMember(
-        userId: 'f-1005',
-        name: 'Anvi',
-        role: FamilyRole.member,
-      ),
-    ];
-  }
-
-  Future<void> _joinPreviewFamily() async {
-    if (widget.state.family.exists) return;
-    final userId = widget.state.auth.current?.userId ?? '10000000';
-    widget.state.family.joinExisting(
-      familyName: _name,
-      familyTag: _tag,
-      member: FamilyMember(
-        userId: userId,
-        name: 'Tinni User',
-        role: FamilyRole.member,
-      ),
-    );
-    if (!mounted) return;
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Joined ' + _name)),
-    );
-  }
-
-  void _openFamilyRoom() {
-    final rooms = widget.state.discovery.recommend(country: 'IN');
-    if (rooms.isEmpty) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RoomScreen(
-          state: widget.state,
-          room: rooms.first,
+  Future<void> _joinPreview() async {
+    final account = widget.state.auth.current;
+    final familyId = widget.previewFamilyId;
+    if (account == null || familyId == null || familyId.isEmpty) return;
+    try {
+      await widget.state.backend.requestFamilyJoin(
+        account.authToken,
+        familyId: familyId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Family join request sent for Leader/Admin approval.'),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
-  Future<void> _editAnnouncement() async {
-    if (!widget.state.family.exists) return;
-    final controller = TextEditingController(
-      text: widget.state.family.notice,
-    );
+  Future<void> _checkIn() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final result =
+          await widget.state.backend.familyCheckIn(account.authToken);
+      await _load();
+      if (!mounted) return;
+      final already = result['already_checked_in'] == true;
+      final exp = (result['exp_awarded'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            already
+                ? 'Today\'s Family check-in is already complete.'
+                : 'Family check-in complete. EXP +' + exp.toString(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _editNotice() async {
+    final account = widget.state.auth.current;
+    if (account == null || !joined) return;
+    final controller = TextEditingController(text: widget.state.family.notice);
     final value = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Family announcement'),
         content: TextField(
           controller: controller,
-          maxLines: 3,
+          maxLines: 4,
+          maxLength: 300,
           decoration: const InputDecoration(
-            hintText: 'Write family announcement',
+            hintText: 'Write Family announcement',
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
             child: const Text('Save'),
           ),
         ],
@@ -287,550 +484,337 @@ class _FamilyHomeScreenState extends State<FamilyHomeScreen> {
     );
     controller.dispose();
     if (value == null || !mounted) return;
-    widget.state.family.updateNotice(value);
-    setState(() {});
+    try {
+      await widget.state.backend.updateFamilyNotice(
+        account.authToken,
+        notice: value,
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final members = _members();
+    final level = widget.state.family.level;
+    final exp = widget.state.family.experience;
+    final next = widget.state.family.nextLevelRequiredExperience;
+    final members = widget.state.family.members;
+
     return Scaffold(
       key: const Key('family-home-screen'),
+      backgroundColor: RoyalPalette.black,
       appBar: AppBar(
         title: Text(
-          _name,
+          familyName,
           style: const TextStyle(
             color: FeaturePalette.family,
             fontWeight: FontWeight.w900,
           ),
         ),
         actions: [
-          IconButton(
-            key: const Key('family-member-manage-button'),
-            tooltip: 'Member Manage',
-            onPressed: () {
-              Navigator.push(
+          if (joined)
+            IconButton(
+              key: const Key('family-member-manage-button'),
+              tooltip: 'Member Manage',
+              onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => FamilyMemberManageScreen(
                     state: widget.state,
-                    familyName: _name,
-                    members: members,
+                    familyName: familyName,
                   ),
                 ),
-              ).then((_) {
-                if (mounted) setState(() {});
-              });
-            },
-            icon: const ShiningIcon(
-              icon: Icons.manage_accounts_rounded,
-              color: FeaturePalette.family,
-              size: 18,
-              boxSize: 34,
-              glow: 0.30,
+              ).then((_) => _load()),
+              icon: const Icon(Icons.manage_accounts_rounded),
             ),
-          ),
         ],
       ),
-      body: Container(
-        key: const Key('family-level-shell'),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              _familyLevelColors.first,
-              RoyalPalette.black,
-              RoyalPalette.black,
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-              child: Row(
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
                 children: [
-                  Container(
-                    key: const Key('family-level-tag'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _familyTagColor,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _familyTagColor),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _familyTagColor.withValues(alpha: 0.38),
-                          blurRadius: 10,
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
+                  RoyalPanel(
+                    key: const Key('family-level-shell'),
+                    gradient: FeaturePalette.glow(FeaturePalette.family),
+                    accentColor: FeaturePalette.family,
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 34,
+                              backgroundColor:
+                                  FeaturePalette.family.withValues(alpha: 0.18),
+                              child: const Icon(
+                                Icons.shield_rounded,
+                                size: 36,
+                                color: FeaturePalette.family,
+                              ),
+                            ),
+                            const SizedBox(width: 11),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    familyName,
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    key: const Key('family-level-tag'),
+                                    familyTag + ' • Family Level ' + level.toString(),
+                                    style: const TextStyle(
+                                      color: FeaturePalette.family,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Text(
+                                    members.length.toString() +
+                                        ' members • EXP ' +
+                                        _familyCompact(exp),
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (joined)
+                              IconButton(
+                                key: const Key('family-level-open'),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FamilyLevelScreen(
+                                      state: widget.state,
+                                      familyName: familyName,
+                                      familyTag: familyTag,
+                                    ),
+                                  ),
+                                ).then((_) => _load()),
+                                icon: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: FeaturePalette.family,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        LinearProgressIndicator(
+                          value: widget.state.family.levelProgress,
+                          color: FeaturePalette.family,
+                          backgroundColor: RoyalPalette.panel2,
+                        ),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            next == null
+                                ? 'Max configured level'
+                                : 'Next ' + _familyCompact(next) + ' EXP',
+                            style: const TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 10,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    child: Text(
-                      _tag + ' • ' + widget.state.family.levelLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FamilyAction(
+                          key: const Key('family-check-in'),
+                          icon: Icons.event_available_rounded,
+                          label: 'Daily Check-in',
+                          onTap: joined ? _checkIn : null,
+                        ),
                       ),
-                    ),
-                  ),
-                  const Spacer(),
-                  InkWell(
-                    key: const Key('family-level-open'),
-                    onTap: widget.state.family.exists
-                        ? () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => FamilyLevelScreen(
-                                  state: widget.state,
-                                  familyName: _name,
-                                  familyTag: _tag,
-                                ),
-                              ),
-                            );
-                          }
-                        : null,
-                    child: Text(
-                      'Family Level ' + widget.state.family.level.toString(),
-                      style: const TextStyle(
-                        color: FeaturePalette.family,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Row(
-            children: [
-              Expanded(
-                child: _FamilyTab(
-                  key: const Key('family-home-tab'),
-                  label: 'Home',
-                  selected: _tab == 0,
-                  onTap: () => setState(() => _tab = 0),
-                ),
-              ),
-              Expanded(
-                child: _FamilyTab(
-                  key: const Key('family-trends-tab'),
-                  label: 'Trends',
-                  selected: _tab == 1,
-                  onTap: () => setState(() => _tab = 1),
-                ),
-              ),
-            ],
-          ),
-          Expanded(
-            child: _tab == 0
-                ? _buildHome(members)
-                : _buildTrends(),
-          ),
-        ],
-      ),
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: widget.state.family.exists
-            ? FilledButton.icon(
-                key: const Key('family-open-room-button'),
-                onPressed: _openFamilyRoom,
-                icon: const Icon(Icons.meeting_room_rounded),
-                label: const Text('Open family room'),
-              )
-            : FilledButton.icon(
-                key: const Key('family-join-button'),
-                onPressed: _joinPreviewFamily,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Join'),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildHome(List<FamilyMember> members) {
-    final notice = widget.state.family.notice.trim().isNotEmpty
-        ? widget.state.family.notice
-        : 'welcome ' + _name + ' members ❤️';
-
-    return ListView(
-      key: const Key('family-home-content'),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-      children: [
-        const Text(
-          'family announcement',
-          style: TextStyle(
-            color: RoyalPalette.cream,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        RoyalPanel(
-          key: const Key('family-announcement'),
-          onTap: widget.state.family.exists ? _editAnnouncement : null,
-          padding: const EdgeInsets.all(11),
-          gradient: FeaturePalette.glow(FeaturePalette.family),
-          accentColor: FeaturePalette.family,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  notice,
-                  style: const TextStyle(
-                    color: RoyalPalette.muted,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              if (widget.state.family.exists)
-                const ShiningIcon(
-                  icon: Icons.edit_rounded,
-                  color: FeaturePalette.family,
-                  size: 15,
-                  boxSize: 28,
-                  glow: 0.28,
-                ),
-            ],
-          ),
-        ),
-        const GoldSectionTitle('Top members of the family'),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _StarCard(
-                title: 'Charm Star',
-                icon: Icons.favorite_rounded,
-                member: members.isEmpty ? null : members.first,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StarCard(
-                title: 'Wealth Star',
-                icon: Icons.diamond_rounded,
-                member: members.length > 1 ? members[1] : members.firstOrNull,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StarCard(
-                title: 'Active star',
-                icon: Icons.local_fire_department_rounded,
-                member: members.length > 2 ? members[2] : members.firstOrNull,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        GoldSectionTitle(
-          'Member list',
-          trailing: IconButton(
-            key: const Key('family-member-list-chevron'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FamilyMemberManageScreen(
-                    state: widget.state,
-                    familyName: _name,
-                    members: members,
-                  ),
-                ),
-              ).then((_) {
-                if (mounted) setState(() {});
-              });
-            },
-            icon: const ShiningIcon(
-              icon: Icons.chevron_right_rounded,
-              color: FeaturePalette.family,
-              size: 16,
-              boxSize: 30,
-              glow: 0.26,
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 70,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: members.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 9),
-            itemBuilder: (context, index) => Column(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: FeaturePalette.family.withValues(alpha: 0.16),
-                    border: Border.all(color: FeaturePalette.family),
-                    boxShadow: [
-                      BoxShadow(
-                        color: FeaturePalette.family.withValues(alpha: 0.34),
-                        blurRadius: 12,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _FamilyAction(
+                          key: const Key('family-wallet-open'),
+                          icon: Icons.account_balance_wallet_rounded,
+                          label: 'Family Wallet',
+                          onTap: joined
+                              ? () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => FamilyWalletScreen(
+                                        state: widget.state,
+                                        familyName: familyName,
+                                      ),
+                                    ),
+                                  ).then((_) => _load())
+                              : null,
+                        ),
                       ),
                     ],
                   ),
-                  child: Text(
-                    members[index].name.characters.first.toUpperCase(),
-                    style: const TextStyle(
-                      color: FeaturePalette.family,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                SizedBox(
-                  width: 58,
-                  child: Text(
-                    members[index].name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 9,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const GoldSectionTitle('Family room'),
-        const SizedBox(height: 8),
-        RoyalPanel(
-          key: const Key('family-room-card'),
-          onTap: _openFamilyRoom,
-          padding: const EdgeInsets.all(10),
-          gradient: FeaturePalette.glow(FeaturePalette.family),
-          accentColor: FeaturePalette.family,
-          child: Row(
-            children: [
-              const ShiningIcon(
-                icon: Icons.mic_rounded,
-                color: FeaturePalette.family,
-                size: 28,
-                boxSize: 58,
-                glow: 0.42,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _name + ' room',
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      _tag + ' • family voice room',
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: FeaturePalette.family,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        const GoldSectionTitle('Family functions'),
-        const SizedBox(height: 8),
-        GridView.count(
-          physics: const NeverScrollableScrollPhysics(),
-          shrinkWrap: true,
-          crossAxisCount: 2,
-          childAspectRatio: 1.35,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: [
-            RoyalPanel(
-              key: const Key('family-signin-action'),
-              onTap: widget.state.family.exists
-                  ? () {
-                      final userId =
-                          widget.state.auth.current?.userId ?? '10000000';
-                      final added = widget.state.familyFeatures.signIn(userId);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            added
-                                ? 'Family sign-in completed.'
-                                : 'Already signed in today.',
-                          ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FamilyTab(
+                          label: 'Home',
+                          selected: tab == 0,
+                          onTap: () => setState(() => tab = 0),
                         ),
-                      );
-                      setState(() {});
-                    }
-                  : null,
-              gradient: FeaturePalette.glow(FeaturePalette.family),
-              accentColor: FeaturePalette.family,
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ShiningIcon(
-                    icon: Icons.check_circle_rounded,
-                    color: FeaturePalette.family,
-                    size: 22,
-                    boxSize: 40,
-                    glow: 0.32,
-                  ),
-                  Text('Daily Sign-in'),
-                ],
-              ),
-            ),
-            RoyalPanel(
-              key: const Key('family-wallet-card'),
-              onTap: widget.state.family.exists
-                  ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FamilyWalletScreen(
-                            state: widget.state,
-                            familyName: _name,
-                          ),
+                      ),
+                      Expanded(
+                        child: _FamilyTab(
+                          label: 'Trends',
+                          selected: tab == 1,
+                          onTap: () => setState(() => tab = 1),
                         ),
-                      ).then((_) {
-                        if (mounted) setState(() {});
-                      });
-                    }
-                  : null,
-              gradient: FeaturePalette.glow(FeaturePalette.wallet),
-              accentColor: FeaturePalette.wallet,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const ShiningIcon(
-                    icon: Icons.account_balance_wallet_rounded,
-                    color: FeaturePalette.wallet,
-                    size: 22,
-                    boxSize: 40,
-                    glow: 0.32,
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Wallet ' +
-                        widget.state.family.walletCoins.toString(),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        const GoldSectionTitle('Family tasks'),
-        const SizedBox(height: 8),
-        for (final task in widget.state.familyFeatures.tasks.values)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: RoyalPanel(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    style: const TextStyle(
-                      color: RoyalPalette.cream,
-                      fontWeight: FontWeight.w800,
+                  const SizedBox(height: 12),
+                  if (tab == 0) ...[
+                    GoldSectionTitle(
+                      'Family Announcement',
+                      trailing: joined
+                          ? IconButton(
+                              key: const Key('family-edit-announcement'),
+                              onPressed: _editNotice,
+                              icon: const Icon(
+                                Icons.edit_rounded,
+                                color: FeaturePalette.family,
+                              ),
+                            )
+                          : null,
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  LinearProgressIndicator(
-                    value: (task.progress / task.target).clamp(0.0, 1.0).toDouble(),
-                    color: FeaturePalette.family,
-                    backgroundColor: RoyalPalette.panel2,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    task.progress.toString() +
-                        '/' +
-                        task.target.toString(),
-                    style: const TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        const SizedBox(height: 18),
-
-      ],
-    );
-  }
-
-  Widget _buildTrends() {
-    final records = widget.state.family.records;
-    return ListView(
-      key: const Key('family-trends-content'),
-      padding: const EdgeInsets.all(14),
-      children: [
-        const GoldSectionTitle('Family trends'),
-        const SizedBox(height: 10),
-        if (records.isEmpty)
-          const RoyalPanel(
-            child: Text(
-              'No family activity yet.',
-              style: TextStyle(color: RoyalPalette.muted),
-            ),
-          )
-        else
-          for (final record in records.reversed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: RoyalPanel(
-                padding: const EdgeInsets.all(10),
-                gradient: FeaturePalette.glow(FeaturePalette.moments),
-                accentColor: FeaturePalette.moments,
-                child: Row(
-                  children: [
-                    const ShiningIcon(
-                      icon: Icons.auto_awesome_rounded,
-                      color: FeaturePalette.moments,
-                      size: 17,
-                      boxSize: 32,
-                      glow: 0.28,
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
+                    RoyalPanel(
+                      key: const Key('family-announcement'),
                       child: Text(
-                        record,
+                        widget.state.family.notice.trim().isEmpty
+                            ? 'Welcome to ' + familyName + ' ❤️'
+                            : widget.state.family.notice,
+                        style: const TextStyle(color: RoyalPalette.muted),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const GoldSectionTitle('Top members of the family'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _MemberStar(
+                            title: 'Charm Star',
+                            member: members.isEmpty ? null : members.first,
+                            icon: Icons.favorite_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: _MemberStar(
+                            title: 'Wealth Star',
+                            member: members.length > 1
+                                ? members[1]
+                                : (members.isEmpty ? null : members.first),
+                            icon: Icons.diamond_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: _MemberStar(
+                            title: 'Active Star',
+                            member: members.length > 2
+                                ? members[2]
+                                : (members.isEmpty ? null : members.first),
+                            icon: Icons.local_fire_department_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const GoldSectionTitle('Member List'),
+                    const SizedBox(height: 8),
+                    if (members.isEmpty)
+                      const RoyalPanel(
+                        child: Text(
+                          'No members to display',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    for (final member in members)
+                      _FamilyMemberRow(member: member),
+                  ] else ...[
+                    const GoldSectionTitle('Family Contribution'),
+                    const SizedBox(height: 8),
+                    for (var index = 0; index < members.length; index++)
+                      ListTile(
+                        leading: Text(
+                          '#${index + 1}',
+                          style: const TextStyle(
+                            color: FeaturePalette.family,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        title: Text(
+                          members[index].name,
+                          style: const TextStyle(color: RoyalPalette.cream),
+                        ),
+                        subtitle: Text(
+                          _familyRoleLabel(members[index].role),
+                          style: const TextStyle(color: RoyalPalette.muted),
+                        ),
+                        trailing: Text(
+                          _familyCompact(members[index].receivedCoins),
+                          style: const TextStyle(
+                            color: FeaturePalette.wallet,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    RoyalPanel(
+                      child: Text(
+                        'Reference coin scale: 20,000 reference coins = '
+                        '2,000,000 Tinni coins (100×) for coin-based Family '
+                        'progression values.',
                         style: const TextStyle(
-                          color: RoyalPalette.cream,
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
                         ),
                       ),
                     ),
                   ],
-                ),
+                  if (!joined && widget.previewFamilyId != null) ...[
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      key: const Key('family-join-button'),
+                      onPressed: _joinPreview,
+                      icon: const Icon(Icons.group_add_rounded),
+                      label: const Text('Request to Join'),
+                    ),
+                  ],
+                ],
               ),
             ),
-      ],
     );
   }
 }
 
-class FamilyLevelScreen extends StatelessWidget {
+class FamilyLevelScreen extends StatefulWidget {
   const FamilyLevelScreen({
     super.key,
     required this.state,
@@ -843,88 +827,139 @@ class FamilyLevelScreen extends StatelessWidget {
   final String familyTag;
 
   @override
+  State<FamilyLevelScreen> createState() => _FamilyLevelScreenState();
+}
+
+class _FamilyLevelScreenState extends State<FamilyLevelScreen> {
+  bool loading = true;
+  Map<String, dynamic> family = const <String, dynamic>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final data = await widget.state.backend.familyState(account.authToken);
+    widget.state.family.applyRemote(data);
+    final raw = data['family'];
+    if (!mounted) return;
+    setState(() {
+      family = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : const <String, dynamic>{};
+      loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final family = state.family;
-    final next = family.nextLevelRequiredExperience;
+    final level = (family['level'] as num?)?.toInt() ??
+        widget.state.family.level;
+    final exp = (family['experience'] as num?)?.toInt() ??
+        widget.state.family.experience;
+    final next = (family['next_threshold'] as num?)?.toInt();
+    final basis =
+        (family['monthly_bonus_basis_points'] as num?)?.toInt() ??
+            widget.state.family.monthlyWalletBonusBasisPoints;
+
     return Scaffold(
       key: const Key('family-level-screen'),
+      backgroundColor: RoyalPalette.black,
       appBar: AppBar(title: const Text('Family Level')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Center(
-            child: CircleAvatar(
-              key: const Key('family-level-dp'),
-              radius: 42,
-              backgroundColor: FeaturePalette.family,
-              child: Text(
-                familyName.trim().isEmpty
-                    ? '?'
-                    : familyName.trim()[0].toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(14),
+              children: [
+                RoyalPanel(
+                  gradient: FeaturePalette.glow(FeaturePalette.family),
+                  accentColor: FeaturePalette.family,
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.workspace_premium_rounded,
+                        color: FeaturePalette.family,
+                        size: 54,
+                      ),
+                      Text(
+                        widget.familyTag + ' • LV.' + level.toString(),
+                        style: const TextStyle(
+                          color: RoyalPalette.cream,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        'EXP ' + _familyCompact(exp),
+                        style: const TextStyle(
+                          color: FeaturePalette.family,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      LinearProgressIndicator(
+                        value: widget.state.family.levelProgress,
+                        color: FeaturePalette.family,
+                        backgroundColor: RoyalPalette.panel2,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                RoyalPanel(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        title: const Text(
+                          'Next level requirement',
+                          style: TextStyle(color: RoyalPalette.cream),
+                        ),
+                        trailing: Text(
+                          next == null ? 'MAX' : _familyCompact(next),
+                          style: const TextStyle(
+                            color: FeaturePalette.wallet,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const Divider(color: RoyalPalette.deepGold),
+                      ListTile(
+                        title: const Text(
+                          'Monthly Wallet Bonus',
+                          style: TextStyle(color: RoyalPalette.cream),
+                        ),
+                        trailing: Text(
+                          (basis / 100).toStringAsFixed(2) + '%',
+                          style: const TextStyle(
+                            color: FeaturePalette.family,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const RoyalPanel(
+                  child: Text(
+                    'Family EXP rule: receiving 1 Tinni coin through the '
+                    'Family Wallet gives the Family +1 EXP. Sending coins '
+                    'does not give the sender Family EXP. Daily check-in also '
+                    'adds the configured Family EXP once per day.\n\n'
+                    'Reference conversion for coin-based Family progression: '
+                    '20,000 reference coins = 2,000,000 Tinni coins (100×).',
+                    style: TextStyle(
+                      color: RoyalPalette.muted,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: Text(
-              familyName,
-              key: const Key('family-level-name'),
-              style: const TextStyle(
-                color: RoyalPalette.cream,
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Center(
-            child: Text(
-              familyTag + ' • L' + family.level.toString(),
-              style: const TextStyle(
-                color: FeaturePalette.family,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          LinearProgressIndicator(
-            key: const Key('family-level-progress'),
-            value: family.levelProgress,
-            minHeight: 14,
-            color: FeaturePalette.family,
-            backgroundColor: RoyalPalette.panel2,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            next == null
-                ? family.experience.toString() + ' EXP • MAX LEVEL'
-                : family.experience.toString() +
-                    ' / ' +
-                    next.toString() +
-                    ' EXP',
-            key: const Key('family-level-exp-text'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Monthly wallet bonus: ' +
-                family.monthlyWalletBonusPercent.toStringAsFixed(2) +
-                '%',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: RoyalPalette.muted),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -934,12 +969,12 @@ class FamilyMemberManageScreen extends StatefulWidget {
     super.key,
     required this.state,
     required this.familyName,
-    required this.members,
+    this.members,
   });
 
   final TinniState state;
   final String familyName;
-  final List<FamilyMember> members;
+  final List<FamilyMember>? members;
 
   @override
   State<FamilyMemberManageScreen> createState() =>
@@ -947,478 +982,250 @@ class FamilyMemberManageScreen extends StatefulWidget {
 }
 
 class _FamilyMemberManageScreenState extends State<FamilyMemberManageScreen> {
-  int _tab = 0;
+  bool loading = true;
+  List<Map<String, dynamic>> requests = const <Map<String, dynamic>>[];
 
-  List<FamilyMember> get _members => widget.state.family.members.isNotEmpty
-      ? widget.state.family.members
-      : widget.members;
-
-  bool get _viewerIsLeader {
-    final viewerId = widget.state.auth.current?.userId;
-    if (viewerId == null) return false;
-    return widget.state.family.head?.userId == viewerId;
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
 
-  String? get _viewerId => widget.state.auth.current?.userId;
-
-  bool get _viewerCanReviewRequests {
-    final viewerId = _viewerId;
-    return viewerId != null &&
-        widget.state.family.canReviewJoinRequests(viewerId);
-  }
-
-  bool _viewerCanRemove(FamilyMember member) {
-    final viewerId = _viewerId;
-    return viewerId != null &&
-        widget.state.family.canRemoveMember(
-          actorUserId: viewerId,
-          targetUserId: member.userId,
-        );
-  }
-
-  void _removeMember(FamilyMember member) {
-    final viewerId = _viewerId;
-    if (viewerId == null) return;
-    if (widget.state.family.removeMemberAs(
-      actorUserId: viewerId,
-      targetUserId: member.userId,
-    )) {
-      setState(() {});
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final data = await widget.state.backend.familyState(account.authToken);
+      widget.state.family.applyRemote(data);
+      final raw = data['join_requests'];
+      if (!mounted) return;
+      setState(() {
+        requests = raw is List
+            ? raw
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList(growable: false)
+            : const <Map<String, dynamic>>[];
+        loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => loading = false);
     }
   }
 
-  void _reviewJoinRequest(FamilyJoinRequest request, bool approve) {
-    final viewerId = _viewerId;
-    if (viewerId == null) return;
-    final changed = approve
-        ? widget.state.family.approveJoinRequest(
-            actorUserId: viewerId,
-            userId: request.userId,
-          )
-        : widget.state.family.rejectJoinRequest(
-            actorUserId: viewerId,
-            userId: request.userId,
-          );
-    if (changed) setState(() {});
-  }
-
-  Future<void> _appointDeputy() async {
-    if (!widget.state.family.exists || !_viewerIsLeader) return;
-    final controller = TextEditingController();
-    final searchedId = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        key: const Key('family-admin-id-search-card'),
-        title: const Text('Add Family Admin'),
-        content: TextField(
-          key: const Key('family-admin-id-search-input'),
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'ID Number',
-            hintText: 'Search existing family member',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Search'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (searchedId == null || searchedId.isEmpty || !mounted) return;
-    final candidate = widget.state.family.members
-        .where(
-          (member) =>
-              member.userId == searchedId &&
-              member.role != FamilyRole.head &&
-              member.role != FamilyRole.deputyHead,
-        )
-        .firstOrNull;
-    if (candidate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ID must belong to an existing family member.'),
-        ),
+  Future<void> _setAdmin(FamilyMember member, bool admin) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.setFamilyAdmin(
+        account.authToken,
+        userId: member.userId,
+        admin: admin,
       );
-      return;
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
     }
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(candidate.name),
-        content: Text('ID ' + candidate.userId + '\nMake Family Admin?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('family-admin-confirm-add'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Make Admin'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    widget.state.family.appoint(candidate.userId, FamilyRole.deputyHead);
-    setState(() {});
   }
 
-  Future<void> _manageAdmin(FamilyMember admin) async {
-    if (!_viewerIsLeader || admin.role != FamilyRole.deputyHead) return;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        key: Key('family-admin-manage-' + admin.userId),
-        title: Text(admin.name),
-        content: Text('ID ' + admin.userId),
-        actions: [
-          TextButton(
-            key: const Key('family-remove-admin-role'),
-            onPressed: () => Navigator.pop(context, 'demote'),
-            child: const Text('Remove Admin'),
-          ),
-          TextButton(
-            key: const Key('family-remove-admin-family'),
-            onPressed: () => Navigator.pop(context, 'remove'),
-            child: const Text('Remove from Family'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || action == null) return;
-    if (action == 'demote') {
-      widget.state.family.appoint(admin.userId, FamilyRole.member);
-    } else if (action == 'remove') {
-      widget.state.family.removeMember(admin.userId);
+  Future<void> _remove(FamilyMember member) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.removeFamilyMember(
+        account.authToken,
+        userId: member.userId,
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
     }
-    setState(() {});
+  }
+
+  Future<void> _resolve(Map<String, dynamic> request, bool approve) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.resolveFamilyJoin(
+        account.authToken,
+        userId: request['user_id']?.toString() ?? '',
+        approve: approve,
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final me = widget.state.auth.current?.userId ?? '';
+    final myMember = widget.state.family.memberById(me);
+    final isLeader = myMember?.role == FamilyRole.head;
+    final canReview = isLeader ||
+        myMember?.role == FamilyRole.deputyHead;
+
     return Scaffold(
       key: const Key('family-member-manage-screen'),
-      appBar: AppBar(
-        title: const Text(
-          'Member Manage',
-          style: TextStyle(
-            color: FeaturePalette.family,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _FamilyTab(
-                  key: const Key('family-member-tab'),
-                  label: 'Member',
-                  selected: _tab == 0,
-                  onTap: () => setState(() => _tab = 0),
-                ),
-              ),
-              Expanded(
-                child: _FamilyTab(
-                  key: const Key('family-admin-tab'),
-                  label: 'Admin',
-                  selected: _tab == 1,
-                  onTap: () => setState(() => _tab = 1),
-                ),
-              ),
-            ],
-          ),
-          Expanded(
-            child: _tab == 0 ? _memberList() : _adminView(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _memberList() {
-    final members = _members;
-    return ListView.separated(
-      key: const Key('family-member-list'),
-      padding: const EdgeInsets.all(14),
-      itemCount: members.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final member = members[index];
-        final score = (members.length - index) * 1180000;
-        return RoyalPanel(
-          padding: const EdgeInsets.all(9),
-          gradient: FeaturePalette.glow(FeaturePalette.family),
-          accentColor: FeaturePalette.family,
-          child: Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: FeaturePalette.family.withValues(alpha: 0.16),
-                  border: Border.all(color: FeaturePalette.family),
-                  boxShadow: [
-                    BoxShadow(
-                      color: FeaturePalette.family.withValues(alpha: 0.34),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  member.name.characters.first.toUpperCase(),
-                  style: const TextStyle(
-                    color: FeaturePalette.family,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      member.name,
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      'ID ' + member.userId,
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 9,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          _roleLabel(member.role),
-                          style: const TextStyle(
-                            color: FeaturePalette.family,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                          ),
+      backgroundColor: RoyalPalette.black,
+      appBar: AppBar(title: const Text('Family Members')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (canReview && requests.isNotEmpty) ...[
+                    const GoldSectionTitle('Join Requests'),
+                    for (final request in requests)
+                      ListTile(
+                        title: Text(
+                          request['display_name']?.toString() ??
+                              request['user_id']?.toString() ??
+                              'User',
+                          style: const TextStyle(color: RoyalPalette.cream),
                         ),
-                        const SizedBox(width: 5),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.state.family.visualTier ==
-                                    FamilyVisualTier.royalGold
-                                ? const Color(0xFFD49B14)
-                                : FeaturePalette.family,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            (widget.state.family.tag ?? 'FM') +
-                                ' ' +
-                                widget.state.family.levelLabel,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w900,
+                        subtitle: Text(
+                          'ID ' + (request['user_id']?.toString() ?? ''),
+                          style: const TextStyle(color: RoyalPalette.muted),
+                        ),
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: 'Approve',
+                              onPressed: () => _resolve(request, true),
+                              icon: const Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.green,
+                              ),
                             ),
-                          ),
+                            IconButton(
+                              tooltip: 'Reject',
+                              onPressed: () => _resolve(request, false),
+                              icon: const Icon(
+                                Icons.cancel_rounded,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    Text(
-                      '🪙 ' + score.toString(),
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 10,
                       ),
-                    ),
+                    const Divider(color: RoyalPalette.deepGold),
                   ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  UserSafetyMenuButton(
-                    state: widget.state,
-                    targetUserId: member.userId,
-                    targetDisplayName: member.name,
-                    onBlockChanged: () {
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                  if (_viewerCanRemove(member))
-                    IconButton(
-                      key: Key('family-remove-member-' + member.userId),
-                      tooltip: 'Remove Member',
-                      onPressed: () => _removeMember(member),
-                      icon: const Icon(
-                        Icons.person_remove_rounded,
-                        color: FeaturePalette.family,
+                  const GoldSectionTitle('Members'),
+                  for (final member in widget.state.family.members)
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: _familyAvatar(member.avatarDataUrl),
+                        child: _familyAvatar(member.avatarDataUrl) == null
+                            ? Text(
+                                member.name.isEmpty
+                                    ? '?'
+                                    : member.name[0].toUpperCase(),
+                              )
+                            : null,
                       ),
+                      title: Text(
+                        member.name,
+                        style: const TextStyle(color: RoyalPalette.cream),
+                      ),
+                      subtitle: Text(
+                        'ID ' +
+                            member.userId +
+                            ' • ' +
+                            _familyRoleLabel(member.role),
+                        style: const TextStyle(color: RoyalPalette.muted),
+                      ),
+                      trailing: member.userId == me ||
+                              member.role == FamilyRole.head
+                          ? null
+                          : PopupMenuButton<String>(
+                              onSelected: (value) {
+                                if (value == 'admin') {
+                                  _setAdmin(member, true);
+                                } else if (value == 'member') {
+                                  _setAdmin(member, false);
+                                } else if (value == 'remove') {
+                                  _remove(member);
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (isLeader &&
+                                    member.role != FamilyRole.deputyHead)
+                                  const PopupMenuItem(
+                                    value: 'admin',
+                                    child: Text('Add Admin'),
+                                  ),
+                                if (isLeader &&
+                                    member.role == FamilyRole.deputyHead)
+                                  const PopupMenuItem(
+                                    value: 'member',
+                                    child: Text('Remove Admin'),
+                                  ),
+                                if (canReview &&
+                                    member.role == FamilyRole.member)
+                                  const PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('Remove Member'),
+                                  ),
+                              ],
+                            ),
                     ),
-                  Text(
-                    index < 5 ? 'Today' : 'Logged in 1 days ago',
-                    style: const TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 9,
-                    ),
-                  ),
                 ],
               ),
-            ],
-          ),
-        );
-      },
+            ),
     );
   }
+}
 
-  Widget _adminView() {
-    final members = _members;
-    final leader = members.where(
-      (member) => member.role == FamilyRole.head,
-    ).firstOrNull;
-    final deputies = members.where(
-      (member) => member.role == FamilyRole.deputyHead,
-    ).toList();
+class _FamilyAction extends StatelessWidget {
+  const _FamilyAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
-    return ListView(
-      key: const Key('family-admin-content'),
-      padding: const EdgeInsets.all(14),
-      children: [
-        if (_viewerCanReviewRequests &&
-            widget.state.family.pendingJoinRequests.isNotEmpty) ...[
-          const Text(
-            'Joining Requests',
-            style: TextStyle(
-              color: FeaturePalette.family,
-              fontWeight: FontWeight.w900,
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return RoyalPanel(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, color: FeaturePalette.family),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: RoyalPalette.cream,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
             ),
           ),
-          const SizedBox(height: 8),
-          for (final request in widget.state.family.pendingJoinRequests)
-            ListTile(
-              key: Key('family-join-request-' + request.userId),
-              title: Text(request.name),
-              subtitle: Text('ID ' + request.userId),
-              trailing: Wrap(
-                children: [
-                  IconButton(
-                    key: Key('family-join-accept-' + request.userId),
-                    tooltip: 'Accept',
-                    onPressed: () => _reviewJoinRequest(request, true),
-                    icon: const Icon(Icons.check_circle_rounded),
-                  ),
-                  IconButton(
-                    key: Key('family-join-reject-' + request.userId),
-                    tooltip: 'Reject',
-                    onPressed: () => _reviewJoinRequest(request, false),
-                    icon: const Icon(Icons.cancel_rounded),
-                  ),
-                ],
-              ),
-            ),
-          const Divider(),
         ],
-        const SizedBox(height: 10),
-        const Center(
-          child: Text(
-            'Family Leader',
-            style: TextStyle(
-              color: FeaturePalette.family,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Center(
-          child: _RoleAvatar(
-            member: leader,
-            label: leader?.name ?? 'Leader',
-            large: true,
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Center(
-          child: Text(
-            'Deputy Family Leader',
-            style: TextStyle(
-              color: FeaturePalette.family,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 3,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          children: [
-            for (var i = 0; i < 6; i++)
-              if (i < deputies.length)
-                InkWell(
-                  key: Key('family-admin-entry-' + deputies[i].userId),
-                  onTap: _viewerIsLeader
-                      ? () => _manageAdmin(deputies[i])
-                      : null,
-                  borderRadius: BorderRadius.circular(50),
-                  child: _RoleAvatar(
-                    member: deputies[i],
-                    label: deputies[i].name,
-                  ),
-                )
-              else if (i < 3)
-                InkWell(
-                  key: Key('family-add-deputy-' + i.toString()),
-                  onTap: _viewerIsLeader ? _appointDeputy : null,
-                  borderRadius: BorderRadius.circular(50),
-                  child: const _EmptyRoleSlot(locked: false),
-                )
-              else
-                const _EmptyRoleSlot(locked: true),
-          ],
-        ),
-      ],
+      ),
     );
-  }
-
-  String _roleLabel(FamilyRole role) {
-    switch (role) {
-      case FamilyRole.head:
-        return 'Family Leader';
-      case FamilyRole.deputyHead:
-        return 'Deputy';
-      case FamilyRole.assistant:
-        return 'Assistant';
-      case FamilyRole.member:
-        return 'Member';
-    }
   }
 }
 
 class _FamilyTab extends StatelessWidget {
   const _FamilyTab({
-    super.key,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -1433,24 +1240,20 @@ class _FamilyTab extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 46,
+        height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          gradient: selected
-              ? const LinearGradient(
-                  colors: [
-                    Color(0xFF5BE0B1),
-                    Color(0xFF178C67),
-                  ],
-                )
-              : null,
-          color: selected ? null : RoyalPalette.nearBlack,
-          border: Border.all(color: RoyalPalette.bronze),
+          color: selected
+              ? FeaturePalette.family.withValues(alpha: 0.20)
+              : RoyalPalette.nearBlack,
+          border: Border.all(
+            color: selected ? FeaturePalette.family : RoyalPalette.deepGold,
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : RoyalPalette.muted,
+            color: selected ? FeaturePalette.family : RoyalPalette.muted,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1459,70 +1262,45 @@ class _FamilyTab extends StatelessWidget {
   }
 }
 
-class _StarCard extends StatelessWidget {
-  const _StarCard({
+class _MemberStar extends StatelessWidget {
+  const _MemberStar({
     required this.title,
-    required this.icon,
     required this.member,
+    required this.icon,
   });
 
   final String title;
-  final IconData icon;
   final FamilyMember? member;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    final accent = icon == Icons.favorite_rounded
-        ? FeaturePalette.cp
-        : icon == Icons.diamond_rounded
-            ? FeaturePalette.diamond
-            : FeaturePalette.games;
     return RoyalPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
-      gradient: FeaturePalette.glow(accent),
-      accentColor: accent,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
       child: Column(
         children: [
-          ShiningIcon(
-            icon: icon,
-            color: accent,
-            size: 26,
-            boxSize: 46,
-            glow: 0.34,
-          ),
-          const SizedBox(height: 5),
+          Icon(icon, color: FeaturePalette.family, size: 25),
+          const SizedBox(height: 4),
           Text(
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: RoyalPalette.cream,
-              fontWeight: FontWeight.w900,
               fontSize: 10,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 6),
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: accent.withValues(alpha: 0.15),
-              border: Border.all(color: accent),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.30),
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-            child: Text(
-              member?.name.characters.first.toUpperCase() ?? '?',
-              style: TextStyle(
-                color: accent,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+          CircleAvatar(
+            radius: 19,
+            backgroundImage: _familyAvatar(member?.avatarDataUrl),
+            child: _familyAvatar(member?.avatarDataUrl) == null
+                ? Text(
+                    member == null || member!.name.isEmpty
+                        ? '?'
+                        : member!.name[0].toUpperCase(),
+                  )
+                : null,
           ),
         ],
       ),
@@ -1530,79 +1308,52 @@ class _StarCard extends StatelessWidget {
   }
 }
 
-class _RoleAvatar extends StatelessWidget {
-  const _RoleAvatar({
-    required this.member,
-    required this.label,
-    this.large = false,
-  });
-
-  final FamilyMember? member;
-  final String label;
-  final bool large;
+class _FamilyMemberRow extends StatelessWidget {
+  const _FamilyMemberRow({required this.member});
+  final FamilyMember member;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: large ? 42 : 31,
-          backgroundColor: FeaturePalette.family,
-          child: CircleAvatar(
-            radius: large ? 37 : 27,
-            backgroundColor: RoyalPalette.panel,
-            child: Text(
-              member?.name.characters.first.toUpperCase() ?? '?',
-              style: TextStyle(
-                color: FeaturePalette.family,
-                fontWeight: FontWeight.w900,
-                fontSize: large ? 28 : 20,
-              ),
-            ),
-          ),
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundImage: _familyAvatar(member.avatarDataUrl),
+        child: _familyAvatar(member.avatarDataUrl) == null
+            ? Text(
+                member.name.isEmpty ? '?' : member.name[0].toUpperCase(),
+              )
+            : null,
+      ),
+      title: Text(
+        member.name,
+        style: const TextStyle(
+          color: RoyalPalette.cream,
+          fontWeight: FontWeight.w800,
         ),
-        const SizedBox(height: 5),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: RoyalPalette.cream,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-          ),
+      ),
+      subtitle: Text(
+        'ID ' + member.userId + ' • ' + _familyRoleLabel(member.role),
+        style: const TextStyle(color: RoyalPalette.muted),
+      ),
+      trailing: Text(
+        _familyCompact(member.receivedCoins),
+        style: const TextStyle(
+          color: FeaturePalette.wallet,
+          fontWeight: FontWeight.w900,
         ),
-      ],
+      ),
     );
   }
 }
 
-class _EmptyRoleSlot extends StatelessWidget {
-  const _EmptyRoleSlot({required this.locked});
-
-  final bool locked;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 31,
-          backgroundColor: RoyalPalette.panel2,
-          child: Icon(
-            locked ? Icons.lock_rounded : Icons.add_rounded,
-            color: FeaturePalette.family,
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          locked ? 'Locked' : 'No',
-          style: const TextStyle(
-            color: RoyalPalette.muted,
-            fontSize: 9,
-          ),
-        ),
-      ],
-    );
+String _familyRoleLabel(FamilyRole role) {
+  switch (role) {
+    case FamilyRole.head:
+      return 'Family Leader';
+    case FamilyRole.deputyHead:
+      return 'Family Admin';
+    case FamilyRole.assistant:
+      return 'Family Member';
+    case FamilyRole.member:
+      return 'Family Member';
   }
 }

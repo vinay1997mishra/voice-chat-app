@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../relationship/cp_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_disconnect_screen.dart';
+import 'cp_ranking_screen.dart';
 
 class CpScreen extends StatefulWidget {
   const CpScreen({super.key, required this.state});
@@ -15,6 +18,8 @@ class CpScreen extends StatefulWidget {
 
 class _CpScreenState extends State<CpScreen> {
   bool loadingFriends = false;
+  bool _syncingCp = false;
+  Map<String, dynamic>? _partnerProfile;
 
   @override
   void initState() {
@@ -27,16 +32,45 @@ class _CpScreenState extends State<CpScreen> {
 
   Future<void> _syncCp() async {
     final account = widget.state.auth.current;
-    if (account == null) return;
+    if (account == null || _syncingCp) return;
+    _syncingCp = true;
     try {
       final remote = await widget.state.backend.cpState(account.authToken);
       widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+
       final memories = await widget.state.backend.cpMemories(account.authToken);
       widget.state.cp.memories
         ..clear()
         ..addAll(memories);
+
+      try {
+        final inventory =
+            await widget.state.backend.inventory(account.authToken);
+        widget.state.inventory.applyRemote(inventory);
+      } catch (_) {
+        // CP Nest remains usable if the inventory refresh is unavailable.
+      }
+
+      Map<String, dynamic>? partner;
+      if (remote != null && remote.state == 'accepted') {
+        final partnerId =
+            remote.userA == account.userId ? remote.userB : remote.userA;
+        try {
+          partner = await widget.state.backend.searchUserById(
+            account.authToken,
+            partnerId,
+          );
+        } catch (_) {
+          partner = null;
+        }
+      }
+      _partnerProfile = partner;
       if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (_) {
+      // Keep the last known CP Nest state visible while network retries.
+    } finally {
+      _syncingCp = false;
+    }
   }
 
   Future<void> _syncFriends() async {
@@ -123,6 +157,317 @@ class _CpScreenState extends State<CpScreen> {
     }
   }
 
+  ImageProvider? _avatarProvider(String? value) {
+    final source = value?.trim() ?? '';
+    if (source.isEmpty) return null;
+    if (source.startsWith('data:image/')) {
+      try {
+        return MemoryImage(base64Decode(source.split(',').last));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (source.startsWith('https://') || source.startsWith('http://')) {
+      return NetworkImage(source);
+    }
+    return null;
+  }
+
+  int _loveDays(DateTime startedAt) {
+    final start = DateTime(startedAt.year, startedAt.month, startedAt.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final value = today.difference(start).inDays + 1;
+    return value < 1 ? 1 : value;
+  }
+
+  String _dateText(DateTime value) {
+    return value.day.toString().padLeft(2, '0') +
+        '/' +
+        value.month.toString().padLeft(2, '0') +
+        '/' +
+        value.year.toString();
+  }
+
+  Future<void> _addIntimacy() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final remote = await widget.state.backend.cpUpdate(
+        account.authToken,
+        'intimacy',
+        <String, dynamic>{'delta': 100},
+      );
+      widget.state.cp.applyRemote(remote, currentUserId: account.userId);
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showRingCabinet() async {
+    final account = widget.state.auth.current;
+    final cp = widget.state.cp.relationship;
+    if (account == null || cp == null) return;
+
+    final rings = widget.state.inventory.ownedDetails.entries
+        .where((entry) => entry.value['item_kind']?.toString() == 'ring')
+        .toList(growable: false);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF100812),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Ring Cabinet',
+                style: TextStyle(
+                  color: FeaturePalette.cpSoft,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                cp.ringId == null
+                    ? 'Choose an owned CP ring'
+                    : 'Equipped CP ring: ' + cp.ringId!,
+                style: const TextStyle(color: RoyalPalette.muted),
+              ),
+              const SizedBox(height: 12),
+              if (rings.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    'No owned rings yet. Rings purchased or granted to this account will appear here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: RoyalPalette.muted),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: rings.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final entry = rings[index];
+                      final row = entry.value;
+                      final selected = cp.ringId == entry.key;
+                      final asset = _avatarProvider(
+                        row['asset_url']?.toString(),
+                      );
+                      return ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: selected
+                                ? FeaturePalette.cp
+                                : RoyalPalette.bronze,
+                          ),
+                        ),
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF2A1027),
+                          backgroundImage: asset,
+                          child: asset == null
+                              ? const Icon(
+                                  Icons.diamond_rounded,
+                                  color: FeaturePalette.cpSoft,
+                                )
+                              : null,
+                        ),
+                        title: Text(
+                          row['name']?.toString() ?? entry.key,
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        subtitle: Text(
+                          entry.key,
+                          style: const TextStyle(color: RoyalPalette.muted),
+                        ),
+                        trailing: selected
+                            ? const Icon(
+                                Icons.check_circle_rounded,
+                                color: FeaturePalette.cp,
+                              )
+                            : const Icon(
+                                Icons.chevron_right_rounded,
+                                color: FeaturePalette.cpSoft,
+                              ),
+                        onTap: selected
+                            ? null
+                            : () async {
+                                try {
+                                  final remote =
+                                      await widget.state.backend.cpUpdate(
+                                    account.authToken,
+                                    'ring',
+                                    <String, dynamic>{'ring_id': entry.key},
+                                  );
+                                  widget.state.cp.applyRemote(
+                                    remote,
+                                    currentUserId: account.userId,
+                                  );
+                                  if (sheetContext.mounted) {
+                                    Navigator.pop(sheetContext);
+                                  }
+                                  if (mounted) setState(() {});
+                                } catch (error) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        error
+                                            .toString()
+                                            .replaceFirst('Bad state: ', ''),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMemories() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF100812),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'CP Memories',
+                      style: TextStyle(
+                        color: FeaturePalette.cpSoft,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await _addMemory();
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (widget.state.cp.memories.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    'No CP memories yet.',
+                    style: TextStyle(color: RoyalPalette.muted),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: widget.state.cp.memories.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      color: Color(0x333D243A),
+                      height: 1,
+                    ),
+                    itemBuilder: (_, index) => ListTile(
+                      leading: const Icon(
+                        Icons.favorite_rounded,
+                        color: FeaturePalette.cp,
+                      ),
+                      title: Text(
+                        widget.state.cp.memories[index],
+                        style: const TextStyle(color: RoyalPalette.cream),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showTasksAndRules() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF100812),
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
+          children: [
+            const Text(
+              'CP Tasks & Rules',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: FeaturePalette.cpSoft,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _CpRuleTile(
+              icon: Icons.favorite_rounded,
+              title: 'Build Intimacy',
+              subtitle:
+                  'Use eligible CP actions to grow intimacy and CP level.',
+            ),
+            _CpRuleTile(
+              icon: Icons.photo_album_rounded,
+              title: 'Keep Memories',
+              subtitle:
+                  'Both CP partners share the same relationship memory history.',
+            ),
+            _CpRuleTile(
+              icon: Icons.diamond_rounded,
+              title: 'Ring Cabinet',
+              subtitle:
+                  'Only rings owned by this account can be selected for the CP.',
+            ),
+            _CpRuleTile(
+              icon: Icons.verified_user_rounded,
+              title: 'Relationship Rule',
+              subtitle:
+                  'CP actions require an active accepted relationship. Disconnect ends the active CP link.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.state.auth.current;
@@ -146,134 +491,292 @@ class _CpScreenState extends State<CpScreen> {
           padding: const EdgeInsets.all(14),
           children: [
             if (cp != null) ...[
-              RoyalPanel(
-                gradient: FeaturePalette.glow(FeaturePalette.cp),
-                accentColor: FeaturePalette.cp,
-                child: Column(
-                  children: [
-                    const ShiningIcon(
-                      icon: Icons.favorite_rounded,
-                      color: FeaturePalette.cp,
-                      size: 36,
-                      boxSize: 64,
-                      glow: 0.44,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'CP Level ' + cp.level.toString(),
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
+              Builder(
+                builder: (context) {
+                  final partnerId =
+                      cp.userA == account?.userId ? cp.userB : cp.userA;
+                  final partnerName =
+                      _partnerProfile?['display_name']?.toString() ??
+                          partnerId;
+                  final partnerAvatar = _avatarProvider(
+                    _partnerProfile?['avatar_data_url']?.toString(),
+                  );
+                  final myAvatar = _avatarProvider(account?.avatarDataUrl);
+                  final days = _loveDays(cp.startedAt);
+                  final progress =
+                      ((cp.intimacy % 1000) / 1000).clamp(0.0, 1.0);
+
+                  return Column(
+                    children: [
+                      Container(
+                        key: const Key('cp-nest-hero'),
+                        padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF3C112C),
+                              Color(0xFF6E214E),
+                              Color(0xFF1A0B1A),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: FeaturePalette.cp.withValues(alpha: 0.82),
+                            width: 1.4,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  FeaturePalette.cp.withValues(alpha: 0.24),
+                              blurRadius: 22,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: Color(0xFFFFD766),
+                                  size: 17,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'CP NEST',
+                                  style: TextStyle(
+                                    color: FeaturePalette.cpSoft,
+                                    fontSize: 20,
+                                    letterSpacing: 2.2,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: Color(0xFFFFD766),
+                                  size: 17,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 15),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _CpPersonAvatar(
+                                    image: myAvatar,
+                                    name: account?.displayName ?? 'You',
+                                    userId: account?.userId ?? '',
+                                  ),
+                                ),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 5),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.favorite_rounded,
+                                        color: FeaturePalette.cp,
+                                        size: 38,
+                                      ),
+                                      Text(
+                                        'LOVE',
+                                        style: TextStyle(
+                                          color: FeaturePalette.cpSoft,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _CpPersonAvatar(
+                                    image: partnerAvatar,
+                                    name: partnerName,
+                                    userId: partnerId,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 15),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                _CpNestPill(
+                                  icon: Icons.favorite_rounded,
+                                  text: days.toString() + ' Love Days',
+                                ),
+                                _CpNestPill(
+                                  icon: Icons.workspace_premium_rounded,
+                                  text: 'CP Lv.' + cp.level.toString(),
+                                ),
+                                _CpNestPill(
+                                  icon: Icons.auto_awesome_rounded,
+                                  text: cp.intimacy.toString() + ' Intimacy',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 13),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 8,
+                                backgroundColor: const Color(0x55220D20),
+                                valueColor:
+                                    const AlwaysStoppedAnimation<Color>(
+                                  FeaturePalette.cp,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            Text(
+                              'Together since ' + _dateText(cp.startedAt),
+                              style: const TextStyle(
+                                color: Color(0xFFE7A6CC),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (cp.ringId != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 11,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x44220D20),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0x99FFD766),
+                                  ),
+                                ),
+                                child: Text(
+                                  '💍 ' + cp.ringId!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFD766),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Intimacy ' + cp.intimacy.toString(),
-                      style: const TextStyle(color: RoyalPalette.muted),
-                    ),
-                    Text(
-                      'Partner ID ' +
-                          (cp.userA == account?.userId ? cp.userB : cp.userA),
-                      style: const TextStyle(color: RoyalPalette.muted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final stateContext = this.context;
-                        final account = widget.state.auth.current;
-                        if (account == null) return;
-                        try {
-                          final remote = await widget.state.backend.cpUpdate(account.authToken, 'intimacy', {'delta': 100});
-                          widget.state.cp.applyRemote(remote, currentUserId: account.userId);
-                          if (mounted) setState(() {});
-                        } catch (error) {
-                          if (!stateContext.mounted) return;
-                          ScaffoldMessenger.of(stateContext).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
-                        }
-                      },
-                      icon: const Icon(Icons.favorite_border_rounded),
-                      label: const Text('+100 Intimacy'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _addMemory,
-                      icon: const Icon(Icons.photo_album_rounded),
-                      label: const Text('Memory'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final stateContext = this.context;
-                  final account = widget.state.auth.current;
-                  if (account == null) return;
-                  final controller = TextEditingController(text: cp.ringId ?? '');
-                  final ringId = await showDialog<String>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('CP Ring'),
-                      content: TextField(controller: controller, maxLength: 80, decoration: const InputDecoration(hintText: 'Ring ID')),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
-                      ],
-                    ),
+                      const SizedBox(height: 14),
+                      GridView.count(
+                        key: const Key('cp-nest-actions'),
+                        crossAxisCount: 3,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 9,
+                        crossAxisSpacing: 9,
+                        childAspectRatio: 0.92,
+                        children: [
+                          _CpNestAction(
+                            icon: Icons.favorite_rounded,
+                            label: 'Intimacy',
+                            subtitle: '+100',
+                            onTap: _addIntimacy,
+                          ),
+                          _CpNestAction(
+                            icon: Icons.diamond_rounded,
+                            label: 'Ring Cabinet',
+                            subtitle: cp.ringId == null ? 'Choose' : 'Equipped',
+                            onTap: _showRingCabinet,
+                          ),
+                          _CpNestAction(
+                            icon: Icons.photo_album_rounded,
+                            label: 'Memories',
+                            subtitle: widget.state.cp.memories.length.toString(),
+                            onTap: _showMemories,
+                          ),
+                          _CpNestAction(
+                            icon: Icons.rule_rounded,
+                            label: 'Tasks / Rules',
+                            subtitle: 'View',
+                            onTap: _showTasksAndRules,
+                          ),
+                          _CpNestAction(
+                            icon: Icons.emoji_events_rounded,
+                            label: 'CP Ranking',
+                            subtitle: 'Ranking',
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      CpRankingScreen(state: widget.state),
+                                ),
+                              );
+                            },
+                          ),
+                          _CpNestAction(
+                            icon: Icons.heart_broken_rounded,
+                            label: 'Disconnect',
+                            subtitle: 'CP',
+                            danger: true,
+                            onTap: () async {
+                              await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CpDisconnectScreen(
+                                    state: widget.state,
+                                  ),
+                                ),
+                              );
+                              await _syncCp();
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      RoyalPanel(
+                        accentColor: FeaturePalette.cp,
+                        gradient: FeaturePalette.glow(FeaturePalette.cp),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.favorite_border_rounded,
+                              color: FeaturePalette.cp,
+                              size: 30,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                widget.state.cp.memories.isEmpty
+                                    ? 'Create your first CP memory together.'
+                                    : widget.state.cp.memories.first,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _showMemories,
+                              icon: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: FeaturePalette.cpSoft,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   );
-                  controller.dispose();
-                  if (ringId == null || ringId.isEmpty) return;
-                  try {
-                    final remote = await widget.state.backend.cpUpdate(account.authToken, 'ring', {'ring_id': ringId});
-                    widget.state.cp.applyRemote(remote, currentUserId: account.userId);
-                    if (mounted) setState(() {});
-                  } catch (error) {
-                    if (!stateContext.mounted) return;
-                    ScaffoldMessenger.of(stateContext).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
-                  }
                 },
-                icon: const Icon(Icons.diamond_rounded),
-                label: Text(cp.ringId == null ? 'Select Ring' : 'Ring ' + cp.ringId!),
               ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: () async {
-                  await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CpDisconnectScreen(state: widget.state),
-                    ),
-                  );
-                  if (mounted) setState(() {});
-                },
-                icon: const Icon(Icons.heart_broken_rounded),
-                label: const Text('CP Disconnect'),
-              ),
-              const SizedBox(height: 16),
-              const GoldSectionTitle('Memories'),
-              const SizedBox(height: 8),
-              if (widget.state.cp.memories.isEmpty)
-                const Text(
-                  'No memories yet.',
-                  style: TextStyle(color: RoyalPalette.muted),
-                )
-              else
-                for (final memory in widget.state.cp.memories)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.favorite_rounded,
-                      color: FeaturePalette.cp,
-                    ),
-                    title: Text(memory),
-                  ),
             ] else if (widget.state.cp.state == CourtingState.pending) ...[
               RoyalPanel(
                 gradient: FeaturePalette.glow(FeaturePalette.cp),
@@ -381,3 +884,226 @@ class _CpScreenState extends State<CpScreen> {
     );
   }
 }
+
+class _CpPersonAvatar extends StatelessWidget {
+  const _CpPersonAvatar({
+    required this.image,
+    required this.name,
+    required this.userId,
+  });
+
+  final ImageProvider? image;
+  final String name;
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isEmpty ? '?' : name.trim().characters.first;
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFFFD766),
+              width: 2,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66FF4FA3),
+                blurRadius: 13,
+              ),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: 34,
+            backgroundColor: const Color(0xFF2B1025),
+            backgroundImage: image,
+            child: image == null
+                ? Text(
+                    initial.toUpperCase(),
+                    style: const TextStyle(
+                      color: FeaturePalette.cpSoft,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 25,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: RoyalPalette.cream,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+          ),
+        ),
+        Text(
+          'ID ' + userId,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xFFD790B8),
+            fontSize: 9.5,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CpNestPill extends StatelessWidget {
+  const _CpNestPill({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0x44220D20),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: FeaturePalette.cp.withValues(alpha: 0.48),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: FeaturePalette.cpSoft, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: const TextStyle(
+              color: FeaturePalette.cpSoft,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CpNestAction extends StatelessWidget {
+  const _CpNestAction({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent =
+        danger ? const Color(0xFFFF6A7A) : FeaturePalette.cp;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              accent.withValues(alpha: 0.17),
+              const Color(0xFF120A12),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: accent.withValues(alpha: 0.46),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ShiningIcon(
+              icon: icon,
+              color: accent,
+              size: 22,
+              boxSize: 38,
+              glow: 0.34,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: accent.withValues(alpha: 0.92),
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CpRuleTile extends StatelessWidget {
+  const _CpRuleTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: ShiningIcon(
+        icon: icon,
+        color: FeaturePalette.cp,
+        size: 19,
+        boxSize: 36,
+        glow: 0.32,
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: RoyalPalette.cream,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          color: RoyalPalette.muted,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+

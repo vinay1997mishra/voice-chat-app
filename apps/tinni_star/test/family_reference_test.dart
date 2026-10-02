@@ -29,13 +29,8 @@ void main() {
     expect(find.byKey(const Key('family-create-button')), findsOneWidget);
     expect(find.byKey(const Key('family-ranking-join-button')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('family-rank-row-0')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('family-home-screen')), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Trends'), findsOneWidget);
-    expect(find.text('Top members of the family'), findsOneWidget);
-    expect(find.text('Member list'), findsOneWidget);
+    // Ranking rows come only from the live backend. Widget tests run with
+    // HttpClient blocked, so they must not rely on fake hard-coded Families.
+    expect(find.text('No Families have been created yet.'), findsOneWidget);
   });
 }

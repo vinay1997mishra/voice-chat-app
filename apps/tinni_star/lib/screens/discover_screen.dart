@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
+import '../ui/room_dp.dart';
 import '../ui/royal_theme.dart';
 import 'room_screen.dart';
 
@@ -24,6 +25,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   void dispose() {
     search.dispose();
     super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        if (search.text.trim().isNotEmpty) {
+          results = widget.state.discovery.search(search.text.trim());
+        }
+      });
+    } catch (_) {
+      // Keep the last loaded room list until the next manual refresh/re-entry.
+    }
   }
 
   List<RoomSummary> _roomsForMode() {
@@ -61,8 +78,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(14),
         children: [
           TextField(
             controller: search,
@@ -135,17 +155,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 padding: const EdgeInsets.only(bottom: 9),
                 child: RoyalPanel(
                   padding: const EdgeInsets.all(10),
-                  gradient: FeaturePalette.glow(FeaturePalette.discover),
-                  accentColor: FeaturePalette.discover,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF17140F),
+                      RoyalPalette.panel,
+                      Color(0xFF080808),
+                    ],
+                  ),
+                  accentColor: RoyalPalette.deepGold,
                   onTap: () => _openRoom(room),
                   child: Row(
                     children: [
-                      const ShiningIcon(
-                        icon: Icons.graphic_eq_rounded,
-                        color: FeaturePalette.discover,
-                        size: 28,
-                        boxSize: 56,
-                        glow: 0.40,
+                      RoomDp(
+                        room: room,
+                        size: 62,
+                        radius: 14,
+                        fit: BoxFit.contain,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -158,7 +185,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               style: const TextStyle(color: RoyalPalette.muted, fontSize: 11),
                             ),
                             Text(
-                              room.country + ' • ID ' + room.id + ' • ' + room.online.toString() + ' online',
+                              room.country + ' • ID ' + room.displayId + ' • ' + room.online.toString() + ' online',
                               style: const TextStyle(fontSize: 10),
                             ),
                           ],
@@ -183,6 +210,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             },
           ),
         ],
+        ),
       ),
     );
   }

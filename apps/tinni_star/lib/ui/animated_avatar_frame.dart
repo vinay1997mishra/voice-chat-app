@@ -35,27 +35,32 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
     if (frame == null || frame.isEmpty) {
       return SizedBox(width: widget.size, height: widget.size, child: widget.child);
     }
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            SizedBox(
-              width: widget.size * .72,
-              height: widget.size * .72,
-              child: widget.child,
-            ),
-            IgnorePointer(
-              child: CustomPaint(
-                size: Size.square(widget.size),
-                painter: _AvatarFramePainter(frame, _controller.value),
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: RepaintBoundary(
+          child: SizedBox(
+            width: widget.size * .72,
+            height: widget.size * .72,
+            child: widget.child,
+          ),
+        ),
+        builder: (context, avatarChild) => SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              avatarChild!,
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size.square(widget.size),
+                  painter: _AvatarFramePainter(frame, _controller.value),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

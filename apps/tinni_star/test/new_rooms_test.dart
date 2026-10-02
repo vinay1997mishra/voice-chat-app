@@ -50,4 +50,30 @@ void main() {
       isTrue,
     );
   });
+  test('Party feeds hide rooms with zero active users', () {
+    final now = DateTime.now();
+    final service = DiscoveryService();
+    service.rooms.addAll([
+      RoomSummary(
+        id: 'active',
+        title: 'Active Room',
+        country: 'IN',
+        online: 2,
+        createdAt: now,
+        roomExperience: 1000,
+      ),
+      RoomSummary(
+        id: 'empty',
+        title: 'Empty Room',
+        country: 'IN',
+        online: 0,
+        createdAt: now,
+        roomExperience: 999999,
+      ),
+    ]);
+
+    expect(service.recommend().map((room) => room.id), ['active']);
+    expect(service.newRooms(now: now).map((room) => room.id), ['active']);
+  });
+
 }

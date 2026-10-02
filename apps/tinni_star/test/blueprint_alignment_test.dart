@@ -85,6 +85,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
+    expect(find.byKey(const Key('room-lifetime-sending')), findsOneWidget);
+    expect(
+      find.byKey(const Key('room-online-members-button')),
+      findsOneWidget,
+    );
+    expect(find.text('Welcome to Tinni Star Royal Party'), findsNothing);
     expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
   });
 }
