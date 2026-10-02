@@ -254,10 +254,20 @@ class ActiveRoomSession extends ChangeNotifier {
     }
     roomController.setSelfMuted(muted);
     if (connected) {
+      final mySeat = roomController.mySeat;
+      final seatMuted = mySeat != null &&
+          mySeat >= 0 &&
+          mySeat < roomController.seats.length &&
+          roomController.seats[mySeat].roomMuted;
       await realtime.setMic(
-        !muted && !presence.selfMicMuted && roomController.micState == MicState.live,
+        !muted &&
+            !presence.selfMicMuted &&
+            !seatMuted &&
+            roomController.micState == MicState.live,
       );
     }
+    _syncLiveState(force: true);
+    notifyListeners();
   }
 
   Future<void> kickUser(
