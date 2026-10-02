@@ -3678,13 +3678,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ? const Color(0xFFFFC247)
                             : value == 'CP'
                                 ? FeaturePalette.cp
-                                : value == 'Backpack'
-                                    ? FeaturePalette.backpack
+                                : value == 'Country'
+                                    ? RoyalPalette.gold
                                     : value == 'Luxury'
                                         ? FeaturePalette.vip
-                                        : value == 'Normal'
-                                            ? FeaturePalette.social
-                                            : FeaturePalette.gift;
+                                        : FeaturePalette.social;
                         return ChoiceChip(
                           label: Text(value),
                           selected: giftCategory == value,
@@ -3717,7 +3715,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       height: 88,
                       child: Center(
                         child: Text(
-                          'No other user is available for gifting.',
+                          'No seated user is available for gifting.',
                           style: TextStyle(color: RoyalPalette.muted),
                         ),
                       ),
@@ -3740,9 +3738,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           onTap: () {
                             setSheetState(() {
                               if (selected) {
-                                if (_selectedGiftRecipients.length > 1) {
-                                  _selectedGiftRecipients.remove(recipient.$1);
-                                }
+                                _selectedGiftRecipients.remove(recipient.$1);
                               } else {
                                 _selectedGiftRecipients.add(recipient.$1);
                               }
@@ -3792,13 +3788,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             }
                                           }
                                         }
-                                        if (avatar != null && avatar.isNotEmpty) {
-                                          return Image.network(
-                                            avatar,
+                                        final provider =
+                                            _roomAvatarProvider(avatar);
+                                        if (provider != null) {
+                                          return Image(
+                                            image: provider,
                                             fit: BoxFit.cover,
+                                            gaplessPlayback: true,
                                             errorBuilder: (_, _, _) => Icon(
                                               Icons.person_rounded,
-                                              color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                              color: selected
+                                                  ? FeaturePalette.gift
+                                                  : FeaturePalette.social,
                                             ),
                                           );
                                         }
@@ -3894,12 +3895,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          PopupMenuButton<int>(
+                          IconButton(
                             key: const Key('lucky-quantity-plus'),
-                            tooltip: 'Lucky quantity',
+                            tooltip: 'Add one',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
-                              minWidth: 30,
+                              minWidth: 28,
+                              minHeight: 30,
+                            ),
+                            onPressed: luckyQuantity >= 7999
+                                ? null
+                                : () => setSheetState(
+                                      () => luckyQuantity++,
+                                    ),
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 20,
+                            ),
+                          ),
+                          PopupMenuButton<int>(
+                            key: const Key('lucky-quantity-presets'),
+                            tooltip: 'Quantity presets',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
                               minHeight: 30,
                             ),
                             color: const Color(0xFF24152F),
@@ -3938,8 +3957,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 )
                                 .toList(growable: false),
                             child: const Icon(
-                              Icons.add_circle_outline_rounded,
-                              size: 20,
+                              Icons.arrow_drop_down_circle_outlined,
+                              color: Color(0xFFFFD45A),
+                              size: 19,
                             ),
                           ),
                         ],
