@@ -43,6 +43,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final Set<String> _selectedGiftRecipients = <String>{};
   GiftDefinition? _luckyComboGift;
+  GiftDefinition? _luckyImpactGift;
+  RoomGiftEvent? _activeGiftEvent;
+  String? _handledGiftEventId;
+  Timer? _giftImpactTimer;
+  int _giftImpactSequence = 0;
   List<String> _luckyComboRecipients = <String>[];
   int _luckyComboCount = 0;
   int _luckyComboWon = 0;
@@ -57,6 +62,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _luckyComboExpiryTimer;
+  int _luckyComboExpiryGeneration = 0;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -625,6 +631,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
     _luckyBubbleTimer?.cancel();
+    _giftImpactTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
