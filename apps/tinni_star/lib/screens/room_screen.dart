@@ -3363,6 +3363,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _selectedGiftRecipients
         ..clear()
         ..add(preselectedUserId);
+    } else if (_selectedGiftRecipients.length > 1) {
+      // Gift sending is single-target. Never carry an accumulated recipient
+      // set from an earlier panel interaction into a new send.
+      final selectedRecipient = _selectedGiftRecipients.first;
+      _selectedGiftRecipients
+        ..clear()
+        ..add(selectedRecipient);
     }
 
     var giftCategory = 'Normal';
@@ -3660,13 +3667,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           key: Key('gift-recipient-${recipient.$1}'),
                           onTap: () {
                             setSheetState(() {
-                              if (selected) {
-                                if (_selectedGiftRecipients.length > 1) {
-                                  _selectedGiftRecipients.remove(recipient.$1);
-                                }
-                              } else {
-                                _selectedGiftRecipients.add(recipient.$1);
-                              }
+                              // Exactly one DP is the gift target. Clearing
+                              // first prevents previously tapped seats from
+                              // remaining selected and receiving the same gift.
+                              _selectedGiftRecipients
+                                ..clear()
+                                ..add(recipient.$1);
                             });
                           },
                           borderRadius: BorderRadius.circular(32),
