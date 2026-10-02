@@ -146,7 +146,9 @@ Leaving the room screen to use another app should not automatically close the ro
 The gift panel contains a **horizontally swipeable recipient strip**.
 
 - Room users can be selected from the strip.
-- Multiple recipients may be selected.
+- Multiple recipients may be selected; only the selected real user IDs receive the gift/effect.
+- **Selected-DP lock:** every selected recipient DP is visibly blurred/dimmed with a gold check/glow; unselected DPs remain normal and clear.
+- **Send readiness lock:** Send becomes enabled immediately when a gift and at least one recipient are selected. It may disable only while that send request is actually in flight; no backend preflight may leave a valid Send button grey.
 - Sending cost is multiplied by selected recipient count.
 - Gift effects are routed to the effect queue when room effects are enabled.
 - Production coin/diamond movement is server-authoritative.

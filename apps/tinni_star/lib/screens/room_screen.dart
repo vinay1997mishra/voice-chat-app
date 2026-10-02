@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -3066,17 +3067,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _selectedGiftRecipients
         ..clear()
         ..add(preselectedUserId);
-    } else if (_selectedGiftRecipients.length > 1) {
-      // Gift sending is single-target: keep only one real user ID when
-      // reopening the panel so stale selections cannot receive a new gift.
-      final selectedRecipient = _selectedGiftRecipients.first;
-      _selectedGiftRecipients
-        ..clear()
-        ..add(selectedRecipient);
     }
 
     var giftCategory = 'Normal';
     var luckyQuantity = 1;
+    var giftSendInFlight = false;
     GiftDefinition? selectedGift;
     const giftCategories = <String>[
       'Normal',
@@ -3385,12 +3380,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           key: Key('gift-recipient-${recipient.$1}'),
                           onTap: () {
                             setSheetState(() {
-                              // Exactly one DP is the gift target. Replacing
-                              // the set prevents gifts/effects leaking to a
-                              // previously selected seat.
-                              _selectedGiftRecipients
-                                ..clear()
-                                ..add(recipient.$1);
+                              // Multi-select is intentional. The backend and
+                              // animation routing receive exactly this real-ID
+                              // set; no seat placeholder IDs are allowed.
+                              if (selected) {
+                                if (_selectedGiftRecipients.length > 1) {
+                                  _selectedGiftRecipients.remove(recipient.$1);
+                                }
+                              } else {
+                                _selectedGiftRecipients.add(recipient.$1);
+                              }
                             });
                           },
                           borderRadius: BorderRadius.circular(32),
@@ -3422,44 +3421,81 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                           ]
                                         : const [],
                                   ),
-                                  child: ClipOval(
-                                    child: Builder(
-                                      builder: (_) {
-                                        final account = widget.state.auth.current;
-                                        String? avatar;
-                                        if (recipient.$1 == senderId) {
-                                          avatar = account?.avatarDataUrl;
-                                        } else {
-                                          for (final member in widget.state.roomSession.liveMembers) {
-                                            if (member.userId == recipient.$1) {
-                                              avatar = member.avatarDataUrl;
-                                              break;
-                                            }
-                                          }
-                                        }
-                                        final provider =
-                                            _roomAvatarProvider(avatar);
-                                        if (provider != null) {
-                                          return DecoratedBox(
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              image: DecorationImage(
-                                                image: provider,
-                                                fit: BoxFit.cover,
-                                              ),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ClipOval(
+                                        child: ImageFiltered(
+                                          key: Key(
+                                            'gift-recipient-blur-${recipient.$1}',
+                                          ),
+                                          imageFilter: ui.ImageFilter.blur(
+                                            sigmaX: selected ? 2.4 : 0,
+                                            sigmaY: selected ? 2.4 : 0,
+                                          ),
+                                          child: Builder(
+                                            builder: (_) {
+                                              final account =
+                                                  widget.state.auth.current;
+                                              String? avatar;
+                                              if (recipient.$1 == senderId) {
+                                                avatar = account?.avatarDataUrl;
+                                              } else {
+                                                for (final member in widget
+                                                    .state
+                                                    .roomSession
+                                                    .liveMembers) {
+                                                  if (member.userId ==
+                                                      recipient.$1) {
+                                                    avatar =
+                                                        member.avatarDataUrl;
+                                                    break;
+                                                  }
+                                                }
+                                              }
+                                              final provider =
+                                                  _roomAvatarProvider(avatar);
+                                              if (provider != null) {
+                                                return DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    image: DecorationImage(
+                                                      image: provider,
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return Icon(
+                                                recipient.$1 == senderId
+                                                    ? Icons
+                                                        .account_circle_rounded
+                                                    : Icons.person_rounded,
+                                                color: FeaturePalette.social,
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      if (selected)
+                                        DecoratedBox(
+                                          key: Key(
+                                            'gift-recipient-selected-${recipient.$1}',
+                                          ),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.black
+                                                .withValues(alpha: 0.20),
+                                          ),
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.check_rounded,
+                                              color: Color(0xFFFFD45A),
+                                              size: 24,
                                             ),
-                                          );
-                                        }
-                                        return Icon(
-                                          recipient.$1 == senderId
-                                              ? Icons.account_circle_rounded
-                                              : Icons.person_rounded,
-                                          color: selected
-                                              ? FeaturePalette.gift
-                                              : FeaturePalette.social,
-                                        );
-                                      },
-                                    ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3774,12 +3810,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             key: const Key('room-gift-send-button'),
                             onPressed: selectedGift == null ||
                                     _selectedGiftRecipients.isEmpty ||
-                                    _luckyComboSending
+                                    giftSendInFlight
                                 ? null
-                                : () => sendSelectedGift(
-                                      context,
-                                      selectedGift!,
-                                    ),
+                                : () {
+                                    setSheetState(
+                                      () => giftSendInFlight = true,
+                                    );
+                                    unawaited(
+                                      sendSelectedGift(
+                                        context,
+                                        selectedGift!,
+                                      ).whenComplete(() {
+                                        if (context.mounted) {
+                                          setSheetState(
+                                            () => giftSendInFlight = false,
+                                          );
+                                        }
+                                      }),
+                                    );
+                                  },
                             style: FilledButton.styleFrom(
                               backgroundColor:
                                   const Color(0xFFFFC247),
@@ -3794,10 +3843,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     BorderRadius.circular(22),
                               ),
                             ),
-                            icon: const Icon(
-                              Icons.send_rounded,
-                              size: 18,
-                            ),
+                            icon: giftSendInFlight
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF1A111F),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.send_rounded,
+                                    size: 18,
+                                  ),
                             label: Text(
                               selectedGift?.lucky == true &&
                                       luckyQuantity > 1

@@ -109,13 +109,23 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /_selectedGiftRecipients\s*\.\.clear\(\)\s*\.\.add\(recipient\.\$1\);/,
-  "Tapping a recipient DP must replace the previous recipient so only that selected user receives the gift",
+  /if \(selected\) \{[\s\S]{0,220}_selectedGiftRecipients\.remove\(recipient\.\$1\)[\s\S]{0,180}\} else \{[\s\S]{0,120}_selectedGiftRecipients\.add\(recipient\.\$1\)/,
+  "Gift panel must support multiple selected real recipient IDs",
+);
+assert.doesNotMatch(
+  roomScreen,
+  /Gift sending is single-target/,
+  "Gift recipient selection must not regress to single-target-only behavior",
 );
 assert.match(
   roomScreen,
-  /Gift sending is single-target/,
-  "Reopening the gift panel must collapse stale recipient selections to one target",
+  /ui\.ImageFilter\.blur\([\s\S]{0,120}sigmaX: selected \? 2\.4 : 0,[\s\S]{0,120}sigmaY: selected \? 2\.4 : 0/,
+  "Selected recipient DP must blur while unselected DPs remain normal",
+);
+assert.match(
+  roomScreen,
+  /giftSendInFlight[\s\S]{0,500}onPressed: selectedGift == null \|\|[\s\S]{0,180}_selectedGiftRecipients\.isEmpty \|\|[\s\S]{0,120}giftSendInFlight/,
+  "Send must become ready from local gift+recipient selection without waiting on server state",
 );
 assert.match(
   roomScreen,

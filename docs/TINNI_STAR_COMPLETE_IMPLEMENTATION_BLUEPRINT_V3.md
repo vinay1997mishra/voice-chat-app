@@ -659,6 +659,8 @@ Must support:
 - categories.
 - multi-recipient selector.
 - horizontal/swipe user recipient row.
+- **Recipient-selection anti-regression lock:** one or many real user IDs may be selected. Selected DPs are blurred/dimmed with a gold check/glow; unselected DPs stay normal. Gifts/effects must route only to the selected IDs.
+- **Send-button anti-regression lock:** once a gift and at least one recipient are locally selected, Send is immediately enabled. It is disabled only while that request is in flight (or when gift/recipient selection is missing).
 - quantity/combo.
 - backpack/inventory.
 - balance.
