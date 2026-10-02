@@ -1866,6 +1866,34 @@ On reconnect:
 - reconcile sequence/version;
 - then resume incremental events.
 
+## T1. Realtime room presence / seat DP delivery — LOCKED
+
+Runtime rule:
+- Room entry performs one authoritative presence join/snapshot.
+- After join, room presence uses one authenticated Durable Object WebSocket with Cloudflare WebSocket Hibernation.
+- Do not poll room presence every second.
+- In the healthy realtime path there is no recurring HTTP heartbeat.
+- A low-frequency HTTP heartbeat is emergency fallback only while the realtime socket is disconnected.
+- The realtime client uses WebSocket protocol ping for transport health and a sparse application presence keepalive.
+- Current implementation target: 75-second application keepalive, 180-second room-member TTL, 60-second HTTP fallback only when WebSocket is unavailable.
+
+Seat/DP rule:
+- USER_JOIN, USER_LEAVE, seat changes, invite/approval/forced-seat changes, mute/admin/lock changes and other presence mutations must push to connected room clients.
+- A user taking or leaving a seat must sync immediately; it must never wait for a periodic heartbeat.
+- Another user's DP must appear automatically from the realtime presence update. Tapping the seat must never be required to make the DP appear.
+- The client must retain a stable avatar provider/cache keyed by user ID + avatar source.
+- Rebuilds must reuse the existing decoded/cached avatar. Never clear a valid DP to blank while applying a room-state update.
+- If a replacement avatar is invalid or not ready, keep the last valid avatar until the replacement is available.
+- Data-URL avatars are decoded once per changed source; HTTP(S)/R2 avatar URLs reuse their image provider/cache.
+- Presence updates may reconcile an authoritative snapshot, but repeated timer-driven full-room refresh/re-render is forbidden.
+- On WebSocket reconnect, server state wins: reconcile the authoritative seat/member state first, then resume realtime events.
+
+Request-budget rule:
+- No REST polling loop for room seats/users/DPs.
+- WebSocket connection establishment is per room session; outgoing server broadcasts do not require one REST request per recipient.
+- Keepalive cadence must remain sparse and must not be shortened back to one-second polling.
+- New room/presence features must use the existing realtime channel or meaningful user-action requests instead of periodic REST refreshes.
+
 ## U. RTC / IM separation
 
 RTC adapter:
