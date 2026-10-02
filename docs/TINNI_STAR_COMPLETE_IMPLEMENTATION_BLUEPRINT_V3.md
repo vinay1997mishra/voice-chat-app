@@ -1879,9 +1879,15 @@ On reconnect:
 - Room entry performs one authoritative presence join/snapshot.
 - After join, use one authenticated hibernating Durable Object WebSocket for room presence.
 - **Do not poll room presence every second.**
-- In the healthy realtime path there is **no recurring HTTP heartbeat**.
-- HTTP heartbeat is emergency fallback only while realtime is disconnected.
-- Current keepalive target is sparse (75-second application presence keepalive with 180-second member TTL); do not shorten this back to frequent polling without an explicit product change.
+- In the healthy realtime path there is **no recurring application-level HTTP heartbeat and no recurring application-level WebSocket keepalive message**.
+- Transport health uses protocol-level WebSocket ping only; protocol ping must not be converted back into Worker/DO application messages.
+- An actively connected room WebSocket is authoritative proof that the user remains in the room, even if the stored `last_seen` timestamp is old.
+- App Directory online state is socket-driven: WebSocket connect marks the room session connected; socket close/error clears it unless a replacement socket for the same user is already active.
+- A stale old socket close must never clear a newer replacement connection.
+- If realtime disconnects, the client retries with exponential backoff instead of a 2-second infinite reconnect loop.
+- HTTP heartbeat is emergency fallback only while realtime is unavailable, currently every **5 minutes**.
+- Disconnected room membership keeps a **30-minute recovery grace** so temporary background/network gaps do not immediately remove the user or seat state.
+- Android active-room background mode continues to use the existing `START_STICKY` foreground voice-room service.
 - Seat take/leave, mic-state change, mute/unmute, lock/unlock, admin/permission change and user join/leave must push immediately through realtime state updates.
 - A DP must appear automatically when presence/seat state arrives; tapping the seat must never be required to make the DP appear.
 - Keep stable seat identity and stable avatar providers/cache. Never clear a valid DP to blank while applying a state update.
@@ -1889,6 +1895,7 @@ On reconnect:
 - Update only the changed seat/member state where possible; avoid timer-driven full-room clear/rebuild cycles.
 - On reconnect, reconcile authoritative server state before resuming incremental updates.
 - Realtime request budget is a product requirement: new room features must reuse the existing live channel or meaningful user-action requests rather than adding periodic REST polling.
+- Normal Android backgrounding must not eject a user from the room merely because the app is no longer foregrounded. Force-stop, device reboot, process death or prolonged network loss are separate failure cases and require reconnect/rejoin recovery rather than false claims of guaranteed uninterrupted execution.
 
 ## U. RTC / IM separation
 
