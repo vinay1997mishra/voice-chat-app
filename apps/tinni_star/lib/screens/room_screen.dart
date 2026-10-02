@@ -7610,6 +7610,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final selfMuted = isMySeat && controller.selfMuted;
     final selfMicOff =
         isMySeat && controller.micState != MicState.live;
+    final authoritativeSeatUserId =
+        presenceMember?.seatIndex == index
+            ? presenceMember!.userId
+            : isMySeat
+                ? account?.userId
+                : null;
+    final showLuckySeatEffect = authoritativeSeatUserId != null &&
+        _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
         selfMuted ||
