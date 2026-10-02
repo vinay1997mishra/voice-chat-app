@@ -2711,11 +2711,33 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
+        const roomId = String(body.room_id || "").trim();
+        const requestedReceivers = [...new Set(
+          (Array.isArray(body.receiver_ids) ? body.receiver_ids : [])
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+        )];
+        if (!roomId || requestedReceivers.length < 1) {
+          throw new Error("Select at least one seated recipient");
+        }
+        const presence = await getRoomPresenceStore(env, roomId).state();
+        const seatedIds = new Set(
+          (Array.isArray(presence?.members) ? presence.members : [])
+            .filter((member) => member?.seat_index !== null &&
+                member?.seat_index !== undefined)
+            .map((member) => String(member.user_id || "").trim())
+            .filter(Boolean),
+        );
+        for (const receiverId of requestedReceivers) {
+          if (!seatedIds.has(receiverId)) {
+            throw new Error("Selected recipient is no longer on a seat");
+          }
+        }
+
         const result = await getAppDirectoryStore(env).sendGift(
           appSession.user.user_id,
           body,
         );
-        const roomId = String(body.room_id || "").trim();
         const transactions = Array.isArray(result?.transactions)
           ? result.transactions
           : [];
@@ -2723,19 +2745,21 @@ export default {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const coins = Number(tx?.total_cost || 0);
-            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+            const diamonds = Number(tx?.receiver_diamonds || 0);
+            if (!receiverId ||
+                !Number.isSafeInteger(diamonds) ||
+                diamonds <= 0) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + coins,
+              Number(receiverTotals.get(receiverId) || 0) + diamonds,
             );
           }
           if (receiverTotals.size > 0) {
             await getRoomPresenceStore(env, roomId).recordGift({
               receivers: [...receiverTotals.entries()].map(
-                ([user_id, coins]) => ({ user_id, coins }),
+                ([user_id, diamonds]) => ({ user_id, diamonds }),
               ),
             });
           }
