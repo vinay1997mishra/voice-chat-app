@@ -57,6 +57,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
+  DateTime? _luckyComboExpiresAt;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
   bool _luckyFeedLoading = false;
   Timer? _seatGiftAnimationTimer;
@@ -843,7 +844,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final event = presence.lastGiftEvent;
     if (event == null) return;
     final eventId = event['event_id']?.toString() ?? '';
-    if (eventId.isNotEmpty && !_seenGiftEventIds.add(eventId)) return;
     final giftId = event['gift_id']?.toString() ?? '';
     final gift = _giftDefinitionForId(giftId);
     if (gift == null) return;
@@ -859,6 +859,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       gift,
       receivers,
       multiplier: _giftInt(event['multiplier']),
+      eventId: eventId,
     );
   }
 
@@ -868,8 +869,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     int multiplier = 0,
     String? eventId,
   }) {
-    if (eventId != null && eventId.isNotEmpty) {
-      _seenGiftEventIds.add(eventId);
+    if (eventId != null &&
+        eventId.isNotEmpty &&
+        !_seenGiftEventIds.add(eventId)) {
+      return;
     }
     _seatGiftAnimationTimer?.cancel();
     _seatGiftAnimationGift = gift;
@@ -2459,13 +2462,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyPoolBalance = 0;
     _luckySessionId = null;
     _luckySessionHighest = 0;
+    _luckyComboExpiresAt = null;
   }
 
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiresAt = DateTime.now().add(const Duration(seconds: 12));
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted) return;
-      setState(_resetLuckyComboState);
+      setState(() {
+        _luckyComboExpiryTimer = null;
+        _luckyComboGift = null;
+        _luckyComboRecipients = <String>[];
+        _luckyComboCount = 0;
+        _luckyComboWon = 0;
+        _luckyLastMultiplier = 0;
+        _luckyPoolBalance = 0;
+        _luckySessionId = null;
+        _luckySessionHighest = 0;
+        _luckyComboExpiresAt = null;
+      });
     });
   }
 
@@ -2627,6 +2643,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _repeatLuckyGift() async {
+    final expiresAt = _luckyComboExpiresAt;
+    if (expiresAt == null || !DateTime.now().isBefore(expiresAt)) {
+      if (mounted) setState(_resetLuckyComboState);
+      return;
+    }
     final gift = _luckyComboGift;
     if (gift == null || _luckyComboRecipients.isEmpty) return;
     await _sendLuckyGift(
@@ -2781,7 +2802,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildLuckyComboOverlay() {
     final gift = _luckyComboGift;
-    if (gift == null) return const SizedBox.shrink();
+    final expiresAt = _luckyComboExpiresAt;
+    if (gift == null ||
+        expiresAt == null ||
+        !DateTime.now().isBefore(expiresAt)) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       key: const Key('lucky-combo-overlay'),
       right: 8,
