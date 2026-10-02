@@ -79,6 +79,16 @@ assert.match(
 );
 assert.match(
   roomScreen,
+  /_luckyComboExpiryTimer\?\.cancel\(\);\s*_luckyComboExpiryTimer = null;\s*_luckyComboEpoch\+\+;/,
+  "Touching/sending Combo must pause the old 12-second expiry while the request is in flight",
+);
+assert.match(
+  roomScreen,
+  /_resetLuckyComboState\(\);/,
+  "A non-Lucky send must end the previous Lucky consecutive-send Combo",
+);
+assert.match(
+  roomScreen,
   /_luckyComboQuantity = quantity;/,
   "Combo must preserve the chosen Lucky quantity",
 );
