@@ -4975,18 +4975,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: const <Widget>[
-                    Icon(Icons.local_fire_department_rounded,
-                        color: Color(0xFFFFE05D), size: 21),
-                    Icon(Icons.star_rounded,
-                        color: Color(0xFFFFE05D), size: 17),
-                    Icon(Icons.star_rounded,
-                        color: Color(0xFFFFE05D), size: 17),
-                    Icon(Icons.star_rounded,
-                        color: Color(0xFFFFE05D), size: 17),
-                    Icon(Icons.star_rounded,
-                        color: Color(0xFFFFE05D), size: 17),
-                    Icon(Icons.star_rounded,
-                        color: Color(0xFFFFE05D), size: 17),
+                    Icon(Icons.rocket_launch_rounded,
+                        color: Color(0xFFB8894D), size: 24),
+                    Icon(Icons.rocket_launch_rounded,
+                        color: Color(0xFF61D9FF), size: 26),
+                    Icon(Icons.rocket_launch_rounded,
+                        color: Color(0xFF57E39B), size: 28),
+                    Icon(Icons.rocket_launch_rounded,
+                        color: Color(0xFFB979FF), size: 30),
+                    Icon(Icons.rocket_launch_rounded,
+                        color: Color(0xFFFFD45A), size: 32),
                   ],
                 ),
               ),
@@ -5021,8 +5019,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF9A63E8).withValues(alpha: 0.42),
+                    color: const Color(0xFF071B4D),
                     borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0x99FFD45A),
+                      width: 1,
+                    ),
                   ),
                   child: GridView.count(
                     physics: const NeverScrollableScrollPhysics(),
@@ -9268,16 +9270,16 @@ class _RocketReward extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF6E3EB3),
+        color: const Color(0xFF0B2B78),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFFCCA7FF),
-          width: 0.8,
+          color: const Color(0xFFFFD45A),
+          width: 0.9,
         ),
       ),
       child: Icon(
         icon,
-        color: const Color(0xFFFFD45A),
+        color: const Color(0xFFFFE27A),
         size: 27,
       ),
     );
