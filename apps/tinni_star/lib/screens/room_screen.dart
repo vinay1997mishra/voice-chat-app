@@ -50,6 +50,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
   final Set<String> _luckyAnimationReceiverIds = <String>{};
+  GiftDefinition? _seatGiftAnimationGift;
+  int _seatGiftAnimationQuantity = 1;
+  final Set<String> _handledGiftEventIds = <String>{};
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
@@ -135,7 +138,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         widget.state.social.connectMessageEvents(account.authToken);
       });
     }
-    _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
     if (session.room?.id != widget.room.id || session.controller == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -220,12 +222,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final ownerId =
         canonicalRoom.ownerId ?? widget.room.ownerId ?? widget.room.id;
     widget.state.roomControls.setOwner(ownerId);
-
-    if (_selectedGiftRecipients.length == 1) {
-      _selectedGiftRecipients
-        ..clear()
-        ..add(ownerId);
-    }
 
     if (canonicalRoom.locked && account.userId != ownerId) {
       final allowed = await _requestLockedRoomAccess(
@@ -827,6 +823,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _syncGiftLiveEvent();
     setState(() {});
   }
 
