@@ -4969,18 +4969,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: <Color>[
-                Color(0xFF24134A),
-                Color(0xFF5A24A8),
-                Color(0xFF3A176E),
+                Color(0xFF06143D),
+                Color(0xFF0D347A),
+                Color(0xFF071A4A),
               ],
             ),
             border: Border.all(
-              color: const Color(0xFFB779FF),
-              width: 1.1,
+              color: const Color(0xFFFFD45A),
+              width: 1.2,
             ),
             boxShadow: const <BoxShadow>[
               BoxShadow(
-                color: Color(0x665D3BFF),
+                color: Color(0x663B78FF),
                 blurRadius: 24,
               ),
             ],
@@ -9155,41 +9155,54 @@ class _ReferenceGameLogo extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x665D3BFF),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color(0x55FF4FD8),
-              blurRadius: 11,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Center(
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFFFF7CF2),
-                Color(0xFFB56CFF),
-                Color(0xFF6F7BFF),
-              ],
-            ).createShader(bounds),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.sports_esports_rounded,
+            size: size * 0.9,
+            color: Colors.white,
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0xAA000000),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          Positioned(
+            left: size * 0.23,
+            top: size * 0.34,
             child: Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.78,
-              color: Colors.white,
+              Icons.add_rounded,
+              size: size * 0.22,
+              color: Colors.black,
             ),
           ),
-        ),
+          Positioned(
+            right: size * 0.25,
+            top: size * 0.37,
+            child: Container(
+              width: size * 0.10,
+              height: size * 0.10,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            right: size * 0.17,
+            top: size * 0.29,
+            child: Container(
+              width: size * 0.09,
+              height: size * 0.09,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -9210,30 +9223,27 @@ class _ReferenceRocketLogo extends StatelessWidget {
         children: [
           Icon(
             Icons.rocket_launch_rounded,
-            size: size * 0.86,
-            color: const Color(0xFFFF63E6),
+            size: size * 0.94,
+            color: const Color(0xFF06143D),
+          ),
+          Icon(
+            Icons.rocket_launch_rounded,
+            size: size * 0.82,
+            color: const Color(0xFFFFD45A),
             shadows: const <Shadow>[
               Shadow(
-                color: Color(0xFF6B5CFF),
-                blurRadius: 12,
+                color: Color(0xAAFF9E24),
+                blurRadius: 8,
               ),
             ],
           ),
           Positioned(
-            bottom: 0,
-            child: Container(
-              width: size * 0.22,
-              height: size * 0.22,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFD45A),
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x88FFD45A),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
+            bottom: size * 0.02,
+            right: size * 0.08,
+            child: Icon(
+              Icons.local_fire_department_rounded,
+              size: size * 0.24,
+              color: const Color(0xFFFF8A24),
             ),
           ),
         ],
@@ -9323,10 +9333,10 @@ class _RocketReward extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF6E3EB3),
+        color: const Color(0xFF0B2A68),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFFCCA7FF),
+          color: const Color(0xFFFFD45A),
           width: 0.8,
         ),
       ),
