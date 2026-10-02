@@ -5749,6 +5749,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
+                  key: tool.$1 == 'Room Type'
+                      ? const Key('room-tool-lock')
+                      : null,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: LinearGradient(
@@ -7317,6 +7320,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (context) => SafeArea(
+        key: const Key('reference-seat-control-panel'),
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
@@ -8377,6 +8381,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                                   const Color(0xFFFFD45A),
                                             ),
                                             child: GestureDetector(
+                                              key: Key(
+                                                'room-live-user-dp-' +
+                                                    (visible[i]['id'] ??
+                                                        i.toString()),
+                                              ),
                                               behavior: HitTestBehavior.opaque,
                                               onTap: () {
                                                 final memberId =
@@ -8461,6 +8470,99 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   )
                 ],
               ),
+            ),
+            Builder(
+              builder: (context) {
+                final tagged = widget.state.roomSession.liveMembers.where(
+                  (member) =>
+                      member.ownerTags.isNotEmpty ||
+                      member.ownerMedals.isNotEmpty,
+                ).toList(growable: false);
+                if (tagged.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return SizedBox(
+                  key: const Key('room-live-owner-badges'),
+                  height: 18,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    children: [
+                      for (final member in tagged) ...[
+                        for (final tag in member.ownerTags)
+                          Container(
+                            key: Key(
+                              'live-owner-tag-' +
+                                  member.userId +
+                                  '-' +
+                                  tag.name,
+                            ),
+                            margin: const EdgeInsets.only(right: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: _ownerTagColor(tag.colorHex),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              tag.name,
+                              style: TextStyle(
+                                color: _ownerTagColor(tag.colorHex),
+                                fontSize: 7,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        for (final medal in member.ownerMedals)
+                          Container(
+                            key: Key(
+                              'live-owner-medal-' +
+                                  member.userId +
+                                  '-' +
+                                  medal.name,
+                            ),
+                            margin: const EdgeInsets.only(right: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: _ownerTagColor(medal.colorHex),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.workspace_premium_rounded,
+                                  size: 7,
+                                  color: _ownerTagColor(medal.colorHex),
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  medal.name,
+                                  style: TextStyle(
+                                    color: _ownerTagColor(medal.colorHex),
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 2),
             SizedBox(
