@@ -68,6 +68,7 @@ class RoomPresenceMember {
     this.moderationMuted = false,
     this.chatBanned = false,
     this.isAdmin = false,
+    this.receivedGiftCoins = 0,
     this.seatEmote,
     this.seatEmoteUntil,
   });
@@ -90,6 +91,7 @@ class RoomPresenceMember {
   final bool moderationMuted;
   final bool chatBanned;
   final bool isAdmin;
+  final int receivedGiftCoins;
   final String? seatEmote;
   final DateTime? seatEmoteUntil;
   final DateTime joinedAt;
@@ -1037,6 +1039,7 @@ class RoomPresenceService extends ChangeNotifier {
                 moderationMuted: row['moderation_muted'] == true,
                 chatBanned: row['chat_banned'] == true,
                 isAdmin: row['is_admin'] == true,
+                receivedGiftCoins: _asInt(row['received_gift_coins']),
                 seatEmote: row['seat_emote']?.toString(),
                 seatEmoteUntil: row['seat_emote_until'] == null
                     ? null
