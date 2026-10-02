@@ -183,7 +183,7 @@ class RoomPresenceService extends ChangeNotifier {
       socket.pingInterval = const Duration(seconds: 20);
       _realtimeKeepAliveTimer?.cancel();
       _realtimeKeepAliveTimer = Timer.periodic(
-        const Duration(seconds: 30),
+        const Duration(seconds: 75),
         (_) => _sendRealtime(
           const <String, Object?>{'type': 'presence_keepalive'},
         ),
