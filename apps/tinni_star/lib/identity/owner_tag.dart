@@ -2,25 +2,42 @@ class OwnerTag {
   const OwnerTag({
     required this.name,
     required this.colorHex,
+    this.kind = 'custom',
+    this.designation = '',
+    this.backgroundColorHex,
   });
 
   final String name;
   final String colorHex;
+  final String kind;
+  final String designation;
+  final String? backgroundColorHex;
 
   factory OwnerTag.fromMap(Map<dynamic, dynamic> value) {
-    final rawColor = value['color']?.toString().trim() ?? '#FFD54F';
-    final normalizedColor =
-        RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(rawColor)
-            ? rawColor.toUpperCase()
-            : '#FFD54F';
+    String normalize(dynamic raw, String fallback) {
+      final color = raw?.toString().trim() ?? fallback;
+      return RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(color)
+          ? color.toUpperCase()
+          : fallback;
+    }
+
     return OwnerTag(
       name: value['name']?.toString().trim() ?? '',
-      colorHex: normalizedColor,
+      colorHex: normalize(value['color'], '#FFD54F'),
+      kind: value['kind']?.toString().trim() ?? 'custom',
+      designation: value['designation']?.toString().trim() ?? '',
+      backgroundColorHex: value['background_color'] == null
+          ? null
+          : normalize(value['background_color'], '#69C9FF'),
     );
   }
 
   Map<String, String> toJson() => <String, String>{
         'name': name,
         'color': colorHex,
+        'kind': kind,
+        if (designation.isNotEmpty) 'designation': designation,
+        if (backgroundColorHex != null)
+          'background_color': backgroundColorHex!,
       };
 }

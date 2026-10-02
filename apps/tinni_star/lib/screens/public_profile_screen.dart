@@ -21,6 +21,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, dynamic> stats = const <String, dynamic>{};
   Map<String, dynamic> guardian = const <String, dynamic>{};
   List<Map<String, dynamic>> medals = const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> identityTags = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> trends = const <Map<String, dynamic>>[];
   bool loading = true;
   bool posting = false;
@@ -65,12 +66,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       if (!mounted) return;
       final tagData = Map<String, dynamic>.from(results[3] as Map);
       final rawMedals = tagData['medals'];
+      final rawIdentityTags = tagData['identity_tags'];
       setState(() {
         media = Map<String, String?>.from(results[0] as Map);
         stats = Map<String, dynamic>.from(results[1] as Map);
         guardian = Map<String, dynamic>.from(results[2] as Map);
         medals = rawMedals is List
             ? rawMedals
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(growable: false)
+            : const <Map<String, dynamic>>[];
+        identityTags = rawIdentityTags is List
+            ? rawIdentityTags
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList(growable: false)
@@ -207,7 +215,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         : const <String, dynamic>{};
     final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
     final charmLevel = (charm['level'] as num?)?.toInt() ?? 0;
-    final vipLevel = widget.state.identity.vip.level;
     final guardianRow = guardian['guardian'] is Map
         ? Map<String, dynamic>.from(guardian['guardian'] as Map)
         : null;
@@ -339,29 +346,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _ProfileBadge(
-                      title: vipLevel > 0 ? 'VIP $vipLevel' : 'Non-VIP',
-                      icon: Icons.workspace_premium_rounded,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ProfileBadge(
-                      title: wealthLevel > 0
-                          ? 'Wealth LV.$wealthLevel'
-                          : 'Incomplete',
-                      icon: Icons.diamond_rounded,
-                    ),
-                  ),
-                ],
+            if (identityTags.isNotEmpty) ...[
+              Padding(
+                key: const Key('profile-identity-tags'),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 9,
+                  children: [
+                    for (final tag in identityTags)
+                      _ProfileIdentityTag(tag: tag),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: RoyalPanel(
@@ -625,6 +624,121 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileIdentityTag extends StatelessWidget {
+  const _ProfileIdentityTag({required this.tag});
+
+  final Map<String, dynamic> tag;
+
+  Color _hex(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = tag['kind']?.toString() ?? 'custom';
+    final designation = (tag['designation']?.toString().trim().isNotEmpty ?? false)
+        ? tag['designation']!.toString().trim()
+        : (tag['name']?.toString() ?? 'Tag');
+    if (kind == 'v_official') {
+      final background = _hex(
+        tag['background_color']?.toString(),
+        const Color(0xFF69C9FF),
+      );
+      return Container(
+        key: const Key('profile-v-official-tag'),
+        padding: const EdgeInsets.fromLTRB(5, 5, 12, 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: RoyalPalette.deepGold.withValues(alpha: .72),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: background,
+                border: Border.all(
+                  color: RoyalPalette.gold,
+                  width: 2.4,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x55F6C84F),
+                    blurRadius: 9,
+                  ),
+                ],
+              ),
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFFFFFFF),
+                    Color(0xFFD6DAE1),
+                    Color(0xFF8D939E),
+                    Color(0xFFF7F8FA),
+                  ],
+                ).createShader(bounds),
+                child: const Text(
+                  'V',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              designation,
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final automatic = tag['kind']?.toString() == 'auto_role';
+    final color = _hex(
+      tag['color']?.toString(),
+      automatic ? RoyalPalette.gold : RoyalPalette.cream,
+    );
+    return Container(
+      key: Key('profile-identity-tag-' + designation.toLowerCase()),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF14120E),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: .78)),
+      ),
+      child: Text(
+        designation,
+        style: TextStyle(
+          color: automatic ? RoyalPalette.gold : color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }

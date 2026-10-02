@@ -34,6 +34,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool checkingIncoming = false;
   String? errorText;
   CallSession? incomingCall;
+  List<Map<String, dynamic>> targetIdentityTags =
+      const <Map<String, dynamic>>[];
 
   bool get _isInbox => widget.targetUserId == null;
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
@@ -89,6 +91,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
           myUserId: _myUserId,
           peerUserId: _targetUserId,
         );
+        final tagData = await widget.state.backend.userTagsAndMedals(
+          account.authToken,
+          _targetUserId,
+        );
+        final rawIdentityTags = tagData['identity_tags'];
+        targetIdentityTags = rawIdentityTags is List
+            ? rawIdentityTags
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(growable: false)
+            : const <Map<String, dynamic>>[];
       } else {
         return;
       }
@@ -747,14 +760,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      _isOfficial
-                          ? 'Verified official account'
-                          : 'ID ' + _targetUserId,
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 11,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isOfficial
+                              ? 'Verified official account'
+                              : 'ID ' + _targetUserId,
+                          style: const TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                        if (!_isOfficial && targetIdentityTags.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Wrap(
+                            key: const Key('message-identity-tags'),
+                            spacing: 5,
+                            runSpacing: 4,
+                            children: [
+                              for (final tag in targetIdentityTags.take(4))
+                                _MessageIdentityTag(tag: tag),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   if (_isFriend)
@@ -976,5 +1006,86 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     return _isInbox ? _buildInbox() : _buildConversation();
+  }
+}
+
+
+class _MessageIdentityTag extends StatelessWidget {
+  const _MessageIdentityTag({required this.tag});
+
+  final Map<String, dynamic> tag;
+
+  Color _hex(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = tag['kind']?.toString() ?? 'custom';
+    final label = (tag['designation']?.toString().trim().isNotEmpty ?? false)
+        ? tag['designation']!.toString().trim()
+        : (tag['name']?.toString() ?? 'Tag');
+    if (kind == 'v_official') {
+      final bg = _hex(tag['background_color']?.toString(), const Color(0xFF69C9FF));
+      return Container(
+        padding: const EdgeInsets.fromLTRB(3, 2, 7, 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: RoyalPalette.deepGold),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: bg,
+                border: Border.all(color: RoyalPalette.gold, width: 1.5),
+              ),
+              child: const Text(
+                'V',
+                style: TextStyle(
+                  color: Color(0xFFE4E7ED),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final color = _hex(tag['color']?.toString(), RoyalPalette.gold);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .75)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: kind == 'auto_role' ? RoyalPalette.gold : color,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 }
