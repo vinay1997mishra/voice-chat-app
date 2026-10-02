@@ -2711,7 +2711,36 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        return json(await getAppDirectoryStore(env).sendGift(appSession.user.user_id, body), 201);
+        const result = await getAppDirectoryStore(env).sendGift(
+          appSession.user.user_id,
+          body,
+        );
+        const roomId = String(body.room_id || "").trim();
+        const transactions = Array.isArray(result?.transactions)
+          ? result.transactions
+          : [];
+        if (roomId && transactions.length > 0) {
+          const receiverTotals = new Map();
+          for (const tx of transactions) {
+            const receiverId = String(tx?.receiver_id || "").trim();
+            const coins = Number(tx?.total_cost || 0);
+            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+              continue;
+            }
+            receiverTotals.set(
+              receiverId,
+              Number(receiverTotals.get(receiverId) || 0) + coins,
+            );
+          }
+          if (receiverTotals.size > 0) {
+            await getRoomPresenceStore(env, roomId).recordGift({
+              receivers: [...receiverTotals.entries()].map(
+                ([user_id, coins]) => ({ user_id, coins }),
+              ),
+            });
+          }
+        }
+        return json(result, 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to send gift") }, 400);
       }
