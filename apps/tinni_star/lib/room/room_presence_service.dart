@@ -172,6 +172,7 @@ class RoomPresenceService extends ChangeNotifier {
         equippedFrameId: equippedFrameId,
         equippedEntryId: equippedEntryId,
         equippedProfileCardId: equippedProfileCardId,
+        notifyOnlyOnVisibleChange: true,
       );
 
   Future<void> leave({
@@ -652,6 +653,7 @@ class RoomPresenceService extends ChangeNotifier {
     String? equippedFrameId,
     String? equippedEntryId,
     String? equippedProfileCardId,
+    bool notifyOnlyOnVisibleChange = false,
   }) async {
     try {
       final request = await _httpClient.postUrl(apiBase.replace(path: path));
@@ -680,16 +682,80 @@ class RoomPresenceService extends ChangeNotifier {
           data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
         );
       }
+      final before = notifyOnlyOnVisibleChange
+          ? _visibleStateSignature()
+          : null;
+      final wasConnected = connected;
       _apply(data);
       connected = true;
       lastError = null;
-      notifyListeners();
+      if (!notifyOnlyOnVisibleChange ||
+          !wasConnected ||
+          before != _visibleStateSignature()) {
+        notifyListeners();
+      }
     } catch (error) {
       connected = false;
       lastError = error.toString();
       notifyListeners();
       rethrow;
     }
+  }
+
+  String _visibleStateSignature() {
+    final buffer = StringBuffer()
+      ..write(micMode)
+      ..write('|')
+      ..write(selfMicMuted)
+      ..write('|')
+      ..write(selfChatBanned)
+      ..write('|')
+      ..write(selfSeatForced)
+      ..write('|')
+      ..write(selfForcedSeatIndex)
+      ..write('|')
+      ..write(lockedSeats.join(','))
+      ..write('|')
+      ..write(mutedSeats.join(','));
+
+    for (final request in seatRequests) {
+      buffer
+        ..write('|rq:')
+        ..write(request.userId)
+        ..write(':')
+        ..write(request.seatIndex)
+        ..write(':')
+        ..write(request.createdAt.millisecondsSinceEpoch);
+    }
+
+    for (final member in members) {
+      buffer
+        ..write('|m:')
+        ..write(member.userId)
+        ..write(':')
+        ..write(member.displayName)
+        ..write(':')
+        ..write(member.avatarDataUrl ?? '')
+        ..write(':')
+        ..write(member.seatIndex)
+        ..write(':')
+        ..write(member.micMuted)
+        ..write(':')
+        ..write(member.moderationMuted)
+        ..write(':')
+        ..write(member.chatBanned)
+        ..write(':')
+        ..write(member.isAdmin)
+        ..write(':')
+        ..write(member.equippedFrameId ?? '')
+        ..write(':')
+        ..write(member.equippedEntryId ?? '')
+        ..write(':')
+        ..write(member.seatEmote ?? '')
+        ..write(':')
+        ..write(member.seatEmoteUntil?.millisecondsSinceEpoch ?? 0);
+    }
+    return buffer.toString();
   }
 
   void _apply(Map<String, dynamic> data) {
