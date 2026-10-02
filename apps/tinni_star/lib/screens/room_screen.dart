@@ -50,6 +50,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
   final Set<String> _luckyAnimationReceiverIds = <String>{};
+  GiftDefinition? _seatGiftEffectGift;
+  int _seatGiftAnimationSequence = 0;
+  final Set<String> _seatGiftAnimationReceiverIds = <String>{};
+  Timer? _seatGiftAnimationTimer;
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
@@ -626,6 +630,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _emoteExpiryTimer?.cancel();
     _luckyBubbleTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
+    _seatGiftAnimationTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -827,6 +832,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _pruneGiftTargetsForCurrentSeats();
     setState(() {});
   }
 
@@ -2390,9 +2396,66 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return true;
   }
 
+  Set<String> _currentlySeatedGiftRecipientIds() {
+    final ids = <String>{};
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (member.seatIndex != null) ids.add(member.userId);
+    }
+    final account = widget.state.auth.current;
+    if (account != null && controller.mySeat != null) {
+      ids.add(account.userId);
+    }
+    return ids;
+  }
+
+  List<String> _filterGiftRecipientsToCurrentSeats(
+    Iterable<String> receiverIds,
+  ) {
+    final active = _currentlySeatedGiftRecipientIds();
+    return receiverIds.where(active.contains).toSet().toList(growable: false);
+  }
+
+  void _startSeatGiftAnimation(
+    GiftDefinition gift,
+    Iterable<String> receiverIds,
+  ) {
+    final activeTargets = _filterGiftRecipientsToCurrentSeats(receiverIds);
+    _seatGiftAnimationTimer?.cancel();
+    _seatGiftEffectGift = activeTargets.isEmpty ? null : gift;
+    _seatGiftAnimationReceiverIds
+      ..clear()
+      ..addAll(activeTargets);
+    _seatGiftAnimationSequence++;
+    if (activeTargets.isEmpty) return;
+    _seatGiftAnimationTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (!mounted) return;
+      setState(() {
+        _seatGiftEffectGift = null;
+        _seatGiftAnimationReceiverIds.clear();
+      });
+    });
+  }
+
+  void _pruneGiftTargetsForCurrentSeats() {
+    final active = _currentlySeatedGiftRecipientIds();
+    _selectedGiftRecipients.removeWhere((id) => !active.contains(id));
+    _seatGiftAnimationReceiverIds.removeWhere((id) => !active.contains(id));
+    _luckyAnimationReceiverIds.removeWhere((id) => !active.contains(id));
+
+    if (_luckyComboRecipients.isNotEmpty) {
+      final next = _luckyComboRecipients.where(active.contains).toList();
+      if (next.length != _luckyComboRecipients.length) {
+        _luckyComboRecipients = next;
+        if (next.isEmpty) _resetLuckyComboState();
+      }
+    }
+  }
+
   void _resetLuckyComboState() {
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = null;
+    _luckyBubbleTimer?.cancel();
+    _luckyBubbleTimer = null;
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
     _luckyComboCount = 0;
@@ -2401,13 +2464,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyPoolBalance = 0;
     _luckySessionId = null;
     _luckySessionHighest = 0;
+    _luckyAnimationReceiverIds.clear();
   }
 
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted) return;
-      setState(_resetLuckyComboState);
+      setState(() {
+        _resetLuckyComboState();
+      });
     });
   }
 
