@@ -46,6 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void didUpdateWidget(covariant ProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _loadOwnerTags();
     _loadEconomyState();
     _loadAccountStats();
   }
@@ -266,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final decoded = body.trim().isEmpty ? null : jsonDecode(body);
       if (decoded is! Map) return;
-      final rawTags = decoded['tags'];
+      final rawTags = decoded['identity_tags'];
       final tags = rawTags is List
           ? rawTags
               .whereType<Map>()
@@ -296,6 +297,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Color _tagColor(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
+  Widget _mineIdentityTag(OwnerTag tag) {
+    final designation = tag.designation.trim().isNotEmpty
+        ? tag.designation.trim()
+        : tag.name.trim();
+    if (tag.kind == 'v_official') {
+      final background = _tagColor(
+        tag.backgroundColorHex,
+        const Color(0xFF69C9FF),
+      );
+      return Container(
+        key: const Key('mine-profile-v-official-tag'),
+        padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFF8C6500)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: background,
+                border: Border.all(
+                  color: const Color(0xFFD09A0A),
+                  width: 1.7,
+                ),
+              ),
+              child: const Text(
+                'V',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              designation.isEmpty ? 'Official' : designation,
+              style: const TextStyle(
+                color: Color(0xFFD09A0A),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final automatic = tag.kind == 'auto_role';
+    final color = _tagColor(
+      tag.colorHex,
+      automatic ? const Color(0xFFD09A0A) : const Color(0xFFC18A00),
+    );
+    return Container(
+      key: Key(
+        'mine-profile-identity-tag-' +
+            (designation.isEmpty ? 'tag' : designation.toLowerCase()),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0804),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        designation.isEmpty ? 'Tag' : designation,
+        style: TextStyle(
+          color: automatic ? const Color(0xFFD09A0A) : color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 
   ImageProvider? _mineAvatarProvider(String? value) {
@@ -709,6 +800,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ],
                         ),
+                        if (_ownerTags.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Wrap(
+                            key: const Key('mine-profile-identity-tags'),
+                            spacing: 6,
+                            runSpacing: 5,
+                            children: [
+                              for (final tag in _ownerTags.take(8))
+                                _mineIdentityTag(tag),
+                            ],
+                          ),
+                        ],
                         if (widget.state.family.exists) ...[
                           const SizedBox(height: 4),
                           Container(
