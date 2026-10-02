@@ -975,9 +975,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _toggleMic() async {
-    controller.toggleMic();
-    await widget.state.roomSession.setMicFromController();
-    setState(() {});
+    if (controller.selfMuted) {
+      await widget.state.roomSession.setSelfMute(false);
+    } else {
+      controller.toggleMic();
+      await widget.state.roomSession.setMicFromController();
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _leaveSeatAndMute() async {
@@ -8848,13 +8852,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : 'Microphone',
+                          : controller.selfMuted
+                              ? 'Unmute yourself'
+                              : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
                           : _toggleMic,
                       icon: ShiningIcon(
-                        icon: controller.micState == MicState.live
+                        icon: controller.micState == MicState.live &&
+                                !controller.selfMuted
                             ? Icons.mic_rounded
                             : Icons.mic_off_rounded,
                         color: controller.mySeat == null ||
