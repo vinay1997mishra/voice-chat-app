@@ -834,7 +834,61 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
+    _syncGiftEvent();
     setState(() {});
+  }
+
+  GiftDefinition _giftDefinitionForEvent(RoomGiftEvent event) {
+    for (final gift in <GiftDefinition>[
+      ...GiftService.catalog,
+      ...GiftService.luckyCatalog,
+    ]) {
+      if (gift.id == event.giftId) return gift;
+    }
+    return GiftDefinition(
+      id: event.giftId.isEmpty ? 'room-gift' : event.giftId,
+      name: event.giftName.isEmpty ? 'Gift' : event.giftName,
+      price: 0,
+      effectKind: event.isLucky ? 'lucky' : 'room',
+      lucky: event.isLucky,
+      emoji: '🎁',
+      maxMultiplier: event.isLucky ? 1000 : 0,
+    );
+  }
+
+  void _syncGiftEvent() {
+    final event = widget.state.roomSession.presence.latestGiftEvent;
+    if (event == null || event.id == _handledGiftEventId) return;
+    _handledGiftEventId = event.id;
+    _activeGiftEvent = event;
+    _giftImpactSequence++;
+
+    _luckyAnimationReceiverIds
+      ..clear()
+      ..addAll(event.receiverDiamonds.keys);
+    if (event.isLucky) {
+      _luckyImpactGift = _giftDefinitionForEvent(event);
+      _luckyAnimationSequence++;
+    }
+
+    final currentUserId = widget.state.auth.current?.userId;
+    if (currentUserId != null) {
+      final received = event.receiverDiamonds[currentUserId] ?? 0;
+      if (received > 0) {
+        widget.state.wallet.diamonds += received;
+      }
+    }
+
+    _giftImpactTimer?.cancel();
+    _giftImpactTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (!mounted || _handledGiftEventId != event.id) return;
+      setState(() {
+        _activeGiftEvent = null;
+        _luckyImpactGift = null;
+        _luckyAnimationReceiverIds.clear();
+        _luckyLastMultiplier = 0;
+      });
+    });
   }
 
   void _syncEntranceQueue() {
