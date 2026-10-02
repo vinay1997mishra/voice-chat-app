@@ -7380,6 +7380,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : null;
     final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
+    final micro = seatDiameter < 24;
     final moderationMuted =
         seat.roomMuted || (presenceMember?.moderationMuted ?? false);
     final selfMuted = isMySeat && controller.selfMuted;
@@ -7761,10 +7762,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            SizedBox(height: compact ? 2 : 4),
+            SizedBox(height: micro ? 0 : (compact ? 2 : 4)),
             SizedBox(
               key: Key('seat-user-name-' + index.toString()),
-              height: compact ? 11 : 14,
+              height: micro ? 8 : (compact ? 11 : 14),
               width: labelWidth,
               child: Text(
                 occupied ? displayName : 'No.' + (index + 1).toString(),
@@ -7773,18 +7774,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: RoyalPalette.cream,
-                  fontSize: compact ? 8.5 : 10.0,
+                  fontSize: micro ? 6.5 : (compact ? 8.5 : 10.0),
                   height: 1.05,
                   fontWeight: occupied ? FontWeight.w800 : FontWeight.w700,
                 ),
               ),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: micro ? 1 : 2),
             Container(
               key: Key('seat-heart-' + index.toString()),
-              height: compact ? 9 : 11,
+              height: micro ? 7 : (compact ? 9 : 11),
               constraints: BoxConstraints(
-                minWidth: compact ? 28 : 34,
+                minWidth: micro ? 20 : (compact ? 28 : 34),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
@@ -7799,13 +7800,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: const Color(0xFFE9DFFF),
-                  fontSize: compact ? 5.5 : 7,
+                  fontSize: micro ? 4.5 : (compact ? 5.5 : 7),
                   height: 1.2,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            if (occupied &&
+            if (!micro &&
+                occupied &&
                 presenceMember != null &&
                 (presenceMember.ownerTags.isNotEmpty ||
                     presenceMember.ownerMedals.isNotEmpty))
@@ -7915,14 +7917,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final maxSeatAreaHeight =
         screenSize.height * (compactVertical ? 0.45 : 0.55);
     final rowLabelSpace = compactVertical
-        ? 20.0
+        ? 30.0
         : (widthSeatDiameter < 48 ? 28.0 : 38.0);
     final heightSeatDiameter =
         (maxSeatAreaHeight / seatSpec.rows) - rowLabelSpace;
     final seatDiameter = (widthSeatDiameter < heightSeatDiameter
             ? widthSeatDiameter
             : heightSeatDiameter)
-        .clamp(compactVertical ? 18.0 : 30.0, 68.0)
+        .clamp(compactVertical ? 12.0 : 30.0, 68.0)
         .toDouble();
     final seatAreaHeight = seatSpec
         .preferredHeight(seatDiameter)
