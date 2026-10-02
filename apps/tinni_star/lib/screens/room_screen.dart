@@ -3313,6 +3313,81 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  List<GiftDefinition> get _roomGiftCatalog => <GiftDefinition>[
+        const GiftDefinition(
+          id: 'gold-dragon',
+          name: 'Golden Dragon',
+          price: 5000,
+          effectKind: 'mp4',
+          emoji: '🐉',
+        ),
+        const GiftDefinition(
+          id: 'royal-crown',
+          name: 'Royal Crown',
+          price: 2500,
+          effectKind: 'pag',
+          emoji: '👑',
+        ),
+        const GiftDefinition(
+          id: 'star-castle',
+          name: 'Star Castle',
+          price: 12000,
+          effectKind: 'mp4',
+          emoji: '🏰',
+        ),
+        const GiftDefinition(
+          id: 'heart-ring',
+          name: 'Heart Ring',
+          price: 1800,
+          effectKind: 'svga',
+          emoji: '💍',
+        ),
+        const GiftDefinition(
+          id: 'country-india',
+          name: 'India',
+          price: 100,
+          effectKind: 'svga',
+          emoji: '🇮🇳',
+        ),
+        const GiftDefinition(
+          id: 'country-taj-mahal',
+          name: 'Taj Mahal',
+          price: 8000,
+          effectKind: 'mp4',
+          emoji: '🕌',
+        ),
+        const GiftDefinition(
+          id: 'country-imperial-city',
+          name: 'Imperial City',
+          price: 8000,
+          effectKind: 'mp4',
+          emoji: '🏯',
+        ),
+        const GiftDefinition(
+          id: 'country-pyramid',
+          name: 'Pyramid',
+          price: 8000,
+          effectKind: 'mp4',
+          emoji: '🔺',
+        ),
+        const GiftDefinition(
+          id: 'country-christ',
+          name: 'Christ Statue',
+          price: 8000,
+          effectKind: 'mp4',
+          emoji: '🗽',
+        ),
+        ...GiftService.catalog,
+        ...GiftService.luckyCatalog,
+      ];
+
+  GiftDefinition? _giftDefinitionForId(String id) {
+    for (final gift in _roomGiftCatalog) {
+      if (gift.id == id) return gift;
+    }
+    return null;
+  }
+
   void _showGiftSheet({String? preselectedUserId}) {
     final ownerId = widget.room.ownerId ?? widget.room.id;
     final senderId = widget.state.auth.current?.userId;
@@ -3323,46 +3398,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ..add(preselectedUserId);
     }
 
-    var giftCategory = 'Popular';
+    var giftCategory = 'Normal';
     var luckyQuantity = 1;
     GiftDefinition? selectedGift;
     const giftCategories = <String>[
-      'Popular',
-      'Lucky',
       'Normal',
-      'Luxury',
+      'Lucky',
       'CP',
-      'Backpack',
+      'Country',
+      'Luxury',
     ];
 
-    final roomGifts = <GiftDefinition>[
-      const GiftDefinition(
-        id: 'gold-dragon',
-        name: 'Golden Dragon',
-        price: 5000,
-        effectKind: 'mp4',
-      ),
-      const GiftDefinition(
-        id: 'royal-crown',
-        name: 'Royal Crown',
-        price: 2500,
-        effectKind: 'pag',
-      ),
-      const GiftDefinition(
-        id: 'star-castle',
-        name: 'Star Castle',
-        price: 12000,
-        effectKind: 'mp4',
-      ),
-      const GiftDefinition(
-        id: 'heart-ring',
-        name: 'Heart Ring',
-        price: 1800,
-        effectKind: 'svga',
-      ),
-      ...GiftService.catalog,
-      ...GiftService.luckyCatalog,
-    ];
+    final roomGifts = _roomGiftCatalog;
 
     List<GiftDefinition> visibleGifts() {
       switch (giftCategory) {
@@ -3371,6 +3418,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         case 'Normal':
           return roomGifts
               .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
+              .toList();
+        case 'CP':
+          return roomGifts
+              .where((gift) => gift.id == 'heart-ring')
+              .toList();
+        case 'Country':
+          return roomGifts
+              .where((gift) => gift.id.startsWith('country-'))
               .toList();
         case 'Luxury':
           return roomGifts
@@ -3382,19 +3437,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     gift.id == 'crown',
               )
               .toList();
-        case 'CP':
-          return roomGifts
-              .where((gift) => gift.id == 'heart-ring')
-              .toList();
-        case 'Backpack':
+        default:
           return roomGifts
               .where(
                 (gift) =>
-                    (widget.state.backpack.items[gift.id]?.quantity ?? 0) > 0,
+                    !gift.lucky &&
+                    !gift.id.startsWith('country-') &&
+                    gift.id != 'heart-ring' &&
+                    gift.id != 'gold-dragon' &&
+                    gift.id != 'royal-crown' &&
+                    gift.id != 'star-castle' &&
+                    gift.id != 'crown',
               )
               .toList();
-        default:
-          return roomGifts;
       }
     }
 
@@ -3579,12 +3634,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             color: Color(0xFFFFD45A),
                           ),
                         ),
-                        TextButton.icon(
-                          key: const Key('room-custom-gift-button'),
-                          onPressed: _createRoomCustomGift,
-                          icon: const Icon(Icons.draw_rounded),
-                          label: const Text('Custom Gift'),
-                        ),
+                        const SizedBox(width: 4),
                       ],
                     ),
                   ),
@@ -3601,8 +3651,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ? const Color(0xFFFFC247)
                             : value == 'CP'
                                 ? FeaturePalette.cp
-                                : value == 'Backpack'
-                                    ? FeaturePalette.backpack
+                                : value == 'Country'
+                                    ? FeaturePalette.social
                                     : value == 'Luxury'
                                         ? FeaturePalette.vip
                                         : value == 'Normal'
