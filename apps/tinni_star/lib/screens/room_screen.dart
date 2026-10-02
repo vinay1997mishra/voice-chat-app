@@ -51,6 +51,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _luckyAnimationSequence = 0;
   final Set<String> _luckyAnimationReceiverIds = <String>{};
   GiftDefinition? _seatGiftEffectGift;
+  int _seatGiftEffectQuantity = 1;
   int _seatGiftAnimationSequence = 0;
   final Set<String> _seatGiftAnimationReceiverIds = <String>{};
   Timer? _seatGiftAnimationTimer;
@@ -2417,11 +2418,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _startSeatGiftAnimation(
     GiftDefinition gift,
-    Iterable<String> receiverIds,
-  ) {
+    Iterable<String> receiverIds, {
+    int quantity = 1,
+  }) {
     final activeTargets = _filterGiftRecipientsToCurrentSeats(receiverIds);
     _seatGiftAnimationTimer?.cancel();
     _seatGiftEffectGift = activeTargets.isEmpty ? null : gift;
+    _seatGiftEffectQuantity = math.max(1, quantity);
     _seatGiftAnimationReceiverIds
       ..clear()
       ..addAll(activeTargets);
@@ -2431,6 +2434,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         _seatGiftEffectGift = null;
+        _seatGiftEffectQuantity = 1;
         _seatGiftAnimationReceiverIds.clear();
       });
     });
@@ -2603,7 +2607,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ..clear()
         ..addAll(activeReceiverIds);
       _luckyAnimationSequence++;
-      _startSeatGiftAnimation(gift, activeReceiverIds);
+      _startSeatGiftAnimation(
+        gift,
+        activeReceiverIds,
+        quantity: quantity,
+      );
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
@@ -3516,7 +3524,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         widget.state.gifts.sent.insert(0, tx);
         widget.state.activities.addGiftScore(senderId, tx.totalCost);
         widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-        _startSeatGiftAnimation(gift, activeRecipients);
+        _startSeatGiftAnimation(
+          gift,
+          activeRecipients,
+          quantity: 1,
+        );
         _refreshRoomSendingSummary();
 
         if (!sheetContext.mounted) return;
@@ -7880,17 +7892,51 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                       ),
                                     ],
                                   ),
-                                  child: _seatGiftEffectGift!.lucky
-                                      ? _luckyArtwork(
-                                          _seatGiftEffectGift!,
-                                          size: seatDiameter * 0.72,
-                                        )
-                                      : Text(
-                                          _seatGiftEffectGift!.emoji,
-                                          style: TextStyle(
-                                            fontSize: seatDiameter * 0.56,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    alignment: Alignment.center,
+                                    children: [
+                                      _seatGiftEffectGift!.lucky
+                                          ? _luckyArtwork(
+                                              _seatGiftEffectGift!,
+                                              size: seatDiameter * 0.72,
+                                            )
+                                          : Text(
+                                              _seatGiftEffectGift!.emoji,
+                                              style: TextStyle(
+                                                fontSize: seatDiameter * 0.56,
+                                              ),
+                                            ),
+                                      if (_seatGiftEffectQuantity > 1)
+                                        Positioned(
+                                          right: -10,
+                                          bottom: -8,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius:
+                                                  BorderRadius.circular(9),
+                                              border: Border.all(
+                                                color:
+                                                    const Color(0xFFFFD45A),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '×$_seatGiftEffectQuantity',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
                                           ),
                                         ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
