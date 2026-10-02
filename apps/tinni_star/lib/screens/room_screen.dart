@@ -8009,7 +8009,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '💜0',
+                '💜' +
+                    _compactRoomSending(
+                      presenceMember?.receivedGiftCoins ?? 0,
+                    ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: const Color(0xFFE9DFFF),
