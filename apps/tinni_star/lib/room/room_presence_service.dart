@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -105,6 +106,13 @@ class RoomPresenceService extends ChangeNotifier {
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  WebSocket? _liveSocket;
+  StreamSubscription<dynamic>? _liveSocketSubscription;
+  Timer? _liveReconnectTimer;
+  String? _liveRoomId;
+  String? _liveAuthToken;
+  bool _liveWanted = false;
+  bool _liveConnecting = false;
 
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
@@ -121,6 +129,109 @@ class RoomPresenceService extends ChangeNotifier {
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
+
+  Future<void> connectLive({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final cleanRoomId = roomId.trim();
+    final token = authToken.trim();
+    if (cleanRoomId.isEmpty || token.isEmpty) return;
+    _liveWanted = true;
+    _liveRoomId = cleanRoomId;
+    _liveAuthToken = token;
+    await _openLiveSocket();
+  }
+
+  Future<void> disconnectLive() async {
+    _liveWanted = false;
+    _liveRoomId = null;
+    _liveAuthToken = null;
+    _liveReconnectTimer?.cancel();
+    _liveReconnectTimer = null;
+    final subscription = _liveSocketSubscription;
+    _liveSocketSubscription = null;
+    await subscription?.cancel();
+    final socket = _liveSocket;
+    _liveSocket = null;
+    try {
+      await socket?.close();
+    } catch (_) {}
+  }
+
+  Future<void> _openLiveSocket() async {
+    if (!_liveWanted || _liveConnecting) return;
+    final roomId = _liveRoomId;
+    final token = _liveAuthToken;
+    if (roomId == null || token == null) return;
+    final existing = _liveSocket;
+    if (existing != null && existing.readyState == WebSocket.open) return;
+
+    _liveConnecting = true;
+    try {
+      final socketUri = apiBase.replace(
+        scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
+        path: '/room-presence/live',
+        queryParameters: <String, String>{'room_id': roomId},
+      );
+      final socket = await WebSocket.connect(
+        socketUri.toString(),
+        headers: <String, dynamic>{
+          HttpHeaders.authorizationHeader: 'Bearer $token',
+        },
+      );
+      if (!_liveWanted ||
+          roomId != _liveRoomId ||
+          token != _liveAuthToken) {
+        await socket.close();
+        return;
+      }
+      _liveSocket = socket;
+      _liveSocketSubscription = socket.listen(
+        _handleLiveSocketData,
+        onDone: _handleLiveSocketClosed,
+        onError: (_) => _handleLiveSocketClosed(),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _scheduleLiveReconnect();
+    } finally {
+      _liveConnecting = false;
+    }
+  }
+
+  void _handleLiveSocketData(dynamic raw) {
+    if (raw is! String) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final data = decoded.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      if (!data.containsKey('members')) return;
+      final before = _visibleStateSignature();
+      _apply(Map<String, dynamic>.from(data));
+      connected = true;
+      lastError = null;
+      if (before != _visibleStateSignature()) {
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  void _handleLiveSocketClosed() {
+    _liveSocket = null;
+    _liveSocketSubscription = null;
+    _scheduleLiveReconnect();
+  }
+
+  void _scheduleLiveReconnect() {
+    if (!_liveWanted || _liveReconnectTimer != null) return;
+    _liveReconnectTimer = Timer(const Duration(seconds: 2), () {
+      _liveReconnectTimer = null;
+      _openLiveSocket();
+    });
+  }
 
   Future<void> join({
     required String roomId,
@@ -179,6 +290,7 @@ class RoomPresenceService extends ChangeNotifier {
     required String roomId,
     required String authToken,
   }) async {
+    await disconnectLive();
     try {
       await _post('/room-presence/leave', roomId, authToken);
     } finally {
@@ -937,6 +1049,11 @@ class RoomPresenceService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _liveReconnectTimer?.cancel();
+    _liveSocketSubscription?.cancel();
+    try {
+      _liveSocket?.close();
+    } catch (_) {}
     _httpClient.close(force: true);
     super.dispose();
   }
