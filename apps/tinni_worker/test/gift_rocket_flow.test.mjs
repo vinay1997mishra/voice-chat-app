@@ -84,6 +84,21 @@ assert.match(
 );
 assert.match(
   roomScreen,
+  /if \(sent && sheetContext\.mounted\) \{\s*Navigator\.pop\(sheetContext\);\s*\}/,
+  "Successful Lucky send must close the gift panel before Combo continues on the room screen",
+);
+assert.match(
+  roomScreen,
+  /_selectedGiftRecipients\s*\.\.clear\(\)\s*\.\.add\(recipient\.\$1\);/,
+  "Tapping a recipient DP must replace the previous target instead of accumulating seat recipients",
+);
+assert.match(
+  roomScreen,
+  /receiverIds: selectedRecipients,/,
+  "Gift API calls must send only the selected recipient snapshot",
+);
+assert.match(
+  roomScreen,
   /quantity: _luckyComboQuantity,/,
   "Combo repeat must resend the preserved quantity",
 );
