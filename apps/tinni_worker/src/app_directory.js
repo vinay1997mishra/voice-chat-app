@@ -4980,10 +4980,6 @@ export class AppDirectoryStore extends DurableObject {
     let totalRebate = 0;
     let highestMultiplier = 0;
     let totalPoolContribution = 0;
-    const hostRewardPercent = Math.max(
-      0,
-      Math.min(100, Number(giftData.host_reward_percent ?? luckyConfig.host_reward_percent ?? 10)),
-    );
     const prizePoolPercent = Math.max(
       0,
       Math.min(100, Number(giftData.prize_pool_percent ?? luckyConfig.prize_pool_percent ?? 2)),
