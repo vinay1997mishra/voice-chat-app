@@ -534,9 +534,7 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                                 ),
                               ),
                               GestureDetector(
-                                key: const Key(
-                                  'personal-profile-uid-long-press',
-                                ),
+                                key: const Key('personal-profile-uid-long-press'),
                                 behavior: HitTestBehavior.opaque,
                                 onLongPress: () =>
                                     _copyUserId(account.userId),
