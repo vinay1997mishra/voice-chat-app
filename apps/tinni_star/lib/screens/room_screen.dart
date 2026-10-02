@@ -2580,10 +2580,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverIds
-        ..clear()
-        ..addAll(receiverIds);
-      _luckyAnimationSequence++;
+      final rawTransactions = response['transactions'];
+      String? eventId;
+      if (rawTransactions is List && rawTransactions.isNotEmpty) {
+        final first = rawTransactions.first;
+        if (first is Map) eventId = first['id']?.toString();
+      }
+      _triggerSeatGiftAnimation(
+        gift,
+        receiverIds,
+        multiplier: multiplier,
+        eventId: eventId,
+      );
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
@@ -2598,15 +2606,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       widget.state.gifts.sent.insert(0, tx);
       widget.state.activities.addGiftScore(account.userId, tx.totalCost);
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-
-      _luckyBubbleTimer?.cancel();
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-        });
-      });
 
       await _refreshLuckyFeed();
       if (multiplier >= 500) {
@@ -2675,10 +2674,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required GiftDefinition gift,
     required double seatDiameter,
   }) {
-    final highWin = _luckyLastMultiplier >= 200;
+    final highWin = _seatGiftAnimationMultiplier >= 200;
     return IgnorePointer(
       child: TweenAnimationBuilder<double>(
-        key: ValueKey<String>('lucky-impact-$_luckyAnimationSequence'),
+        key: ValueKey<String>('gift-impact-$_seatGiftAnimationSequence'),
         tween: Tween<double>(begin: 0, end: 1),
         duration: const Duration(milliseconds: 1180),
         curve: Curves.easeOut,
@@ -7699,8 +7698,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : isMySeat
                 ? account?.userId
                 : null;
-    final showLuckySeatEffect = authoritativeSeatUserId != null &&
-        _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
+    final showGiftSeatEffect = authoritativeSeatUserId != null &&
+        _seatGiftAnimationReceiverIds.contains(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
         selfMuted ||
@@ -7918,12 +7917,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
-                          'lucky-flight-$_luckyAnimationSequence',
+                          'gift-flight-$_seatGiftAnimationSequence',
                         ),
                         tween: Tween<double>(begin: 0, end: 1),
                         duration: const Duration(milliseconds: 720),
@@ -7980,25 +7979,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                         },
                         child: _luckyArtwork(
-                          _luckyComboGift!,
+                          _seatGiftAnimationGift!,
                           size: seatDiameter * 0.74,
                         ),
                       ),
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationGift != null)
                     _buildLuckyImpactEffect(
-                      gift: _luckyComboGift!,
+                      gift: _seatGiftAnimationGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyLastMultiplier > 0)
+                  if (showGiftSeatEffect &&
+                      _seatGiftAnimationMultiplier > 0)
                     Positioned(
                       top: -(compact ? 30.0 : 38.0),
                       child: IgnorePointer(
                         child: TweenAnimationBuilder<double>(
                           key: ValueKey<String>(
-                            'lucky-multiplier-$_luckyAnimationSequence',
+                            'gift-multiplier-$_seatGiftAnimationSequence',
                           ),
                           tween: Tween<double>(begin: 0, end: 1),
                           duration: const Duration(milliseconds: 1500),
@@ -8023,7 +8022,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: _luckyLastMultiplier >= 200
+                                colors: _seatGiftAnimationMultiplier >= 200
                                     ? const <Color>[
                                         Color(0xFFFFE66D),
                                         Color(0xFFFF8C26),
@@ -8047,7 +8046,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ],
                             ),
                             child: Text(
-                              '$_luckyLastMultiplier×',
+                              '$_seatGiftAnimationMultiplier×',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: compact ? 11 : 14,
