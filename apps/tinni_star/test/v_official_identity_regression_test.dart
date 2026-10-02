@@ -77,6 +77,20 @@ void main() {
     expect(directory.contains('background_color TEXT'), true);
     expect(directory.contains('listUserIdentityTags'), true);
     expect(directory.contains("role IN ('host','agency')"), true);
+    expect(
+      directory.contains('name: role === "agency" ? "Agency" : "Host"'),
+      true,
+    );
+    expect(
+      directory.contains('designation: role === "agency" ? "Agency" : "Host"'),
+      true,
+    );
+    expect(directory.contains('color: "#69C9FF"'), true);
+    expect(directory.contains('background_color: "#69C9FF"'), true);
+    final autoRoleBlockStart = directory.indexOf('listUserIdentityTags(userIdValue)');
+    final autoRoleBlockEnd = directory.indexOf('listOfficials()', autoRoleBlockStart);
+    final autoRoleBlock = directory.substring(autoRoleBlockStart, autoRoleBlockEnd);
+    expect(autoRoleBlock.contains('name: "V Official"'), false);
   });
 
   test('message conversation exposes target identity tags', () {
