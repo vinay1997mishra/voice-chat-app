@@ -69,7 +69,7 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       ..showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('ID copy ho gaya'),
+          content: Text('Copied'),
           duration: Duration(seconds: 2),
         ),
       );
