@@ -2590,10 +2590,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverIds
-        ..clear()
-        ..addAll(receiverIds);
-      _luckyAnimationSequence++;
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
@@ -2608,15 +2604,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       widget.state.gifts.sent.insert(0, tx);
       widget.state.activities.addGiftScore(account.userId, tx.totalCost);
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
-
-      _luckyBubbleTimer?.cancel();
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-        });
-      });
 
       await _refreshLuckyFeed();
       if (multiplier >= 500) {
