@@ -103,6 +103,7 @@ export class RoomPresenceStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS room_gift_totals (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
+        diamonds INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_room_lucky_numbers_time
@@ -125,6 +126,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
+      "ALTER TABLE room_gift_totals ADD COLUMN diamonds INTEGER NOT NULL DEFAULT 0",
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1024,10 +1026,10 @@ export class RoomPresenceStore extends DurableObject {
               owner_tags_json, owner_medals_json, mic_enabled,
               seat_index, seat_emote, seat_emote_until, joined_at, last_seen,
               COALESCE(
-                (SELECT coins FROM room_gift_totals rg
+                (SELECT diamonds FROM room_gift_totals rg
                   WHERE rg.user_id = room_members.user_id),
                 0
-              ) AS received_gift_coins
+              ) AS received_gift_diamonds
          FROM room_members
         ORDER BY joined_at ASC`,
     ).toArray().map((row) => ({
@@ -1069,7 +1071,10 @@ export class RoomPresenceStore extends DurableObject {
         Number(row.mic_enabled || 0) !== 1,
       chat_banned: this.chatBanStatus(row.user_id),
       is_admin: this.isManager(row.user_id),
-      received_gift_coins: Math.max(0, Number(row.received_gift_coins || 0)),
+      received_gift_diamonds: Math.max(
+        0,
+        Number(row.received_gift_diamonds || 0),
+      ),
       seat_emote:
         row.seat_emote &&
         row.seat_emote_until !== null &&
@@ -1095,16 +1100,20 @@ export class RoomPresenceStore extends DurableObject {
     let changed = false;
     for (const item of rows) {
       const userId = String(item?.user_id || "").trim();
-      const coins = Number(item?.coins || 0);
-      if (!userId || !Number.isSafeInteger(coins) || coins <= 0) continue;
+      const diamonds = Number(item?.diamonds || 0);
+      if (
+        !userId ||
+        !Number.isSafeInteger(diamonds) ||
+        diamonds <= 0
+      ) continue;
       this.ctx.storage.sql.exec(
-        `INSERT INTO room_gift_totals (user_id, coins, updated_at)
-         VALUES (?, ?, ?)
+        `INSERT INTO room_gift_totals (user_id, coins, diamonds, updated_at)
+         VALUES (?, 0, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
-           coins = room_gift_totals.coins + excluded.coins,
+           diamonds = room_gift_totals.diamonds + excluded.diamonds,
            updated_at = excluded.updated_at`,
         userId,
-        coins,
+        diamonds,
         now,
       );
       changed = true;
