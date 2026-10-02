@@ -5027,12 +5027,31 @@ export class AppDirectoryStore extends DurableObject {
       }
 
       if (isLucky && receiverTotal > 0) {
-        const multiplier = this._rollLuckyMultiplier(luckyConfig);
-        const rebateCoins = receiverTotal * multiplier;
-        const poolContribution = Math.floor(receiverTotal * prizePoolPercent / 100);
-        totalRebate += rebateCoins;
+        // Quantity is a batch UI shortcut, but each Lucky unit gets an
+        // independent rebate roll just like repeatedly tapping Combo.
+        let receiverRebateCoins = 0;
+        let receiverHighestMultiplier = 0;
+        const recentMultipliers = [];
+        for (let sendIndex = 0; sendIndex < quantity; sendIndex += 1) {
+          const multiplier = this._rollLuckyMultiplier(luckyConfig);
+          receiverHighestMultiplier = Math.max(
+            receiverHighestMultiplier,
+            multiplier,
+          );
+          receiverRebateCoins += chargedUnitPrice * multiplier;
+          if (recentMultipliers.length < 32) {
+            recentMultipliers.push(multiplier);
+          }
+        }
+        const poolContribution = Math.floor(
+          receiverTotal * prizePoolPercent / 100,
+        );
+        totalRebate += receiverRebateCoins;
         totalPoolContribution += poolContribution;
-        highestMultiplier = Math.max(highestMultiplier, multiplier);
+        highestMultiplier = Math.max(
+          highestMultiplier,
+          receiverHighestMultiplier,
+        );
         const socialValueCoins = receiverDiamonds;
         const resultId = "lucky-" + crypto.randomUUID();
         this.ctx.storage.sql.exec(
@@ -5040,17 +5059,21 @@ export class AppDirectoryStore extends DurableObject {
             (id,transaction_id,room_id,sender_id,receiver_id,gift_id,session_id,multiplier,rebate_coins,pool_contribution,social_value_coins,created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           resultId, id, roomId, senderId, receiverId, giftId, luckySessionId,
-          multiplier, rebateCoins, poolContribution, socialValueCoins, now,
+          receiverHighestMultiplier, receiverRebateCoins, poolContribution,
+          socialValueCoins, now,
         );
         luckyResults.push({
           id: resultId,
           transaction_id: id,
           receiver_id: receiverId,
           session_id: luckySessionId,
-          multiplier,
-          rebate_coins: rebateCoins,
+          multiplier: receiverHighestMultiplier,
+          rebate_coins: receiverRebateCoins,
           pool_contribution: poolContribution,
           social_value_coins: socialValueCoins,
+          receiver_diamonds: receiverDiamonds,
+          roll_count: quantity,
+          recent_multipliers: recentMultipliers,
         });
       }
     }
