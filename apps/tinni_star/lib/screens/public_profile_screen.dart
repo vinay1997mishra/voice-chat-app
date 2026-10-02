@@ -63,43 +63,71 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       );
   }
 
+  Future<dynamic> _safeProfileLoad(Future<dynamic> request) async {
+    try {
+      return await request;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _load() async {
     final account = widget.state.auth.current;
     if (account == null) return;
-    try {
-      final results = await Future.wait<dynamic>([
-        widget.state.backend.profileMedia(account.authToken),
-        widget.state.backend.accountStats(account.authToken),
-        widget.state.backend.guardianState(account.authToken),
+
+    final results = await Future.wait<dynamic>([
+      _safeProfileLoad(widget.state.backend.profileMedia(account.authToken)),
+      _safeProfileLoad(widget.state.backend.accountStats(account.authToken)),
+      _safeProfileLoad(widget.state.backend.guardianState(account.authToken)),
+      _safeProfileLoad(
         widget.state.backend.userTagsAndMedals(
           account.authToken,
           account.userId,
         ),
-        widget.state.backend.profileTrends(account.authToken),
-      ]);
-      if (!mounted) return;
-      final tagData = Map<String, dynamic>.from(results[3] as Map);
-      final rawIdentityTags = tagData['identity_tags'];
-      setState(() {
-        media = Map<String, String?>.from(results[0] as Map);
-        stats = Map<String, dynamic>.from(results[1] as Map);
-        guardian = Map<String, dynamic>.from(results[2] as Map);
+      ),
+      _safeProfileLoad(widget.state.backend.profileTrends(account.authToken)),
+    ]);
+
+    if (!mounted) return;
+
+    final mediaResult = results[0];
+    final statsResult = results[1];
+    final guardianResult = results[2];
+    final tagResult = results[3];
+    final trendsResult = results[4];
+
+    final tagData = tagResult is Map
+        ? Map<String, dynamic>.from(tagResult)
+        : const <String, dynamic>{};
+    final rawIdentityTags = tagData['identity_tags'];
+
+    setState(() {
+      if (mediaResult is Map) {
+        media = Map<String, String?>.from(mediaResult);
+      }
+      if (statsResult is Map) {
+        stats = Map<String, dynamic>.from(statsResult);
+      }
+      if (guardianResult is Map) {
+        guardian = Map<String, dynamic>.from(guardianResult);
+      }
+      if (tagResult is Map) {
         identityTags = rawIdentityTags is List
             ? rawIdentityTags
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList(growable: false)
             : const <Map<String, dynamic>>[];
+      }
+      if (trendsResult is List) {
         trends = List<Map<String, dynamic>>.from(
-          (results[4] as List).whereType<Map>().map(
+          trendsResult.whereType<Map>().map(
                 (row) => Map<String, dynamic>.from(row),
               ),
         );
-        loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => loading = false);
-    }
+      }
+      loading = false;
+    });
   }
 
   Future<void> _openEdit() async {
