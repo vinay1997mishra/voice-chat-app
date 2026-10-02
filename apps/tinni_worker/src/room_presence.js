@@ -1517,7 +1517,20 @@ export class RoomPresenceStore extends DurableObject {
         this._touchSocketMember(userId, now);
       } catch (_) {}
     }
-    await this._clearDirectoryPresence(userId, roomId, now);
+
+    // A reconnect can establish a replacement socket before the old socket's
+    // close callback runs. Never let that stale close mark the new session
+    // offline.
+    const replacementActive = this.ctx
+      .getWebSockets("room-presence")
+      .some((candidate) => {
+        if (candidate === socket) return false;
+        const other = candidate.deserializeAttachment?.() || {};
+        return String(other.userId || "").trim() === userId;
+      });
+    if (!replacementActive) {
+      await this._clearDirectoryPresence(userId, roomId, now);
+    }
   }
 
   async webSocketClose(socket) {
