@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
@@ -20,7 +21,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, String?> media = const <String, String?>{};
   Map<String, dynamic> stats = const <String, dynamic>{};
   Map<String, dynamic> guardian = const <String, dynamic>{};
-  List<Map<String, dynamic>> medals = const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> identityTags = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> trends = const <Map<String, dynamic>>[];
   bool loading = true;
   bool posting = false;
@@ -48,43 +49,85 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     return null;
   }
 
+  Future<void> _copyUserId(String userId) async {
+    await Clipboard.setData(ClipboardData(text: userId));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Copied'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
+  Future<dynamic> _safeProfileLoad(Future<dynamic> request) async {
+    try {
+      return await request;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _load() async {
     final account = widget.state.auth.current;
     if (account == null) return;
-    try {
-      final results = await Future.wait<dynamic>([
-        widget.state.backend.profileMedia(account.authToken),
-        widget.state.backend.accountStats(account.authToken),
-        widget.state.backend.guardianState(account.authToken),
+
+    final results = await Future.wait<dynamic>([
+      _safeProfileLoad(widget.state.backend.profileMedia(account.authToken)),
+      _safeProfileLoad(widget.state.backend.accountStats(account.authToken)),
+      _safeProfileLoad(widget.state.backend.guardianState(account.authToken)),
+      _safeProfileLoad(
         widget.state.backend.userTagsAndMedals(
           account.authToken,
           account.userId,
         ),
-        widget.state.backend.profileTrends(account.authToken),
-      ]);
-      if (!mounted) return;
-      final tagData = Map<String, dynamic>.from(results[3] as Map);
-      final rawMedals = tagData['medals'];
-      setState(() {
-        media = Map<String, String?>.from(results[0] as Map);
-        stats = Map<String, dynamic>.from(results[1] as Map);
-        guardian = Map<String, dynamic>.from(results[2] as Map);
-        medals = rawMedals is List
-            ? rawMedals
+      ),
+      _safeProfileLoad(widget.state.backend.profileTrends(account.authToken)),
+    ]);
+
+    if (!mounted) return;
+
+    final mediaResult = results[0];
+    final statsResult = results[1];
+    final guardianResult = results[2];
+    final tagResult = results[3];
+    final trendsResult = results[4];
+
+    final tagData = tagResult is Map
+        ? Map<String, dynamic>.from(tagResult)
+        : const <String, dynamic>{};
+    final rawIdentityTags = tagData['identity_tags'];
+
+    setState(() {
+      if (mediaResult is Map) {
+        media = Map<String, String?>.from(mediaResult);
+      }
+      if (statsResult is Map) {
+        stats = Map<String, dynamic>.from(statsResult);
+      }
+      if (guardianResult is Map) {
+        guardian = Map<String, dynamic>.from(guardianResult);
+      }
+      if (tagResult is Map) {
+        identityTags = rawIdentityTags is List
+            ? rawIdentityTags
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList(growable: false)
             : const <Map<String, dynamic>>[];
+      }
+      if (trendsResult is List) {
         trends = List<Map<String, dynamic>>.from(
-          (results[4] as List).whereType<Map>().map(
+          trendsResult.whereType<Map>().map(
                 (row) => Map<String, dynamic>.from(row),
               ),
         );
-        loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => loading = false);
-    }
+      }
+      loading = false;
+    });
   }
 
   Future<void> _openEdit() async {
@@ -207,7 +250,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         : const <String, dynamic>{};
     final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
     final charmLevel = (charm['level'] as num?)?.toInt() ?? 0;
-    final vipLevel = widget.state.identity.vip.level;
     final guardianRow = guardian['guardian'] is Map
         ? Map<String, dynamic>.from(guardian['guardian'] as Map)
         : null;
@@ -328,11 +370,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   Positioned(
                     left: 101,
                     top: 208,
-                    child: Text(
-                      'UID: ${account.userId}',
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 10.5,
+                    child: GestureDetector(
+                      key: const Key('public-profile-uid-long-press'),
+                      behavior: HitTestBehavior.opaque,
+                      onLongPress: () => _copyUserId(account.userId),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'UID: ${account.userId}',
+                          style: const TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 10.5,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -340,25 +390,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               ),
             ),
             Padding(
+              key: const Key('profile-identity-tags'),
               padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _ProfileBadge(
-                      title: vipLevel > 0 ? 'VIP $vipLevel' : 'Non-VIP',
-                      icon: Icons.workspace_premium_rounded,
-                    ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 38),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 9,
+                    children: [
+                      for (final tag in identityTags)
+                        _ProfileIdentityTag(tag: tag),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _ProfileBadge(
-                      title: wealthLevel > 0
-                          ? 'Wealth LV.$wealthLevel'
-                          : 'Incomplete',
-                      icon: Icons.diamond_rounded,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -486,49 +532,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          RoyalPanel(
-            accentColor: RoyalPalette.deepGold,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'My medal',
-                  style: TextStyle(
-                    color: RoyalPalette.gold,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                if (medals.isEmpty)
-                  const Text(
-                    'No medal equipped yet.',
-                    style: TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 11,
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final medal in medals.take(8))
-                        Chip(
-                          avatar: const Icon(
-                            Icons.military_tech_rounded,
-                            size: 17,
-                            color: RoyalPalette.gold,
-                          ),
-                          label: Text(
-                            medal['name']?.toString() ?? 'Medal',
-                          ),
-                        ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
           if (media.values.any((value) => (value ?? '').isNotEmpty))
             RoyalPanel(
               accentColor: RoyalPalette.deepGold,
@@ -630,45 +633,116 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   }
 }
 
-class _ProfileBadge extends StatelessWidget {
-  const _ProfileBadge({required this.title, required this.icon});
+class _ProfileIdentityTag extends StatelessWidget {
+  const _ProfileIdentityTag({required this.tag});
 
-  final String title;
-  final IconData icon;
+  final Map<String, dynamic> tag;
+
+  Color _hex(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 11),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF191610),
-            Color(0xFF080807),
-          ],
+    final kind = tag['kind']?.toString() ?? 'custom';
+    final designation = (tag['designation']?.toString().trim().isNotEmpty ?? false)
+        ? tag['designation']!.toString().trim()
+        : (tag['name']?.toString() ?? 'Tag');
+    if (kind == 'v_official') {
+      final background = _hex(
+        tag['background_color']?.toString(),
+        const Color(0xFF69C9FF),
+      );
+      return Container(
+        key: const Key('profile-v-official-tag'),
+        padding: const EdgeInsets.fromLTRB(5, 5, 12, 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: RoyalPalette.deepGold.withValues(alpha: .72),
+          ),
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: RoyalPalette.deepGold.withValues(alpha: .66),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: RoyalPalette.gold, size: 22),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: RoyalPalette.cream,
-                fontWeight: FontWeight.w800,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: background,
+                border: Border.all(
+                  color: RoyalPalette.gold,
+                  width: 2.4,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x55F6C84F),
+                    blurRadius: 9,
+                  ),
+                ],
+              ),
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFFFFFFF),
+                    Color(0xFFD6DAE1),
+                    Color(0xFF8D939E),
+                    Color(0xFFF7F8FA),
+                  ],
+                ).createShader(bounds),
+                child: const Text(
+                  'V',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              designation,
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final automatic = tag['kind']?.toString() == 'auto_role';
+    final color = _hex(
+      tag['color']?.toString(),
+      automatic ? RoyalPalette.gold : RoyalPalette.cream,
+    );
+    return Container(
+      key: Key('profile-identity-tag-' + designation.toLowerCase()),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF14120E),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: .78)),
+      ),
+      child: Text(
+        designation,
+        style: TextStyle(
+          color: automatic ? RoyalPalette.gold : color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
