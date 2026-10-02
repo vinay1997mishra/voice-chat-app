@@ -795,11 +795,11 @@ Tinni-specific extra room tools may remain after these primary reference-style e
 ### Room Game entry placement — LOCKED
 
 - **Game is not a 4-box tile.**
-- The room shows a dedicated floating **purple game-controller** entry on the right side of the room, above the bottom room controls, matching the reference placement.
+- The room shows a dedicated floating **white game-controller/remote on a black button** on the right side of the room, above the bottom room controls, matching the latest approved reference placement.
 - Tapping the floating controller opens **Game Center**.
 - Tinni Star keeps its own games inside Game Center; moving the entry does not remove Fruit Jackpot or Fruit Party.
 - When a Tinni game panel is actively open, the floating controller entry is hidden so it does not cover gameplay.
-- The floating Game icon uses the same purple/pink controller visual family as the reference video, while the rest of the room keeps Tinni Star branding.
+- The floating Game icon is intentionally simple: white game-controller/remote glyph, black circular button, no extra gradient/logo artwork.
 
 
 
@@ -830,7 +830,7 @@ Tinni Star must match the approved reference interaction for these room surfaces
 
 **Floating Game + Rocket**
 - Game remains outside the room 4-box.
-- Right-side floating stack shows a small Rocket icon above a short progress indicator and the purple/pink Game controller below it.
+- Right-side floating stack shows a clear Rocket icon above a short progress indicator and the simple white-on-black Game controller below it.
 - Game controller opens `Game Center`.
 - Game Center shows a room/profile progress card, coin balance, an `All Games` grid, and Tinni's Fruit Jackpot / Fruit Party entries.
 - Fruit Jackpot and Fruit Party active overlays use approximately **50% of screen height** per the latest approved room layout.
@@ -1896,6 +1896,28 @@ On reconnect:
 - On reconnect, reconcile authoritative server state before resuming incremental updates.
 - Realtime request budget is a product requirement: new room features must reuse the existing live channel or meaningful user-action requests rather than adding periodic REST polling.
 - Normal Android backgrounding must not eject a user from the room merely because the app is no longer foregrounded. Force-stop, device reboot, process death or prolonged network loss are separate failure cases and require reconnect/rejoin recovery rather than false claims of guaranteed uninterrupted execution.
+
+### T.2 Gift Box / Lucky / recipient delivery — LATEST LOCKED RULE
+
+- Room Gift Box has exactly these category tabs, in this order: **Normal, Lucky, CP, Country, Luxury**.
+- Do not restore Popular, Backpack, or any other extra Gift Box tab unless the owner explicitly changes this rule later.
+- Bottom send bar shows the sender's current total **Wallet coin balance**.
+- Recipient selection is keyed only by authoritative **user ID**, never by DP image, display name, seat number, or avatar equality.
+- Only users currently occupying a room seat are valid gift recipients.
+- Self-send is allowed while the sender is on a seat; the same selected-UID effect must render on the sender's own seat.
+- Gift fly/impact animation renders only on seats occupied by selected recipient user IDs.
+- If a selected user leaves the room, goes down from the seat, or the seat becomes occupied by another user, gift targeting/effects for the old user stop immediately.
+- Another user using the same DP must never inherit the selected user's gift target.
+- Backend validates recipient IDs against the current seated room members before charging/sending.
+- Normal, CP, Country and Luxury gifts credit the selected receiver **100% of gift coin value as Diamonds**.
+- Lucky gifts credit the selected receiver **10% of gift coin value as Diamonds**. The sender's Lucky rebate/win remains a separate sender-coin system.
+- Room sending ranking counts non-Lucky gifts at **100%** value and Lucky gifts at **10%** value.
+- Lucky quantity control includes +/- plus a separate small dropdown arrow with presets: **9 / 21 / 51 / 99 / 199 / 599 / 899 / 2999 / 7999**.
+- After any successful Lucky send, including a quantity send, the Gift Box closes like a single send and the Combo control appears in the room.
+- Combo keeps the same gift + currently valid selected recipient IDs.
+- Combo expires and disappears after **12 seconds of inactivity**. Every successful Combo send rearms the 12-second timeout.
+- If all Combo recipients leave their seats, Combo ends immediately rather than retargeting other seats.
+- Gift effect playback may be locally hidden by the user's Effects preference, but hiding an effect must never change payment, diamond credit, ranking, or recipient identity.
 
 ## U. RTC / IM separation
 
