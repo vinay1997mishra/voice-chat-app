@@ -3296,25 +3296,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showGiftSheet({String? preselectedUserId}) {
-    final ownerId = widget.room.ownerId ?? widget.room.id;
-    final senderId = widget.state.auth.current?.userId;
-    if (senderId == null) return;
+    final account = widget.state.auth.current;
+    final senderId = account?.userId;
+    if (senderId == null || account == null) return;
     if (preselectedUserId != null && preselectedUserId != senderId) {
       _selectedGiftRecipients
         ..clear()
         ..add(preselectedUserId);
     }
 
-    var giftCategory = 'Popular';
+    var giftCategory = 'Normal';
     var luckyQuantity = 1;
     GiftDefinition? selectedGift;
     const giftCategories = <String>[
-      'Popular',
-      'Lucky',
       'Normal',
-      'Luxury',
+      'Lucky',
       'CP',
-      'Backpack',
+      'Country',
+      'Luxury',
     ];
 
     final roomGifts = <GiftDefinition>[
@@ -3342,6 +3341,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         price: 1800,
         effectKind: 'svga',
       ),
+      GiftDefinition(
+        id: 'country-pride',
+        name: account.countryName.trim().isEmpty
+            ? 'Country Pride'
+            : account.countryName + ' Pride',
+        price: 500,
+        effectKind: 'country',
+        emoji: account.flagEmoji.trim().isEmpty ? '🌐' : account.flagEmoji,
+      ),
       ...GiftService.catalog,
       ...GiftService.luckyCatalog,
     ];
@@ -3368,48 +3376,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           return roomGifts
               .where((gift) => gift.id == 'heart-ring')
               .toList();
-        case 'Backpack':
+        case 'Country':
           return roomGifts
-              .where(
-                (gift) =>
-                    (widget.state.backpack.items[gift.id]?.quantity ?? 0) > 0,
-              )
+              .where((gift) => gift.id == 'country-pride')
               .toList();
         default:
-          return roomGifts;
+          return const <GiftDefinition>[];
       }
     }
 
     List<(String, String)> recipients() {
-      final account = widget.state.auth.current;
-      final values = <(String, String)>[
-        (senderId, account?.displayName ?? 'You'),
-      ];
-      if (ownerId != senderId) {
-        values.add((ownerId, 'Room Owner'));
+      final values = <(String, String)>[];
+      final seen = <String>{};
+
+      void addRecipient(String id, String name) {
+        final cleanId = id.trim();
+        if (cleanId.isEmpty || !seen.add(cleanId)) return;
+        values.add((
+          cleanId,
+          name.trim().isEmpty ? cleanId : name.trim(),
+        ));
       }
-      for (var index = 0; index < controller.seats.length; index++) {
-        final seat = controller.seats[index];
-        final name = seat.userName;
-        if (name == null) continue;
-        final liveMatch = widget.state.roomSession.liveMembers.where(
-          (member) => member.seatIndex == index,
-        );
-        final id = name == 'You'
-            ? senderId
-            : liveMatch.isNotEmpty
-                ? liveMatch.first.userId
-                : 'seat-${index + 1}';
-        if (values.any((item) => item.$1 == id)) continue;
-        values.add((id, name));
+
+      addRecipient(senderId, account.displayName);
+      final seated = widget.state.roomSession.liveMembers
+          .where((member) => member.seatIndex != null)
+          .toList(growable: false)
+        ..sort((a, b) => a.seatIndex!.compareTo(b.seatIndex!));
+      for (final member in seated) {
+        addRecipient(member.userId, member.displayName);
       }
       for (final member in widget.state.roomSession.liveMembers) {
-        if (values.any((item) => item.$1 == member.userId)) continue;
-        values.add((member.userId, member.displayName));
+        addRecipient(member.userId, member.displayName);
       }
+
       _selectedGiftRecipients.removeWhere(
-        (id) => !values.any((item) => item.$1 == id),
+        (id) => !seen.contains(id),
       );
+      if (preselectedUserId != null &&
+          seen.contains(preselectedUserId) &&
+          preselectedUserId != senderId) {
+        _selectedGiftRecipients
+          ..clear()
+          ..add(preselectedUserId);
+      }
       if (_selectedGiftRecipients.isEmpty && values.isNotEmpty) {
         _selectedGiftRecipients.add(values.first.$1);
       }
