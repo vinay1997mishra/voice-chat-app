@@ -7919,7 +7919,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // test/split-screen viewports compact vertically so the bottom controls
     // remain reachable instead of overflowing off-screen.
     final maxSeatAreaHeight =
-        screenSize.height * (compactVertical ? 0.45 : 0.55);
+        screenSize.height * (compactVertical ? 0.42 : 0.55);
     final rowLabelSpace = compactVertical
         ? 30.0
         : (widthSeatDiameter < 48 ? 28.0 : 38.0);
