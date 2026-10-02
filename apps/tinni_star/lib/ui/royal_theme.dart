@@ -1,56 +1,56 @@
 import 'package:flutter/material.dart';
 
 abstract final class RoyalPalette {
-  static const black = Color(0xFF050505);
-  static const nearBlack = Color(0xFF0D0B08);
-  static const panel = Color(0xFF15110B);
-  static const panel2 = Color(0xFF21190D);
-  static const gold = Color(0xFFFFD45A);
-  static const deepGold = Color(0xFFB8860B);
-  static const bronze = Color(0xFF7A5515);
-  static const cream = Color(0xFFFFE9A6);
-  static const muted = Color(0xFFB8A77A);
+  // Luxury base: deep obsidian with restrained warm-metal highlights.
+  static const black = Color(0xFF030303);
+  static const nearBlack = Color(0xFF0A0908);
+  static const panel = Color(0xFF12100D);
+  static const panel2 = Color(0xFF1A1712);
+  static const gold = Color(0xFFE8C36A);
+  static const deepGold = Color(0xFF9B7428);
+  static const bronze = Color(0xFF684C24);
+  static const cream = Color(0xFFF1E7CF);
+  static const muted = Color(0xFF9B9282);
 }
 
 abstract final class FeaturePalette {
-  // Black + gold remain the app shell/background identity.
-  // Functional modules use their own accent colors so the UI is not
-  // monochrome and important actions are easier to recognize.
-  static const cp = Color(0xFFFF4D8D);
-  static const cpSoft = Color(0xFFFF8FB7);
-  static const vip = Color(0xFF5B8CFF);
-  static const gift = Color(0xFFB45CFF);
-  static const family = Color(0xFF26C78D);
-  static const games = Color(0xFFFF8A3D);
-  static const music = Color(0xFF28C7D9);
-  static const social = Color(0xFF4F9DFF);
-  static const discover = Color(0xFF38BDF8);
-  static const message = Color(0xFF22C7A9);
-  static const email = Color(0xFFFFB74D);
-  static const facebook = Color(0xFF4A7CFF);
-  static const google = Color(0xFF5E97F6);
-  static const wallet = Color(0xFFFFC247);
-  static const store = Color(0xFFFF6B6B);
-  static const rank = Color(0xFFFFB300);
-  static const moments = Color(0xFF7C6CFF);
-  static const rocket = Color(0xFFFF5A65);
-  static const backpack = Color(0xFF45C08A);
-  static const customGift = Color(0xFFE86CFF);
-  static const safety = Color(0xFFEF5350);
-  static const diamond = Color(0xFF49D7FF);
-  static const ludo = Color(0xFF34C759);
-  static const uno = Color(0xFFFF3B30);
-  static const fruitJackpot = Color(0xFFFFC107);
-  static const fruitParty = Color(0xFFFF4DB8);
+  // Jewel accents: each module keeps its identity without turning the UI neon.
+  static const cp = Color(0xFFC85A7A);
+  static const cpSoft = Color(0xFFE1A1B3);
+  static const vip = Color(0xFF5B78B8);
+  static const gift = Color(0xFF8B62A8);
+  static const family = Color(0xFF4A9878);
+  static const games = Color(0xFFC47A43);
+  static const music = Color(0xFF4F95A0);
+  static const social = Color(0xFF5F82B4);
+  static const discover = Color(0xFF5B93A8);
+  static const message = Color(0xFF4F917F);
+  static const email = Color(0xFFC59352);
+  static const facebook = Color(0xFF5874AF);
+  static const google = Color(0xFF6682B2);
+  static const wallet = Color(0xFFD2A64E);
+  static const store = Color(0xFFB86868);
+  static const rank = Color(0xFFD0A640);
+  static const moments = Color(0xFF746AA4);
+  static const rocket = Color(0xFFB95C63);
+  static const backpack = Color(0xFF60977C);
+  static const customGift = Color(0xFFA76BAA);
+  static const safety = Color(0xFFB95E5B);
+  static const diamond = Color(0xFF61A3B7);
+  static const ludo = Color(0xFF5D946B);
+  static const uno = Color(0xFFB8574F);
+  static const fruitJackpot = Color(0xFFD2A13F);
+  static const fruitParty = Color(0xFFB85E8A);
 
   static LinearGradient glow(Color color) => LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          color.withValues(alpha: 0.30),
+          color.withValues(alpha: 0.16),
           RoyalPalette.panel,
-          color.withValues(alpha: 0.12),
+          color.withValues(alpha: 0.055),
         ],
+        stops: const [0.0, 0.54, 1.0],
       );
 }
 
@@ -81,25 +81,25 @@ class ShiningIcon extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: RadialGradient(
           colors: [
-            color.withValues(alpha: 0.30),
-            color.withValues(alpha: 0.08),
+            color.withValues(alpha: 0.20),
+            color.withValues(alpha: 0.055),
             Colors.transparent,
           ],
         ),
         border: Border.all(
-          color: color.withValues(alpha: 0.70),
-          width: 1.15,
+          color: color.withValues(alpha: 0.52),
+          width: 1.05,
         ),
         boxShadow: [
           BoxShadow(
             color: color.withValues(alpha: glow),
-            blurRadius: 15,
-            spreadRadius: 1,
+            blurRadius: 12,
+            spreadRadius: 0.4,
           ),
           BoxShadow(
             color: color.withValues(alpha: glow * 0.45),
-            blurRadius: 26,
-            spreadRadius: 1,
+            blurRadius: 20,
+            spreadRadius: 0.3,
           ),
         ],
       ),
@@ -223,17 +223,17 @@ class RoyalPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: accent.withValues(
-            alpha: accentColor == null ? 1.0 : 0.78,
+            alpha: accentColor == null ? 0.72 : 0.48,
           ),
-          width: accentColor == null ? 1.1 : 1.35,
+          width: accentColor == null ? 1.0 : 1.1,
         ),
         boxShadow: [
           BoxShadow(
             color: accent.withValues(
-              alpha: accentColor == null ? 0.10 : 0.28,
+              alpha: accentColor == null ? 0.07 : 0.13,
             ),
-            blurRadius: accentColor == null ? 18 : 20,
-            spreadRadius: accentColor == null ? 1 : 1.2,
+            blurRadius: accentColor == null ? 16 : 17,
+            spreadRadius: accentColor == null ? 0.4 : 0.6,
           ),
         ],
       ),

@@ -6,6 +6,9 @@ const ROOM_THEME_DURATION_DAYS = new Set([7, 10, 15, 30]);
 const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
 const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
+const COINS_PER_USD = 2000000;
+const RECHARGE_PROVIDER_MIN_USD = 5;
+const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
 const encoder = new TextEncoder();
@@ -84,6 +87,7 @@ function rowToUser(row) {
     email: String(row.email),
     display_name: String(row.display_name),
     age: Number(row.age),
+    birthday: row.birthday ? String(row.birthday) : null,
     signature: String(row.signature || ""),
     country_code: String(row.country_code),
     country_name: String(row.country_name),
@@ -147,6 +151,7 @@ function rowToRoom(row) {
   const seatLayout = roomSeatLayout(row.seat_count);
   return {
     id: String(row.id),
+    public_id: row.public_id ? String(row.public_id) : String(row.id),
     owner_id: String(row.owner_id),
     title: String(row.title),
     country_code: String(row.country_code),
@@ -171,6 +176,22 @@ function rowToRoom(row) {
       ? String(row.owner_flag_emoji)
       : null,
     member_count: Number(row.member_count || 0),
+    online: Number(row.member_count || 0),
+    active_user_exp: Math.max(
+      0,
+      Number(row.active_user_exp ?? (Number(row.member_count || 0) * 500)),
+    ),
+    sending_exp: Math.max(0, Number(row.sending_exp || 0)),
+    receiving_exp: Math.max(0, Number(row.receiving_exp || 0)),
+    room_experience: Math.max(
+      0,
+      Number(
+        row.room_experience ??
+          (Number(row.member_count || 0) * 500) +
+            Number(row.sending_exp || 0) +
+            Number(row.receiving_exp || 0),
+      ),
+    ),
     announcement: row.announcement ? String(row.announcement) : "",
     category: row.category ? String(row.category) : "",
     privacy: row.privacy ? String(row.privacy) : "public",
@@ -253,6 +274,7 @@ export class AppDirectoryStore extends DurableObject {
         email TEXT NOT NULL UNIQUE,
         display_name TEXT NOT NULL,
         age INTEGER NOT NULL,
+        birthday TEXT,
         signature TEXT NOT NULL DEFAULT '',
         country_code TEXT NOT NULL,
         country_name TEXT NOT NULL,
@@ -265,8 +287,18 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_app_users_google_sub ON app_users(google_sub);
       CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
 
+      CREATE TABLE IF NOT EXISTS profile_trends (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_profile_trends_user
+        ON profile_trends(user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS app_rooms (
         id TEXT PRIMARY KEY,
+        public_id TEXT NOT NULL UNIQUE,
         owner_id TEXT NOT NULL UNIQUE,
         title TEXT NOT NULL,
         country_code TEXT NOT NULL,
@@ -413,6 +445,36 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_user_notifications_user_time
         ON user_notifications(user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS user_feedback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'submitted',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_feedback_user_time
+        ON user_feedback(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS user_task_claims (
+        user_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        reward_coins INTEGER NOT NULL DEFAULT 0,
+        claimed_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, task_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_task_claims_user
+        ON user_task_claims(user_id, claimed_at DESC);
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id TEXT PRIMARY KEY,
+        message_voice INTEGER NOT NULL DEFAULT 1,
+        message_vibration INTEGER NOT NULL DEFAULT 1,
+        room_floating_only INTEGER NOT NULL DEFAULT 0,
+        language TEXT NOT NULL DEFAULT 'English',
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS event_notification_dispatches (
         event_id TEXT NOT NULL,
         phase TEXT NOT NULL,
@@ -472,9 +534,11 @@ export class AppDirectoryStore extends DurableObject {
         sender_id TEXT NOT NULL,
         receiver_id TEXT NOT NULL,
         gift_id TEXT NOT NULL,
+        session_id TEXT,
         multiplier INTEGER NOT NULL DEFAULT 0,
         rebate_coins INTEGER NOT NULL DEFAULT 0,
         pool_contribution INTEGER NOT NULL DEFAULT 0,
+        social_value_coins INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_lucky_gift_results_room_time
@@ -500,6 +564,43 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_lucky_gift_daily_rank
         ON lucky_gift_daily(day_key, rebate_coins DESC, sent_coins DESC);
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        gift_id TEXT NOT NULL,
+        gift_name TEXT NOT NULL,
+        unit_price INTEGER NOT NULL,
+        send_count INTEGER NOT NULL DEFAULT 0,
+        total_sent_coins INTEGER NOT NULL DEFAULT 0,
+        total_rebate_coins INTEGER NOT NULL DEFAULT 0,
+        highest_multiplier INTEGER NOT NULL DEFAULT 0,
+        started_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lucky_gift_sessions_user_time
+        ON lucky_gift_sessions(user_id, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_pool_daily (
+        day_key TEXT PRIMARY KEY,
+        contributed_coins INTEGER NOT NULL DEFAULT 0,
+        distributed_coins INTEGER NOT NULL DEFAULT 0,
+        settled_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS lucky_gift_settlements (
+        id TEXT PRIMARY KEY,
+        day_key TEXT NOT NULL,
+        rank INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
+        share_percent INTEGER NOT NULL,
+        coins INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lucky_gift_settlements_day
+        ON lucky_gift_settlements(day_key, rank ASC);
 
       CREATE TABLE IF NOT EXISTS room_gift_owner_daily (
         room_id TEXT NOT NULL,
@@ -805,6 +906,32 @@ export class AppDirectoryStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS privileged_wallet_credentials (
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        password_salt TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        auth_version INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, wallet_type)
+      );
+
+      CREATE TABLE IF NOT EXISTS privileged_wallet_reset_requests (
+        request_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        otp_salt TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        verified INTEGER NOT NULL DEFAULT 0,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_privileged_wallet_reset_user
+        ON privileged_wallet_reset_requests(user_id, wallet_type, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS owner_settings (
         key TEXT PRIMARY KEY,
         value_json TEXT NOT NULL,
@@ -983,6 +1110,48 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_family_join_requests_status
         ON family_join_requests(family_id, status, created_at);
 
+      CREATE TABLE IF NOT EXISTS family_daily_logins (
+        family_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        exp_awarded INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, user_id, day_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS family_received_coins (
+        id TEXT PRIMARY KEY,
+        family_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL,
+        receiver_user_id TEXT NOT NULL,
+        coins INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'family_wallet',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_received_coins_family_time
+        ON family_received_coins(family_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS family_wallet_transfers (
+        id TEXT PRIMARY KEY,
+        family_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL,
+        receiver_user_id TEXT NOT NULL,
+        coins INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_family_wallet_transfers_family_time
+        ON family_wallet_transfers(family_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS family_monthly_bonuses (
+        family_id TEXT NOT NULL,
+        month_key TEXT NOT NULL,
+        received_coins INTEGER NOT NULL DEFAULT 0,
+        bonus_basis_points INTEGER NOT NULL DEFAULT 0,
+        bonus_coins INTEGER NOT NULL DEFAULT 0,
+        settled_at INTEGER NOT NULL,
+        PRIMARY KEY(family_id, month_key)
+      );
+
       CREATE TABLE IF NOT EXISTS user_id_history (
         old_user_id TEXT PRIMARY KEY,
         new_user_id TEXT NOT NULL,
@@ -991,11 +1160,13 @@ export class AppDirectoryStore extends DurableObject {
     `);
 
     for (const migration of [
+      "ALTER TABLE app_users ADD COLUMN birthday TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'google'",
       "ALTER TABLE room_themes ADD COLUMN starts_at INTEGER",
       "ALTER TABLE app_rooms ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'royal-dark'",
       "ALTER TABLE app_rooms ADD COLUMN theme_asset TEXT",
       "ALTER TABLE app_rooms ADD COLUMN seat_theme_id TEXT NOT NULL DEFAULT 'royal-gold'",
+      "ALTER TABLE app_rooms ADD COLUMN public_id TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
@@ -1017,7 +1188,16 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN category TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE app_rooms ADD COLUMN privacy TEXT NOT NULL DEFAULT 'public'",
       "ALTER TABLE app_rooms ADD COLUMN closed INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_rooms ADD COLUMN room_level INTEGER NOT NULL DEFAULT 1"
+      "ALTER TABLE app_rooms ADD COLUMN room_level INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_vehicle_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_entry_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_card_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_ring_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_bubble_id TEXT",
+      "ALTER TABLE user_equipment ADD COLUMN equipped_profile_background_id TEXT",
+      "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE lucky_gift_results ADD COLUMN session_id TEXT",
+      "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1029,6 +1209,12 @@ export class AppDirectoryStore extends DurableObject {
       }
     }
 
+    this.ctx.storage.sql.exec(
+      "UPDATE app_rooms SET public_id = id WHERE public_id IS NULL OR public_id = ''"
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_rooms_public_id ON app_rooms(public_id)"
+    );
     this.ctx.storage.sql.exec(
       "UPDATE app_users SET auth_subject = google_sub WHERE auth_subject IS NULL OR auth_subject = ''"
     );
@@ -1176,6 +1362,73 @@ export class AppDirectoryStore extends DurableObject {
         Date.now(),
       );
     }
+    const premiumEffects = [
+      ["frame","frame-royal-gold","Royal Gold",1],
+      ["frame","frame-pink-heart","Pink Heart",2],
+      ["frame","frame-crystal-star","Crystal Star",3],
+      ["frame","frame-crown-queen","Crown Queen",4],
+      ["frame","frame-rose-garden","Rose Garden",5],
+      ["frame","frame-angel-wings","Angel Wings",6],
+      ["frame","frame-diamond-ice-vip","Diamond Ice VIP",7],
+      ["frame","frame-flame-king-vip","Flame King VIP",8],
+      ["frame","frame-india-pride","India Pride",9],
+      ["frame","frame-winner-trophy","Winner Trophy",10],
+
+      ["profile_card","profile-card-royal-gold","Royal Gold Card",1],
+      ["profile_card","profile-card-pink-heart","Pink Heart Card",2],
+      ["profile_card","profile-card-crystal-star","Crystal Star Card",3],
+      ["profile_card","profile-card-vip-queen","VIP Queen Card",4],
+      ["profile_card","profile-card-family-leader","Family Leader Card",5],
+      ["profile_card","profile-card-host","Host Card",6],
+      ["profile_card","profile-card-agency","Agency Card",7],
+      ["profile_card","profile-card-india-pride","India Pride Card",8],
+      ["profile_card","profile-card-birthday","Birthday Card",9],
+      ["profile_card","profile-card-winner","Winner Card",10],
+
+      ["entry","entry-golden-sports-car","Golden Sports Car",1],
+      ["entry","entry-angel-wings","Angel Wings",2],
+      ["entry","entry-rose-love-castle","Rose Love Castle",3],
+      ["entry","entry-royal-lion","Royal Lion",4],
+      ["entry","entry-luxury-yacht","Luxury Yacht",5],
+      ["entry","entry-princess-castle","Princess Castle",6],
+      ["entry","entry-phoenix-fire","Phoenix Fire",7],
+      ["entry","entry-diamond-ice","Diamond Ice",8],
+      ["entry","entry-rocket-star","Rocket Star",9],
+      ["entry","entry-winner-trophy","Winner Trophy",10],
+    ];
+    for (const [kind,id,name,order] of premiumEffects) {
+      const r2Key = "premium/" + kind + "/" + id + ".webp";
+      this.ctx.storage.sql.exec(
+        `INSERT OR IGNORE INTO owner_catalog
+          (id, kind, name, data_json, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+        id,
+        kind,
+        name,
+        JSON.stringify({
+          coin_price: 0,
+          duration_days: 0,
+          order,
+          effect_style: id,
+          effect_version: 1,
+          r2_key: r2Key,
+          asset_url: "https://tinni-star-api.mishrajii7991.workers.dev/media/" + r2Key,
+          preview_mode: "procedural_4d",
+          test_release: true,
+        }),
+        Date.now(),
+        Date.now(),
+      );
+    }
+
+  }
+
+  _ensureEconomyMigrations() {
+    // The Durable Object constructor already creates the economy/family
+    // tables and applies additive migrations before any RPC method runs.
+    // Feature methods call this guard defensively; keep it as an idempotent
+    // compatibility hook so those calls never crash the Worker.
+    return true;
   }
 
   _nextUserId() {
@@ -1223,14 +1476,23 @@ export class AppDirectoryStore extends DurableObject {
   _resolveOwnerUserId(userIdValue) {
     const raw = String(userIdValue || "").trim();
     if (!raw) return "";
-    const direct = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", raw,
-    ).toArray()[0];
-    if (direct) return String(direct.user_id);
-    const history = this.ctx.storage.sql.exec(
-      "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1", raw,
-    ).toArray()[0];
-    return history ? String(history.new_user_id) : raw;
+    let current = raw;
+    const seen = new Set();
+    for (let depth = 0; depth < 12; depth += 1) {
+      if (seen.has(current)) break;
+      seen.add(current);
+      const direct = this.ctx.storage.sql.exec(
+        "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", current,
+      ).toArray()[0];
+      if (direct) return String(direct.user_id);
+      const history = this.ctx.storage.sql.exec(
+        "SELECT new_user_id FROM user_id_history WHERE old_user_id = ? LIMIT 1",
+        current,
+      ).toArray()[0];
+      if (!history?.new_user_id) break;
+      current = String(history.new_user_id);
+    }
+    return current;
   }
 
   listUserTags(userIdValue) {
@@ -1528,6 +1790,7 @@ export class AppDirectoryStore extends DurableObject {
       game_config: this._ownerSetting("game_config", {
         enabled: true, min_bet: 1, max_bet: 1000000,
       }),
+      lucky_gift_config: this._luckyGiftConfig(),
       treasury: {
         balance: Number(treasury.balance || 0),
         updated_at: Number(treasury.updated_at || 0),
@@ -1591,6 +1854,13 @@ export class AppDirectoryStore extends DurableObject {
     if (requested.length > 500) throw new Error("Tag batch is limited to 500 IDs");
     const name = cleanText(nameValue, 40);
     const color = String(colorValue || "").trim();
+    const normalizedRoleTag = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const roleWalletType =
+      normalizedRoleTag === "coinseller"
+        ? "coin_seller"
+        : (normalizedRoleTag === "merchant" || normalizedRoleTag === "marchant")
+          ? "merchant"
+          : null;
     if (!name) throw new Error("Tag name is required");
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Choose a valid tag color");
     let tagged = 0;
@@ -1616,9 +1886,12 @@ export class AppDirectoryStore extends DurableObject {
           userId, name, color, now,
         );
       }
+      if (roleWalletType) {
+        this._manageWallet(userId, roleWalletType, "create", 0);
+      }
       tagged += 1;
     }
-    return { ok: true, tagged, name, color };
+    return { ok: true, tagged, name, color, activated_wallet_type: roleWalletType };
   }
 
   removeOwnerTag(userIdValue, tagIdValue) {
@@ -1809,6 +2082,24 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  _debitNormalWalletAuthorized(userIdValue, amountValue, sourceValue = "authorized_spend") {
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    const guard = this._normalWalletGuard(userIdValue);
+    if (guard.security_frozen) throw new Error("Wallet is security-frozen. Owner unfreeze is required.");
+    if (guard.coins < amount) throw new Error("Wallet balance is not enough");
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE wallet_coin_guards SET expected_coins=MAX(0,expected_coins-?),updated_at=? WHERE user_id=?",
+      amount, now, guard.user_id,
+    );
+    return this._normalWalletGuard(guard.user_id);
+  }
+
   _creditNormalWalletAuthorized(userIdValue, amountValue, sourceValue = "authorized_transfer") {
     const amount = Math.floor(Number(amountValue || 0));
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
@@ -1910,7 +2201,28 @@ export class AppDirectoryStore extends DurableObject {
       }
       const now = Date.now();
       if (operation === "credit") {
-        this._creditNormalWalletAuthorized(userId, amount, "owner_or_staff_panel");
+        const credited = this._creditNormalWalletAuthorized(
+          userId,
+          amount,
+          "owner_or_staff_panel",
+        );
+        const confirmed = this.getWallet(userId);
+        if (
+          confirmed.security_frozen ||
+          Number(confirmed.coins || 0) !== Number(credited.coins || 0)
+        ) {
+          throw new Error("Normal wallet credit could not be confirmed");
+        }
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'owner_wallet_credit',?,0,?,?,?)",
+          crypto.randomUUID(),
+          userId,
+          amount,
+          "owner-wallet:" + crypto.randomUUID(),
+          "Coins added from Owner Panel",
+          now,
+        );
+        return { wallet_type: "normal", ...confirmed, owner_credit_confirmed: true };
       } else if (operation === "debit") {
         const wallet = this.getWallet(userId);
         if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
@@ -2191,14 +2503,31 @@ export class AppDirectoryStore extends DurableObject {
     const oldId = this._resolveOwnerUserId(oldIdValue);
     const newId = String(newIdValue || "").trim();
     if (!oldId || !newId) throw new Error("Current and new user ID are required");
-    if (!/^\d{4,8}$/.test(newId)) throw new Error("New public ID must contain 4 to 8 digits");
-    if (oldId === newId) return this.ownerSearchUsers(newId, 1)[0];
+    const numericId = /^\d{4,8}$/.test(newId);
+    const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(newId);
+    if (!numericId && !nameId) {
+      throw new Error(
+        "Public ID must be 4 to 8 digits or a 3 to 20 character Name ID using letters, numbers and underscore",
+      );
+    }
+    if (nameId) {
+      const approved = this.ctx.storage.sql.exec(
+        "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) AND enabled = 1 LIMIT 1",
+        newId,
+      ).toArray()[0];
+      if (!approved) {
+        throw new Error("Name ID must be added from Owner Panel first");
+      }
+    }
+    if (oldId.toLowerCase() === newId.toLowerCase()) {
+      return this.ownerSearchUsers(oldId, 1)[0];
+    }
     const user = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", oldId,
     ).toArray()[0];
     if (!user) throw new Error("User not found");
     const taken = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", newId,
+      "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1", newId,
     ).toArray()[0];
     if (taken) throw new Error("New public ID is already in use");
 
@@ -2207,17 +2536,47 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     const oldRoomId = room ? String(room.id) : null;
     const userColumns = [
+      ["profile_trends","user_id"],
       ["app_user_identities","user_id"], ["app_wallets","user_id"],
+      ["wallet_coin_guards","user_id"], ["privileged_wallet_coin_guards","user_id"],
+      ["wallet_transactions","user_id"], ["vip_entitlements","user_id"],
       ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
       ["owner_hierarchy","user_id"], ["owner_hierarchy","parent_user_id"],
+      ["hierarchy_period_earnings","user_id"], ["settlement_balances","user_id"],
+      ["settlement_transfers","sender_user_id"], ["settlement_transfers","recipient_user_id"],
       ["room_lock_attempts","user_id"], ["room_access_grants","user_id"],
       ["room_themes","creator_user_id"], ["app_follows","follower_id"],
       ["app_follows","target_id"], ["app_blocks","blocker_id"],
       ["app_blocks","target_id"], ["direct_messages","from_user_id"],
       ["direct_messages","to_user_id"], ["app_calls","caller_id"],
-      ["app_calls","receiver_id"],
+      ["app_calls","receiver_id"], ["call_privacy_incidents","actor_user_id"],
+      ["user_notifications","user_id"], ["user_notifications","source_user_id"],
+      ["user_feedback","user_id"], ["user_task_claims","user_id"],
+      ["user_preferences","user_id"], ["event_notification_dispatches","user_id"],
+      ["app_room_invites","user_id"], ["app_recent_rooms","user_id"],
+      ["app_user_presence","user_id"], ["room_realtime_events","user_id"],
+      ["gift_transactions","sender_id"], ["gift_transactions","receiver_id"],
+      ["lucky_gift_results","sender_id"], ["lucky_gift_results","receiver_id"],
+      ["lucky_gift_daily","user_id"], ["lucky_gift_sessions","user_id"],
+      ["lucky_gift_settlements","user_id"], ["room_gift_owner_daily","owner_id"],
+      ["room_follows","user_id"], ["room_memberships","user_id"],
+      ["lucky_pouches","creator_id"], ["lucky_pouch_claims","user_id"],
+      ["country_ribbons","user_id"], ["room_game_actions","user_id"],
+      ["ludo_room_players","user_id"], ["security_action_windows","user_id"],
+      ["security_events","user_id"], ["client_analytics_events","user_id"],
+      ["client_crash_reports","user_id"], ["owner_user_price_overrides","user_id"],
+      ["user_inventory","user_id"], ["user_equipment","user_id"],
+      ["cp_relationships","user_a"], ["cp_relationships","user_b"],
+      ["cp_relationships","requested_by"], ["cp_memories","user_a"],
+      ["cp_memories","user_b"], ["families","leader_user_id"],
+      ["family_members","user_id"], ["family_join_requests","user_id"],
+      ["family_daily_logins","user_id"], ["family_received_coins","sender_user_id"],
+      ["family_received_coins","receiver_user_id"],
+      ["family_wallet_transfers","sender_user_id"],
+      ["family_wallet_transfers","receiver_user_id"],
+      ["owner_unique_ids","assigned_user_id"],
     ];
     for (const pair of userColumns) {
       const tableName = pair[0], columnName = pair[1];
@@ -2226,25 +2585,27 @@ export class AppDirectoryStore extends DurableObject {
         newId, oldId,
       );
     }
-    this.ctx.storage.sql.exec(
-      "UPDATE app_rooms SET owner_id = ? WHERE owner_id = ?", newId, oldId,
-    );
-
-    if (oldRoomId && oldRoomId === oldId) {
-      const roomColumns = [
-        ["room_locks","room_id"], ["room_lock_attempts","room_id"],
-        ["room_access_grants","room_id"], ["room_themes","room_id"],
-        ["owner_room_controls","room_id"],
-      ];
-      for (const pair of roomColumns) {
-        const tableName = pair[0], columnName = pair[1];
-        this.ctx.storage.sql.exec(
-          "UPDATE " + tableName + " SET " + columnName + " = ? WHERE " + columnName + " = ?",
-          newId, oldRoomId,
-        );
+    if (oldRoomId) {
+      const conflictingRoom = this.ctx.storage.sql.exec(
+        "SELECT id FROM app_rooms WHERE public_id = ? AND id <> ? LIMIT 1",
+        newId,
+        oldRoomId,
+      ).toArray()[0];
+      if (conflictingRoom) {
+        throw new Error("New public ID conflicts with an existing room ID");
       }
+
+      // Keep the room's internal ID stable so its live presence, settings,
+      // history and all room-linked records remain the same room. Only the
+      // public room ID follows the owner's changed public ID.
       this.ctx.storage.sql.exec(
-        "UPDATE app_rooms SET id = ? WHERE id = ?", newId, oldRoomId,
+        "UPDATE app_rooms SET owner_id = ?, public_id = ?, updated_at = ? WHERE id = ?",
+        newId, newId, Date.now(), oldRoomId,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET owner_id = ?, public_id = ?, updated_at = ? WHERE owner_id = ?",
+        newId, newId, Date.now(), oldId,
       );
     }
 
@@ -2278,28 +2639,64 @@ export class AppDirectoryStore extends DurableObject {
         vip_level: String(data.operation) === "remove" ? 0 : Math.max(1, Number(data.vip_level || 1)),
       });
       case "unique-id-new": {
-        const publicId = String(data.public_id || "").trim();
-        if (!/^\\d{4,8}$/.test(publicId)) throw new Error("Unique ID must contain 4 to 8 digits");
+        const requestedId = String(data.public_id || "").trim();
+        const numericId = /^\\d{4,8}$/.test(requestedId);
+        const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(requestedId);
+        if (!numericId && !nameId) {
+          throw new Error(
+            "Unique ID must be 4 to 8 digits or a 3 to 20 character Name ID using letters, numbers and underscore",
+          );
+        }
         const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
         const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
-        const existingUser = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+        const existingUser = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
         if (existingUser) throw new Error("Unique ID is already in use");
+        const existingOffer = this.ctx.storage.sql.exec(
+          "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
+        const publicId = existingOffer ? String(existingOffer.public_id) : requestedId;
         this.ctx.storage.sql.exec(
           `INSERT INTO owner_unique_ids (public_id,price_coins,duration_days,assigned_user_id,enabled,created_at,updated_at)
            VALUES (?,?,?,NULL,1,?,?)
            ON CONFLICT(public_id) DO UPDATE SET price_coins=excluded.price_coins,duration_days=excluded.duration_days,enabled=1,updated_at=excluded.updated_at`,
           publicId, price, durationDays, Date.now(), Date.now(),
         );
-        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0, enabled: true };
+        return {
+          public_id: publicId,
+          id_type: nameId ? "name" : "number",
+          price_coins: price,
+          duration_days: durationDays,
+          permanent: durationDays === 0,
+          enabled: true,
+        };
       }
       case "unique-id-price": {
-        const publicId = String(data.public_id || "").trim();
+        const requestedId = String(data.public_id || "").trim();
         const price = Math.max(0, Math.floor(Number(data.price_coins || 0)));
         const durationDays = Math.max(0, Math.floor(Number(data.duration_days || 0)));
-        const row = this.ctx.storage.sql.exec("SELECT public_id FROM owner_unique_ids WHERE public_id = ? LIMIT 1", publicId).toArray()[0];
+        const row = this.ctx.storage.sql.exec(
+          "SELECT public_id FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) LIMIT 1",
+          requestedId,
+        ).toArray()[0];
         if (!row) throw new Error("Unique ID not found");
-        this.ctx.storage.sql.exec("UPDATE owner_unique_ids SET price_coins = ?, duration_days = ?, updated_at = ? WHERE public_id = ?", price, durationDays, Date.now(), publicId);
-        return { public_id: publicId, price_coins: price, duration_days: durationDays, permanent: durationDays === 0 };
+        const publicId = String(row.public_id);
+        this.ctx.storage.sql.exec(
+          "UPDATE owner_unique_ids SET price_coins = ?, duration_days = ?, updated_at = ? WHERE public_id = ?",
+          price,
+          durationDays,
+          Date.now(),
+          publicId,
+        );
+        return {
+          public_id: publicId,
+          price_coins: price,
+          duration_days: durationDays,
+          permanent: durationDays === 0,
+        };
       }
       case "id-change": return this._changeUserId(data.user_id, data.new_id);
       case "room-ban": {
@@ -2429,15 +2826,32 @@ export class AppDirectoryStore extends DurableObject {
         starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
-      case "entry-new": return this.ownerCatalogCreate("entry", data.name, {
-        asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
-        order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
-        starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
-        ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
-      });
+      case "vehicle-new":
+      case "entry-new":
+      case "ring-new":
+      case "bubble-new":
+      case "profile-background-new": {
+        const kindByAction = {
+          "vehicle-new": "vehicle",
+          "entry-new": "entry",
+          "ring-new": "ring",
+          "bubble-new": "bubble",
+          "profile-background-new": "profile_background",
+        };
+        return this.ownerCatalogCreate(kindByAction[action], data.name, {
+          asset_url: String(data.asset_url || ""),
+          price: Math.max(0, Number(data.price || data.coin_price || 0)),
+          duration_days: Math.max(0, Number(data.duration_days || 0)),
+          order: Number(data.order || 0),
+          countries: Array.isArray(data.countries) ? data.countries : [],
+          starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
+          ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
+        });
+      }
       case "frame-new": return this.ownerCatalogCreate("frame", data.name, {
         asset_url: String(data.asset_url || ""), vip_level: Number(data.vip_level || 0),
         price: Math.max(0, Number(data.price || data.coin_price || 0)),
+        duration_days: Math.max(0, Number(data.duration_days || 0)),
         order: Number(data.order || 0), countries: Array.isArray(data.countries) ? data.countries : [],
         starts_at: data.starts_at ? Date.parse(String(data.starts_at)) : null,
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
@@ -2453,6 +2867,63 @@ export class AppDirectoryStore extends DurableObject {
         const policies = this.ownerState().policies;
         policies[String(data.key || "").trim()] = data.value;
         return this._setOwnerSetting("policies", policies);
+      }
+      case "lucky-gift-config": {
+        const current = this._luckyGiftConfig();
+        const sourceWeights = data.multiplier_weights &&
+            typeof data.multiplier_weights === "object"
+          ? data.multiplier_weights
+          : current.multiplier_weights;
+        const multiplierWeights = {};
+        for (const [key, value] of Object.entries(sourceWeights || {})) {
+          const multiplier = Math.max(
+            0,
+            Math.min(1000, Math.floor(Number(key) || 0)),
+          );
+          const weight = Math.max(0, Math.floor(Number(value) || 0));
+          if (weight > 0) multiplierWeights[String(multiplier)] = weight;
+        }
+        if (Object.keys(multiplierWeights).length === 0) {
+          throw new Error("Lucky multiplier weights cannot be empty");
+        }
+        const rankSharesRaw = Array.isArray(data.rank_shares)
+          ? data.rank_shares
+          : current.rank_shares;
+        const rankShares = rankSharesRaw.slice(0, 3).map((value) =>
+          Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+        );
+        while (rankShares.length < 3) rankShares.push(0);
+        if (rankShares.reduce((sum, value) => sum + value, 0) > 100) {
+          throw new Error("Lucky ranking shares cannot total more than 100%");
+        }
+        const next = {
+          enabled: data.enabled === undefined ? current.enabled !== false : data.enabled === true,
+          max_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.max_multiplier ?? current.max_multiplier ?? 1000)))),
+          high_win_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.high_win_multiplier ?? current.high_win_multiplier ?? 200)))),
+          banner_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.banner_multiplier ?? current.banner_multiplier ?? 500)))),
+          ultra_banner_multiplier: Math.max(1, Math.min(1000, Math.floor(Number(data.ultra_banner_multiplier ?? current.ultra_banner_multiplier ?? 1000)))),
+          host_reward_percent: Math.max(0, Math.min(100, Number(data.host_reward_percent ?? current.host_reward_percent ?? 10))),
+          charm_wealth_percent: Math.max(0, Math.min(100, Number(data.charm_wealth_percent ?? current.charm_wealth_percent ?? 10))),
+          prize_pool_percent: Math.max(0, Math.min(100, Number(data.prize_pool_percent ?? current.prize_pool_percent ?? 2))),
+          rank_shares: rankShares,
+          daily_send_cap: Math.max(0, Math.floor(Number(data.daily_send_cap ?? current.daily_send_cap ?? 0))),
+          banners_enabled: data.banners_enabled === undefined ? current.banners_enabled !== false : data.banners_enabled === true,
+          testing_mode: data.testing_mode === true,
+          event_mode: data.event_mode === true,
+          multiplier_weights: multiplierWeights,
+        };
+        if (next.high_win_multiplier > next.max_multiplier ||
+            next.banner_multiplier > next.max_multiplier ||
+            next.ultra_banner_multiplier > next.max_multiplier) {
+          throw new Error("Lucky thresholds cannot exceed the maximum multiplier");
+        }
+        if (next.banner_multiplier < next.high_win_multiplier) {
+          throw new Error("Lucky banner multiplier must be at least the high-win multiplier");
+        }
+        if (next.ultra_banner_multiplier < next.banner_multiplier) {
+          throw new Error("Lucky ultra banner multiplier must be at least the banner multiplier");
+        }
+        return this._setOwnerSetting("lucky_gift_config", next);
       }
       case "pricing-set": {
         const policies = this.ownerState().policies;
@@ -2571,6 +3042,53 @@ export class AppDirectoryStore extends DurableObject {
     return this.getUserById(userId);
   }
 
+  async bindEmailIdentity(userIdValue, requestIdValue, otpValue, passwordValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId || !(await this.getUserById(userId))) throw new Error("User not found");
+    const password = String(passwordValue || "");
+    if (password.length < 8 || password.length > 128) {
+      throw new Error("Tinni password must be 8 to 128 characters");
+    }
+    const verified = await this.verifyEmailOtp(requestIdValue, otpValue);
+    const email = String(verified.email || "").trim().toLowerCase();
+    if (!email) throw new Error("Verified email is required");
+
+    const linked = await this.getUserByProvider("email", email);
+    if (linked && String(linked.user_id) !== String(userId)) {
+      throw new Error("This email is already linked to another Tinni account");
+    }
+    const credential = this.ctx.storage.sql.exec(
+      "SELECT user_id,auth_version FROM email_password_credentials WHERE email=? LIMIT 1",
+      email,
+    ).toArray()[0];
+    if (credential && String(credential.user_id) !== String(userId)) {
+      throw new Error("This email is already used by another Tinni account");
+    }
+
+    await this.linkIdentity(userId, "email", email);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    const nextVersion = Math.max(1, Number(credential?.auth_version || 0) + 1);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO email_password_credentials
+        (email,user_id,password_salt,password_hash,auth_version,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(email) DO UPDATE SET
+         user_id=excluded.user_id,
+         password_salt=excluded.password_salt,
+         password_hash=excluded.password_hash,
+         auth_version=excluded.auth_version,
+         updated_at=excluded.updated_at`,
+      email,userId,toBase64Url(salt),toBase64Url(hash),nextVersion,now,now,
+    );
+    return {
+      ok:true,
+      email,
+      identities:this.accountIdentities(userId),
+    };
+  }
+
   async getUserByGoogleSub(googleSubValue) {
     return this.getUserByProvider("google", googleSubValue);
   }
@@ -2623,7 +3141,11 @@ export class AppDirectoryStore extends DurableObject {
     if (avatarDataUrl && avatarDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
       throw new Error("Profile photo is too large");
     }
-    if (avatarDataUrl && !avatarDataUrl.startsWith("data:image/")) {
+    if (
+      avatarDataUrl &&
+      !avatarDataUrl.startsWith("data:image/") &&
+      !avatarDataUrl.startsWith("https://")
+    ) {
       throw new Error("Profile photo format is invalid");
     }
 
@@ -3001,6 +3523,29 @@ export class AppDirectoryStore extends DurableObject {
 
     const displayName = input?.display_name === undefined
       ? current.display_name : cleanText(input.display_name, 40);
+    let birthday = input?.birthday === undefined
+      ? (current.birthday || null)
+      : cleanText(input.birthday, 10);
+    let age = Number(current.age || 0);
+    if (birthday) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+        throw new Error("Birthday must use YYYY-MM-DD");
+      }
+      const parsed = new Date(birthday + "T00:00:00Z");
+      if (!Number.isFinite(parsed.getTime())) {
+        throw new Error("Birthday is invalid");
+      }
+      const nowDate = new Date();
+      age = nowDate.getUTCFullYear() - parsed.getUTCFullYear();
+      const beforeBirthday =
+        nowDate.getUTCMonth() < parsed.getUTCMonth() ||
+        (nowDate.getUTCMonth() === parsed.getUTCMonth() &&
+          nowDate.getUTCDate() < parsed.getUTCDate());
+      if (beforeBirthday) age -= 1;
+      if (age < 18 || age > 100) {
+        throw new Error("Age must be between 18 and 100");
+      }
+    }
     const signature = input?.signature === undefined
       ? current.signature : cleanText(input.signature, 3000);
     const countryCode = input?.country_code === undefined
@@ -3028,11 +3573,12 @@ export class AppDirectoryStore extends DurableObject {
 
     this.ctx.storage.sql.exec(
       `UPDATE app_users
-          SET display_name = ?, signature = ?, country_code = ?, country_name = ?,
-              flag_emoji = ?, gender = ?, avatar_data_url = ?, updated_at = ?
+          SET display_name = ?, age = ?, birthday = ?, signature = ?,
+              country_code = ?, country_name = ?, flag_emoji = ?, gender = ?,
+              avatar_data_url = ?, updated_at = ?
         WHERE user_id = ?`,
-      displayName, signature, countryCode, countryName, flagEmoji, gender,
-      avatarDataUrl, Date.now(), userId,
+      displayName, age, birthday, signature, countryCode, countryName,
+      flagEmoji, gender, avatarDataUrl, Date.now(), userId,
     );
     return this.getUserById(userId);
   }
@@ -3079,6 +3625,61 @@ export class AppDirectoryStore extends DurableObject {
       roomId,
     ).toArray()[0];
     return row ? rowToRoom(row) : null;
+  }
+
+  findUserByExactPublicId(publicIdValue) {
+    const raw = String(publicIdValue || "").trim();
+    if (!raw) return null;
+    const direct = this.ctx.storage.sql.exec(
+      `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+              u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+              p.room_id AS active_room_id, p.last_seen
+         FROM app_users u
+         LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+        WHERE LOWER(u.user_id) = LOWER(?)
+        LIMIT 1`,
+      raw,
+    ).toArray()[0];
+
+    let row = direct;
+    if (!row) {
+      const history = this.ctx.storage.sql.exec(
+        "SELECT new_user_id FROM user_id_history WHERE LOWER(old_user_id) = LOWER(?) LIMIT 1",
+        raw,
+      ).toArray()[0];
+      if (history) {
+        row = this.ctx.storage.sql.exec(
+          `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+                  u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+                  p.room_id AS active_room_id, p.last_seen
+             FROM app_users u
+             LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+            WHERE u.user_id = ?
+            LIMIT 1`,
+          String(history.new_user_id),
+        ).toArray()[0];
+      }
+    }
+    if (!row) return null;
+    const now = Date.now();
+    const onlineCutoff = now - 90000;
+    return {
+      user_id: String(row.user_id),
+      display_name: String(row.display_name),
+      signature: String(row.signature || ""),
+      country_code: String(row.country_code || ""),
+      country_name: String(row.country_name || ""),
+      flag_emoji: String(row.flag_emoji || ""),
+      gender: String(row.gender || ""),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      online: row.last_seen != null && Number(row.last_seen) >= onlineCutoff,
+      active_room_id:
+        row.last_seen != null &&
+        Number(row.last_seen) >= onlineCutoff &&
+        row.active_room_id
+          ? String(row.active_room_id)
+          : null,
+    };
   }
 
   searchUsers(queryValue, limitValue = 30) {
@@ -3426,6 +4027,24 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row) => String(row.target_id));
   }
 
+  listBlockedProfiles(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return [];
+    return this.ctx.storage.sql.exec(
+      `SELECT u.user_id,u.display_name,u.avatar_data_url,u.flag_emoji,b.created_at
+         FROM app_blocks b
+         JOIN app_users u ON u.user_id=b.target_id
+        WHERE b.blocker_id=?
+        ORDER BY b.created_at DESC`, userId,
+    ).toArray().map((row)=>({
+      user_id:String(row.user_id),
+      display_name:String(row.display_name || row.user_id),
+      avatar_data_url:row.avatar_data_url ? String(row.avatar_data_url) : null,
+      flag_emoji:String(row.flag_emoji || ""),
+      blocked_at:Number(row.created_at || 0),
+    }));
+  }
+
   isBlockedBetween(firstUserIdValue, secondUserIdValue) {
     const firstUserId = String(firstUserIdValue || "").trim();
     const secondUserId = String(secondUserIdValue || "").trim();
@@ -3601,8 +4220,13 @@ export class AppDirectoryStore extends DurableObject {
          GROUP BY g.sender_id, u.display_name, u.avatar_data_url
          ORDER BY sending DESC, g.sender_id ASC LIMIT 100`, roomId, start,
     ).toArray();
+    const lifetimeRow = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(total_cost), 0) AS total FROM gift_transactions WHERE room_id = ?",
+      roomId,
+    ).toArray()[0];
     return {
       ok: true, room_id: roomId, period,
+      lifetime_total: Math.max(0, Number(lifetimeRow?.total || 0)),
       ranking: rows.map((row, index) => ({
         rank: index + 1, user_id: String(row.sender_id),
         name: String(row.display_name || row.sender_id),
@@ -3943,9 +4567,16 @@ export class AppDirectoryStore extends DurableObject {
       enabled: true,
       max_multiplier: 1000,
       high_win_multiplier: 200,
+      banner_multiplier: 500,
+      ultra_banner_multiplier: 1000,
       host_reward_percent: 10,
       charm_wealth_percent: 10,
       prize_pool_percent: 2,
+      rank_shares: [50, 25, 15],
+      daily_send_cap: 0,
+      banners_enabled: true,
+      testing_mode: false,
+      event_mode: false,
       multiplier_weights: {
         "0": 900000,
         "1": 45000,
@@ -3957,6 +4588,7 @@ export class AppDirectoryStore extends DurableObject {
         "22": 1800,
         "30": 900,
         "50": 450,
+        "75": 320,
         "100": 250,
         "200": 60,
         "250": 20,
@@ -3998,9 +4630,76 @@ export class AppDirectoryStore extends DurableObject {
     return 0;
   }
 
+  _settleLuckyGiftPools(nowValue = Date.now()) {
+    const now = Number(nowValue || Date.now());
+    const currentDay = new Date(now).toISOString().slice(0, 10);
+    const config = this._luckyGiftConfig();
+    const rawShares = Array.isArray(config.rank_shares) ? config.rank_shares : [50, 25, 15];
+    const shares = rawShares.slice(0, 3).map((value) =>
+      Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+    );
+    const totalShare = shares.reduce((sum, value) => sum + value, 0);
+    if (totalShare > 100) return;
+
+    const pending = this.ctx.storage.sql.exec(
+      `SELECT day_key,contributed_coins
+         FROM lucky_gift_pool_daily
+        WHERE settled_at IS NULL AND day_key < ?
+        ORDER BY day_key ASC
+        LIMIT 31`,
+      currentDay,
+    ).toArray();
+
+    for (const pool of pending) {
+      const dayKey = String(pool.day_key || "");
+      const contributed = Math.max(0, Number(pool.contributed_coins || 0));
+      const ranking = this.ctx.storage.sql.exec(
+        `SELECT user_id,rebate_coins,sent_coins
+           FROM lucky_gift_daily
+          WHERE day_key=?
+          ORDER BY rebate_coins DESC,sent_coins DESC,updated_at ASC
+          LIMIT 3`,
+        dayKey,
+      ).toArray();
+      let distributed = 0;
+      ranking.forEach((row, index) => {
+        const share = shares[index] || 0;
+        const coins = Math.floor(contributed * share / 100);
+        if (coins <= 0) return;
+        const userId = String(row.user_id || "");
+        if (!userId) return;
+        this._creditNormalWalletAuthorized(userId, coins, "lucky_daily_pool");
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
+          "wallet-" + crypto.randomUUID(), userId, "lucky_daily_pool",
+          coins, 0, "lucky-pool:" + dayKey,
+          "Lucky Day Ranking #" + (index + 1), now,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO lucky_gift_settlements (id,day_key,rank,user_id,share_percent,coins,created_at) VALUES (?,?,?,?,?,?,?)",
+          "settlement-" + crypto.randomUUID(), dayKey, index + 1, userId, share, coins, now,
+        );
+        distributed += coins;
+      });
+      if (distributed > 0) {
+        this.ctx.storage.sql.exec(
+          "UPDATE lucky_gift_pool SET balance=MAX(0,balance-?),updated_at=? WHERE singleton_id=1",
+          distributed, now,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        "UPDATE lucky_gift_pool_daily SET distributed_coins=?,settled_at=?,updated_at=? WHERE day_key=?",
+        distributed, now, now, dayKey,
+      );
+    }
+  }
+
   luckyGiftState(userIdValue = "") {
     const userId = String(userIdValue || "").trim();
-    const dayKey = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    this._settleLuckyGiftPools(now);
+    const config = this._luckyGiftConfig();
+    const dayKey = new Date(now).toISOString().slice(0, 10);
     const poolRow = this.ctx.storage.sql.exec(
       "SELECT balance,updated_at FROM lucky_gift_pool WHERE singleton_id=1 LIMIT 1",
     ).toArray()[0];
@@ -4026,17 +4725,53 @@ export class AppDirectoryStore extends DurableObject {
     const mine = userId
       ? ranking.find((row) => row.user_id === userId) || null
       : null;
+    const sessions = userId
+      ? this.ctx.storage.sql.exec(
+          `SELECT id,room_id,gift_id,gift_name,unit_price,send_count,total_sent_coins,
+                  total_rebate_coins,highest_multiplier,started_at,updated_at
+             FROM lucky_gift_sessions
+            WHERE user_id=?
+            ORDER BY updated_at DESC
+            LIMIT 20`,
+          userId,
+        ).toArray().map((row) => ({
+          id: String(row.id),
+          room_id: String(row.room_id),
+          gift_id: String(row.gift_id),
+          gift_name: String(row.gift_name),
+          unit_price: Number(row.unit_price || 0),
+          send_count: Number(row.send_count || 0),
+          total_sent_coins: Number(row.total_sent_coins || 0),
+          total_rebate_coins: Number(row.total_rebate_coins || 0),
+          highest_multiplier: Number(row.highest_multiplier || 0),
+          started_at: Number(row.started_at || 0),
+          updated_at: Number(row.updated_at || 0),
+        }))
+      : [];
+    const rawShares = Array.isArray(config.rank_shares) ? config.rank_shares : [50, 25, 15];
+    const rankShares = rawShares.slice(0, 3).map((value) =>
+      Math.max(0, Math.min(100, Math.floor(Number(value) || 0)))
+    );
+    const shareTotal = rankShares.reduce((sum, value) => sum + value, 0);
+    const countdownEndsAt = Date.parse(dayKey + "T00:00:00.000Z") + 86400000;
     return {
       ok: true,
       day_key: dayKey,
       pool_balance: Math.max(0, Number(poolRow?.balance || 0)),
       pool_updated_at: Number(poolRow?.updated_at || 0),
-      max_multiplier: Math.max(1, Math.min(1000, Number(this._luckyGiftConfig().max_multiplier || 1000))),
-      high_win_multiplier: Math.max(1, Number(this._luckyGiftConfig().high_win_multiplier || 200)),
-      visible_daily_rank_shares: [50, 25, 15],
-      remaining_share_percent: 10,
+      max_multiplier: Math.max(1, Math.min(1000, Number(config.max_multiplier || 1000))),
+      high_win_multiplier: Math.max(1, Number(config.high_win_multiplier || 200)),
+      banner_multiplier: Math.max(1, Number(config.banner_multiplier || 500)),
+      ultra_banner_multiplier: Math.max(1, Number(config.ultra_banner_multiplier || 1000)),
+      visible_daily_rank_shares: rankShares,
+      remaining_share_percent: Math.max(0, 100 - shareTotal),
+      countdown_ends_at: countdownEndsAt,
+      daily_send_cap: Math.max(0, Number(config.daily_send_cap || 0)),
+      testing_mode: config.testing_mode === true,
+      event_mode: config.event_mode === true,
       ranking,
       mine,
+      recent_sessions: sessions,
     };
   }
 
@@ -4090,6 +4825,39 @@ export class AppDirectoryStore extends DurableObject {
     const luckyConfig = this._luckyGiftConfig();
     if (isLucky && luckyConfig.enabled === false) {
       throw new Error("Lucky gifts are temporarily unavailable");
+    }
+    if (isLucky) {
+      this._settleLuckyGiftPools(Date.now());
+    }
+    const luckySessionId = isLucky
+      ? cleanText(input?.lucky_session_id || ("lucky-session-" + crypto.randomUUID()), 96)
+      : "";
+    const charmWealthPercent = Math.max(
+      0,
+      Math.min(100, Number(giftData.charm_wealth_percent ?? luckyConfig.charm_wealth_percent ?? 10)),
+    );
+    if (isLucky) {
+      const dailyCap = Math.max(0, Math.floor(Number(luckyConfig.daily_send_cap || 0)));
+      if (dailyCap > 0) {
+        const dayKey = new Date().toISOString().slice(0, 10);
+        const used = Number(this.ctx.storage.sql.exec(
+          "SELECT sent_count FROM lucky_gift_daily WHERE day_key=? AND user_id=? LIMIT 1",
+          dayKey, senderId,
+        ).toArray()[0]?.sent_count || 0);
+        if (used + quantity * receivers.length > dailyCap) {
+          throw new Error("Lucky Gift daily send cap reached");
+        }
+      }
+      const existingSession = this.ctx.storage.sql.exec(
+        "SELECT user_id,room_id,gift_id FROM lucky_gift_sessions WHERE id=? LIMIT 1",
+        luckySessionId,
+      ).toArray()[0];
+      if (existingSession &&
+          (String(existingSession.user_id) !== senderId ||
+           String(existingSession.room_id) !== roomId ||
+           String(existingSession.gift_id) !== giftId)) {
+        throw new Error("Invalid Lucky Gift session");
+      }
     }
 
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
@@ -4186,21 +4954,24 @@ export class AppDirectoryStore extends DurableObject {
         totalRebate += rebateCoins;
         totalPoolContribution += poolContribution;
         highestMultiplier = Math.max(highestMultiplier, multiplier);
+        const socialValueCoins = Math.floor(receiverTotal * charmWealthPercent / 100);
         const resultId = "lucky-" + crypto.randomUUID();
         this.ctx.storage.sql.exec(
           `INSERT INTO lucky_gift_results
-            (id,transaction_id,room_id,sender_id,receiver_id,gift_id,multiplier,rebate_coins,pool_contribution,created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          resultId, id, roomId, senderId, receiverId, giftId,
-          multiplier, rebateCoins, poolContribution, now,
+            (id,transaction_id,room_id,sender_id,receiver_id,gift_id,session_id,multiplier,rebate_coins,pool_contribution,social_value_coins,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          resultId, id, roomId, senderId, receiverId, giftId, luckySessionId,
+          multiplier, rebateCoins, poolContribution, socialValueCoins, now,
         );
         luckyResults.push({
           id: resultId,
           transaction_id: id,
           receiver_id: receiverId,
+          session_id: luckySessionId,
           multiplier,
           rebate_coins: rebateCoins,
           pool_contribution: poolContribution,
+          social_value_coins: socialValueCoins,
         });
       }
     }
@@ -4210,6 +4981,16 @@ export class AppDirectoryStore extends DurableObject {
         this.ctx.storage.sql.exec(
           "UPDATE lucky_gift_pool SET balance=balance+?,updated_at=? WHERE singleton_id=1",
           totalPoolContribution, now,
+        );
+        const poolDayKey = new Date(now).toISOString().slice(0, 10);
+        this.ctx.storage.sql.exec(
+          `INSERT INTO lucky_gift_pool_daily
+            (day_key,contributed_coins,distributed_coins,settled_at,updated_at)
+           VALUES (?,?,0,NULL,?)
+           ON CONFLICT(day_key) DO UPDATE SET
+             contributed_coins=lucky_gift_pool_daily.contributed_coins+excluded.contributed_coins,
+             updated_at=excluded.updated_at`,
+          poolDayKey, totalPoolContribution, now,
         );
       }
       if (totalRebate > 0) {
@@ -4240,16 +5021,43 @@ export class AppDirectoryStore extends DurableObject {
         totalRebate, highestMultiplier, now,
       );
 
+      this.ctx.storage.sql.exec(
+        `INSERT INTO lucky_gift_sessions
+          (id,user_id,room_id,gift_id,gift_name,unit_price,send_count,total_sent_coins,
+           total_rebate_coins,highest_multiplier,started_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           send_count=lucky_gift_sessions.send_count+excluded.send_count,
+           total_sent_coins=lucky_gift_sessions.total_sent_coins+excluded.total_sent_coins,
+           total_rebate_coins=lucky_gift_sessions.total_rebate_coins+excluded.total_rebate_coins,
+           highest_multiplier=MAX(lucky_gift_sessions.highest_multiplier,excluded.highest_multiplier),
+           updated_at=excluded.updated_at`,
+        luckySessionId, senderId, roomId, giftId, giftName, chargedUnitPrice,
+        quantity * receivers.length, totalCost, totalRebate, highestMultiplier, now, now,
+      );
+
       const highWinThreshold = Math.max(
         1,
         Number(giftData.high_win_multiplier ?? luckyConfig.high_win_multiplier ?? 200),
       );
-      if (highestMultiplier >= highWinThreshold && totalRebate > 0) {
+      const bannerThreshold = Math.max(
+        highWinThreshold,
+        Number(giftData.banner_multiplier ?? luckyConfig.banner_multiplier ?? 500),
+      );
+      const ultraBannerThreshold = Math.max(
+        bannerThreshold,
+        Number(giftData.ultra_banner_multiplier ?? luckyConfig.ultra_banner_multiplier ?? 1000),
+      );
+      if (luckyConfig.banners_enabled !== false &&
+          highestMultiplier >= bannerThreshold &&
+          totalRebate > 0) {
         const user = this.getUserById(senderId);
         const countryCode = String(user?.country_code || room.country_code || "").toUpperCase();
+        const ultra = highestMultiplier >= ultraBannerThreshold;
         this.ctx.storage.sql.exec(
           "INSERT INTO country_ribbons (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-          "ribbon-" + crypto.randomUUID(), countryCode, "lucky_gift", 3, roomId,
+          "ribbon-" + crypto.randomUUID(), countryCode,
+          ultra ? "lucky_gift_ultra" : "lucky_gift", ultra ? 4 : 3, roomId,
           senderId, String(user?.display_name || senderId), user?.avatar_data_url || null,
           totalRebate, giftName + " • " + highestMultiplier + "x", now, now + 120000,
         );
@@ -4279,6 +5087,18 @@ export class AppDirectoryStore extends DurableObject {
           1,
           Number(giftData.high_win_multiplier ?? luckyConfig.high_win_multiplier ?? 200),
         ),
+        banner_win: highestMultiplier >= Math.max(
+          1,
+          Number(giftData.banner_multiplier ?? luckyConfig.banner_multiplier ?? 500),
+        ),
+        ultra_win: highestMultiplier >= Math.max(
+          1,
+          Number(giftData.ultra_banner_multiplier ?? luckyConfig.ultra_banner_multiplier ?? 1000),
+        ),
+        session: this.ctx.storage.sql.exec(
+          "SELECT id,gift_name,unit_price,send_count,total_sent_coins,total_rebate_coins,highest_multiplier,started_at,updated_at FROM lucky_gift_sessions WHERE id=? LIMIT 1",
+          luckySessionId,
+        ).toArray()[0] || null,
       } : null,
     };
   }
@@ -4288,9 +5108,11 @@ export class AppDirectoryStore extends DurableObject {
     const limit = Math.max(1, Math.min(200, Number(limitValue) || 100));
     if (!roomId) return [];
     const rows = this.ctx.storage.sql.exec(
-      `SELECT g.*,l.multiplier,l.rebate_coins,l.pool_contribution
+      `SELECT g.*,l.session_id,l.multiplier,l.rebate_coins,l.pool_contribution,l.social_value_coins,
+              COALESCE(u.display_name,g.sender_id) AS sender_name,u.avatar_data_url AS sender_avatar_data_url
          FROM gift_transactions g
          LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+         LEFT JOIN app_users u ON u.user_id=g.sender_id
         WHERE g.room_id=?
         ORDER BY g.created_at DESC
         LIMIT ?`,
@@ -4302,9 +5124,13 @@ export class AppDirectoryStore extends DurableObject {
       unit_price: Number(row.unit_price),
       total_cost: Number(row.total_cost),
       created_at: Number(row.created_at),
+      session_id: row.session_id ? String(row.session_id) : null,
       multiplier: row.multiplier == null ? null : Number(row.multiplier),
       rebate_coins: row.rebate_coins == null ? null : Number(row.rebate_coins),
       pool_contribution: row.pool_contribution == null ? null : Number(row.pool_contribution),
+      social_value_coins: row.social_value_coins == null ? null : Number(row.social_value_coins),
+      sender_name: String(row.sender_name || row.sender_id),
+      sender_avatar_data_url: row.sender_avatar_data_url ? String(row.sender_avatar_data_url) : null,
     }));
   }
 
@@ -4610,6 +5436,34 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, id, room_id: roomId, user_id: userId, game_key: gameKey, action, result, created_at: now };
   }
 
+  cpRanking(limitValue = 100) {
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT c.user_a,c.user_b,c.intimacy,c.level,c.updated_at,
+              ua.display_name AS user_a_name,
+              ua.avatar_data_url AS user_a_avatar,
+              ub.display_name AS user_b_name,
+              ub.avatar_data_url AS user_b_avatar
+         FROM cp_relationships c
+         LEFT JOIN app_users ua ON ua.user_id=c.user_a
+         LEFT JOIN app_users ub ON ub.user_id=c.user_b
+        WHERE c.state='accepted'
+        ORDER BY c.intimacy DESC,c.level DESC,c.updated_at ASC
+        LIMIT ?`,
+      limit,
+    ).toArray().map((row, index) => ({
+      rank: index + 1,
+      user_a: String(row.user_a),
+      user_b: String(row.user_b),
+      user_a_name: String(row.user_a_name || row.user_a),
+      user_b_name: String(row.user_b_name || row.user_b),
+      user_a_avatar: row.user_a_avatar ? String(row.user_a_avatar) : null,
+      user_b_avatar: row.user_b_avatar ? String(row.user_b_avatar) : null,
+      intimacy: Math.max(0, Number(row.intimacy || 0)),
+      level: Math.max(1, Number(row.level || 1)),
+    }));
+  }
+
   cpState(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
@@ -4716,6 +5570,256 @@ export class AppDirectoryStore extends DurableObject {
     return memory;
   }
 
+  profileTrends(userIdValue, limitValue = 40) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const limit = Math.max(1, Math.min(100, Number(limitValue || 40)));
+    return this.ctx.storage.sql.exec(
+      `SELECT id,user_id,text,created_at
+         FROM profile_trends
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+      userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      text: String(row.text || ""),
+      created_at: Number(row.created_at || 0),
+    }));
+  }
+
+  addProfileTrend(userIdValue, textValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const text = cleanText(textValue, 500);
+    if (!text) throw new Error("Trend text is required");
+    const now = Date.now();
+    const id = "trend-" + now + "-" + crypto.randomUUID().slice(0, 8);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO profile_trends (id,user_id,text,created_at) VALUES (?,?,?,?)",
+      id, userId, text, now,
+    );
+    return { id, user_id: userId, text, created_at: now };
+  }
+
+  guardianState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("User not found");
+    const now = Date.now();
+    const since = now - (30 * 24 * 60 * 60 * 1000);
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT g.sender_id,
+              COALESCE(SUM(g.total_cost),0) AS points,
+              u.display_name,
+              u.avatar_data_url,
+              u.flag_emoji
+         FROM gift_transactions g
+         LEFT JOIN app_users u ON u.user_id = g.sender_id
+        WHERE g.receiver_id = ?
+          AND g.created_at >= ?
+        GROUP BY g.sender_id, u.display_name, u.avatar_data_url, u.flag_emoji
+        ORDER BY points DESC, g.sender_id ASC
+        LIMIT 50`,
+      userId, since,
+    ).toArray();
+
+    const supporters = rows.map((row, index) => ({
+      rank: index + 1,
+      user_id: String(row.sender_id),
+      display_name: String(row.display_name || row.sender_id),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      flag_emoji: String(row.flag_emoji || ""),
+      points: Math.max(0, Number(row.points || 0)),
+      guardian_eligible: Number(row.points || 0) >= 1000,
+    }));
+    const top = supporters[0] || null;
+    const guardian = top && Number(top.points || 0) >= 10000 ? top : null;
+    return {
+      guardian,
+      supporters,
+      candidate_threshold: 1000,
+      guardian_threshold: 10000,
+      window_days: 30,
+      updated_at: now,
+    };
+  }
+
+  profileStats(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId || !this.getUserById(userId)) throw new Error("User not found");
+
+    const following = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE follower_id=?", userId,
+    ).toArray()[0]?.count || 0);
+    const followers = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE target_id=?", userId,
+    ).toArray()[0]?.count || 0);
+    const sent = Number(this.ctx.storage.sql.exec(
+      `SELECT COALESCE(SUM(CASE WHEN l.transaction_id IS NULL THEN g.total_cost ELSE l.social_value_coins END),0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+        WHERE g.sender_id=?`, userId,
+    ).toArray()[0]?.total || 0);
+    const received = Number(this.ctx.storage.sql.exec(
+      `SELECT COALESCE(SUM(CASE WHEN l.transaction_id IS NULL THEN g.total_cost ELSE l.social_value_coins END),0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+        WHERE g.receiver_id=?`, userId,
+    ).toArray()[0]?.total || 0);
+
+    const levelFor = (settingKey, points) => {
+      const row = this.ctx.storage.sql.exec(
+        "SELECT value_json FROM owner_settings WHERE key=? LIMIT 1", settingKey,
+      ).toArray()[0];
+      let thresholds = [];
+      try {
+        const parsed = JSON.parse(String(row?.value_json || "[]"));
+        thresholds = Array.isArray(parsed)
+          ? parsed.map((value)=>Math.max(0,Number(value||0))).filter(Number.isFinite)
+          : [];
+      } catch {}
+      thresholds.sort((a,b)=>a-b);
+      let level = 0;
+      for (const threshold of thresholds) {
+        if (points >= threshold) level += 1;
+        else break;
+      }
+      const next = level < thresholds.length ? thresholds[level] : null;
+      return { level, next_threshold: next, thresholds };
+    };
+
+    return {
+      user_id:userId,
+      following_count:following,
+      followers_count:followers,
+      lifetime_sent_coins:Math.max(0,sent),
+      lifetime_received_coins:Math.max(0,received),
+      wealth:levelFor("wealth_level_thresholds", Math.max(0,sent)),
+      charm:levelFor("charm_level_thresholds", Math.max(0,received)),
+    };
+  }
+
+  taskState(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const user = this.ctx.storage.sql.exec(
+      "SELECT display_name,country_code,gender FROM app_users WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+    const followed = Number(this.ctx.storage.sql.exec(
+      "SELECT COUNT(*) AS count FROM app_follows WHERE follower_id=?", userId,
+    ).toArray()[0]?.count || 0) > 0;
+    const family = Boolean(this.ctx.storage.sql.exec(
+      "SELECT user_id FROM family_members WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const gifted = Boolean(this.ctx.storage.sql.exec(
+      "SELECT id FROM gift_transactions WHERE sender_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const enteredRoom = Boolean(this.ctx.storage.sql.exec(
+      "SELECT room_id FROM app_recent_rooms WHERE user_id=? LIMIT 1", userId,
+    ).toArray()[0]);
+    const profileComplete = String(user.display_name || "").trim().length > 0 &&
+      String(user.country_code || "").trim().length > 0 &&
+      String(user.gender || "").trim().length > 0;
+    const definitions = [
+      { id:"profile_complete", title:"Complete your profile", reward_coins:100, completed:profileComplete },
+      { id:"follow_one", title:"Follow 1 user", reward_coins:100, completed:followed },
+      { id:"enter_room", title:"Enter a Party room", reward_coins:100, completed:enteredRoom },
+      { id:"send_gift", title:"Send your first gift", reward_coins:200, completed:gifted },
+      { id:"join_family", title:"Join a Family", reward_coins:300, completed:family },
+    ];
+    const claims = new Set(this.ctx.storage.sql.exec(
+      "SELECT task_id FROM user_task_claims WHERE user_id=?", userId,
+    ).toArray().map((row)=>String(row.task_id)));
+    return definitions.map((task)=>({ ...task, claimed:claims.has(task.id) }));
+  }
+
+  claimTask(userIdValue, taskIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const taskId = String(taskIdValue || "").trim();
+    const task = this.taskState(userId).find((item)=>item.id===taskId);
+    if (!task) throw new Error("Task not found");
+    if (!task.completed) throw new Error("Complete this task first");
+    if (task.claimed) throw new Error("Task reward already claimed");
+    const now = Date.now();
+    this._creditNormalWalletAuthorized(userId, task.reward_coins, "task_reward");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_task_claims(user_id,task_id,reward_coins,claimed_at) VALUES(?,?,?,?)",
+      userId,task.id,task.reward_coins,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'task_reward',?,0,?,?,?)",
+      crypto.randomUUID(),userId,task.reward_coins,"task:"+task.id,task.title,now,
+    );
+    return { ok:true, task:{...task,claimed:true}, tasks:this.taskState(userId), wallet:this.getWallet(userId) };
+  }
+
+  userPreferences(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM user_preferences WHERE user_id = ? LIMIT 1", userId,
+    ).toArray()[0];
+    return {
+      message_voice: row ? Number(row.message_voice) === 1 : true,
+      message_vibration: row ? Number(row.message_vibration) === 1 : true,
+      room_floating_only: row ? Number(row.room_floating_only) === 1 : false,
+      language: row ? String(row.language || "English") : "English",
+    };
+  }
+
+  updateUserPreferences(userIdValue, input = {}) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const current = this.userPreferences(userId);
+    const next = {
+      message_voice: input.message_voice === undefined ? current.message_voice : input.message_voice === true,
+      message_vibration: input.message_vibration === undefined ? current.message_vibration : input.message_vibration === true,
+      room_floating_only: input.room_floating_only === undefined ? current.room_floating_only : input.room_floating_only === true,
+      language: cleanText(input.language === undefined ? current.language : input.language, 40) || "English",
+    };
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO user_preferences
+        (user_id,message_voice,message_vibration,room_floating_only,language,updated_at)
+       VALUES (?,?,?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET
+        message_voice=excluded.message_voice,
+        message_vibration=excluded.message_vibration,
+        room_floating_only=excluded.room_floating_only,
+        language=excluded.language,
+        updated_at=excluded.updated_at`,
+      userId, next.message_voice ? 1 : 0, next.message_vibration ? 1 : 0,
+      next.room_floating_only ? 1 : 0, next.language, now,
+    );
+    return { ok: true, preferences: next };
+  }
+
+  submitUserFeedback(userIdValue, categoryValue, messageValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const category = cleanText(categoryValue || "General", 40) || "General";
+    const message = cleanText(messageValue, 2000);
+    if (message.length < 3) throw new Error("Feedback message is too short");
+    const row = { id: crypto.randomUUID(), user_id: userId, category, message, status: "submitted", created_at: Date.now() };
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_feedback (id,user_id,category,message,status,created_at) VALUES (?,?,?,?,?,?)",
+      row.id,row.user_id,row.category,row.message,row.status,row.created_at,
+    );
+    return { ok: true, feedback: row };
+  }
+
+  userFeedback(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT id,category,message,status,created_at FROM user_feedback WHERE user_id=? ORDER BY created_at DESC LIMIT 100", userId,
+    ).toArray().map((row)=>({id:String(row.id),category:String(row.category),message:String(row.message),status:String(row.status),created_at:Number(row.created_at)}));
+  }
+
+  accountIdentities(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    return this.ctx.storage.sql.exec(
+      "SELECT provider,subject,created_at FROM app_user_identities WHERE user_id=? ORDER BY created_at ASC", userId,
+    ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
+  }
+
   walletTransactions(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     return this.ctx.storage.sql.exec(
@@ -4755,44 +5859,96 @@ export class AppDirectoryStore extends DurableObject {
   inventoryState(userIdValue) {
     this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
+    const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
-      "SELECT item_id, item_kind, acquired_at, expires_at FROM user_inventory WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY acquired_at DESC",
-      userId, Date.now(),
+      `SELECT ui.item_id,ui.item_kind,ui.acquired_at,ui.expires_at,
+              oc.name AS catalog_name,oc.data_json AS catalog_data_json
+         FROM user_inventory ui
+         LEFT JOIN owner_catalog oc ON oc.id=ui.item_id
+        WHERE ui.user_id=? AND (ui.expires_at IS NULL OR ui.expires_at>?)
+        ORDER BY ui.acquired_at DESC`,
+      userId, now,
     ).toArray();
     const equipment = this.ctx.storage.sql.exec(
-      "SELECT equipped_frame_id, updated_at FROM user_equipment WHERE user_id = ? LIMIT 1",
+      `SELECT equipped_frame_id,equipped_vehicle_id,equipped_entry_id,
+              equipped_profile_card_id,equipped_ring_id,equipped_bubble_id,
+              equipped_profile_background_id,updated_at
+         FROM user_equipment WHERE user_id = ? LIMIT 1`,
       userId,
-    ).toArray()[0];
-    if (equipment?.equipped_frame_id) {
-      const active = rows.some((row) => String(row.item_id) === String(equipment.equipped_frame_id));
-      if (!active) {
-        this.ctx.storage.sql.exec("UPDATE user_equipment SET equipped_frame_id = NULL, updated_at = ? WHERE user_id = ?", Date.now(), userId);
-        equipment.equipped_frame_id = null;
+    ).toArray()[0] || {};
+    const activeIds = new Set(rows.map((row) => String(row.item_id)));
+    const keys = [
+      "equipped_frame_id","equipped_vehicle_id","equipped_entry_id",
+      "equipped_profile_card_id","equipped_ring_id","equipped_bubble_id",
+      "equipped_profile_background_id",
+    ];
+    let changed = false;
+    for (const key of keys) {
+      if (equipment[key] && !activeIds.has(String(equipment[key]))) {
+        equipment[key] = null;
+        changed = true;
       }
     }
+    if (changed) {
+      this.ctx.storage.sql.exec(
+        `UPDATE user_equipment SET
+          equipped_frame_id=?,equipped_vehicle_id=?,equipped_entry_id=?,
+          equipped_profile_card_id=?,equipped_ring_id=?,equipped_bubble_id=?,
+          equipped_profile_background_id=?,updated_at=?
+         WHERE user_id=?`,
+        equipment.equipped_frame_id || null,
+        equipment.equipped_vehicle_id || null,
+        equipment.equipped_entry_id || null,
+        equipment.equipped_profile_card_id || null,
+        equipment.equipped_ring_id || null,
+        equipment.equipped_bubble_id || null,
+        equipment.equipped_profile_background_id || null,
+        now,userId,
+      );
+    }
     return {
-      owned: rows.map((row) => ({
-        item_id: String(row.item_id),
-        item_kind: String(row.item_kind),
-        acquired_at: Number(row.acquired_at),
-        expires_at: row.expires_at == null ? null : Number(row.expires_at),
-      })),
-      equipped_frame_id: equipment?.equipped_frame_id
-        ? String(equipment.equipped_frame_id)
-        : null,
-      updated_at: Number(equipment?.updated_at || 0),
+      owned: rows.map((row) => {
+        let data = {};
+        try { data = JSON.parse(String(row.catalog_data_json || "{}")); } catch {}
+        return {
+          item_id: String(row.item_id),
+          item_kind: String(row.item_kind),
+          name: String(row.catalog_name || row.item_id),
+          asset_url: String(data.asset_url || ""),
+          acquired_at: Number(row.acquired_at),
+          expires_at: row.expires_at == null ? null : Number(row.expires_at),
+        };
+      }),
+      equipped_frame_id: equipment.equipped_frame_id ? String(equipment.equipped_frame_id) : null,
+      equipped_vehicle_id: equipment.equipped_vehicle_id ? String(equipment.equipped_vehicle_id) : null,
+      equipped_entry_id: equipment.equipped_entry_id ? String(equipment.equipped_entry_id) : null,
+      equipped_profile_card_id: equipment.equipped_profile_card_id ? String(equipment.equipped_profile_card_id) : null,
+      equipped_ring_id: equipment.equipped_ring_id ? String(equipment.equipped_ring_id) : null,
+      equipped_bubble_id: equipment.equipped_bubble_id ? String(equipment.equipped_bubble_id) : null,
+      equipped_profile_background_id: equipment.equipped_profile_background_id ? String(equipment.equipped_profile_background_id) : null,
+      updated_at: Number(equipment.updated_at || 0),
     };
   }
 
   purchaseUniqueId(userIdValue, publicIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
-    const publicId = String(publicIdValue || "").trim();
+    const requestedId = String(publicIdValue || "").trim();
+    if (!/^\d{4,8}$/.test(requestedId)) {
+      throw new Error(
+        "Name ID cannot be purchased or claimed by a user; only the Owner Master Panel can assign it",
+      );
+    }
     const offer = this.ctx.storage.sql.exec(
-      "SELECT * FROM owner_unique_ids WHERE public_id = ? AND enabled = 1 LIMIT 1", publicId,
+      "SELECT * FROM owner_unique_ids WHERE LOWER(public_id) = LOWER(?) AND enabled = 1 LIMIT 1",
+      requestedId,
     ).toArray()[0];
     if (!offer) throw new Error("Unique ID is unavailable");
+    const publicId = String(offer.public_id);
     if (offer.assigned_user_id) throw new Error("Unique ID is already assigned");
-    const taken = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", publicId).toArray()[0];
+    const taken = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users WHERE LOWER(user_id) = LOWER(?) LIMIT 1",
+      publicId,
+    ).toArray()[0];
     if (taken) throw new Error("Unique ID is already in use");
     const effective = this._effectivePrice(userId, "unique_id:" + publicId, Math.max(0, Number(offer.price_coins || 0)), Math.max(0, Number(offer.duration_days || 0)));
     const price = effective.price;
@@ -4835,7 +5991,9 @@ export class AppDirectoryStore extends DurableObject {
   purchaseCatalogItem(userIdValue, kindValue, itemIdValue, countryCodeValue = "") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const kind = cleanText(kindValue, 40).toLowerCase();
-    if (!["entry","vehicle","profile_card"].includes(kind)) throw new Error("Unsupported purchasable item type");
+    if (!["entry","vehicle","profile_card","ring","bubble","profile_background"].includes(kind)) {
+      throw new Error("Unsupported purchasable item type");
+    }
     const item = this.purchasableCatalog(kind, countryCodeValue).find((v) => v.id === String(itemIdValue || "").trim());
     if (!item) throw new Error("Item is unavailable");
     const existing = this.ctx.storage.sql.exec("SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1", userId, item.id).toArray()[0];
@@ -4854,6 +6012,111 @@ export class AppDirectoryStore extends DurableObject {
     const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
     this.ctx.storage.sql.exec("INSERT INTO user_inventory (user_id,item_id,item_kind,acquired_at,expires_at) VALUES (?,?,?,?,?)", userId, item.id, kind, now, expiresAt);
     return { ok: true, duplicate: false, price_coins: price, duration_days: durationDays, expires_at: expiresAt, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
+  }
+
+  equipCatalogItem(userIdValue, kindValue, itemIdValue) {
+    this._ensureEconomyMigrations();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    const columns = {
+      vehicle: "equipped_vehicle_id",
+      entry: "equipped_entry_id",
+      profile_card: "equipped_profile_card_id",
+      ring: "equipped_ring_id",
+      bubble: "equipped_bubble_id",
+      profile_background: "equipped_profile_background_id",
+    };
+    const column = columns[kind];
+    if (!column) throw new Error("Unsupported equippable item type");
+    const itemId = itemIdValue == null ? "" : String(itemIdValue).trim();
+    if (itemId) {
+      const owned = this.ctx.storage.sql.exec(
+        "SELECT item_id FROM user_inventory WHERE user_id=? AND item_id=? AND item_kind=? AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
+        userId,itemId,kind,Date.now(),
+      ).toArray()[0];
+      if (!owned) throw new Error("Item is not owned or has expired");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO user_equipment(user_id,equipped_frame_id,updated_at) VALUES(?,NULL,?)",
+      userId,now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE user_equipment SET " + column + "=?, updated_at=? WHERE user_id=?",
+      itemId || null,now,userId,
+    );
+    return { ok:true, inventory:this.inventoryState(userId) };
+  }
+
+  sendCatalogItem(senderUserIdValue, recipientUserIdValue, kindValue, itemIdValue, countryCodeValue = "") {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
+    const recipientExists = recipientId
+      ? this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", recipientId,
+        ).toArray()[0]
+      : null;
+    if (!recipientExists) throw new Error("Recipient user not found");
+    if (String(senderId) === String(recipientId)) throw new Error("Use Buy for your own account");
+    const kind = cleanText(kindValue, 40).toLowerCase();
+    if (!["entry","vehicle","profile_card","ring","bubble","profile_background","frame"].includes(kind)) {
+      throw new Error("Unsupported send item type");
+    }
+    const itemId = String(itemIdValue || "").trim();
+    const item = kind === "frame"
+      ? this.frameCatalog(countryCodeValue).find((v)=>v.id===itemId)
+      : this.purchasableCatalog(kind,countryCodeValue).find((v)=>v.id===itemId);
+    if (!item) throw new Error("Item is unavailable");
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT item_id FROM user_inventory WHERE user_id=? AND item_id=? AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
+      recipientId,itemId,Date.now(),
+    ).toArray()[0];
+    if (existing) throw new Error("Recipient already owns this item");
+
+    const basePrice = kind === "frame"
+      ? Math.max(0,Number(item.price ?? item.data?.price ?? item.data?.coin_price ?? 0))
+      : Math.max(0,Number(item.price_coins || 0));
+    const baseDuration = kind === "frame"
+      ? Math.max(0,Number(item.data?.duration_days || 0))
+      : Math.max(0,Number(item.duration_days || 0));
+    const effective = this._effectivePrice(senderId, kind + ":" + itemId, basePrice, baseDuration);
+    const price = effective.price;
+    const wallet = this.getWallet(senderId);
+    if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.coins < price) throw new Error("Insufficient coin balance");
+    const now = Date.now();
+    if (price > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
+        price,now,senderId,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,?,?,0,?,?,?)",
+        crypto.randomUUID(),senderId,"store_item_send",-price,
+        kind+":"+itemId,"Sent "+String(item.name||itemId)+" to "+recipientId,now,
+      );
+    }
+    const durationDays = effective.duration_days ?? baseDuration;
+    const expiresAt = durationDays > 0 ? now + durationDays * 86400000 : null;
+    this.ctx.storage.sql.exec(
+      "INSERT INTO user_inventory(user_id,item_id,item_kind,acquired_at,expires_at) VALUES(?,?,?,?,?)",
+      recipientId,itemId,kind,now,expiresAt,
+    );
+    this._notifyUser(
+      recipientId,
+      "store_item_received",
+      "Store gift received",
+      "You received " + String(item.name || itemId) + " from ID " + senderId + ".",
+      { source_user_id: senderId, metadata: { item_id:itemId, item_kind:kind } },
+    );
+    return {
+      ok:true,
+      recipient_user_id:recipientId,
+      price_coins:price,
+      duration_days:durationDays,
+      expires_at:expiresAt,
+      wallet:this.getWallet(senderId),
+    };
   }
 
   purchaseFrame(userIdValue, frameIdValue, countryCodeValue = "") {
@@ -5986,6 +7249,65 @@ export class AppDirectoryStore extends DurableObject {
       : { allowed: false };
   }
 
+  unreadMessageCount(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return 0;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS count
+         FROM direct_messages
+        WHERE to_user_id = ?
+          AND seen_at IS NULL`,
+      userId,
+    ).toArray()[0];
+    return Number(row?.count || 0);
+  }
+
+  _notifyMessageSocket(userIdValue, payload = {}) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return;
+    const message = JSON.stringify({
+      ...payload,
+      unread_count: this.unreadMessageCount(userId),
+    });
+    for (const socket of this.ctx.getWebSockets("message-user:" + userId)) {
+      try {
+        socket.send(message);
+      } catch (_) {
+        // Closed sockets are cleaned up by the Durable Object runtime.
+      }
+    }
+  }
+
+  async fetch(request) {
+    if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("WebSocket required", { status: 426 });
+    }
+    const userId = String(request.headers.get("x-tinni-user-id") || "").trim();
+    if (!userId) return new Response("Unauthorized", { status: 401 });
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.ctx.acceptWebSocket(server, ["message-user:" + userId]);
+    server.send(JSON.stringify({
+      type: "inbox_state",
+      unread_count: this.unreadMessageCount(userId),
+    }));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(socket, message) {
+    if (String(message || "") === "ping") {
+      try {
+        socket.send(JSON.stringify({ type: "pong" }));
+      } catch (_) {}
+    }
+  }
+
+  webSocketClose() {}
+
+  webSocketError() {}
+
   markConversationSeen(userIdValue, peerUserIdValue) {
     const userId = String(userIdValue || "").trim();
     const peerUserId = String(peerUserIdValue || "").trim();
@@ -6001,6 +7323,10 @@ export class AppDirectoryStore extends DurableObject {
       peerUserId,
       userId,
     );
+    this._notifyMessageSocket(userId, {
+      type: "messages_seen",
+      peer_user_id: peerUserId,
+    });
     return now;
   }
 
@@ -6318,7 +7644,303 @@ export class AppDirectoryStore extends DurableObject {
     return { notified };
   }
 
-  transferCoinsFromSeller(senderUserIdValue, recipientUserIdValue, amountValue, walletTypeValue = "") {
+  _normalizePrivilegedWalletType(walletTypeValue) {
+    const raw = String(walletTypeValue || "")
+      .trim()
+      .toLowerCase()
+      .replaceAll("-", "_")
+      .replace(/\s+/g, "_");
+    const normalized = raw === "coinseller" ? "coin_seller" : raw;
+    if (!["coin_seller", "merchant"].includes(normalized)) {
+      throw new Error("Valid Coin Seller or Merchant wallet is required");
+    }
+    return normalized;
+  }
+
+  _activePrivilegedWalletRow(userIdValue, walletTypeValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = this._normalizePrivilegedWalletType(walletTypeValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id,wallet_type,balance,banned FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId,
+      walletType,
+    ).toArray()[0];
+    if (!row || Number(row.banned || 0) === 1) {
+      throw new Error("Active " + walletType.replaceAll("_", " ") + " wallet is required");
+    }
+    return {
+      user_id: userId,
+      wallet_type: walletType,
+      balance: Math.max(0, Number(row.balance || 0)),
+    };
+  }
+
+  listRechargeProviders() {
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT w.user_id,w.wallet_type,u.display_name,u.avatar_data_url,
+              u.flag_emoji,u.country_code
+         FROM owner_wallets w
+         JOIN app_users u ON u.user_id=w.user_id
+        WHERE w.wallet_type IN ('coin_seller','merchant')
+          AND w.banned=0
+        ORDER BY CASE w.wallet_type WHEN 'coin_seller' THEN 0 ELSE 1 END,
+                 w.updated_at DESC
+        LIMIT 300`,
+    ).toArray();
+
+    const providers = [];
+    for (const row of rows) {
+      try {
+        const guard = this._privilegedWalletGuard(row.user_id, row.wallet_type);
+        if (guard.security_frozen) continue;
+        if (guard.balance < RECHARGE_PROVIDER_MIN_COINS) continue;
+        const usdCents = Math.floor((guard.balance * 100) / COINS_PER_USD);
+        providers.push({
+          user_id: String(row.user_id),
+          display_name: String(row.display_name || row.user_id),
+          wallet_type: String(row.wallet_type),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          flag_emoji: String(row.flag_emoji || ""),
+          country_code: String(row.country_code || ""),
+          balance_coins: guard.balance,
+          usd_cents: usdCents,
+          minimum_visible_usd: RECHARGE_PROVIDER_MIN_USD,
+        });
+      } catch {}
+    }
+    return providers;
+  }
+
+  roleWalletPasswordStatus(userIdValue, walletTypeValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT auth_version,updated_at FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: Boolean(row),
+      auth_version: row ? Number(row.auth_version || 1) : 0,
+      updated_at: row ? Number(row.updated_at || 0) : null,
+    };
+  }
+
+  async setupRoleWalletPassword(userIdValue, walletTypeValue, passwordValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (existing) throw new Error("Wallet password is already set. Use reset password.");
+
+    const password = String(passwordValue || "");
+    if (password.length < 6 || password.length > 64) {
+      throw new Error("Wallet password must be 6 to 64 characters");
+    }
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_credentials
+        (user_id,wallet_type,password_salt,password_hash,auth_version,created_at,updated_at)
+       VALUES (?,?,?,?,1,?,?)`,
+      wallet.user_id,
+      wallet.wallet_type,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now,
+      now,
+    );
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: true,
+      auth_version: 1,
+      updated_at: now,
+    };
+  }
+
+  async verifyRoleWalletPassword(userIdValue, walletTypeValue, passwordValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const password = String(passwordValue || "");
+    const row = this.ctx.storage.sql.exec(
+      "SELECT password_salt,password_hash FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!row) throw new Error("Set your wallet transfer password first");
+    if (!password) return false;
+    const actual = await deriveSecret(
+      password,
+      fromBase64Url(String(row.password_salt)),
+      210000,
+    );
+    return safeEqualBytes(actual, fromBase64Url(String(row.password_hash)));
+  }
+
+  async startRoleWalletPasswordReset(userIdValue, walletTypeValue) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const configured = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!configured) throw new Error("Set your wallet transfer password first");
+
+    const user = this.ctx.storage.sql.exec(
+      "SELECT email FROM app_users WHERE user_id=? LIMIT 1",
+      wallet.user_id,
+    ).toArray()[0];
+    const email = String(user?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) throw new Error("Account email is unavailable");
+
+    const now = Date.now();
+    const recent = this.ctx.storage.sql.exec(
+      `SELECT created_at FROM privileged_wallet_reset_requests
+        WHERE user_id=? AND wallet_type=?
+        ORDER BY created_at DESC LIMIT 1`,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (recent && now - Number(recent.created_at || 0) < 60000) {
+      throw new Error("Please wait before requesting another OTP");
+    }
+
+    const otp = randomOtp();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(otp, salt, 120000);
+    const requestId = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_reset_requests
+        (request_id,user_id,wallet_type,otp_salt,otp_hash,attempts,verified,
+         expires_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,0,0,?,?,?)`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now + 10 * 60 * 1000,
+      now,
+      now,
+    );
+    return {
+      ok: true,
+      request_id: requestId,
+      wallet_type: wallet.wallet_type,
+      email,
+      otp,
+      expires_at: now + 10 * 60 * 1000,
+    };
+  }
+
+  async verifyRoleWalletPasswordReset(
+    userIdValue,
+    walletTypeValue,
+    requestIdValue,
+    otpValue,
+  ) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const requestId = String(requestIdValue || "").trim();
+    const otp = String(otpValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      `SELECT * FROM privileged_wallet_reset_requests
+        WHERE request_id=? AND user_id=? AND wallet_type=? LIMIT 1`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!row) throw new Error("Wallet reset request not found");
+    if (Date.now() > Number(row.expires_at || 0)) throw new Error("OTP has expired");
+    if (Number(row.verified || 0) === 1) {
+      return { ok: true, verified: true, request_id: requestId };
+    }
+    if (Number(row.attempts || 0) >= 5) throw new Error("Too many OTP attempts");
+    if (!/^\d{6}$/.test(otp)) throw new Error("Enter the 6-digit OTP");
+
+    const attempts = Number(row.attempts || 0) + 1;
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_reset_requests SET attempts=?,updated_at=? WHERE request_id=?",
+      attempts,
+      Date.now(),
+      requestId,
+    );
+    const actual = await deriveSecret(
+      otp,
+      fromBase64Url(String(row.otp_salt)),
+      120000,
+    );
+    if (!safeEqualBytes(actual, fromBase64Url(String(row.otp_hash)))) {
+      throw new Error("Incorrect OTP");
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE privileged_wallet_reset_requests SET verified=1,updated_at=? WHERE request_id=?",
+      Date.now(),
+      requestId,
+    );
+    return { ok: true, verified: true, request_id: requestId };
+  }
+
+  async completeRoleWalletPasswordReset(
+    userIdValue,
+    walletTypeValue,
+    requestIdValue,
+    newPasswordValue,
+  ) {
+    const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
+    const requestId = String(requestIdValue || "").trim();
+    const password = String(newPasswordValue || "");
+    if (password.length < 6 || password.length > 64) {
+      throw new Error("Wallet password must be 6 to 64 characters");
+    }
+    const request = this.ctx.storage.sql.exec(
+      `SELECT verified,expires_at FROM privileged_wallet_reset_requests
+        WHERE request_id=? AND user_id=? AND wallet_type=? LIMIT 1`,
+      requestId,
+      wallet.user_id,
+      wallet.wallet_type,
+    ).toArray()[0];
+    if (!request || Number(request.verified || 0) !== 1) {
+      throw new Error("Verify the email OTP first");
+    }
+    if (Date.now() > Number(request.expires_at || 0)) throw new Error("OTP has expired");
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await deriveSecret(password, salt, 210000);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE privileged_wallet_credentials
+          SET password_salt=?,password_hash=?,auth_version=auth_version+1,updated_at=?
+        WHERE user_id=? AND wallet_type=?`,
+      toBase64Url(salt),
+      toBase64Url(hash),
+      now,
+      wallet.user_id,
+      wallet.wallet_type,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM privileged_wallet_reset_requests WHERE user_id=? AND wallet_type=?",
+      wallet.user_id,
+      wallet.wallet_type,
+    );
+    return {
+      ok: true,
+      wallet_type: wallet.wallet_type,
+      configured: true,
+      updated_at: now,
+    };
+  }
+
+  async transferCoinsFromSeller(
+    senderUserIdValue,
+    recipientUserIdValue,
+    amountValue,
+    walletTypeValue = "",
+    passwordValue = "",
+  ) {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
     this._enforceActionRate(senderId, "seller_coin_transfer", 10, 60000, 300000);
     const recipientId = this._resolveOwnerUserId(recipientUserIdValue);
@@ -6349,6 +7971,12 @@ export class AppDirectoryStore extends DurableObject {
       }
     }
     if (!source) throw new Error("Active funded Coin Seller or Merchant wallet is required");
+    const passwordValid = await this.verifyRoleWalletPassword(
+      senderId,
+      source.wallet_type,
+      passwordValue,
+    );
+    if (!passwordValid) throw new Error("Incorrect wallet password");
 
     const recipient = this.ctx.storage.sql.exec(
       "SELECT user_id,display_name FROM app_users WHERE user_id=? LIMIT 1", recipientId,
@@ -6433,14 +8061,20 @@ export class AppDirectoryStore extends DurableObject {
       text,
       { source_user_id: fromUserId, metadata: { message_id: id } },
     );
-    return {
+    const message = {
       id,
       from: fromUserId,
+      from_name: String(sender?.display_name || fromUserId),
       to: toUserId,
       text,
       created_at: now,
       seen_at: null,
     };
+    this._notifyMessageSocket(toUserId, {
+      type: "message_received",
+      message,
+    });
+    return message;
   }
 
 
@@ -6470,7 +8104,7 @@ export class AppDirectoryStore extends DurableObject {
       now,
     );
 
-    return {
+    const message = {
       id,
       from: "tinni-official",
       from_name: "Tinni Official",
@@ -6482,6 +8116,11 @@ export class AppDirectoryStore extends DurableObject {
         ? contextValue
         : {},
     };
+    this._notifyMessageSocket(toUserId, {
+      type: "message_received",
+      message,
+    });
+    return message;
   }
 
     async listRooms() {
@@ -6490,13 +8129,25 @@ export class AppDirectoryStore extends DurableObject {
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
-              COALESCE(pc.member_count, 0) AS member_count
+              COALESCE(pc.member_count, 0) AS member_count,
+              COALESCE(pc.member_count, 0) * 500 AS active_user_exp,
+              COALESCE(gx.gift_coins, 0) AS sending_exp,
+              COALESCE(gx.gift_coins, 0) AS receiving_exp,
+              (COALESCE(pc.member_count, 0) * 500)
+                + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
          LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+         LEFT JOIN (
+           SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
+             FROM gift_transactions
+            GROUP BY room_id
+         ) gx ON gx.room_id = r.id
         WHERE COALESCE(r.closed, 0) = 0
           AND COALESCE(r.locked, 0) = 0
-        ORDER BY r.created_at DESC
+        ORDER BY room_experience DESC,
+                 COALESCE(pc.member_count, 0) DESC,
+                 r.created_at DESC
         LIMIT 500`,
     ).toArray().map(rowToRoom);
   }
@@ -7226,10 +8877,62 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-    _familyMembership(userIdValue) {
-    const userId = String(userIdValue || "").trim();
+  _familyLevelThresholds() {
+    const policies = this.ownerState().policies || {};
+    const configured = Array.isArray(policies.family_level_thresholds)
+      ? policies.family_level_thresholds
+          .map((value) => Math.max(0, Math.floor(Number(value || 0))))
+          .filter(Number.isSafeInteger)
+      : [];
+    if (configured.length >= 2 && configured[0] === 0) return configured;
+    // Tinni Star family thresholds currently locked by product rules.
+    return [
+      0,
+      50000000,
+      240000000,
+      580000000,
+      970000000,
+      1300000000,
+      1800000000,
+      2500000000,
+      3500000000,
+      6000000000,
+      15000000000,
+    ];
+  }
+
+  _familyLevelInfo(experienceValue) {
+    const experience = Math.max(0, Math.floor(Number(experienceValue || 0)));
+    const thresholds = this._familyLevelThresholds();
+    let level = 1;
+    for (let index = 1; index < thresholds.length; index += 1) {
+      if (experience >= thresholds[index]) level = index + 1;
+      else break;
+    }
+    const currentThreshold = thresholds[Math.max(0, level - 1)] || 0;
+    const nextThreshold = level < thresholds.length ? thresholds[level] : null;
+    const span = nextThreshold == null ? 0 : Math.max(1, nextThreshold - currentThreshold);
+    const progress = nextThreshold == null
+      ? 1
+      : Math.max(0, Math.min(1, (experience - currentThreshold) / span));
+    const bonusBasisPoints = 100 + Math.max(0, Math.min(10, level - 1)) * 25;
+    return {
+      level,
+      experience,
+      current_threshold: currentThreshold,
+      next_threshold: nextThreshold,
+      progress,
+      monthly_bonus_basis_points: bonusBasisPoints,
+      monthly_bonus_percent: bonusBasisPoints / 100,
+    };
+  }
+
+  _familyMembership(userIdValue) {
+    this._ensureEconomyMigrations();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return null;
     return this.ctx.storage.sql.exec(
-      `SELECT fm.family_id, fm.user_id, fm.role, f.name, f.tag,
+      `SELECT fm.family_id, fm.user_id, fm.role, f.name, f.tag, f.notice,
               f.leader_user_id, f.experience, f.wallet_coins
          FROM family_members fm
          JOIN families f ON f.id = fm.family_id
@@ -7248,19 +8951,176 @@ export class AppDirectoryStore extends DurableObject {
     );
   }
 
+  _familyPreviousIndiaMonthWindow(timestampValue = Date.now()) {
+    const shifted = new Date(Number(timestampValue) + 19800000);
+    const year = shifted.getUTCFullYear();
+    const month = shifted.getUTCMonth();
+    const currentStartShifted = Date.UTC(year, month, 1);
+    const previousStartShifted = Date.UTC(year, month - 1, 1);
+    const previous = new Date(previousStartShifted);
+    const monthKey =
+      previous.getUTCFullYear().toString().padStart(4, "0") + "-" +
+      (previous.getUTCMonth() + 1).toString().padStart(2, "0");
+    return {
+      month_key: monthKey,
+      start_at: previousStartShifted - 19800000,
+      end_at: currentStartShifted - 19800000,
+    };
+  }
+
+  _settleFamilyMonthlyBonus(familyIdValue, timestampValue = Date.now()) {
+    const familyId = String(familyIdValue || "").trim();
+    if (!familyId) return null;
+    const window = this._familyPreviousIndiaMonthWindow(timestampValue);
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT * FROM family_monthly_bonuses WHERE family_id=? AND month_key=? LIMIT 1",
+      familyId, window.month_key,
+    ).toArray()[0];
+    if (existing) {
+      return {
+        month_key: String(existing.month_key),
+        received_coins: Number(existing.received_coins || 0),
+        bonus_basis_points: Number(existing.bonus_basis_points || 0),
+        bonus_coins: Number(existing.bonus_coins || 0),
+        settled_at: Number(existing.settled_at || 0),
+      };
+    }
+
+    const family = this.ctx.storage.sql.exec(
+      "SELECT experience FROM families WHERE id=? LIMIT 1", familyId,
+    ).toArray()[0];
+    if (!family) return null;
+    const received = Number(this.ctx.storage.sql.exec(
+      `SELECT COALESCE(SUM(coins),0) AS total
+         FROM family_received_coins
+        WHERE family_id=? AND created_at>=? AND created_at<?`,
+      familyId, window.start_at, window.end_at,
+    ).toArray()[0]?.total || 0);
+    const level = this._familyLevelInfo(family.experience);
+    const bonus = Math.floor(received * level.monthly_bonus_basis_points / 10000);
+    const now = Number(timestampValue || Date.now());
+    this.ctx.storage.sql.exec(
+      `INSERT INTO family_monthly_bonuses
+        (family_id,month_key,received_coins,bonus_basis_points,bonus_coins,settled_at)
+       VALUES(?,?,?,?,?,?)`,
+      familyId,window.month_key,received,level.monthly_bonus_basis_points,bonus,now,
+    );
+    if (bonus > 0) {
+      this.ctx.storage.sql.exec(
+        "UPDATE families SET wallet_coins=wallet_coins+?,updated_at=? WHERE id=?",
+        bonus,now,familyId,
+      );
+    }
+    return {
+      month_key: window.month_key,
+      received_coins: received,
+      bonus_basis_points: level.monthly_bonus_basis_points,
+      bonus_coins: bonus,
+      settled_at: now,
+    };
+  }
+
+  familyList(limitValue = 100) {
+    this._ensureEconomyMigrations();
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT f.id,f.name,f.tag,f.notice,f.leader_user_id,f.experience,f.wallet_coins,
+              f.created_at,f.updated_at,
+              lu.display_name AS leader_name,
+              lu.avatar_data_url AS leader_avatar_data_url,
+              COUNT(fm.user_id) AS member_count
+         FROM families f
+         LEFT JOIN family_members fm ON fm.family_id=f.id
+         LEFT JOIN app_users lu ON lu.user_id=f.leader_user_id
+        GROUP BY f.id
+        ORDER BY f.experience DESC, member_count DESC, f.created_at ASC
+        LIMIT ?`, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      tag: String(row.tag),
+      notice: String(row.notice || ""),
+      leader_user_id: String(row.leader_user_id),
+      leader_name: String(row.leader_name || row.leader_user_id),
+      leader_avatar_data_url: row.leader_avatar_data_url
+        ? String(row.leader_avatar_data_url)
+        : null,
+      experience: Number(row.experience || 0),
+      wallet_coins: Number(row.wallet_coins || 0),
+      member_count: Number(row.member_count || 0),
+      level: this._familyLevelInfo(row.experience),
+      created_at: Number(row.created_at || 0),
+      updated_at: Number(row.updated_at || 0),
+    }));
+  }
+
+  familyCreate(userIdValue, nameValue, tagValue) {
+    this._ensureEconomyMigrations();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const userExists = userId
+      ? this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", userId,
+        ).toArray()[0]
+      : null;
+    if (!userExists) throw new Error("User not found");
+    if (this._familyMembership(userId)) throw new Error("Already in a family");
+    const name = cleanText(nameValue, 40);
+    const tag = cleanText(tagValue, 12).toUpperCase();
+    if (name.length < 2) throw new Error("Family name is too short");
+    if (tag.length < 2) throw new Error("Family tag is too short");
+    const duplicate = this.ctx.storage.sql.exec(
+      "SELECT id FROM families WHERE LOWER(name)=LOWER(?) OR UPPER(tag)=UPPER(?) LIMIT 1",
+      name,tag,
+    ).toArray()[0];
+    if (duplicate) throw new Error("Family name or tag is already in use");
+    const now = Date.now();
+    const familyId = "family-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO families
+        (id,name,tag,leader_user_id,experience,wallet_coins,created_at,updated_at,notice)
+       VALUES(?,?,?,?,0,0,?,?,?)`,
+      familyId,name,tag,userId,now,now,"Welcome to " + name + " ❤️",
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_members(family_id,user_id,role,joined_at) VALUES(?,?,'leader',?)",
+      familyId,userId,now,
+    );
+    return { ok:true, family_id:familyId };
+  }
+
   async familyState(userIdValue) {
     const membership = this._familyMembership(userIdValue);
-    if (!membership) return { family: null, members: [], join_requests: [] };
+    if (!membership) {
+      return {
+        family: null,
+        members: [],
+        join_requests: [],
+        available_families: this.familyList(100),
+      };
+    }
     const familyId = String(membership.family_id);
+    const settledBonus = this._settleFamilyMonthlyBonus(familyId, Date.now());
+    const fresh = this._familyMembership(userIdValue) || membership;
     const members = this.ctx.storage.sql.exec(
-      `SELECT fm.user_id, fm.role, fm.joined_at, u.display_name, u.avatar_data_url
+      `SELECT fm.user_id, fm.role, fm.joined_at, u.display_name, u.avatar_data_url,
+              COALESCE(SUM(rc.coins),0) AS received_coins
          FROM family_members fm
          JOIN app_users u ON u.user_id = fm.user_id
+         LEFT JOIN family_received_coins rc
+           ON rc.family_id=fm.family_id AND rc.receiver_user_id=fm.user_id
         WHERE fm.family_id = ?
+        GROUP BY fm.family_id,fm.user_id
         ORDER BY CASE fm.role WHEN 'leader' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-                 fm.joined_at`,
+                 received_coins DESC, fm.joined_at`,
       familyId,
-    ).toArray();
+    ).toArray().map((row)=>({
+      user_id:String(row.user_id),
+      role:String(row.role),
+      joined_at:Number(row.joined_at || 0),
+      display_name:String(row.display_name || row.user_id),
+      avatar_data_url:row.avatar_data_url ? String(row.avatar_data_url) : null,
+      received_coins:Number(row.received_coins || 0),
+    }));
     const requests = this._familyCanReview(userIdValue, familyId)
       ? this.ctx.storage.sql.exec(
           `SELECT r.user_id, r.created_at, u.display_name, u.avatar_data_url
@@ -7271,15 +9131,21 @@ export class AppDirectoryStore extends DurableObject {
           familyId,
         ).toArray()
       : [];
+    const level = this._familyLevelInfo(fresh.experience);
     return {
       family: {
         id: familyId,
-        name: String(membership.name),
-        tag: String(membership.tag),
-        leader_user_id: String(membership.leader_user_id),
-        experience: Number(membership.experience || 0),
-        wallet_coins: Number(membership.wallet_coins || 0),
-        my_role: String(membership.role),
+        name: String(fresh.name),
+        tag: String(fresh.tag),
+        notice: String(fresh.notice || ""),
+        leader_user_id: String(fresh.leader_user_id),
+        experience: Number(fresh.experience || 0),
+        wallet_coins: Number(fresh.wallet_coins || 0),
+        my_role: String(fresh.role),
+        ...level,
+        reference_coin_scale: 100,
+        reference_20000_tinni_coins: 2000000,
+        last_month_bonus: settledBonus,
       },
       members,
       join_requests: requests,
@@ -7287,12 +9153,11 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async familyRequestJoin(userIdValue, familyIdValue) {
-    const userId = String(userIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
     const familyId = String(familyIdValue || "").trim();
     if (this._familyMembership(userId)) throw new Error("Already in a family");
     const family = this.ctx.storage.sql.exec(
-      "SELECT id FROM families WHERE id = ? LIMIT 1",
-      familyId,
+      "SELECT id FROM families WHERE id = ? LIMIT 1", familyId,
     ).toArray()[0];
     if (!family) throw new Error("Family not found");
     const now = Date.now();
@@ -7312,7 +9177,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!actor || !this._familyCanReview(actorUserIdValue, actor.family_id)) {
       throw new Error("Family admin permission required");
     }
-    const targetUserId = String(targetUserIdValue || "").trim();
+    const targetUserId = this._resolveOwnerUserId(targetUserIdValue);
     const request = this.ctx.storage.sql.exec(
       `SELECT user_id FROM family_join_requests
         WHERE family_id = ? AND user_id = ? AND status = 'pending' LIMIT 1`,
@@ -7378,8 +9243,139 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true };
   }
 
+  familyLeave(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const membership = this._familyMembership(userId);
+    if (!membership) return { ok:true };
+    if (String(membership.role) === "leader") {
+      throw new Error("Family Leader cannot leave before transferring or closing the Family");
+    }
+    this.ctx.storage.sql.exec(
+      "DELETE FROM family_members WHERE family_id=? AND user_id=?",
+      membership.family_id,userId,
+    );
+    return { ok:true };
+  }
+
+  familyUpdateNotice(userIdValue, noticeValue) {
+    const actor = this._familyMembership(userIdValue);
+    if (!actor || !["leader","admin"].includes(String(actor.role))) {
+      throw new Error("Family Leader/Admin permission required");
+    }
+    const notice = cleanText(noticeValue, 300);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET notice=?,updated_at=? WHERE id=?",
+      notice,now,actor.family_id,
+    );
+    return { ok:true, notice };
+  }
+
+  familyCheckIn(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const membership = this._familyMembership(userId);
+    if (!membership) throw new Error("Join a Family first");
+    const dayKey = this._indiaGiftDayKey(Date.now());
+    const existing = this.ctx.storage.sql.exec(
+      "SELECT exp_awarded FROM family_daily_logins WHERE family_id=? AND user_id=? AND day_key=? LIMIT 1",
+      membership.family_id,userId,dayKey,
+    ).toArray()[0];
+    if (existing) {
+      return { ok:true, already_checked_in:true, exp_awarded:Number(existing.exp_awarded || 0) };
+    }
+    const policies = this.ownerState().policies || {};
+    const exp = Math.max(1, Math.floor(Number(policies.family_daily_login_exp || 1)));
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_daily_logins(family_id,user_id,day_key,exp_awarded,created_at) VALUES(?,?,?,?,?)",
+      membership.family_id,userId,dayKey,exp,now,
+    );
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET experience=experience+?,updated_at=? WHERE id=?",
+      exp,now,membership.family_id,
+    );
+    return { ok:true, already_checked_in:false, exp_awarded:exp };
+  }
+
+  familyTransferCoins(senderUserIdValue, receiverUserIdValue, coinsValue) {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const receiverId = this._resolveOwnerUserId(receiverUserIdValue);
+    const amount = Math.floor(Number(coinsValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    if (senderId === receiverId) throw new Error("Choose another Family member");
+    const sender = this._familyMembership(senderId);
+    const receiver = this._familyMembership(receiverId);
+    if (!sender || !receiver || String(sender.family_id) !== String(receiver.family_id)) {
+      throw new Error("Coins can be sent only to a member of your Family");
+    }
+    this._enforceActionRate(senderId, "family_wallet_send", 20, 60000, 300000);
+    const now = Date.now();
+    const id = "family-transfer-" + crypto.randomUUID();
+    this._debitNormalWalletAuthorized(senderId, amount, "family_member_transfer");
+    this._creditNormalWalletAuthorized(receiverId, amount, "family_member_transfer");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_wallet_transfers(id,family_id,sender_user_id,receiver_user_id,coins,created_at) VALUES(?,?,?,?,?,?)",
+      id,sender.family_id,senderId,receiverId,amount,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO family_received_coins(id,family_id,sender_user_id,receiver_user_id,coins,source,created_at) VALUES(?,?,?,?,?,'family_wallet',?)",
+      id,sender.family_id,senderId,receiverId,amount,now,
+    );
+    // Receiving coins gives Family EXP 1:1. Sending coins gives no Family EXP.
+    this.ctx.storage.sql.exec(
+      "UPDATE families SET experience=experience+?,updated_at=? WHERE id=?",
+      amount,now,sender.family_id,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'family_send',?,0,?,?,?)",
+      crypto.randomUUID(),senderId,-amount,id,"Family Wallet send to "+receiverId,now,
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?, 'family_receive',?,0,?,?,?)",
+      crypto.randomUUID(),receiverId,amount,id,"Family Wallet received from "+senderId,now,
+    );
+    this._notifyUser(
+      receiverId,
+      "family_coins_received",
+      "Family Wallet",
+      amount.toLocaleString("en-US") + " coins received from " + senderId + ".",
+      { source_user_id:senderId, metadata:{ family_id:String(sender.family_id), coins:amount } },
+    );
+    return {
+      ok:true,
+      transfer_id:id,
+      sender_wallet:this.getWallet(senderId),
+      receiver_user_id:receiverId,
+      coins:amount,
+      family_level:this._familyLevelInfo(Number(sender.experience || 0) + amount),
+    };
+  }
+
+  familyWalletTransfers(userIdValue, limitValue = 100) {
+    const membership = this._familyMembership(userIdValue);
+    if (!membership) return [];
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT t.*, su.display_name AS sender_name, ru.display_name AS receiver_name
+         FROM family_wallet_transfers t
+         JOIN app_users su ON su.user_id=t.sender_user_id
+         JOIN app_users ru ON ru.user_id=t.receiver_user_id
+        WHERE t.family_id=?
+        ORDER BY t.created_at DESC LIMIT ?`,
+      membership.family_id,limit,
+    ).toArray().map((row)=>({
+      id:String(row.id),
+      sender_user_id:String(row.sender_user_id),
+      sender_name:String(row.sender_name || row.sender_user_id),
+      receiver_user_id:String(row.receiver_user_id),
+      receiver_name:String(row.receiver_name || row.receiver_user_id),
+      coins:Number(row.coins || 0),
+      created_at:Number(row.created_at || 0),
+    }));
+  }
+
   async createRoom(ownerIdValue, input) {
-    const ownerId = String(ownerIdValue || "").trim();
+    const ownerId = this._resolveOwnerUserId(ownerIdValue);
     const owner = await this.getUserById(ownerId);
     if (!owner) throw new Error("Owner user does not exist");
 
@@ -7417,9 +9413,10 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     this.ctx.storage.sql.exec(
       `INSERT INTO app_rooms
-        (id, owner_id, title, country_code, country_name, flag_emoji,
+        (id, public_id, owner_id, title, country_code, country_name, flag_emoji,
          seat_count, party_mode, locked, photo_data_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ownerId,
       ownerId,
       ownerId,
       title,

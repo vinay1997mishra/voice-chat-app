@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
@@ -22,7 +20,6 @@ class LudoScreen extends StatefulWidget {
 
 class _LudoScreenState extends State<LudoScreen> {
   late LudoGame game;
-  Timer? _syncTimer;
   bool _remoteReady = false;
   bool _syncing = false;
   String? _myColor;
@@ -33,12 +30,6 @@ class _LudoScreenState extends State<LudoScreen> {
     super.initState();
     game = LudoGame();
     Future<void>.delayed(Duration.zero, () => _syncRemote(initial: true));
-  }
-
-  @override
-  void dispose() {
-    _syncTimer?.cancel();
-    super.dispose();
   }
 
   void _applyRemote(Map<String, dynamic> data) {
@@ -65,10 +56,6 @@ class _LudoScreenState extends State<LudoScreen> {
       );
       if (!mounted) return;
       setState(() => _applyRemote(data));
-      _syncTimer ??= Timer.periodic(
-        const Duration(seconds: 2),
-        (_) => _syncRemote(),
-      );
     } catch (error) {
       if (!mounted) return;
       if (initial || !_remoteReady) {
@@ -190,8 +177,15 @@ class _LudoScreenState extends State<LudoScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: RefreshIndicator(
+          onRefresh: () => _syncRemote(),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: RoyalPanel(
@@ -369,7 +363,11 @@ class _LudoScreenState extends State<LudoScreen> {
                 ],
               ),
             ),
-          ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

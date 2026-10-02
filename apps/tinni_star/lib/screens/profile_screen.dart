@@ -4,16 +4,23 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../community/family_service.dart';
 import '../identity/owner_tag.dart';
+import '../i18n/tinni_localization.dart';
 import '../infra/app_backend_service.dart';
-import '../moderation/user_safety_menu.dart';
-import '../ui/royal_theme.dart';
 import '../ui/animated_avatar_frame.dart';
+import '../ui/premium_effects.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
+import 'custom_center_screen.dart';
 import 'vip_screen.dart';
+import 'store_screen.dart';
+import 'recharge_screen.dart';
 import 'cp_screen.dart';
+import 'privacy_policy_screen.dart';
+import 'personal_profile_screen.dart';
+import 'public_profile_screen.dart';
+import 'guardian_screen.dart';
+import 'mine_function_screens.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -26,17 +33,38 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final List<OwnerTag> _ownerTags = <OwnerTag>[];
   final List<OwnerTag> _ownerMedals = <OwnerTag>[];
+  Map<String, dynamic> _accountStats = const <String, dynamic>{};
+  bool _economyLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadOwnerTags();
     _loadEconomyState();
+    _loadAccountStats();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _loadEconomyState();
+    _loadAccountStats();
+  }
+
+  Future<void> _loadAccountStats() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final stats = await widget.state.backend.accountStats(account.authToken);
+      if (!mounted) return;
+      setState(() => _accountStats = stats);
+    } catch (_) {}
   }
 
   Future<void> _loadEconomyState() async {
     final account = widget.state.auth.current;
-    if (account == null) return;
+    if (account == null || _economyLoading) return;
+    _economyLoading = true;
     try {
       final wallet = await widget.state.backend.wallet(account.authToken);
       final vip = await widget.state.backend.vipMe(account.authToken);
@@ -45,7 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         vip == null ? 0 : int.tryParse(vip['vip_level']?.toString() ?? '') ?? 0,
       );
       if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _economyLoading = false;
+    }
   }
 
   Future<void> _showSettlementTransfer() async {
@@ -268,391 +299,792 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  ImageProvider? _mineAvatarProvider(String? value) {
+    final source = value?.trim() ?? '';
+    if (source.isEmpty) return null;
+    if (source.startsWith('data:image/')) {
+      try {
+        return MemoryImage(base64Decode(source.split(',').last));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (source.startsWith('https://') || source.startsWith('http://')) {
+      return NetworkImage(source);
+    }
+    return null;
+  }
+
+  void _openMineScreen(Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+
+  Widget _mineMenuRow({
+    required Key key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      height: 52,
+      child: InkWell(
+        key: key,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 27,
+                height: 27,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF171006),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF8C6500),
+                    width: 1,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x448C6500),
+                      blurRadius: 7,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  size: 17,
+                  color: const Color(0xFFC18A00),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFFC18A00),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF9C7000),
+                size: 23,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mineMenuGroup(List<Widget> rows) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xE60A0804),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF5F4600),
+          width: 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x443D2A00),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _mineStatusCard({
+    required Key key,
+    required String title,
+    required String subtitle,
+    required List<Color> colors,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        key: key,
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          height: 60,
+          padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color.lerp(const Color(0xFF050402), colors.first, 0.10)!,
+                Color.lerp(const Color(0xFF100B03), colors.last, 0.08)!,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFFFC400), width: 1.2),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33D39A00),
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFFD09A0A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFFAA7C08),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(icon, color: const Color(0xFFC18A00), size: 30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.state.auth.current;
-    final identity = widget.state.identity;
-
     if (account == null) {
       return const Scaffold(
         body: Center(child: Text('Login required')),
       );
     }
 
-    ImageProvider? avatar;
-    final dataUrl = account.avatarDataUrl;
-    if (dataUrl != null && dataUrl.startsWith('data:image/')) {
-      try {
-        avatar = MemoryImage(base64Decode(dataUrl.split(',').last));
-      } catch (_) {
-        avatar = null;
-      }
-    }
+    final language = widget.state.languagePreference.value;
+    final avatar = _mineAvatarProvider(account.avatarDataUrl);
+    final followCount = (_accountStats['following_count'] as num?)?.toInt() ??
+        widget.state.social.following.length;
+    final fansCount = (_accountStats['followers_count'] as num?)?.toInt() ?? 0;
+    final charmPoints =
+        (_accountStats['lifetime_received_coins'] as num?)?.toInt() ?? 0;
+    final wealth = _accountStats['wealth'] is Map
+        ? Map<String, dynamic>.from(_accountStats['wealth'] as Map)
+        : const <String, dynamic>{};
+    final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
+    final vipLevel = widget.state.identity.vip.level;
+    final profileBackgroundId =
+        widget.state.inventory.equipped('profile_background');
+    final profileBackgroundAsset = profileBackgroundId == null
+        ? ''
+        : widget.state.inventory.ownedDetails[profileBackgroundId]
+                    ?['asset_url']
+                ?.toString() ??
+            '';
+    final profileBackground =
+        _mineAvatarProvider(profileBackgroundAsset);
+    final ringId = widget.state.inventory.equipped('ring');
+    final profileCardId = widget.state.inventory.equipped('profile_card');
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Mine',
-          style: TextStyle(
-            color: FeaturePalette.social,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        actions: [
-          UserSafetyMenuButton(
-            state: widget.state,
-            targetUserId: account.userId,
-            targetDisplayName: account.displayName,
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          RoyalPanel(
-            gradient: FeaturePalette.glow(FeaturePalette.social),
-            accentColor: FeaturePalette.social,
-            child: Row(
-              children: [
-                AnimatedAvatarFrame(
-                  size: 92,
-                  frameId: widget.state.inventory.equippedFrameId,
-                  child: CircleAvatar(
-                    backgroundColor: RoyalPalette.panel2,
-                    backgroundImage: avatar,
-                    child: avatar == null
-                        ? Text(
-                            account.displayName.characters.first.toUpperCase(),
-                            style: const TextStyle(
-                              color: FeaturePalette.social,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          )
-                        : null,
+      key: const Key('reference-mine-screen'),
+      backgroundColor: const Color(0xFF030201),
+      body: SafeArea(
+        bottom: false,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF050402),
+                Color(0xFF090603),
+                Color(0xFF020201),
+                Color(0xFF000000),
+              ],
+              stops: [0.0, 0.24, 0.58, 1.0],
+            ),
+            image: profileBackground == null
+                ? null
+                : DecorationImage(
+                    image: profileBackground,
+                    fit: BoxFit.cover,
+                    opacity: 0.08,
                   ),
+          ),
+          child: CustomPaint(
+            painter: const _MineGoldenStarsPainter(),
+            child: ListView(
+            key: const Key('reference-mine-list'),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
+            children: [
+              InkWell(
+                key: const Key('profile-active-card'),
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => _openMineScreen(
+                  PublicProfileScreen(state: widget.state),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        account.displayName,
-                        style: const TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        'ID ' +
-                            account.userId +
-                            ' • ' +
-                            account.flagEmoji +
-                            ' ' +
-                            account.countryName,
-                        style: const TextStyle(color: RoyalPalette.muted),
-                      ),
-                      if (_ownerTags.isNotEmpty || _ownerMedals.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 5,
-                          children: [
-                            for (final tag in _ownerTags)
-                              _OwnerTagBadge(tag: tag),
-                            for (final medal in _ownerMedals)
-                              _OwnerTagBadge(
-                                tag: medal,
-                                medal: true,
+                child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: profileCardId == null
+                        ? const [
+                            Color(0xE60A0804),
+                            Color(0xD9060503),
+                          ]
+                        : const [
+                            Color(0xFF151006),
+                            Color(0xFF090603),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: profileCardId == null
+                        ? const Color(0xFF5F4600)
+                        : const Color(0xFFC18A00),
+                    width: profileCardId == null ? 1 : 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x443D2A00),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: PremiumProfileCardShell(
+                    effectId: profileCardId,
+                    child: Row(
+                  children: [
+                  Container(
+                    padding: EdgeInsets.all(ringId == null ? 0 : 3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: ringId == null
+                          ? null
+                          : Border.all(
+                              color: const Color(0xFFFFC928),
+                              width: 2.4,
+                            ),
+                      boxShadow: ringId == null
+                          ? null
+                          : const [
+                              BoxShadow(
+                                color: Color(0x66FFC928),
+                                blurRadius: 12,
                               ),
+                            ],
+                    ),
+                    child: AnimatedAvatarFrame(
+                      size: 66,
+                      frameId: widget.state.inventory.equippedFrameId,
+                      child: CircleAvatar(
+                      radius: 33,
+                      backgroundColor: const Color(0xFF0F6F6D),
+                      backgroundImage: avatar,
+                      child: avatar == null
+                          ? Text(
+                              account.displayName.trim().isEmpty
+                                  ? '?'
+                                  : account.displayName
+                                      .trim()
+                                      .characters
+                                      .first
+                                      .toUpperCase(),
+                              style: const TextStyle(
+                                color: Color(0xFFC18A00),
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            )
+                          : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                account.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFFD09A0A),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              account.flagEmoji,
+                              style: const TextStyle(fontSize: 14),
+                            ),
                           ],
                         ),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        account.age.toString() +
-                            ' • ' +
-                            (account.gender == 'male' ? 'Male' : 'Female'),
-                        style: const TextStyle(
-                          color: RoyalPalette.muted,
-                          fontSize: 11,
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'UID:' + account.userId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF9C7000),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0A0804),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF8C6500),
+                                ),
+                              ),
+                              child: const Text(
+                                'Lv.0',
+                                style: TextStyle(
+                                  color: Color(0xFFC18A00),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        if (widget.state.family.exists) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            key: const Key('profile-family-tag'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0A0804),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF8C6500),
+                              ),
+                            ),
+                            child: Text(
+                              (widget.state.family.tag ?? 'FM') +
+                                  ' • ' +
+                                  widget.state.family.levelLabel,
+                              style: const TextStyle(
+                                color: Color(0xFFC18A00),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.workspace_premium_rounded,
+                    color: Color(0xFFC18A00),
+                    size: 23,
+                  ),
+                ],
+              ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  _MineCountStat(
+                    value: followCount.toString(),
+                    label: tinniText(language, 'follow'),
+                  ),
+                  const _MineCountDivider(),
+                  _MineCountStat(value: fansCount.toString(), label: tinniText(language, 'fans')),
+                  const _MineCountDivider(),
+                  _MineCountStat(value: charmPoints.toString(), label: tinniText(language, 'charm')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                key: const Key('mine-wallet'),
+                borderRadius: BorderRadius.circular(11),
+                onTap: () => _openMineScreen(
+                  RechargeScreen(state: widget.state),
+                ),
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF120D04), Color(0xFF050402)],
+                    ),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: const Color(0xFF8C6500),
+                      width: 1.2,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33D28A00),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
                       ),
-                      if (account.signature.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          account.signature,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: RoyalPalette.cream,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                      if (widget.state.family.exists) ...[
-                        const SizedBox(height: 5),
-                        _FamilyTagBadge(state: widget.state),
-                      ],
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.monetization_on_rounded,
+                        size: 40,
+                        color: Color(0xFFC18A00),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _GoldBadge(
-                            'VIP' + identity.vip.level.toString(),
-                            color: FeaturePalette.vip,
+                          const Text(
+                            'Coins',
+                            style: TextStyle(
+                              color: Color(0xFFAA7C08),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          _GoldBadge(
-                            'Noble ' + identity.noble.level.toString(),
-                            color: FeaturePalette.rank,
+                          Text(
+                            widget.state.wallet.coins.toString(),
+                            style: const TextStyle(
+                              color: Color(0xFFD09A0A),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0A0804),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFF8C6500),
+                              ),
+                            ),
+                            child: const Text(
+                              'First Recharge',
+                              style: TextStyle(
+                                color: Color(0xFFAA7C08),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            tinniText(language, 'wallet'),
+                            style: TextStyle(
+                              color: Color(0xFFD09A0A),
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (widget.state.wallet.securityFrozen) ...[
-            RoyalPanel(
-              gradient: FeaturePalette.glow(FeaturePalette.safety),
-              accentColor: FeaturePalette.safety,
-              child: const Row(
-                children: [
-                  ShiningIcon(
-                    icon: Icons.lock_rounded,
-                    color: FeaturePalette.safety,
-                    size: 22,
-                    boxSize: 42,
-                    glow: 0.34,
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Wallet security frozen\nUnexpected coin credit detected. Only the Platform Owner can unfreeze this wallet.',
-                      style: TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w800,
-                      ),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                key: const Key('mine-cp-panel'),
+                borderRadius: BorderRadius.circular(11),
+                onTap: () => _openMineScreen(
+                  CpScreen(state: widget.state),
+                ),
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1B0A14), Color(0xFF080304)],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Coins',
-                  value: widget.state.wallet.coins.toString(),
-                  color: FeaturePalette.wallet,
-                ),
-              ),
-              if (widget.state.wallet.diamondWalletVisible) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Diamonds',
-                    value: widget.state.wallet.diamonds.toString() +
-                        '\n' +
-                        widget.state.wallet.diamondUsdText,
-                    color: FeaturePalette.diamond,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (widget.state.wallet.isHost ||
-              widget.state.wallet.isAgency ||
-              widget.state.wallet.isBd) ...[
-            const SizedBox(height: 10),
-            RoyalPanel(
-              gradient: FeaturePalette.glow(FeaturePalette.diamond),
-              accentColor: FeaturePalette.diamond,
-              child: Row(
-                children: [
-                  const ShiningIcon(
-                    icon: Icons.currency_exchange_rounded,
-                    color: FeaturePalette.diamond,
-                    size: 24,
-                    boxSize: 46,
-                    glow: 0.36,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Withdrawable ' +
-                          widget.state.wallet.withdrawableUsdText +
-                          (widget.state.wallet.diamondWalletVisible
-                              ? '\n4M Diamonds = \$1.70'
-                              : '\nCommission settlement'),
-                      style: const TextStyle(
-                        color: RoyalPalette.cream,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: const Color(0xFFC18A00),
+                      width: 1.2,
                     ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33C18A00),
+                        blurRadius: 7,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  FilledButton(
-                    key: const Key('wallet-settlement-transfer'),
-                    onPressed: widget.state.wallet.canTransferSettlement
-                        ? _showSettlementTransfer
-                        : null,
-                    child: const Text('Transfer'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          const GoldSectionTitle('My CP'),
-          const SizedBox(height: 8),
-          RoyalPanel(
-            key: const Key('mine-cp-panel'),
-            gradient: FeaturePalette.glow(FeaturePalette.cp),
-            accentColor: FeaturePalette.cp,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CpScreen(state: widget.state),
-              ),
-            ).then((_) => setState(() {})),
-            child: const Row(
-              children: [
-                ShiningIcon(
-                  icon: Icons.favorite_rounded,
-                  color: FeaturePalette.cp,
-                  size: 28,
-                  boxSize: 52,
-                  glow: 0.42,
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: const Row(
                     children: [
-                      Text(
-                        'CP Panel',
-                        style: TextStyle(
-                          color: RoyalPalette.cream,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
+                      Icon(
+                        Icons.favorite_rounded,
+                        size: 34,
+                        color: Color(0xFFC18A00),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'My CP',
+                              style: TextStyle(
+                                color: Color(0xFFD09A0A),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'CP Nest • intimacy • memories • details',
+                              style: TextStyle(
+                                color: Color(0xFFAA7C08),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Request, accept, intimacy, memories and CP details',
-                        style: TextStyle(
-                          color: RoyalPalette.muted,
-                          fontSize: 10,
-                        ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFFC18A00),
                       ),
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: FeaturePalette.cp,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          const GoldSectionTitle('My Account'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _MineTile(
-                  icon: Icons.groups_rounded,
-                  label: 'Family',
-                  color: FeaturePalette.family,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => widget.state.family.exists
-                          ? FamilyHomeScreen(state: widget.state)
-                          : FamilyRankingScreen(state: widget.state),
-                    ),
-                  ).then((_) => setState(() {})),
-                ),
               ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _MineTile(
-                  icon: Icons.workspace_premium_rounded,
-                  label: 'VIP',
-                  color: FeaturePalette.vip,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => VipScreen(state: widget.state),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _mineStatusCard(
+                    key: const Key('mine-vip-card'),
+                    title: 'VIP',
+                    subtitle: vipLevel > 0 ? 'VIP' + vipLevel.toString() : 'Not obtained',
+                    colors: const [Color(0xFFB829E8), Color(0xFF6B2FC0)],
+                    icon: Icons.workspace_premium_rounded,
+                    onTap: () => _openMineScreen(
+                      VipScreen(state: widget.state),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  _mineStatusCard(
+                    key: const Key('mine-wealth-level-card'),
+                    title: tinniText(language, 'wealth_level'),
+                    subtitle: 'LV.' + wealthLevel.toString(),
+                    colors: const [Color(0xFF24B85B), Color(0xFF087A38)],
+                    icon: Icons.diamond_rounded,
+                    onTap: () => _openMineScreen(
+                      WealthLevelScreen(state: widget.state),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _mineMenuGroup([
+                _mineMenuRow(
+                  key: const Key('mine-personal-information'),
+                  icon: Icons.account_box_rounded,
+                  label: 'Personal information',
+                  onTap: () => _openMineScreen(
+                    PersonalProfileScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-my-guardian'),
+                  icon: Icons.shield_rounded,
+                  label: 'My Guardian',
+                  onTap: () => _openMineScreen(
+                    GuardianScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-medal-of-honor'),
+                  icon: Icons.hexagon_rounded,
+                  label: tinniText(language, 'medal_of_honor'),
+                  onTap: () => _openMineScreen(
+                    MedalOfHonorScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-custom-center'),
+                  icon: Icons.design_services_rounded,
+                  label: tinniText(language, 'custom_center'),
+                  onTap: () => _openMineScreen(
+                    CustomCenterScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-shop'),
+                  icon: Icons.shopping_bag_rounded,
+                  label: tinniText(language, 'shop'),
+                  onTap: () => _openMineScreen(
+                    StoreScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-props'),
+                  icon: Icons.auto_awesome_rounded,
+                  label: tinniText(language, 'props'),
+                  onTap: () => _openMineScreen(
+                    PropsScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-reward-records'),
+                  icon: Icons.receipt_long_rounded,
+                  label: tinniText(language, 'reward_records'),
+                  onTap: () => _openMineScreen(
+                    RewardRecordsScreen(state: widget.state),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 9),
+              _mineMenuGroup([
+                _mineMenuRow(
+                  key: const Key('mine-task'),
+                  icon: Icons.task_alt_rounded,
+                  label: tinniText(language, 'task'),
+                  onTap: () => _openMineScreen(
+                    TaskScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-host-data'),
+                  icon: Icons.monitor_heart_rounded,
+                  label: tinniText(language, 'host_data'),
+                  onTap: () => _openMineScreen(
+                    HostDataScreen(
+                      state: widget.state,
+                      onTransfer: _showSettlementTransfer,
                     ),
                   ),
                 ),
-              ),
+              ]),
+              const SizedBox(height: 9),
+              _mineMenuGroup([
+                _mineMenuRow(
+                  key: const Key('mine-family'),
+                  icon: Icons.home_work_rounded,
+                  label: tinniText(language, 'family'),
+                  onTap: () => _openMineScreen(
+                    widget.state.family.exists
+                        ? FamilyHomeScreen(state: widget.state)
+                        : FamilyRankingScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-cp-nest'),
+                  icon: Icons.favorite_rounded,
+                  label: tinniText(language, 'cp_nest'),
+                  onTap: () => _openMineScreen(
+                    CpScreen(state: widget.state),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 9),
+              _mineMenuGroup([
+                _mineMenuRow(
+                  key: const Key('mine-feedback'),
+                  icon: Icons.chat_bubble_rounded,
+                  label: tinniText(language, 'feedback'),
+                  onTap: () => _openMineScreen(
+                    FeedbackScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-setting'),
+                  icon: Icons.settings_rounded,
+                  label: tinniText(language, 'setting'),
+                  onTap: () => _openMineScreen(
+                    TinniSettingsScreen(state: widget.state),
+                  ),
+                ),
+              ]),
             ],
           ),
-        ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _OwnerTagBadge extends StatelessWidget {
-  const _OwnerTagBadge({
-    required this.tag,
-    this.medal = false,
-  });
+class _MineCountStat extends StatelessWidget {
+  const _MineCountStat({required this.value, required this.label});
 
-  final OwnerTag tag;
-  final bool medal;
-
-  Color get _color {
-    final value = int.tryParse(tag.colorHex.replaceFirst('#', ''), radix: 16);
-    return Color(0xFF000000 | (value ?? 0xFFD54F));
-  }
+  final String value;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final color = _color;
-    return Container(
-      key: Key(
-        (medal ? 'profile-owner-medal-' : 'profile-owner-tag-') + tag.name,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.28),
-            blurRadius: 8,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    return Expanded(
+      child: Column(
         children: [
-          if (medal) ...[
-            Icon(
-              Icons.workspace_premium_rounded,
-              size: 12,
-              color: color,
-            ),
-            const SizedBox(width: 3),
-          ],
           Text(
-            tag.name,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
+            value,
+            style: const TextStyle(
+              color: Color(0xFFD09A0A),
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF9C7000),
               fontSize: 10,
             ),
           ),
@@ -662,180 +1094,62 @@ class _OwnerTagBadge extends StatelessWidget {
   }
 }
 
-class _FamilyTagBadge extends StatelessWidget {
-  const _FamilyTagBadge({required this.state});
+class _MineCountDivider extends StatelessWidget {
+  const _MineCountDivider();
 
-  final TinniState state;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 24,
+      color: const Color(0xFF5F4600),
+    );
+  }
+}
 
-  Color get _color {
-    switch (state.family.visualTier) {
-      case FamilyVisualTier.emerald:
-        return const Color(0xFF0E8A62);
-      case FamilyVisualTier.sapphire:
-        return const Color(0xFF155FA8);
-      case FamilyVisualTier.amethyst:
-        return const Color(0xFF833FB0);
-      case FamilyVisualTier.royalGold:
-        return const Color(0xFFD49B14);
-      case FamilyVisualTier.bronze:
-        return const Color(0xFF7A5515);
+
+
+class _MineGoldenStarsPainter extends CustomPainter {
+  const _MineGoldenStarsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    for (var i = 0; i < 96; i += 1) {
+      final x = (((i * 47) % 997) / 997) * size.width;
+      final y = (((i * 83) % 991) / 991) * size.height;
+      final bright = i % 13 == 0;
+      final radius = bright ? 1.65 : 0.55 + (i % 3) * 0.22;
+      dotPaint.color = bright
+          ? const Color(0xFFD9A514)
+          : Color.fromARGB(
+              105 + (i % 4) * 20,
+              190,
+              137,
+              0,
+            );
+      canvas.drawCircle(Offset(x, y), radius, dotPaint);
+
+      if (bright) {
+        glowPaint.color = const Color(0x66D9A514);
+        canvas.drawLine(
+          Offset(x - 4.2, y),
+          Offset(x + 4.2, y),
+          glowPaint,
+        );
+        canvas.drawLine(
+          Offset(x, y - 4.2),
+          Offset(x, y + 4.2),
+          glowPaint,
+        );
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const Key('profile-family-tag'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_color.withValues(alpha: 0.68), _color],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color.withValues(alpha: 0.95)),
-        boxShadow: [
-          BoxShadow(
-            color: _color.withValues(alpha: 0.35),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Text(
-        (state.family.tag ?? 'Family') + ' • ' + state.family.levelLabel,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 9,
-        ),
-      ),
-    );
-  }
-}
-
-class _GoldBadge extends StatelessWidget {
-  const _GoldBadge(this.text, {required this.color});
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.30),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w800,
-          fontSize: 10,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoyalPanel(
-      gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(color: RoyalPalette.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MineTile extends StatelessWidget {
-  const _MineTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoyalPanel(
-      padding: const EdgeInsets.all(8),
-      gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.15),
-              border: Border.all(
-                color: color.withValues(alpha: 0.75),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.32),
-                  blurRadius: 12,
-                ),
-              ],
-            ),
-            child: ShiningIcon(
-              icon: icon,
-              color: color,
-              size: 24,
-              boxSize: 42,
-              glow: 0.34,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  bool shouldRepaint(covariant _MineGoldenStarsPainter oldDelegate) => false;
 }

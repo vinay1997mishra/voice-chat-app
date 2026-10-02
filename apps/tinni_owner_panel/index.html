@@ -275,9 +275,9 @@
 
         <section class="view" id="view-wallets">
           <div class="grid three">
-            <article class="panel"><h2>Normal User Wallet</h2><p class="muted">Credit/debit/ban any user's normal wallet.</p><button class="btn primary" data-action="wallet-normal">Manage</button></article>
-            <article class="panel"><h2>Coin Seller Wallet</h2><p class="muted">Create, credit, debit, ban/unban seller inventory wallet.</p><button class="btn primary" data-action="wallet-seller">Manage</button></article>
-            <article class="panel"><h2>Merchant Wallet</h2><p class="muted">Create, credit, debit, ban/unban merchant wallet.</p><button class="btn primary" data-action="wallet-merchant">Manage</button></article>
+            <article class="panel"><h2>Normal User Wallet</h2><p class="muted">Add/remove coins and ban/unban any user's normal wallet.</p><button class="btn primary" data-action="wallet-normal">Manage</button></article>
+            <article class="panel"><h2>Coin Seller Wallet</h2><p class="muted">Create wallet, add/remove coins, and ban/unban Coin Seller wallet.</p><button class="btn primary" data-action="wallet-seller">Manage</button></article>
+            <article class="panel"><h2>Merchant Wallet</h2><p class="muted">Create wallet, add/remove coins, and ban/unban Merchant wallet.</p><button class="btn primary" data-action="wallet-merchant">Manage</button></article>
           </div>
           <article class="panel"><div class="panel-head"><h2>Owner Treasury Distribution</h2><span class="badge gold">2,000,000 coins = $1</span></div><p class="muted">Send Owner Treasury coins to a normal user wallet, Coin Seller wallet or Merchant wallet. Every movement is audit logged.</p><button class="btn primary" data-action="treasury-send">Send Coins</button></article>
           <article class="panel"><div class="panel-head"><h2>Wallet Security Freeze</h2><span class="badge gold">Owner only</span></div><p class="muted">Unexpected coin credits are quarantined and freeze the affected wallet. Only the Platform Owner can remove this security freeze.</p><button class="btn secondary" data-action="wallet-security-unfreeze">Unfreeze Wallet</button></article>
@@ -313,7 +313,7 @@
         </section>
 
         <section class="view" id="view-gifts">
-          <article class="panel"><div class="panel-head"><div><h2>Gift Catalog</h2><p>Add, edit, remove, enable/disable and schedule gifts.</p></div><button class="btn primary" data-action="gift-new">+ Add Gift</button></div><div id="giftCatalogList" class="empty-state">Loading gifts…</div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Gift Catalog</h2><p>Add, edit, remove, enable/disable and schedule gifts.</p></div><div class="button-row"><button class="btn secondary" data-action="lucky-gift-config">Lucky Settings</button><button class="btn primary" data-action="gift-new">+ Add Gift</button></div></div><div id="giftCatalogList" class="empty-state">Loading gifts…</div></article>
         </section>
 
         <section class="view" id="view-assets">

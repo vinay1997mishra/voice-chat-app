@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/tinni_localization.dart';
 import '../screens/discover_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
@@ -40,6 +41,12 @@ class _TinniShellState extends State<TinniShell> {
   int index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    widget.state.refreshAccountPreferences();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(state: widget.state),
@@ -77,61 +84,106 @@ class _TinniShellState extends State<TinniShell> {
           );
         },
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (value) {
-          const labels = <String>['party', 'discover', 'message', 'mine'];
-          widget.state.analytics.event('navigation_tab', <String, Object?>{
-            'tab': labels[value],
-          });
-          setState(() => index = value);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.groups_rounded, color: FeaturePalette.family),
-            selectedIcon: ShiningIcon(
-              icon: Icons.groups_rounded,
-              color: FeaturePalette.family,
-              size: 20,
-              boxSize: 36,
-              glow: 0.34,
-            ),
-            label: 'Party',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF17130D),
+              RoyalPalette.nearBlack,
+              RoyalPalette.black,
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_rounded, color: FeaturePalette.discover),
-            selectedIcon: ShiningIcon(
-              icon: Icons.explore_rounded,
-              color: FeaturePalette.discover,
-              size: 20,
-              boxSize: 36,
-              glow: 0.34,
+          border: Border(
+            top: BorderSide(
+              color: RoyalPalette.gold.withValues(alpha: .42),
+              width: .8,
             ),
-            label: 'Discover',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.mail_rounded, color: FeaturePalette.message),
-            selectedIcon: ShiningIcon(
-              icon: Icons.mail_rounded,
-              color: FeaturePalette.message,
-              size: 20,
-              boxSize: 36,
-              glow: 0.34,
+          boxShadow: [
+            BoxShadow(
+              color: RoyalPalette.gold.withValues(alpha: .08),
+              blurRadius: 18,
+              offset: const Offset(0, -5),
             ),
-            label: 'Message',
+          ],
+        ),
+        child: ValueListenableBuilder<String>(
+          valueListenable: widget.state.languagePreference,
+          builder: (context, language, _) => NavigationBar(
+            height: 70,
+            backgroundColor: Colors.transparent,
+            indicatorColor: RoyalPalette.gold.withValues(alpha: .12),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            selectedIndex: index,
+            onDestinationSelected: (value) {
+              const labels = <String>['party', 'discover', 'message', 'mine'];
+              widget.state.analytics.event('navigation_tab', <String, Object?>{
+                'tab': labels[value],
+              });
+              setState(() => index = value);
+            },
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.groups_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.groups_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'party'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.explore_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.explore_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'discover'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.mail_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.mail_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'message'),
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.person_rounded,
+                  color: RoyalPalette.muted,
+                ),
+                selectedIcon: const ShiningIcon(
+                  icon: Icons.person_rounded,
+                  color: RoyalPalette.gold,
+                  size: 20,
+                  boxSize: 36,
+                  glow: 0.18,
+                ),
+                label: tinniText(language, 'mine'),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_rounded, color: FeaturePalette.social),
-            selectedIcon: ShiningIcon(
-              icon: Icons.person_rounded,
-              color: FeaturePalette.social,
-              size: 20,
-              boxSize: 36,
-              glow: 0.34,
-            ),
-            label: 'Mine',
-          ),
-        ],
+        ),
       ),
     );
   }

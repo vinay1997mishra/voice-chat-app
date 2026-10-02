@@ -1,15 +1,19 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../infra/app_backend_service.dart';
 import '../core/seat_policy.dart';
+import '../ui/room_dp.dart';
+import '../ui/royal_party_artwork.dart';
 import '../ui/royal_theme.dart';
 
 import 'cp_ranking_screen.dart';
@@ -48,6 +52,35 @@ Color _homeFeatureColor(String title) {
 }
 
 
+String _compactNumber(int value) {
+  if (value >= 1000000000) {
+    return (value / 1000000000).toStringAsFixed(value % 1000000000 == 0 ? 0 : 1) + 'B';
+  }
+  if (value >= 1000000) {
+    return (value / 1000000).toStringAsFixed(value % 1000000 == 0 ? 0 : 1) + 'M';
+  }
+  if (value >= 1000) {
+    return (value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1) + 'K';
+  }
+  return value.toString();
+}
+
+ImageProvider? _homeAvatarProvider(String? value) {
+  final source = value?.trim() ?? '';
+  if (source.isEmpty) return null;
+  if (source.startsWith('data:image/')) {
+    try {
+      return MemoryImage(base64Decode(source.split(',').last));
+    } catch (_) {
+      return null;
+    }
+  }
+  if (source.startsWith('https://') || source.startsWith('http://')) {
+    return NetworkImage(source);
+  }
+  return null;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.state});
 
@@ -61,12 +94,17 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = ['Mine', 'Party', 'Events', 'Country'];
 
   final PageController _pageController = PageController(initialPage: 1);
-  Timer? _roomSyncTimer;
+  final List<Map<String, dynamic>> _cpTop = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> _familyTop = <Map<String, dynamic>>[];
   int _page = 1;
   bool popular = true;
   String countryFilter = '';
   String countryFilterLabel = '';
   final List<RemoteNotification> _notifications = <RemoteNotification>[];
+  bool _notificationsInitialized = false;
+  bool _notificationVoice = true;
+  bool _notificationVibration = true;
+  bool _roomFloatingOnly = false;
 
   @override
   void initState() {
@@ -77,17 +115,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
+    _syncPartyRankPreviews();
     _syncNotifications();
-    _roomSyncTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) {
-        _syncRooms();
-        _syncNotifications();
-      },
-    );
+    if (account != null) {
+      widget.state.social.connectMessageEvents(account.authToken);
+    }
   }
 
   Future<void> _syncRooms() async {
+    await widget.state.refreshAuthenticatedAccount();
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
@@ -98,17 +134,89 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _syncPartyRankPreviews() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.cpRanking(account.authToken, limit: 3),
+        widget.state.backend.familyList(account.authToken, limit: 3),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _cpTop
+          ..clear()
+          ..addAll(
+            List<Map<String, dynamic>>.from(results[0] as List),
+          );
+        _familyTop
+          ..clear()
+          ..addAll(
+            List<Map<String, dynamic>>.from(results[1] as List),
+          );
+      });
+    } catch (_) {
+      // Keep the last successful podium preview while reconnecting.
+    }
+  }
+
   Future<void> _syncNotifications() async {
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
-      final values = await widget.state.backend.notifications(account.authToken);
+      final results = await Future.wait<dynamic>([
+        widget.state.backend.notifications(account.authToken),
+        widget.state.backend.accountPreferences(account.authToken),
+      ]);
+      final values = List<RemoteNotification>.from(results[0] as List);
+      final preferences =
+          Map<String, dynamic>.from(results[1] as Map);
+
+      final previousIds = _notifications.map((item) => item.id).toSet();
+      final newlyArrived = _notificationsInitialized
+          ? values
+              .where((item) => !item.read && !previousIds.contains(item.id))
+              .toList(growable: false)
+          : const <RemoteNotification>[];
+
+      _notificationVoice = preferences['message_voice'] != false;
+      _notificationVibration =
+          preferences['message_vibration'] != false;
+      _roomFloatingOnly = preferences['room_floating_only'] == true;
+
       if (!mounted) return;
       setState(() {
         _notifications
           ..clear()
           ..addAll(values);
+        _notificationsInitialized = true;
       });
+
+      if (newlyArrived.isNotEmpty) {
+        if (_notificationVoice) {
+          await SystemSound.play(SystemSoundType.alert);
+        }
+        if (_notificationVibration) {
+          await HapticFeedback.mediumImpact();
+        }
+        final canFloat =
+            !_roomFloatingOnly || widget.state.roomSession.hasRoom;
+        if (canFloat && mounted) {
+          final notice = newlyArrived.first;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(notice.title + ': ' + notice.message),
+                duration: const Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: 'View',
+                  onPressed: _showNotifications,
+                ),
+              ),
+            );
+        }
+      }
     } catch (_) {
       // Keep the last notification snapshot while reconnecting.
     }
@@ -225,9 +333,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _roomSyncTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshHomePage() async {
+    await Future.wait<void>([
+      _syncRooms(),
+      _syncPartyRankPreviews(),
+      _syncNotifications(),
+    ]);
+  }
+
+  Widget _pullRefresh(Widget child) {
+    return RefreshIndicator(
+      onRefresh: _refreshHomePage,
+      child: child,
+    );
   }
 
   Future<void> _goToPage(int index) async {
@@ -240,15 +362,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> createRoom() async {
+    await widget.state.refreshAuthenticatedAccount(force: true);
     final account = widget.state.auth.current;
     if (account == null) return;
 
+    try {
+      await widget.state.discovery.syncRooms(account.authToken);
+    } catch (_) {
+      // The backend still prevents a second owner room if this refresh fails.
+    }
+
     final existing = widget.state.discovery.ownedRooms(account.userId);
     if (existing.isNotEmpty) {
-      openRoom(existing.first);
+      await openRoom(existing.first);
       return;
     }
 
+    if (!mounted) return;
     final result = await showModalBottomSheet<_CreateRoomResult>(
       context: context,
       isScrollControlled: true,
@@ -291,14 +421,42 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void openRoom(RoomSummary room) {
-    widget.state.discovery.visit(room.id);
-    Navigator.push(
+  Future<void> openRoom(RoomSummary room) async {
+    final previousUserId = widget.state.auth.current?.userId;
+    final idChanged =
+        await widget.state.refreshAuthenticatedAccount(force: true);
+    final account = widget.state.auth.current;
+    var targetRoom = room;
+
+    if (account != null && idChanged) {
+      try {
+        await widget.state.discovery.syncRooms(account.authToken);
+        final migratedOwnedRooms =
+            widget.state.discovery.ownedRooms(account.userId);
+        if (previousUserId != null &&
+            room.ownerId == previousUserId &&
+            migratedOwnedRooms.isNotEmpty) {
+          targetRoom = migratedOwnedRooms.first;
+        } else {
+          final refreshed = widget.state.discovery.rooms
+              .where((item) => item.id == room.id)
+              .toList();
+          if (refreshed.isNotEmpty) targetRoom = refreshed.first;
+        }
+      } catch (_) {
+        // Continue with the last room snapshot; server-side ownership remains authoritative.
+      }
+    }
+
+    if (!mounted) return;
+    widget.state.discovery.visit(targetRoom.id);
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RoomScreen(state: widget.state, room: room),
+        builder: (_) => RoomScreen(state: widget.state, room: targetRoom),
       ),
     );
+    if (mounted) await _refreshHomePage();
   }
 
   void openVip() {
@@ -371,9 +529,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
+      backgroundColor: RoyalPalette.black,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              RoyalPalette.black,
+              RoyalPalette.nearBlack,
+              RoyalPalette.black,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
             Row(
               children: [
                 Expanded(
@@ -460,14 +631,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _pageController,
                 onPageChanged: (index) => setState(() => _page = index),
                 children: [
-                  _buildMinePage(),
-                  _buildPartyPage(),
-                  _buildEventsPage(),
-                  _buildCountryPage(),
+                  _pullRefresh(_buildMinePage()),
+                  _pullRefresh(_buildPartyPage()),
+                  _pullRefresh(_buildEventsPage()),
+                  _pullRefresh(_buildCountryPage()),
                 ],
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -490,6 +662,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView(
       key: const Key('home-mine-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
         const GoldSectionTitle('My room'),
@@ -667,9 +840,26 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList();
     final topRooms = ordered.take(3).toList();
     final listRooms = ordered.skip(3).toList();
+    final roomRankGroups = topRooms
+        .map<List<String?>>((room) => <String?>[room.photoDataUrl])
+        .toList(growable: false);
+    final cpRankGroups = _cpTop
+        .map<List<String?>>(
+          (row) => <String?>[
+            row['user_a_avatar']?.toString(),
+            row['user_b_avatar']?.toString(),
+          ],
+        )
+        .toList(growable: false);
+    final familyRankGroups = _familyTop
+        .map<List<String?>>(
+          (row) => <String?>[row['leader_avatar_data_url']?.toString()],
+        )
+        .toList(growable: false);
 
     return ListView(
       key: const Key('home-party-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
       children: [
         SizedBox(
@@ -678,16 +868,16 @@ class _HomeScreenState extends State<HomeScreen> {
           child: PageView(
             children: [
               _PartyPromoCard(
-                title: 'WEEKLY STAR',
-                subtitle: 'Weekly rankings and royal rewards',
+                title: 'ROYAL PARTY',
+                subtitle: 'Live rooms, rankings and royal rewards',
                 icon: Icons.workspace_premium_rounded,
-                onTap: () => openRankings(initialTab: 1),
+                onTap: () => openRankings(initialTab: 0),
               ),
               _PartyPromoCard(
-                title: 'ROYAL PARTY',
-                subtitle: 'Live rooms, rankings and party events',
-                icon: Icons.mic_external_on_rounded,
-                onTap: () => openRankings(initialTab: 0),
+                title: 'WEEKLY STAR',
+                subtitle: 'Weekly rankings and royal rewards',
+                icon: Icons.emoji_events_rounded,
+                onTap: () => openRankings(initialTab: 1),
               ),
               _PartyPromoCard(
                 title: 'THE GREAT NAVIGATOR',
@@ -706,6 +896,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-room-rank-button'),
                 title: 'Room',
                 icon: Icons.mic_external_on_rounded,
+                rankAvatarGroups: roomRankGroups,
                 onTap: () => openRankings(initialTab: 0),
               ),
             ),
@@ -715,6 +906,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-cp-button'),
                 title: 'CP Ranking',
                 icon: Icons.favorite_rounded,
+                rankAvatarGroups: cpRankGroups,
                 onTap: openCpRanking,
               ),
             ),
@@ -724,6 +916,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: const Key('party-family-button'),
                 title: 'Family',
                 icon: Icons.groups_rounded,
+                rankAvatarGroups: familyRankGroups,
                 onTap: openFamilyRanking,
               ),
             ),
@@ -749,16 +942,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 10),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < topRooms.length; i++) ...[
+            for (var i = 0; i < 3; i++) ...[
               Expanded(
-                child: _TopRoomCard(
-                  room: topRooms[i],
-                  rank: i + 1,
-                  onTap: () => openRoom(topRooms[i]),
-                ),
+                child: i < topRooms.length
+                    ? _TopRoomCard(
+                        room: topRooms[i],
+                        rank: i + 1,
+                        onTap: () => openRoom(topRooms[i]),
+                      )
+                    : const SizedBox.shrink(),
               ),
-              if (i != topRooms.length - 1) const SizedBox(width: 8),
+              if (i != 2) const SizedBox(width: 8),
             ],
           ],
         ),
@@ -805,6 +1001,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView(
       key: const Key('home-events-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
         RoyalPanel(
@@ -923,6 +1120,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView(
       key: const Key('home-country-page'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
         const GoldSectionTitle('Country Rooms'),
@@ -1014,6 +1212,8 @@ class _RoomArtwork extends StatelessWidget {
     final remotePhoto = room.photoDataUrl;
     final hasRemotePhoto =
         remotePhoto != null && remotePhoto.startsWith('data:image/');
+    final hasNetworkPhoto = remotePhoto != null &&
+        (remotePhoto.startsWith('https://') || remotePhoto.startsWith('http://'));
     final hasLocalPhoto =
         path != null && path.isNotEmpty && File(path).existsSync();
 
@@ -1042,14 +1242,31 @@ class _RoomArtwork extends StatelessWidget {
                   fit: BoxFit.cover,
                 ),
               )
-            : hasLocalPhoto
+            : hasNetworkPhoto
                 ? SizedBox.expand(
-                    child: Image.file(
-                      File(path),
+                    child: Image.network(
+                      remotePhoto,
                       fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Center(
+                        child: Text(
+                          fallback ?? room.title.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: FeaturePalette.discover,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
                     ),
                   )
-                : fallback != null
+                : hasLocalPhoto
+                    ? SizedBox.expand(
+                        child: Image.file(
+                          File(path),
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : fallback != null
                 ? Text(
                     fallback!,
                     style: const TextStyle(
@@ -1207,56 +1424,122 @@ class _PartyPromoCard extends StatelessWidget {
       child: RoyalPanel(
         onTap: onTap,
         radius: 22,
-        gradient: FeaturePalette.glow(color),
-        accentColor: color,
-        child: Row(
-          children: [
-            ShiningIcon(
-              icon: icon,
-              color: color,
-              size: 38,
-              boxSize: 70,
-              glow: 0.46,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 21,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: RoyalPalette.cream,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Swipe for more',
-                    style: TextStyle(
-                      color: RoyalPalette.muted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+        padding: EdgeInsets.zero,
+        accentColor: RoyalPalette.deepGold,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: RoyalPartyBackdrop(
+                  accent: color,
+                  intensity: title == 'ROYAL PARTY' ? 1 : .72,
+                ),
               ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: color,
-            ),
-          ],
+              const Positioned.fill(
+                child: RoyalPanelOrnament(color: RoyalPalette.gold),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            RoyalPalette.gold.withValues(alpha: .24),
+                            RoyalPalette.nearBlack,
+                          ],
+                        ),
+                        border: Border.all(
+                          color: RoyalPalette.gold.withValues(alpha: .65),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: RoyalPalette.gold.withValues(alpha: .12),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        icon,
+                        color: RoyalPalette.gold,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 21,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: RoyalPalette.muted,
+                              height: 1.2,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: RoyalPalette.gold.withValues(alpha: .08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: RoyalPalette.gold.withValues(alpha: .28),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'VIP • LIVE',
+                                  style: TextStyle(
+                                    color: RoyalPalette.gold,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .6,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: RoyalPalette.gold,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1295,12 +1578,7 @@ class _InteractiveTopTabs extends StatelessWidget {
                         labels[i],
                         style: TextStyle(
                           color: selectedIndex == i
-                              ? <Color>[
-                                  FeaturePalette.social,
-                                  FeaturePalette.family,
-                                  FeaturePalette.fruitParty,
-                                  FeaturePalette.discover,
-                                ][i]
+                              ? RoyalPalette.gold
                               : RoyalPalette.muted,
                           fontWeight: selectedIndex == i
                               ? FontWeight.w900
@@ -1314,23 +1592,14 @@ class _InteractiveTopTabs extends StatelessWidget {
                         height: 4,
                         width: selectedIndex == i ? 28 : 0,
                         decoration: BoxDecoration(
-                          color: <Color>[
-                            FeaturePalette.social,
-                            FeaturePalette.family,
-                            FeaturePalette.fruitParty,
-                            FeaturePalette.discover,
-                          ][i],
+                          color: RoyalPalette.gold,
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: selectedIndex == i
                               ? [
                                   BoxShadow(
-                                    color: <Color>[
-                                      FeaturePalette.social,
-                                      FeaturePalette.family,
-                                      FeaturePalette.fruitParty,
-                                      FeaturePalette.discover,
-                                    ][i].withValues(alpha: 0.55),
-                                    blurRadius: 10,
+                                    color: RoyalPalette.gold
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 9,
                                   ),
                                 ]
                               : null,
@@ -1353,40 +1622,177 @@ class _FeatureCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.onTap,
+    this.rankAvatarGroups = const <List<String?>>[],
   });
 
   final String title;
   final IconData icon;
   final VoidCallback onTap;
+  final List<List<String?>> rankAvatarGroups;
 
   @override
   Widget build(BuildContext context) {
     final color = _homeFeatureColor(title);
     return RoyalPanel(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: EdgeInsets.zero,
       onTap: onTap,
       gradient: FeaturePalette.glow(color),
-      accentColor: color,
-      child: Column(
-        children: [
-          ShiningIcon(
-            icon: icon,
-            color: color,
-            size: 28,
-            boxSize: 50,
-          ),
-          const SizedBox(height: 7),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
+      accentColor: RoyalPalette.deepGold,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: RoyalPanelOrnament(
+                color: color.withValues(alpha: .85),
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 7),
+              child: Column(
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: RoyalPalette.cream,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 0.35,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  if (rankAvatarGroups.isNotEmpty)
+                    _PartyRankAvatarRow(
+                      groups: rankAvatarGroups.take(3).toList(growable: false),
+                      accent: color,
+                    )
+                  else
+                    ShiningIcon(
+                      icon: icon,
+                      color: color,
+                      size: 28,
+                      boxSize: 50,
+                      glow: .18,
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    rankAvatarGroups.isEmpty
+                        ? 'Royal ranking'
+                        : 'TOP 1  •  TOP 2  •  TOP 3',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: rankAvatarGroups.isEmpty
+                          ? RoyalPalette.muted
+                          : RoyalPalette.gold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 8.2,
+                      letterSpacing: .25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _PartyRankAvatarRow extends StatelessWidget {
+  const _PartyRankAvatarRow({
+    required this.groups,
+    required this.accent,
+  });
+
+  final List<List<String?>> groups;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (var i = 0; i < groups.length; i++)
+          _PartyRankAvatarGroup(
+            rank: i + 1,
+            sources: groups[i],
+            accent: i == 0
+                ? FeaturePalette.rank
+                : i == 1
+                    ? const Color(0xFFC7D1DC)
+                    : const Color(0xFFD78955),
+          ),
+      ],
+    );
+  }
+}
+
+class _PartyRankAvatarGroup extends StatelessWidget {
+  const _PartyRankAvatarGroup({
+    required this.rank,
+    required this.sources,
+    required this.accent,
+  });
+
+  final int rank;
+  final List<String?> sources;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = sources
+        .map(_homeAvatarProvider)
+        .whereType<ImageProvider>()
+        .take(2)
+        .toList(growable: false);
+
+    Widget avatar(int index) {
+      return CircleAvatar(
+        backgroundColor: RoyalPalette.nearBlack,
+        backgroundImage: valid.isEmpty ? null : valid[index],
+        child: valid.isEmpty
+            ? Icon(
+                rank == 1
+                    ? Icons.workspace_premium_rounded
+                    : Icons.person_rounded,
+                size: 15,
+                color: accent,
+              )
+            : null,
+      );
+    }
+
+    final body = valid.length <= 1
+        ? avatar(0)
+        : Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: const Alignment(-.48, 0),
+                child: FractionallySizedBox(
+                  widthFactor: .72,
+                  heightFactor: .72,
+                  child: ClipOval(child: avatar(0)),
+                ),
+              ),
+              Align(
+                alignment: const Alignment(.48, 0),
+                child: FractionallySizedBox(
+                  widthFactor: .72,
+                  heightFactor: .72,
+                  child: ClipOval(child: avatar(1)),
+                ),
+              ),
+            ],
+          );
+
+    return RoyalRankHalo(
+      rank: rank,
+      size: 52,
+      child: body,
     );
   }
 }
@@ -1404,77 +1810,61 @@ class _TopRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = rank == 1
-        ? FeaturePalette.rank
+    final metal = rank == 1
+        ? RoyalPalette.gold
         : rank == 2
-            ? const Color(0xFFC5D0DA)
-            : FeaturePalette.family;
+            ? const Color(0xFFBEC4CB)
+            : const Color(0xFFA56C43);
     return RoyalPanel(
       key: Key('room-card-' + room.id),
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.fromLTRB(6, 9, 6, 7),
       onTap: onTap,
-      gradient: FeaturePalette.glow(accent),
-      accentColor: accent,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          metal.withValues(alpha: .10),
+          RoyalPalette.panel,
+          RoyalPalette.black,
+        ],
+      ),
+      accentColor: metal,
       child: Column(
         children: [
-          Stack(
-            alignment: Alignment.topCenter,
-            children: [
-              Container(
-                height: 106,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: LinearGradient(
-                    colors: rank == 1
-                        ? const [Color(0xFF614000), Color(0xFF130D03)]
-                        : const [Color(0xFF292017), Color(0xFF080706)],
-                  ),
-                ),
-                child: Center(
-                  child: ShiningIcon(
-                    icon: rank == 1
-                        ? Icons.emoji_events_rounded
-                        : Icons.groups_rounded,
-                    size: 38,
-                    boxSize: 66,
-                    color: accent,
-                    glow: 0.44,
-                  ),
-                ),
+          RoyalRankFrame(
+            rank: rank,
+            height: 112,
+            child: Center(
+              child: RoomDp(
+                room: room,
+                size: 96,
+                radius: 13,
+                fit: BoxFit.contain,
               ),
-              Transform.translate(
-                offset: const Offset(0, -7),
-                child: CircleAvatar(
-                  radius: 17,
-                  backgroundColor: accent,
-                  child: Text(
-                    rank.toString(),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             room.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: RoyalPalette.cream,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               fontSize: 11,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
-            (room.country == 'IN' ? '🇮🇳  ' : '🌐  ') +
-                room.online.toString(),
+            (room.country == 'IN' ? '🇮🇳 ' : '🌐 ') +
+                room.online.toString() +
+                '  •  EXP ' +
+                _compactNumber(room.roomExperience),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: RoyalPalette.muted,
-              fontSize: 10,
+              fontSize: 8.8,
             ),
           ),
         ],
@@ -1504,15 +1894,23 @@ class _RoomListCard extends StatelessWidget {
       child: RoyalPanel(
         padding: const EdgeInsets.all(9),
         onTap: onTap,
-        gradient: FeaturePalette.glow(FeaturePalette.discover),
-        accentColor: FeaturePalette.discover,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF18140E),
+            RoyalPalette.panel,
+            Color(0xFF0B0B0B),
+          ],
+        ),
+        accentColor: RoyalPalette.deepGold,
         child: Row(
           children: [
-            _RoomArtwork(
+            RoomDp(
               room: room,
-              width: 74,
-              height: 74,
-              icon: Icons.graphic_eq_rounded,
+              size: 74,
+              radius: 13,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -1552,7 +1950,7 @@ class _RoomListCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        'ID ' + room.id,
+                        'ID ' + room.displayId,
                         style: const TextStyle(fontSize: 10),
                       ),
                     ],
@@ -1595,6 +1993,13 @@ class _RoomListCard extends StatelessWidget {
   }
 }
 
+enum _RoomPhotoCropMode {
+  full,
+  center,
+  top,
+  bottom,
+}
+
 class _CreateRoomResult {
   const _CreateRoomResult({
     required this.title,
@@ -1622,6 +2027,7 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
   int seatCount = 12;
   String partyMode = 'Friends-making Party';
   String? photoDataUrl;
+  _RoomPhotoCropMode photoCropMode = _RoomPhotoCropMode.full;
 
   @override
   void dispose() {
@@ -1694,16 +2100,199 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
     );
     if (image == null || !mounted) return;
     final bytes = await image.readAsBytes();
-    if (bytes.length > 320000) {
-      if (!mounted) return;
+    if (!mounted) return;
+
+    final mode = await _chooseRoomPhotoCrop(bytes);
+    if (mode == null || !mounted) return;
+
+    final squareBytes = await _renderSquareRoomPhoto(bytes, mode);
+    if (!mounted) return;
+    if (squareBytes.length > 320000) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a smaller room photo.')),
+        const SnackBar(
+          content: Text('Room photo is still too large after cropping.'),
+        ),
       );
       return;
     }
     setState(() {
-      photoDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      photoCropMode = mode;
+      photoDataUrl = 'data:image/png;base64,${base64Encode(squareBytes)}';
     });
+  }
+
+  String _cropModeLabel(_RoomPhotoCropMode mode) => switch (mode) {
+        _RoomPhotoCropMode.full => 'Full photo',
+        _RoomPhotoCropMode.center => 'Center crop',
+        _RoomPhotoCropMode.top => 'Top crop',
+        _RoomPhotoCropMode.bottom => 'Bottom crop',
+      };
+
+  Alignment _cropPreviewAlignment(_RoomPhotoCropMode mode) => switch (mode) {
+        _RoomPhotoCropMode.top => Alignment.topCenter,
+        _RoomPhotoCropMode.bottom => Alignment.bottomCenter,
+        _ => Alignment.center,
+      };
+
+  Future<_RoomPhotoCropMode?> _chooseRoomPhotoCrop(Uint8List bytes) {
+    return showModalBottomSheet<_RoomPhotoCropMode>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Room DP crop',
+                style: TextStyle(
+                  color: RoyalPalette.cream,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Choose exactly how the square room DP should look.',
+                style: TextStyle(
+                  color: RoyalPalette.muted,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 14),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.14,
+                children: [
+                  for (final mode in _RoomPhotoCropMode.values)
+                    InkWell(
+                      key: Key('room-photo-crop-' + mode.name),
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.pop(sheetContext, mode),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: RoyalPalette.panel,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: RoyalPalette.deepGold.withValues(alpha: .72),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  color: RoyalPalette.black,
+                                  width: double.infinity,
+                                  child: Image.memory(
+                                    bytes,
+                                    fit: mode == _RoomPhotoCropMode.full
+                                        ? BoxFit.contain
+                                        : BoxFit.cover,
+                                    alignment: _cropPreviewAlignment(mode),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              _cropModeLabel(mode),
+                              style: const TextStyle(
+                                color: RoyalPalette.cream,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Uint8List> _renderSquareRoomPhoto(
+    Uint8List bytes,
+    _RoomPhotoCropMode mode,
+  ) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    const outputSize = 256;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(RoyalPalette.black, BlendMode.src);
+
+    final width = image.width.toDouble();
+    final height = image.height.toDouble();
+    final src = mode == _RoomPhotoCropMode.full
+        ? Rect.fromLTWH(0, 0, width, height)
+        : _squareSourceRect(width, height, mode);
+
+    Rect dst;
+    if (mode == _RoomPhotoCropMode.full) {
+      final scale = math.min(outputSize / width, outputSize / height);
+      final drawWidth = width * scale;
+      final drawHeight = height * scale;
+      dst = Rect.fromLTWH(
+        (outputSize - drawWidth) / 2,
+        (outputSize - drawHeight) / 2,
+        drawWidth,
+        drawHeight,
+      );
+    } else {
+      dst = Rect.fromLTWH(
+        0,
+        0,
+        outputSize.toDouble(),
+        outputSize.toDouble(),
+      );
+    }
+
+    canvas.drawImageRect(
+      image,
+      src,
+      dst,
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    final output = await recorder.endRecording().toImage(
+          outputSize,
+          outputSize,
+        );
+    final data = await output.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    output.dispose();
+    codec.dispose();
+    if (data == null) throw StateError('Unable to crop room photo');
+    return data.buffer.asUint8List();
+  }
+
+  Rect _squareSourceRect(
+    double width,
+    double height,
+    _RoomPhotoCropMode mode,
+  ) {
+    final side = math.min(width, height);
+    final left = (width - side) / 2;
+    final top = switch (mode) {
+      _RoomPhotoCropMode.top => 0.0,
+      _RoomPhotoCropMode.bottom => height - side,
+      _ => (height - side) / 2,
+    };
+    return Rect.fromLTWH(left, top, side, side);
   }
 
   @override
@@ -1735,20 +2324,40 @@ class _CreateRoomSheetState extends State<_CreateRoomSheet> {
                 borderRadius: BorderRadius.circular(48),
                 child: Column(
                   children: [
-                    ShiningIcon(
-                      icon: photoDataUrl == null
-                          ? Icons.add_a_photo_rounded
-                          : Icons.check_circle_rounded,
-                      color: photoDataUrl == null
-                          ? FeaturePalette.moments
-                          : FeaturePalette.family,
-                      size: 34,
-                      boxSize: 76,
-                      glow: 0.44,
-                    ),
+                    if (photoDataUrl == null)
+                      const ShiningIcon(
+                        icon: Icons.add_a_photo_rounded,
+                        color: FeaturePalette.moments,
+                        size: 34,
+                        boxSize: 76,
+                        glow: 0.24,
+                      )
+                    else
+                      Container(
+                        width: 104,
+                        height: 104,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: RoyalPalette.black,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: RoyalPalette.gold,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.memory(
+                            base64Decode(photoDataUrl!.split(',').last),
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 7),
                     Text(
-                      photoDataUrl == null ? 'Add room photo' : 'Room photo selected',
+                      photoDataUrl == null
+                          ? 'Add room photo'
+                          : 'Room DP • ' + _cropModeLabel(photoCropMode),
                       style: const TextStyle(
                         color: RoyalPalette.cream,
                         fontWeight: FontWeight.w800,

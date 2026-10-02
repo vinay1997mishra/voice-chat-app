@@ -5,6 +5,7 @@ class RoomSummary {
   const RoomSummary({
     required this.id,
     required this.title,
+    this.publicId,
     required this.country,
     required this.online,
     this.countryName,
@@ -25,10 +26,18 @@ class RoomSummary {
     this.seatThemeId = 'royal-gold',
     this.announcement = '',
     this.roomLevel = 1,
+    this.roomExperience = 0,
+    this.activeUserExp = 0,
+    this.sendingExp = 0,
+    this.receivingExp = 0,
   });
 
   final String id;
   final String title;
+  final String? publicId;
+
+  String get displayId =>
+      publicId == null || publicId!.isEmpty ? id : publicId!;
   final String country;
   final String? countryName;
   final String? flagEmoji;
@@ -49,6 +58,10 @@ class RoomSummary {
   final String seatThemeId;
   final String announcement;
   final int roomLevel;
+  final int roomExperience;
+  final int activeUserExp;
+  final int sendingExp;
+  final int receivingExp;
 
   bool createdWithin(
     Duration age, {
@@ -63,6 +76,7 @@ class RoomSummary {
 
   RoomSummary copyWith({
     String? title,
+    String? publicId,
     String? country,
     String? countryName,
     String? flagEmoji,
@@ -83,10 +97,15 @@ class RoomSummary {
     String? seatThemeId,
     String? announcement,
     int? roomLevel,
+    int? roomExperience,
+    int? activeUserExp,
+    int? sendingExp,
+    int? receivingExp,
   }) =>
       RoomSummary(
         id: id,
         title: title ?? this.title,
+        publicId: publicId ?? this.publicId,
         country: country ?? this.country,
         countryName: countryName ?? this.countryName,
         flagEmoji: flagEmoji ?? this.flagEmoji,
@@ -108,6 +127,10 @@ class RoomSummary {
         seatThemeId: seatThemeId ?? this.seatThemeId,
         announcement: announcement ?? this.announcement,
         roomLevel: roomLevel ?? this.roomLevel,
+        roomExperience: roomExperience ?? this.roomExperience,
+        activeUserExp: activeUserExp ?? this.activeUserExp,
+        sendingExp: sendingExp ?? this.sendingExp,
+        receivingExp: receivingExp ?? this.receivingExp,
       );
 }
 
@@ -228,6 +251,11 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
+    final storedPhoto = await _storeRoomPhotoIfNeeded(
+      authToken,
+      photoDataUrl,
+    );
+
     final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms'));
     request.headers.contentType = ContentType.json;
     request.headers.set(
@@ -240,7 +268,7 @@ class DiscoveryService {
         'seat_count': seatCount,
         'party_mode': partyMode,
         'locked': locked,
-        'photo_data_url': photoDataUrl,
+        'photo_data_url': storedPhoto,
       }),
     );
 
@@ -275,6 +303,9 @@ class DiscoveryService {
     String? seatThemeId,
   }) async {
     if (authToken.trim().isEmpty) throw StateError('Login session is required');
+    final storedPhoto = photoDataUrl == null
+        ? null
+        : await _storeRoomPhotoIfNeeded(authToken, photoDataUrl);
     final request = await _httpClient.patchUrl(apiBase.replace(path: '/rooms/settings'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
@@ -289,7 +320,7 @@ class DiscoveryService {
     if (partyMode != null) body['party_mode'] = partyMode;
     if (privacy != null) body['privacy'] = privacy;
     if (closed != null) body['closed'] = closed;
-    if (photoDataUrl != null) body['photo_data_url'] = photoDataUrl;
+    if (storedPhoto != null) body['photo_data_url'] = storedPhoto;
     if (seatThemeId != null) body['seat_theme_id'] = seatThemeId;
     request.write(jsonEncode(body));
     final response = await request.close();
@@ -545,6 +576,38 @@ class DiscoveryService {
     return theme;
   }
 
+  Future<String?> _storeRoomPhotoIfNeeded(
+    String authToken,
+    String? value,
+  ) async {
+    final source = value?.trim();
+    if (source == null || source.isEmpty || !source.startsWith('data:image/')) {
+      return source;
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-media'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(jsonEncode(<String, dynamic>{'data_url': source}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to upload room photo',
+      );
+    }
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) {
+      throw StateError('Server did not return room photo URL');
+    }
+    return url;
+  }
+
     Future<RoomAccessResult> getRoomAccessStatus({
     required String authToken,
     required String roomId,
@@ -657,10 +720,11 @@ class DiscoveryService {
     return RoomSummary(
       id: id,
       title: title,
+      publicId: row['public_id']?.toString(),
       country: row['country_code']?.toString() ?? '',
       countryName: row['country_name']?.toString(),
       flagEmoji: row['flag_emoji']?.toString(),
-      online: _asInt(row['online']),
+      online: _asInt(row['online'], fallback: _asInt(row['member_count'])),
       locked: row['locked'] == true,
       seatCount: _asInt(row['seat_count'], fallback: 12),
       partyMode:
@@ -678,16 +742,25 @@ class DiscoveryService {
       seatThemeId: row['seat_theme_id']?.toString() ?? 'royal-gold',
       announcement: row['announcement']?.toString() ?? '',
       roomLevel: _asInt(row['room_level'], fallback: 1),
+      roomExperience: _asInt(row['room_experience']),
+      activeUserExp: _asInt(row['active_user_exp']),
+      sendingExp: _asInt(row['sending_exp']),
+      receivingExp: _asInt(row['receiving_exp']),
     );
   }
 
   List<RoomSummary> recommend({String? country}) {
-    final visibleRooms = rooms.where((room) => !room.locked).toList();
+    // Party must only show active, unlocked rooms. Empty rooms stay available
+    // to Mine/Recent/Search but are hidden from the public Party feed.
+    final visibleRooms =
+        rooms.where((room) => !room.locked && room.online > 0).toList();
     final filtered = country == null
         ? visibleRooms
         : visibleRooms.where((room) => room.country == country).toList();
     final sorted = List<RoomSummary>.from(filtered)
       ..sort((a, b) {
+        final expOrder = b.roomExperience.compareTo(a.roomExperience);
+        if (expOrder != 0) return expOrder;
         final onlineOrder = b.online.compareTo(a.online);
         if (onlineOrder != 0) return onlineOrder;
         return (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -702,7 +775,12 @@ class DiscoveryService {
   }) {
     final reference = now ?? DateTime.now();
     final values = rooms
-        .where((room) => !room.locked && room.createdWithin(maxAge, now: reference))
+        .where(
+          (room) =>
+              !room.locked &&
+              room.online > 0 &&
+              room.createdWithin(maxAge, now: reference),
+        )
         .toList()
       ..sort(
         (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -722,8 +800,10 @@ class DiscoveryService {
     return rooms
         .where(
           (room) => room.locked
-              ? room.id == value
-              : room.id == value || room.title.toLowerCase().contains(lower),
+              ? room.displayId == value
+              : room.displayId == value ||
+                  room.id == value ||
+                  room.title.toLowerCase().contains(lower),
         )
         .toList();
   }

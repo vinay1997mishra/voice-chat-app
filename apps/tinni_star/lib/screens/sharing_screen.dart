@@ -22,7 +22,7 @@ class SharingScreen extends StatelessWidget {
   String get text => payload.title + ' ' + payload.link;
 
   Future<void> _systemShare(BuildContext context) async {
-    await state.sharing.share(ShareTarget.copyLink, payload);
+    await state.sharing.share(ShareTarget.system, payload);
   }
 
   Future<void> _copy(BuildContext context) async {

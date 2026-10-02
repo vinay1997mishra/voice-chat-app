@@ -21,6 +21,7 @@ class RoomController extends ChangeNotifier {
   MicState micState = MicState.offSeat;
   bool? inviteModeOverride;
   bool selfMuted = false;
+  bool _selfMuteForcedMicOff = false;
 
   TinniFunctionConfig get config => runtime.config;
   bool get inviteMode => inviteModeOverride ?? config.inviteMode;
@@ -40,6 +41,7 @@ class RoomController extends ChangeNotifier {
       mySeat = null;
       micState = MicState.offSeat;
       selfMuted = false;
+      _selfMuteForcedMicOff = false;
     }
     notifyListeners();
   }
@@ -109,6 +111,7 @@ class RoomController extends ChangeNotifier {
     mySeat = null;
     micState = MicState.offSeat;
     selfMuted = false;
+    _selfMuteForcedMicOff = false;
     notifyListeners();
   }
 
@@ -121,6 +124,8 @@ class RoomController extends ChangeNotifier {
     if (index == null) {
       mySeat = null;
       micState = MicState.offSeat;
+      selfMuted = false;
+      _selfMuteForcedMicOff = false;
       notifyListeners();
       return;
     }
@@ -129,6 +134,8 @@ class RoomController extends ChangeNotifier {
     seats[index] = seats[index].copyWith(userName: 'You');
     mySeat = index;
     micState = MicState.muted;
+    selfMuted = false;
+    _selfMuteForcedMicOff = false;
     notifyListeners();
   }
 
@@ -140,6 +147,8 @@ class RoomController extends ChangeNotifier {
     if (mySeat == index) {
       mySeat = null;
       micState = MicState.offSeat;
+      selfMuted = false;
+      _selfMuteForcedMicOff = false;
     }
     messages.add(
       RoomMessage(
@@ -163,9 +172,22 @@ class RoomController extends ChangeNotifier {
   }
 
   void setSelfMuted(bool muted) {
-    selfMuted = muted;
-    if (muted && micState == MicState.live) {
-      micState = MicState.muted;
+    if (selfMuted == muted) return;
+
+    if (muted) {
+      _selfMuteForcedMicOff = micState == MicState.live;
+      selfMuted = true;
+      if (micState == MicState.live) {
+        micState = MicState.muted;
+      }
+    } else {
+      selfMuted = false;
+      if (_selfMuteForcedMicOff &&
+          mySeat != null &&
+          micState != MicState.banned) {
+        micState = MicState.live;
+      }
+      _selfMuteForcedMicOff = false;
     }
     notifyListeners();
   }
@@ -177,6 +199,15 @@ class RoomController extends ChangeNotifier {
     final seat = seats[index];
     if (seat.occupied) return;
     seats[index] = seat.copyWith(locked: !seat.locked);
+    notifyListeners();
+  }
+
+  void setSeatLocked(int index, bool locked) {
+    if (index < 0 || index >= seats.length) return;
+    final seat = seats[index];
+    if (seat.occupied && locked) return;
+    if (seat.locked == locked) return;
+    seats[index] = seat.copyWith(locked: locked);
     notifyListeners();
   }
 
@@ -205,10 +236,27 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void restoreMicAfterModeration() {
+    if (mySeat == null || micState == MicState.banned || selfMuted) {
+      return;
+    }
+    if (micState == MicState.live) return;
+    micState = MicState.live;
+    notifyListeners();
+  }
+
   void sendMessage(String text) {
     final value = text.trim();
     if (!config.roomChatEnabled || value.isEmpty) return;
     messages.add(RoomMessage('You', value));
+    notifyListeners();
+  }
+
+  void addRoomMessage(String author, String text) {
+    final cleanAuthor = author.trim().isEmpty ? 'User' : author.trim();
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+    messages.add(RoomMessage(cleanAuthor, cleanText));
     notifyListeners();
   }
 

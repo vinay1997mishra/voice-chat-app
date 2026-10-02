@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../activities/activity_service.dart';
 import '../activities/rank_features.dart';
 import '../auth/auth_service.dart';
@@ -131,7 +133,89 @@ class TinniState {
         return roomControls.agencyNameFor(userId);
       },
       equippedFrameIdProvider: () => inventory.equippedFrameId,
+      equippedEntryIdProvider: () => inventory.equipped('entry'),
+      equippedProfileCardIdProvider: () => inventory.equipped('profile_card'),
+      onRoomClosed: () => ktv.stopRoomPlayback(),
+      onSeatForcedDown: () async {
+        final userId = auth.current?.userId ?? '';
+        await ktv.stopForSeatDown(userId);
+      },
     );
+  }
+
+  final ValueNotifier<String> languagePreference =
+      ValueNotifier<String>('English');
+
+  bool _refreshingAccountIdentity = false;
+  DateTime? _lastAccountIdentityRefreshAt;
+
+  Future<bool> refreshAuthenticatedAccount({bool force = false}) async {
+    final account = auth.current;
+    if (account == null || _refreshingAccountIdentity) return false;
+    final last = _lastAccountIdentityRefreshAt;
+    if (!force &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 10)) {
+      return false;
+    }
+
+    _refreshingAccountIdentity = true;
+    try {
+      final user = await backend.currentUser(account.authToken);
+      final serverUserId = user['user_id']?.toString().trim() ?? '';
+      if (serverUserId.isEmpty) return false;
+
+      int readInt(dynamic value, int fallback) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        return int.tryParse(value?.toString() ?? '') ?? fallback;
+      }
+
+      final refreshed = TinniAccount(
+        userId: serverUserId,
+        email: user['email']?.toString() ?? account.email,
+        displayName: user['display_name']?.toString() ?? account.displayName,
+        age: readInt(user['age'], account.age),
+        birthday: user['birthday']?.toString() ?? account.birthday,
+        signature: user['signature']?.toString() ?? account.signature,
+        countryCode: user['country_code']?.toString() ?? account.countryCode,
+        countryName: user['country_name']?.toString() ?? account.countryName,
+        flagEmoji: user['flag_emoji']?.toString() ?? account.flagEmoji,
+        gender: user['gender']?.toString() ?? account.gender,
+        avatarDataUrl:
+            user['avatar_data_url']?.toString() ?? account.avatarDataUrl,
+        providers: account.providers,
+        authToken: account.authToken,
+      );
+      auth.setAuthenticatedAccount(refreshed);
+      await authPersistence?.save(refreshed);
+      _lastAccountIdentityRefreshAt = DateTime.now();
+      return refreshed.userId != account.userId;
+    } catch (_) {
+      return false;
+    } finally {
+      _refreshingAccountIdentity = false;
+    }
+  }
+
+  void setLanguagePreference(String value) {
+    final normalized = value.trim();
+    languagePreference.value =
+        const {'English', 'Hindi', 'Urdu'}.contains(normalized)
+            ? normalized
+            : 'English';
+  }
+
+  Future<void> refreshAccountPreferences() async {
+    await refreshAuthenticatedAccount(force: true);
+    final account = auth.current;
+    if (account == null) return;
+    try {
+      final preferences = await backend.accountPreferences(account.authToken);
+      setLanguagePreference(
+        preferences['language']?.toString() ?? 'English',
+      );
+    } catch (_) {}
   }
 
   final FunctionPackRuntime runtime;

@@ -44,6 +44,21 @@ Status meanings:
 | Ranks/Hall of Fame | `lib/activities` | Implemented |
 | Birthday/party/dating/memorial | `lib/party`, activity service | Implemented state |
 | Profile/personalization | `lib/profile`, Me screen | Implemented |
+| Mine reference-video structure | `profile_screen.dart` | Implemented structure/order; final pixel-level visual matching remains an active polish target |
+| Mine live Follow/Fans/Charm/Wealth | `profile_screen.dart`, `/account/stats` | Implemented with backend-derived counts/totals; Wealth/Charm use real gift transaction totals |
+| Wealth Level page | `mine_function_screens.dart`, `/account/stats` | Implemented; Owner Panel thresholds are data-driven |
+| Medal of Honor | `mine_function_screens.dart`, `/app-user/tags` | Implemented backend-driven medals with truthful empty state |
+| Props / owned inventory | `mine_function_screens.dart`, inventory/store APIs | Implemented; owned props load from backend and equippable frames support Use/Using |
+| Reward Records | `mine_function_screens.dart`, `/wallet/transactions` | Implemented server transaction history |
+| Tasks / task rewards | `mine_function_screens.dart`, `/tasks`, `/tasks/claim` | Implemented server-derived completion and one-time reward claim |
+| Host data / settlement history | `mine_function_screens.dart`, wallet settlement APIs | Implemented role/balance/settlement view and transfer history |
+| Feedback | `mine_function_screens.dart`, `/feedback` | Implemented submit + user feedback history |
+| Message notification preferences | `mine_function_screens.dart`, `/account/preferences` | Implemented persisted Voice/Vibration/room-floating preferences |
+| Bind account | `mine_function_screens.dart`, account-link APIs | Google + Email OTP binding implemented; Facebook hidden unless deliberately re-enabled |
+| Language preference | `mine_function_screens.dart`, `/account/preferences` | Account preference implemented for English/Hindi/Urdu; full-screen localization continues as translations are added |
+| Blocklist | `mine_function_screens.dart`, social block APIs | Implemented real blocked-user list + Move out/Unblock |
+| Privacy / Service Agreement | `privacy_policy_screen.dart` | Implemented real in-app Tinni Star policy page; effective 30 Sep 2026 |
+| Sign out | `mine_function_screens.dart` | Implemented confirmation, room/push cleanup, persisted-auth clear, return to Login |
 | Calls | `lib/calls` | Implemented call state; RTC provider required |
 | Sharing targets | `lib/sharing` | Implemented payload abstraction; native target launch can be added per provider |
 | Push | `platform_services.dart` | Adapter ready |

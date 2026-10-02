@@ -1066,32 +1066,188 @@ export default {
       });
     }
 
-    if (url.pathname === "/app-config" && request.method === "GET") {
-      const ownerState = getAppDirectoryStore(env).ownerState();
-      const features = ownerState.features || {};
-      const gameConfig = ownerState.game_config || {};
+    if (url.pathname === "/auth-config" && request.method === "GET") {
       return json({
         ok: true,
         google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
         facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
         email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+      });
+    }
+
+    if (url.pathname === "/app-config" && request.method === "GET") {
+      return json({
+        ok: true,
+        google_server_client_id: env.GOOGLE_SERVER_CLIENT_ID || null,
+        facebook_configured: Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET),
+        email_otp_configured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+        livekit_configured: Boolean(
+          env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
+        ),
+        effect_media_configured: Boolean(env.EFFECT_MEDIA),
         remote_config: {
           room_recommendation_enabled: true,
-          gift_effects_enabled: features.gifts !== false,
-          ktv_enabled: features.voice_rooms !== false,
-          games_enabled: features.games !== false && gameConfig.enabled !== false,
-          voice_rooms_enabled: features.voice_rooms !== false,
-          vip_enabled: features.vip !== false,
-          host_system_enabled: features.host_system !== false,
-          agency_system_enabled: features.agency_system !== false,
-          bd_system_enabled: features.bd_system !== false,
-          coin_seller_enabled: features.coin_seller !== false,
-          merchant_enabled: features.merchant !== false,
-          banners_enabled: features.banners !== false,
-          vehicle_entries_enabled: features.vehicle_entries !== false,
-          frames_enabled: features.frames !== false,
+          gift_effects_enabled: true,
+          ktv_enabled: true,
+          games_enabled: true,
+          voice_rooms_enabled: true,
+          vip_enabled: true,
+          host_system_enabled: true,
+          agency_system_enabled: true,
+          bd_system_enabled: true,
+          coin_seller_enabled: true,
+          merchant_enabled: true,
+          banners_enabled: true,
+          vehicle_entries_enabled: true,
+          frames_enabled: true,
         },
       });
+    }
+
+    if (url.pathname === "/room-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Room media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({ ok: false, error: "Room photo must be JPEG, PNG or WebP" }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid room photo data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
+        return json({ ok: false, error: "Room photo must be 650 KB or smaller" }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const key = "rooms/" + userId + "/dp";
+      const updatedAt = Date.now();
+      await env.EFFECT_MEDIA.put(key, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          user_id: userId,
+          kind: "room_dp",
+          updated_at: String(updatedAt),
+        },
+      });
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/media/" +
+        encodeURIComponent(key) +
+        "?v=" +
+        updatedAt;
+      return json({ ok: true, url: mediaUrl }, 201);
+    }
+
+    if (url.pathname === "/profile-media" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const slots = ["avatar", "cover", "life_1", "life_2", "life_3", "travel"];
+      const media = {};
+      for (const slot of slots) {
+        const key = "profiles/" + userId + "/" + slot;
+        const object = await env.EFFECT_MEDIA.head(key);
+        media[slot] = object
+          ? (env.PUBLIC_API_ORIGIN || url.origin) +
+              "/media/" +
+              encodeURIComponent(key) +
+              "?v=" +
+              encodeURIComponent(object.customMetadata?.updated_at || object.etag || "1")
+          : null;
+      }
+      return json({ ok: true, media });
+    }
+
+    if (url.pathname === "/profile-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const slot = String(body.slot || "").trim().toLowerCase();
+      const allowed = new Set(["avatar", "cover", "life_1", "life_2", "life_3", "travel"]);
+      if (!allowed.has(slot)) {
+        return json({ ok: false, error: "Invalid profile photo slot" }, 400);
+      }
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({ ok: false, error: "Profile photo must be JPEG, PNG or WebP" }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid profile photo data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
+        return json({ ok: false, error: "Profile photo must be 650 KB or smaller" }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const key = "profiles/" + userId + "/" + slot;
+      const updatedAt = Date.now();
+      await env.EFFECT_MEDIA.put(key, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          user_id: userId,
+          slot,
+          updated_at: String(updatedAt),
+        },
+      });
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/media/" +
+        encodeURIComponent(key) +
+        "?v=" +
+        updatedAt;
+      return json({ ok: true, slot, url: mediaUrl }, 201);
+    }
+
+    if (url.pathname === "/profile-media" && request.method === "DELETE") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Profile media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const slot = String(body.slot || "").trim().toLowerCase();
+      const allowed = new Set(["avatar", "cover", "life_1", "life_2", "life_3", "travel"]);
+      if (!allowed.has(slot)) {
+        return json({ ok: false, error: "Invalid profile photo slot" }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      await env.EFFECT_MEDIA.delete("profiles/" + userId + "/" + slot);
+      return json({ ok: true, slot });
+    }
+
+    if (url.pathname.startsWith("/media/") && request.method === "GET") {
+      if (!env.EFFECT_MEDIA) {
+        return new Response("Media storage is not configured", { status: 503 });
+      }
+      const key = decodeURIComponent(url.pathname.slice("/media/".length));
+      if (!key || key.includes("..")) {
+        return new Response("Invalid media key", { status: 400 });
+      }
+      const object = await env.EFFECT_MEDIA.get(key);
+      if (!object) return new Response("Not found", { status: 404 });
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      headers.set("cache-control", "public, max-age=604800, immutable");
+      return new Response(object.body, { headers });
     }
 
     if (url.pathname === "/telemetry/analytics" && request.method === "POST") {
@@ -1587,6 +1743,64 @@ export default {
       return json({ ok: true });
     }
 
+    if (url.pathname === "/account/link/email/start" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+        return json({ ok: false, error: "Email OTP service is not configured yet" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      try {
+        const pending = await getAppDirectoryStore(env).startEmailOtp(body.email);
+        await sendEmailOtp(pending.email, pending.otp, env);
+        return json({
+          ok:true,
+          request_id:pending.request_id,
+          email:pending.email,
+          expires_at:pending.expires_at,
+        }, 201);
+      } catch (error) {
+        return json({ ok:false, error:String(error?.message || "Unable to send email OTP") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/link/email/verify" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false, error:"Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).bindEmailIdentity(
+          appSession.user.user_id,
+          body.request_id,
+          body.otp,
+          body.password,
+        ));
+      } catch (error) {
+        return json({ ok:false, error:String(error?.message || "Unable to bind email") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/link/google" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const google = await verifyGoogleIdToken(body.id_token, env);
+        if (!google.sub) throw new Error("Google account identity is incomplete");
+        const store = getAppDirectoryStore(env);
+        await store.linkIdentity(appSession.user.user_id, "google", google.sub);
+        return json({
+          ok: true,
+          identities: await store.accountIdentities(appSession.user.user_id),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to bind Google account"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/app/me" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1616,6 +1830,17 @@ export default {
       return json({
         ok: true,
         room: await getAppDirectoryStore(env).findRoomByExactId(roomId),
+      });
+    }
+
+    if (url.pathname === "/users/exact-id" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const id = String(url.searchParams.get("id") || "").trim();
+      if (!id) return json({ ok: true, user: null });
+      return json({
+        ok: true,
+        user: await getAppDirectoryStore(env).findUserByExactPublicId(id),
       });
     }
 
@@ -1655,6 +1880,92 @@ export default {
       return json({
         ok: true,
         rooms: await getAppDirectoryStore(env).listRecentRooms(appSession.user.user_id),
+      });
+    }
+
+    if (url.pathname === "/family/list" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      return json({
+        ok:true,
+        families: await getAppDirectoryStore(env).familyList(
+          url.searchParams.get("limit") || 100,
+        ),
+      });
+    }
+
+    if (url.pathname === "/family/create" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).familyCreate(
+          appSession.user.user_id,body.name,body.tag,
+        );
+        return json(result,201);
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to create Family")},400);
+      }
+    }
+
+    if (url.pathname === "/family/notice" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyUpdateNotice(
+          appSession.user.user_id,body.notice,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to update Family notice")},400);
+      }
+    }
+
+    if (url.pathname === "/family/leave" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      try {
+        return json(await getAppDirectoryStore(env).familyLeave(
+          appSession.user.user_id,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to leave Family")},400);
+      }
+    }
+
+    if (url.pathname === "/family/check-in" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      try {
+        return json(await getAppDirectoryStore(env).familyCheckIn(
+          appSession.user.user_id,
+        ));
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to check in")},400);
+      }
+    }
+
+    if (url.pathname === "/family/wallet/send" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).familyTransferCoins(
+          appSession.user.user_id,body.receiver_user_id,body.coins,
+        ),201);
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to send Family coins")},400);
+      }
+    }
+
+    if (url.pathname === "/family/wallet/transfers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      return json({
+        ok:true,
+        transfers: await getAppDirectoryStore(env).familyWalletTransfers(
+          appSession.user.user_id,url.searchParams.get("limit") || 100,
+        ),
       });
     }
 
@@ -1880,6 +2191,16 @@ export default {
       }
     }
 
+    if (url.pathname === "/cp/ranking" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const limit = Number(url.searchParams.get("limit") || 100);
+      return json({
+        ok: true,
+        ranking: await getAppDirectoryStore(env).cpRanking(limit),
+      });
+    }
+
     if (url.pathname === "/cp" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1931,10 +2252,229 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/profile/trends" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const limit = Number(url.searchParams.get("limit") || 40);
+      try {
+        return json({
+          ok: true,
+          trends: await getAppDirectoryStore(env).profileTrends(
+            appSession.user.user_id,
+            limit,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load Trends"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/profile/trends" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          trend: await getAppDirectoryStore(env).addProfileTrend(
+            appSession.user.user_id,
+            body.text,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to add Trend"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/profile/guardian" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          guardian: await getAppDirectoryStore(env).guardianState(
+            appSession.user.user_id,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load Guardian"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/stats" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false, error:"Unauthorized" }, 401);
+      return json({
+        ok:true,
+        stats: await getAppDirectoryStore(env).profileStats(appSession.user.user_id),
+      });
+    }
+
+    if (url.pathname === "/tasks" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, tasks: await getAppDirectoryStore(env).taskState(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/tasks/claim" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).claimTask(
+          appSession.user.user_id, body.task_id,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to claim task") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/preferences" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, preferences: await getAppDirectoryStore(env).userPreferences(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/account/preferences" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).updateUserPreferences(appSession.user.user_id, body));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update preferences") }, 400);
+      }
+    }
+
+    if (url.pathname === "/account/identities" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, identities: await getAppDirectoryStore(env).accountIdentities(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/feedback" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, feedback: await getAppDirectoryStore(env).userFeedback(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/feedback" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).submitUserFeedback(
+          appSession.user.user_id, body.category, body.message,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to submit feedback") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({ ok: true, wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/wallet/recharge-providers" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        providers: await getAppDirectoryStore(env).listRechargeProviders(),
+      });
+    }
+
+    if (url.pathname === "/wallet/role-password/status" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json(await getAppDirectoryStore(env).roleWalletPasswordStatus(
+          appSession.user.user_id,
+          url.searchParams.get("wallet_type") || "",
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load wallet password status") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/setup" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).setupRoleWalletPassword(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.password,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to set wallet password") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/start" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        const result = await getAppDirectoryStore(env).startRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+        );
+        await sendEmailOtp(result.email, result.otp, env);
+        return json({
+          ok: true,
+          request_id: result.request_id,
+          wallet_type: result.wallet_type,
+          email: result.email,
+          expires_at: result.expires_at,
+        }, 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send wallet reset OTP") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/verify" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).verifyRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.request_id,
+          body.otp,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Wallet reset OTP verification failed") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-password/reset/complete" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).completeRoleWalletPasswordReset(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.request_id,
+          body.new_password,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to reset wallet password") }, 400);
+      }
     }
 
     if (url.pathname === "/wallet/transactions" && request.method === "GET") {
@@ -1990,6 +2530,7 @@ export default {
           body.recipient_user_id,
           body.amount_coins,
           body.wallet_type,
+          body.password,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer coins") }, 400);
@@ -2028,11 +2569,19 @@ export default {
       const rows = getAppDirectoryStore(env).ctx.storage.sql.exec(
         "SELECT public_id,price_coins,duration_days,assigned_user_id,enabled,updated_at FROM owner_unique_ids WHERE enabled = 1 ORDER BY LENGTH(public_id), public_id"
       ).toArray();
-      return json({ ok: true, unique_ids: rows.map((row) => ({
-        public_id: String(row.public_id), price_coins: Number(row.price_coins || 0),
-        duration_days: Number(row.duration_days || 0), permanent: Number(row.duration_days || 0) === 0,
-        available: !row.assigned_user_id, updated_at: Number(row.updated_at || 0),
-      })) });
+      return json({
+        ok: true,
+        unique_ids: rows
+          .filter((row) => /^\d{4,8}$/.test(String(row.public_id || "")))
+          .map((row) => ({
+            public_id: String(row.public_id),
+            price_coins: Number(row.price_coins || 0),
+            duration_days: Number(row.duration_days || 0),
+            permanent: Number(row.duration_days || 0) === 0,
+            available: !row.assigned_user_id,
+            updated_at: Number(row.updated_at || 0),
+          })),
+      });
     }
 
     if (url.pathname === "/unique-ids/purchase" && request.method === "POST") {
@@ -2058,6 +2607,38 @@ export default {
       const body = await request.json().catch(() => ({}));
       try { return json(getAppDirectoryStore(env).purchaseCatalogItem(appSession.user.user_id, body.kind, body.item_id, body.country || "")); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to purchase item") }, 400); }
+    }
+
+    if (url.pathname === "/store/equip" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).equipCatalogItem(
+          appSession.user.user_id,
+          body.kind,
+          body.item_id,
+        ));
+      } catch (error) {
+        return json({ ok:false,error:String(error?.message || "Unable to equip item") },400);
+      }
+    }
+
+    if (url.pathname === "/store/send" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok:false,error:"Unauthorized" },401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).sendCatalogItem(
+          appSession.user.user_id,
+          body.recipient_user_id,
+          body.kind,
+          body.item_id,
+          appSession.user.country_code || "",
+        ),201);
+      } catch (error) {
+        return json({ ok:false,error:String(error?.message || "Unable to send item") },400);
+      }
     }
 
     if (url.pathname === "/frames/catalog" && request.method === "GET") {
@@ -2424,6 +3005,17 @@ export default {
       });
     }
 
+    if (url.pathname === "/social/blocked/details" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        blocked: await getAppDirectoryStore(env).listBlockedProfiles(
+          appSession.user.user_id,
+        ),
+      });
+    }
+
     if (url.pathname === "/social/block" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2641,6 +3233,21 @@ export default {
           error: String(error?.message || "Unable to end call"),
         }, 400);
       }
+    }
+
+    if (url.pathname === "/messages/live" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return json({ ok: false, error: "WebSocket upgrade required" }, 426);
+      }
+      const headers = new Headers(request.headers);
+      headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      const forwarded = new Request(request.url, {
+        method: "GET",
+        headers,
+      });
+      return getAppDirectoryStore(env).fetch(forwarded);
     }
 
     if (url.pathname === "/messages/inbox" && request.method === "GET") {
@@ -2876,40 +3483,45 @@ export default {
       }
     }
 
-    if (url.pathname === "/room-presence/stream" && request.method === "GET") {
-      if (String(request.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
-        return new Response("Expected WebSocket", { status: 426 });
-      }
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const roomId = String(url.searchParams.get("room_id") || "").trim();
-      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
-
-      const directory = getAppDirectoryStore(env);
-      const room = await directory.findRoomByExactId(roomId);
-      if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      const access = await directory.roomAccessState(appSession.user.user_id, roomId);
-      if (!access.allowed) {
-        return json({ ok: false, error: "Room password is required.", room_locked: true }, 403);
-      }
-
-      const store = getRoomPresenceStore(env, roomId);
-      const headers = new Headers(request.headers);
-      headers.set("X-Tinni-User-Id", String(appSession.user.user_id));
-      headers.set("X-Tinni-Room-Id", roomId);
-      headers.set(
-        "X-Tinni-Room-Owner",
-        String(room.owner_id) === String(appSession.user.user_id) ? "1" : "0",
-      );
-      return store.fetch(new Request(request.url, { method: "GET", headers }));
-    }
-
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       return json(await getRoomPresenceStore(env, roomId).state());
+    }
+
+    if (url.pathname === "/room-presence/live" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return json({ ok: false, error: "WebSocket upgrade required" }, 426);
+      }
+
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const store = getRoomPresenceStore(env, roomId);
+      if (!(await store.isMember(appSession.user.user_id))) {
+        return json({ ok: false, error: "Join the room first" }, 403);
+      }
+
+      const headers = new Headers(request.headers);
+      headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      headers.set("x-tinni-room-id", roomId);
+      headers.set(
+        "x-tinni-room-owner",
+        String(room.owner_id) === String(appSession.user.user_id) ? "1" : "0",
+      );
+      const forwarded = new Request(request.url, {
+        method: "GET",
+        headers,
+      });
+      return store.fetch(forwarded);
     }
 
     if (url.pathname === "/room-presence/mic-mode" && request.method === "POST") {
@@ -2966,11 +3578,18 @@ export default {
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner role cannot be changed" }, 400);
       }
-      const targetIsMember = await getAppDirectoryStore(env).isRoomMember(roomId, targetUserId);
-      if (!targetIsMember) {
-        return json({ ok: false, error: "Only a room member can become Room Admin" }, 400);
+      const targetUser = await getAppDirectoryStore(env).findUserByExactPublicId(
+        targetUserId,
+      );
+      if (!targetUser) {
+        return json({ ok: false, error: "User ID not found" }, 404);
       }
-      return json(await store.setManager(targetUserId, Boolean(body.enabled)));
+      return json(
+        await store.setManager(
+          String(targetUser.user_id),
+          Boolean(body.enabled),
+        ),
+      );
     }
 
     if (url.pathname === "/room-presence/chat-ban" && request.method === "POST") {
@@ -3035,9 +3654,59 @@ export default {
       const actorId = String(appSession.user.user_id);
       const isManager = await store.isManager(actorId);
       const isMember = await store.isMember(actorId);
-      if (String(room.owner_id) !== actorId && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can lock seats" }, 403);
+      const actorIsOwner = String(room.owner_id) === actorId;
+      if (!actorIsOwner && !(isManager && isMember)) return json({ ok: false, error: "Only room owner/admin can lock seats" }, 403);
+      const occupantId = await store.userIdAtSeat(seatIndex);
+      if (!actorIsOwner && occupantId) {
+        if (occupantId === String(room.owner_id)) {
+          return json({ ok: false, error: "Room admins cannot lock the owner seat" }, 403);
+        }
+        if (await store.isManager(occupantId)) {
+          return json({ ok: false, error: "Room admins cannot lock another admin seat" }, 403);
+        }
+      }
       try { return json(await store.setSeatLock({ seat_index: seatIndex, locked_by: actorId, locked: body.locked === true })); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to update seat lock") }, 400); }
+    }
+
+    if (url.pathname === "/room-presence/seat-mute" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      const seatIndex = Number(body.seat_index);
+      if (!roomId || !Number.isInteger(seatIndex) || seatIndex < 0) {
+        return json({ ok: false, error: "room_id and seat_index are required" }, 400);
+      }
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const isManager = await store.isManager(actorId);
+      const isMember = await store.isMember(actorId);
+      const actorIsOwner = String(room.owner_id) === actorId;
+      if (!actorIsOwner && !(isManager && isMember)) {
+        return json({ ok: false, error: "Only room owner/admin can mute seats" }, 403);
+      }
+      const occupantId = await store.userIdAtSeat(seatIndex);
+      if (!actorIsOwner && occupantId) {
+        if (occupantId === String(room.owner_id)) {
+          return json({ ok: false, error: "Room admins cannot mute the owner seat" }, 403);
+        }
+        if (await store.isManager(occupantId)) {
+          return json({ ok: false, error: "Room admins cannot mute another admin seat" }, 403);
+        }
+      }
+      try {
+        return json(await store.setSeatMute({
+          seat_index: seatIndex,
+          muted_by: actorId,
+          muted: body.muted === true,
+        }));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update seat mute") }, 400);
+      }
     }
 
     if (url.pathname === "/room-presence/seat-take" && request.method === "POST") {
@@ -3082,9 +3751,33 @@ export default {
       }
 
       try {
+        const rooms = await getAppDirectoryStore(env).listRooms();
+        const room = rooms.find(
+          (item) => String(item.id || item.room_id || "") === roomId,
+        );
+        if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+        const store = getRoomPresenceStore(env, roomId);
+        const actorId = String(appSession.user.user_id);
+        const isManager = await store.isManager(actorId);
+        const isMember = await store.isMember(actorId);
+        const privileged =
+          String(room.owner_id) === actorId || (isManager && isMember);
+
+        // Owner/admin must never create a request for their own room.
+        // Even if a stale client calls the request endpoint after an ID change,
+        // take the seat directly on the authoritative backend.
+        if (privileged) {
+          return json(await store.takeSeat({
+            user_id: actorId,
+            seat_index: seatIndex,
+            privileged: true,
+          }));
+        }
+
         return json(
-          await getRoomPresenceStore(env, roomId).requestSeat({
-            user_id: appSession.user.user_id,
+          await store.requestSeat({
+            user_id: actorId,
             seat_index: seatIndex,
           }),
         );
@@ -3422,6 +4115,28 @@ export default {
       return json(await getRoomPresenceStore(env, roomId).unkick(targetUserId));
     }
 
+    if (url.pathname === "/room-presence/lucky-number" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+      const store = getRoomPresenceStore(env, roomId);
+      try {
+        return json(await store.drawLuckyNumber({
+          user_id: appSession.user.user_id,
+          display_name: appSession.user.display_name,
+        }));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to draw lucky number"),
+        }, 400);
+      }
+    }
+
     if (
       (url.pathname === "/room-presence/join" ||
        url.pathname === "/room-presence/heartbeat" ||
@@ -3459,6 +4174,8 @@ export default {
         host_tag: body.host_tag,
         agency_name: body.agency_name,
         equipped_frame_id: body.equipped_frame_id,
+        equipped_entry_id: body.equipped_entry_id,
+        equipped_profile_card_id: body.equipped_profile_card_id,
         owner_tags: Array.isArray(user.tags) ? user.tags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
@@ -4059,6 +4776,19 @@ export default {
 
     if (url.pathname === "/api/owner/action" && request.method === "POST") {
       const body = await request.json().catch(() => ({}));
+      const actionName = String(body.action || "");
+      const actionData = body.data && typeof body.data === "object" ? body.data : {};
+      const requestedNameId =
+        (actionName === "id-change" &&
+          /[A-Za-z_]/.test(String(actionData.new_id || ""))) ||
+        ((actionName === "unique-id-new" || actionName === "unique-id-price") &&
+          /[A-Za-z_]/.test(String(actionData.public_id || "")));
+      if (requestedNameId && !ownerOnly(session)) {
+        return json({
+          ok: false,
+          error: "Name ID can only be created or assigned from the Owner Master Panel",
+        }, 403);
+      }
       const actionPermissions = {
         "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
@@ -4067,7 +4797,7 @@ export default {
         "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
-        "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create",
+        "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
         "entry-new":"assets.entries","profile-card-new":"assets.frames","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
         "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
         "feature-set":"policies.edit","pricing-set":"policies.pricing","user-price-override-set":"policies.pricing","user-price-override-remove":"policies.pricing",

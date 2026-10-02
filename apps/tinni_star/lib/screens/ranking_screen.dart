@@ -39,10 +39,13 @@ class _RankingScreenState extends State<RankingScreen> {
             (room) => _RankItem(
               id: room.id,
               name: room.title,
-              subtitle: room.country == 'IN'
-                  ? '🇮🇳 India'
-                  : '🌐 ' + room.country,
-              score: room.online * (_period + 1) * 100,
+              subtitle: (room.country == 'IN'
+                      ? '🇮🇳 India'
+                      : '🌐 ' + room.country) +
+                  ' • ' +
+                  room.online.toString() +
+                  ' online',
+              score: room.roomExperience,
               room: room,
             ),
           )

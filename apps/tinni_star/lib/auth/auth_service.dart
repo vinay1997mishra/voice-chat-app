@@ -6,6 +6,7 @@ class TinniAccount {
     required this.email,
     required this.displayName,
     required this.age,
+    this.birthday,
     required this.signature,
     required this.countryCode,
     required this.countryName,
@@ -20,6 +21,7 @@ class TinniAccount {
   final String email;
   final String displayName;
   final int age;
+  final String? birthday;
   final String signature;
   final String countryCode;
   final String countryName;
@@ -38,6 +40,7 @@ class TinniAccount {
       email: user['email']?.toString() ?? '',
       displayName: user['display_name']?.toString() ?? '',
       age: _asInt(user['age']),
+      birthday: user['birthday']?.toString(),
       signature: user['signature']?.toString() ?? '',
       countryCode: user['country_code']?.toString() ?? '',
       countryName: user['country_name']?.toString() ?? '',

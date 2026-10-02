@@ -1866,34 +1866,6 @@ On reconnect:
 - reconcile sequence/version;
 - then resume incremental events.
 
-## T1. Realtime room presence / seat DP delivery — LOCKED
-
-Runtime rule:
-- Room entry performs one authoritative presence join/snapshot.
-- After join, room presence uses one authenticated Durable Object WebSocket with Cloudflare WebSocket Hibernation.
-- Do not poll room presence every second.
-- In the healthy realtime path there is no recurring HTTP heartbeat.
-- A low-frequency HTTP heartbeat is emergency fallback only while the realtime socket is disconnected.
-- The realtime client uses WebSocket protocol ping for transport health and a sparse application presence keepalive.
-- Current implementation target: 75-second application keepalive, 180-second room-member TTL, 60-second HTTP fallback only when WebSocket is unavailable.
-
-Seat/DP rule:
-- USER_JOIN, USER_LEAVE, seat changes, invite/approval/forced-seat changes, mute/admin/lock changes and other presence mutations must push to connected room clients.
-- A user taking or leaving a seat must sync immediately; it must never wait for a periodic heartbeat.
-- Another user's DP must appear automatically from the realtime presence update. Tapping the seat must never be required to make the DP appear.
-- The client must retain a stable avatar provider/cache keyed by user ID + avatar source.
-- Rebuilds must reuse the existing decoded/cached avatar. Never clear a valid DP to blank while applying a room-state update.
-- If a replacement avatar is invalid or not ready, keep the last valid avatar until the replacement is available.
-- Data-URL avatars are decoded once per changed source; HTTP(S)/R2 avatar URLs reuse their image provider/cache.
-- Presence updates may reconcile an authoritative snapshot, but repeated timer-driven full-room refresh/re-render is forbidden.
-- On WebSocket reconnect, server state wins: reconcile the authoritative seat/member state first, then resume realtime events.
-
-Request-budget rule:
-- No REST polling loop for room seats/users/DPs.
-- WebSocket connection establishment is per room session; outgoing server broadcasts do not require one REST request per recipient.
-- Keepalive cadence must remain sparse and must not be shortened back to one-second polling.
-- New room/presence features must use the existing realtime channel or meaningful user-action requests instead of periodic REST refreshes.
-
 ## U. RTC / IM separation
 
 RTC adapter:
@@ -1935,36 +1907,115 @@ Required architecture:
 
 Do not claim background microphone support across all Android/OEM versions until tested on real devices.
 
-## W. Profile / Setting / Blacklist
+## W. Mine / Me / Profile / Setting — REFERENCE VIDEO LOCKED
 
-Bottom Mine/Profile includes the user's account-oriented area.
+Bottom **Mine/Me** is the user's personal account surface and is separate from **Party > Mine**.
 
-Reference Setting menu includes:
-- Message notification
-- Bind account
-- Language settings
-- About
-- Feedback
-- Blacklist
-- Privacy statement
-- Sign out
+### W.1 Reference-video visual target
 
-Mine/Profile may also expose:
-- VIP
-- Wealth level
-- Medal of Honor
-- Custom Center
-- Shop
-- Props
-- Reward Records
-- Task
-- Host data
-- Family
-- CP Nest
-- Feedback
-- Setting
+The supplied reference videos are the visual source for the Mine page. Final UI must preserve the same overall composition, order and interaction pattern rather than replacing it with a generic profile page. Match the reference as closely as practical for:
 
-Tinni UI styling may differ, but functional routing must remain clear.
+- top DP/name/UID identity block;
+- Follow / Fans / Charm statistics row;
+- Wallet card;
+- VIP and Wealth cards;
+- grouped menu rows;
+- icon location, chevrons, spacing, row height and card proportions;
+- light Mine-page surface with Tinni gold/yellow accents.
+
+Exact functional labels and menu order are product-locked unless the user explicitly changes them.
+
+### W.2 Top identity and stats
+
+Show real account data:
+
+- DP/avatar + equipped profile frame;
+- display name;
+- country flag;
+- public UID;
+- user level;
+- Family tag + Family level when applicable;
+- active identity/VIP indicator;
+- **Follow** = real following count;
+- **Fans** = real follower count;
+- **Charm** = real lifetime eligible gift receiving.
+
+Do not hard-code these counters.
+
+### W.3 Wallet, VIP and Wealth
+
+- **Wallet** shows the real normal-wallet Coin balance and opens the real wallet/recharge surface.
+- **VIP** shows current VIP status/level and opens the real VIP page.
+- **Wealth level** is calculated from real lifetime eligible gift sending and opens a dedicated Wealth page.
+- Wealth level thresholds are data-driven/Owner-Panel configurable.
+- Charm and Wealth remain separate: receiving drives Charm; sending drives Wealth.
+
+### W.4 Mine menu exact order
+
+1. Medal of Honor
+2. Custom Center
+3. Shop
+4. Props
+5. Reward Records
+6. Task
+7. Host data
+8. Family
+9. CP Nest
+10. Feedback
+11. Setting
+
+Each row opens a real function; no defined row may terminate at a generic placeholder.
+
+### W.5 Function behavior
+
+- **Medal of Honor**: backend-driven user medals with truthful empty state.
+- **Custom Center**: existing personalization/customization center.
+- **Shop**: real data-driven store with category browsing, preview, price, duration/permanent state, Purchase/Send where supported.
+- **Props**: owned inventory/entitlements with real equip/use state.
+- **Reward Records**: server wallet/reward transaction history with date/time and Coin/Diamond delta.
+- **Task**: server-derived task completion, one-time reward claim and wallet transaction write.
+- **Host data**: real Host/Agency/BD role, diamonds, commission, withdrawable value, settlement transfer and transfer history.
+- **Family**: Family home when joined; Family discovery/ranking/join flow when not joined.
+- **CP Nest**: personal CP entry remains in Mine and opens real CP functions.
+- **Feedback**: category + message submission stored server-side, with user's own feedback history.
+
+Games remain room-only and do not move into Mine.
+
+### W.6 Setting exact order
+
+1. Message notification
+2. Bind account
+3. Language settings
+4. About Tinni Star
+5. Feedback
+6. Blocklist
+7. Privacy statement
+8. Sign out
+
+Required behaviors:
+
+- **Message notification** persists Voice, Vibration and Only receive floating screen in the room preferences.
+- **Bind account** shows linked identities; Google linking uses verified Google identity; Email linking uses OTP + 8–128 character Tinni password and must bind to the same Tinni user ID.
+- Facebook binding stays hidden unless Facebook login is deliberately re-enabled.
+- **Language settings** saves the account preference; current choices include English, Hindi and Urdu.
+- **About Tinni Star** shows real Tinni Star identity/version information.
+- **Blocklist** loads real blocked users and supports Move out / Unblock through the backend.
+- **Privacy statement** opens the real Service Agreement & Privacy Policy page.
+- **Sign out** confirms, closes active room session, unregisters push, clears persisted auth/profile state and returns to Login.
+
+### W.7 Privacy / Service Agreement
+
+- Privacy statement is not a placeholder.
+- Page title: **Service Agreement & Privacy Policy**.
+- Two switchable sections: **Service Agreement** and **Privacy Policy**.
+- Policy is written for Tinni Star and covers account/profile data, rooms/chat/calls, verification material, device/diagnostic information, wallet/gifts/purchases, public visibility, providers, retention, security, permissions, rights, age requirements, international processing, policy updates and contact route.
+- Until an official legal/support contact is configured, privacy/contact requests route through **Mine → Feedback**.
+- Current effective date: **30 September 2026**.
+
+### W.8 No-placeholder / server-authority rule
+
+For the Mine flow, do not use fake local balances, fake stats, fake reward history, hard-coded Fans/Charm/Wealth values, unrelated destination pages or generic No content yet pages for functions defined above. Empty states are allowed only when they truthfully represent empty server-backed data.
+
 
 ## X. Social graph
 
@@ -2565,9 +2616,9 @@ Do **not** add or duplicate Room Settings, Blocklist, Cover, Lock, Seat Requests
 
 
 
-### Blueprint sync state — 0.5.23+41
+### Blueprint sync state — 0.5.22+40
 
-This blueprint is synchronized with the current Tinni Star room implementation at app version `0.5.23+41`.
+This blueprint is synchronized with the current Tinni Star room implementation at app version `0.5.22+40`.
 
 Canonical current room rules:
 - 4-box has exactly: Room Type, Music, Effects, Lock / Unlock, Lucky Bag, Sound On / Off, Lucky Number, Group PK, Public Screen / Screen On, Report.
@@ -2583,68 +2634,25 @@ Canonical current room rules:
 
 
 
+## Tinni Star Privacy & Service Agreement
 
-### Build stabilization sync — 0.5.23+41
-
-The successful Tinni Star `0.5.23+41` APK build keeps all previously locked room behavior and adds the following stability/layout fixes:
-
-- Reference seat rows reserve extra vertical label space so the stack **seat/avatar or lock → No.X/name → heart pill → optional tag/medal** does not overflow.
-- The seat-count rules remain unchanged: every count **8–42** stays supported with the existing fixed row-distribution policy.
-- The exact **5-digit room password** rule is unchanged. The password dialogs now use local value state instead of a disposable text controller, preventing disposed-controller failures during modal close/reopen transitions.
-- Opening **Room Type → Cover**, room tools, **Room Setup**, and **Room Members** after closing another modal uses a short transition delay so sheets/pages do not collide during route animation.
-- Removed 4-box entries remain removed: Gift, Feedback, Moderation, Friends/Event Mode, Launch/Stop Event, Blacklist, Seat Requests, standalone Cover/Room Theme, and standalone Settings.
-- Hidden legacy helper methods may remain in source only for compatibility, but they are not exposed as 4-box tiles and must not reappear in the room UI.
-- The current 4-box remains exactly: **Room Type, Music, Effects, Lock / Unlock, Lucky Bag, Sound On / Off, Lucky Number, Group PK, Public Screen / Screen On, Report**.
-- Room Type remains exactly: **Mic Types, Cover, Mic Theme, Setting**.
-- Room Type → Setting remains: **Room Seats, Free mic, Only managers can speak**.
-- The reference-style room visuals and flows remain unchanged: **Room DP + Name + ID**, in-room **Daily / Weekly / Monthly Ranking**, seat self-mute red mic-off badge, right-side **Rocket above Game**, and LP/Game ribbons.
+- Mine → Setting must contain **Privacy statement**.
+- Privacy statement opens a real in-app page titled **Service Agreement & Privacy Policy**; it must not be a placeholder.
+- The page has two switchable sections: **Service Agreement** and **Privacy Policy**.
+- Privacy Policy must be written specifically for Tinni Star and cover account/profile data, rooms/chat/calls, verification material, device/diagnostic data, wallet/gift/purchase records, public profile visibility, service providers, retention, security, device permissions, user privacy choices/rights, age requirements, international processing, policy updates and in-app privacy contact.
+- Service Agreement must cover account responsibility, rooms/chat/calls, virtual items/balances, purchases/refunds, safety/moderation, service availability, privacy-policy linkage, agreement updates and support contact.
+- Do not publish invented legal contact information. Until an official legal/support email is configured, privacy/contact requests route through **Mine → Feedback**.
+- Current policy effective date: **30 September 2026**. Any material future policy change must update the displayed effective date and the policy text.
 
 
+### Family reference coin-scale rule — LOCKED
 
-### Lucky / Rebate Gift system — video reference LOCKED
-
-Tinni Star includes a server-authoritative **Lucky / Rebate Gift** category inside the room Gift panel.
-
-- Lucky gifts use the same selected recipient(s) as normal room gifts, but the rebate outcome is calculated only by the Worker/backend.
-- After the first Lucky gift is sent, a persistent **Combo** control keeps the same gift and recipient selection so the sender can continue sending without reopening the Gift sheet.
-- The Combo surface shows two different counters: the cumulative **send count** (for example ×11 / ×30 / ×55) and cumulative **coins won/returned** (for example +140 / +840). The send count must never be confused with the rebate multiplier.
-- A successful send immediately synchronizes the sender wallet from the authoritative server response. Returned coins are available for the next Combo send immediately.
-- Insufficient balance stops the send; no client-side negative balance or speculative credit is allowed.
-- The gift visually flies into the selected receiver's seat/Profile DP and disappears. A short floating multiplier bubble rises above that DP and fades out.
-- Common visible multiplier bubbles include **5×, 7×, 9×, 10×, 20× and 22×**. 30× / 50× / 100× are less common. **200× and above are rare**, with 250× / 500× / 750× / 1000× increasingly rare.
-- Maximum supported rebate is **1000×**. Default server weights are data-driven and can be changed centrally; the APK never chooses or overrides the result.
-- **200×+** results qualify for a stronger room/country big-win ribbon. Country targeting and the existing LP-first / game-next ribbon rules remain intact.
-- Every Lucky send can contribute an Owner-configurable percentage to the **Real-time Prize Pool**.
-- The Gift panel exposes a Lucky Prize Pool / **Lucky Day Ranking** view showing the real-time pool, today's ranked senders, total returned coins and highest multiplier.
-- The reference daily Top-3 shares shown in the supplied video are **50% / 25% / 15%**. The remaining 10% is not auto-assigned by this blueprint until the Owner defines that rule.
-- For a Lucky/Rebate gift sent to an active Host, the default Host diamond value is **10% of the normal gift value**. This percentage is Owner-configurable.
-- Lucky/Rebate gifts carry the reference **10% normal Charm/Wealth contribution rule** when the corresponding production social-stat counters are active.
-- All debits, rebates, Host reward, pool contribution, ranking totals and high-win ribbons are server-authoritative and auditable. The wallet anti-tamper expected-balance guard is updated together with an authorized rebate credit.
-- Owner Panel can create/edit Lucky gifts, including price, Lucky enable/disable, emoji/asset, maximum multiplier, high-win threshold, Host reward %, Charm/Wealth %, prize-pool %, schedule and country targeting.
-
-Built-in colorful test Lucky gifts:
-
-1. Colorful Rose — 20 Coins
-2. Rainbow Heart — 50 Coins
-3. Magic Balloon — 100 Coins
-4. Candy Star — 200 Coins
-5. Neon Butterfly — 500 Coins
-6. Sparkle Crown — 1,000 Coins
-7. Dream Cake — 2,000 Coins
-8. Galaxy Ring — 5,000 Coins
-9. Shining Unicorn — 10,000 Coins
-10. Royal Treasure Box — 20,000 Coins
-
-These ten gifts are testable from the room Gift panel's **Lucky** category and are seeded into the backend Owner gift catalog without overwriting later Owner edits.
-
-
-### Lucky Gift 3D artwork & send animation — LOCKED
-
-- All 10 built-in Lucky Gifts use bundled full-colour transparent 3D artwork assets instead of emoji placeholders.
-- The room Gift panel renders each Lucky Gift's own artwork, and the Combo surface reuses the same artwork.
-- On send, the selected gift performs a 3D-style fly-in toward the selected receiver seat/DP using translation, rotation, scale/depth and glow.
-- At DP impact, the gift pops with an expanding luminous ring, gold/rainbow sparkle particles, star bursts and a short artwork impact pop.
-- The Lucky multiplier floats above the receiver DP and fades upward; 200×+ uses stronger gold/orange high-win styling.
-- The client never selects the Lucky multiplier. Wallet debit, rebate credit and multiplier remain server-authoritative.
-- Backend catalog metadata stores artwork_asset, send_effect=fly_3d, impact_effect=sparkle_pop and multiplier_effect=float_multiplier for the built-in Lucky Gifts.
-- Existing Owner gift price/probability configuration is preserved when the new visual metadata is migrated.
+- The supplied Family reference uses a smaller coin denomination than Tinni Star.
+- **20,000 reference coins = 2,000,000 Tinni coins.**
+- Therefore every **coin-based Family progression / Family level / contribution target** copied from that reference is converted at **100×** into Tinni Star coins.
+- Example conversions: 20K → 2M, 50K → 5M, 100K → 10M, 500K → 50M, 1M → 100M.
+- The 100× conversion applies only to coin-denominated Family values. It does **not** multiply percentages, member limits, role counts, dates, durations or other non-coin values.
+- If a source screenshot value is not legible, do not invent it. Keep the last explicitly locked Tinni threshold until the exact reference value is confirmed.
+- Family Wallet transfer rule remains: **sender gets no Family EXP; receiver gives the Family 1 EXP per 1 Tinni coin received**.
+- Daily Family check-in also adds the configured Family EXP once per day.
+- Monthly Family Wallet bonus remains **L1 1.00% + 0.25 percentage point per level**, capped by the locked Family level rules.

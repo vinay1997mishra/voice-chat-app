@@ -53,7 +53,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
   ];
 
   Timer? _animationTimer;
-  Timer? _serverTimer;
   int _tick = 0;
   int _selectedBet = 5000;
 
@@ -71,10 +70,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
         setState(() => _tick += 1);
       },
     );
-    _serverTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _sync(),
-    );
   }
 
   Future<void> _sync() async {
@@ -87,7 +82,6 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
   @override
   void dispose() {
     _animationTimer?.cancel();
-    _serverTimer?.cancel();
     super.dispose();
   }
 
@@ -203,7 +197,16 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
         : const Color(0xFFFFC83D);
 
     return LayoutBuilder(
-      builder: (context, constraints) {
+      builder: (context, viewport) {
+        return RefreshIndicator(
+          onRefresh: _sync,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              width: viewport.maxWidth,
+              height: viewport.maxHeight,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
         final tight = constraints.maxHeight < 520;
         final railWidth = tight ? 36.0 : 44.0;
         final cellWidth =
@@ -449,6 +452,11 @@ class _FruitJackpotPanelState extends State<FruitJackpotPanel> {
                 ],
               ),
             ],
+          ),
+        );
+                },
+              ),
+            ),
           ),
         );
       },
