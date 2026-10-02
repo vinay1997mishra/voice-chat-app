@@ -3518,7 +3518,14 @@ export default {
       const directory = getAppDirectoryStore(env);
       const tags = await directory.listUserTags(requestedId);
       const medals = await directory.listUserMedals(requestedId);
-      return json({ ok: true, user_id: requestedId, tags, medals });
+      const identityTags = await directory.listUserIdentityTags(requestedId);
+      return json({
+        ok: true,
+        user_id: requestedId,
+        tags,
+        medals,
+        identity_tags: identityTags,
+      });
     }
 
     if (url.pathname === "/room-events" && request.method === "POST") {
@@ -4776,6 +4783,11 @@ export default {
           body.user_ids,
           body.name,
           body.color,
+          {
+            kind: body.kind,
+            designation: body.designation,
+            background_color: body.background_color,
+          },
         );
         await writeAudit(
           env,
@@ -4783,7 +4795,14 @@ export default {
           "user.tag.apply",
           "users",
           Array.isArray(body.user_ids) ? body.user_ids.join(",") : "",
-          { name: result.name, color: result.color, tagged: result.tagged },
+          {
+            name: result.name,
+            color: result.color,
+            kind: result.kind,
+            designation: result.designation,
+            background_color: result.background_color,
+            tagged: result.tagged,
+          },
         );
         return json(result);
       } catch (error) {

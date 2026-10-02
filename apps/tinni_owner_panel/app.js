@@ -1958,6 +1958,51 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
+  const vColorButton = e.target.closest("[data-v-color]");
+  if (vColorButton) {
+    const value = String(vColorButton.dataset.vColor || "#69C9FF");
+    const select = document.getElementById("ownerVBackground");
+    if (select) select.value = value;
+    document.querySelectorAll("[data-v-color]").forEach((button) => {
+      button.classList.toggle("active", button === vColorButton);
+    });
+    const preview = document.querySelector(".v-official-preview");
+    if (preview) preview.style.setProperty("--v-bg", value);
+    return;
+  }
+
+  if (e.target.closest("[data-owner-v-official-selected]")) {
+    const designation = String(
+      document.getElementById("ownerVDesignation")?.value || ""
+    ).trim();
+    const background = String(
+      document.getElementById("ownerVBackground")?.value || "#69C9FF"
+    );
+    const ids = [...ownerSelectedUsers.keys()];
+    if (!designation) { toast("Write or select a Position / Designation."); return; }
+    if (ids.length === 0) { toast("Select at least one ID."); return; }
+    try {
+      const result = await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          user_ids: ids,
+          name: "V Official",
+          color: background,
+          kind: "v_official",
+          designation,
+          background_color: background,
+        }),
+      });
+      toast("V Official · " + designation + " applied to " + result.tagged + " IDs.");
+      await searchOwnerMessagingUsers(
+        document.getElementById("ownerUserSearchInput")?.value || ""
+      );
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const approveCallVerification = e.target.closest("[data-call-verify-approve]")?.dataset.callVerifyApprove;
   if (approveCallVerification) {
     try {
