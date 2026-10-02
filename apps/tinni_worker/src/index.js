@@ -2723,19 +2723,29 @@ export default {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const coins = Number(tx?.total_cost || 0);
-            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+            const diamonds = Number(tx?.receiver_diamonds || 0);
+            if (
+              !receiverId ||
+              !Number.isSafeInteger(diamonds) ||
+              diamonds < 0
+            ) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + coins,
+              Number(receiverTotals.get(receiverId) || 0) + diamonds,
             );
           }
           if (receiverTotals.size > 0) {
             await getRoomPresenceStore(env, roomId).recordGift({
+              event_id: String(transactions[0]?.id || ""),
+              gift_id: String(transactions[0]?.gift_id || body.gift_id || ""),
+              gift_name: String(
+                transactions[0]?.gift_name || body.gift_name || "Gift",
+              ),
+              is_lucky: result?.lucky != null,
               receivers: [...receiverTotals.entries()].map(
-                ([user_id, coins]) => ({ user_id, coins }),
+                ([user_id, diamonds]) => ({ user_id, diamonds }),
               ),
             });
           }
