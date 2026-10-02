@@ -99,8 +99,13 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /_selectedGiftRecipients\s*\.\.clear\(\)\s*\.\.add\(recipient\.\$1\);/,
-  "Tapping a recipient DP must replace the previous target instead of accumulating seat recipients",
+  /_selectedGiftRecipients\.contains\(recipient\.\$1\)/,
+  "Recipient strip must bind selection to real user IDs",
+);
+assert.match(
+  roomScreen,
+  /_selectedGiftRecipients\.add\(recipient\.\$1\)/,
+  "Gift panel must support selecting more than one real recipient DP",
 );
 assert.match(
   roomScreen,
