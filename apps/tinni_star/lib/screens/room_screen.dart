@@ -2464,8 +2464,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<bool> _sendLuckyGift(
     GiftDefinition gift,
-    List<String> receiverIds,
-  ) async {
+    List<String> receiverIds, {
+    int quantity = 1,
+  }) async {
     final account = widget.state.auth.current;
     if (account == null || receiverIds.isEmpty || _luckyComboSending) {
       return false;
@@ -2484,7 +2485,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         authToken: account.authToken,
         giftId: gift.id,
         giftName: gift.name,
-        quantity: 1,
+        quantity: quantity,
         unitPrice: gift.price,
         receiverIds: receiverIds,
         luckySessionId: sessionId,
@@ -2521,17 +2522,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           : math.max(serverHighest, multiplier);
       _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckyAnimationReceiverId = receiverIds.first;
+      _luckyAnimationReceiverIds
+        ..clear()
+        ..addAll(receiverIds);
       _luckyAnimationSequence++;
+      _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
         gift: gift,
-        quantity: 1,
+        quantity: quantity,
         senderId: account.userId,
         receiverIds: List<String>.unmodifiable(receiverIds),
         totalCost: totalCost > 0
             ? totalCost
-            : gift.price * receiverIds.length,
+            : gift.price * quantity * receiverIds.length,
       );
       widget.state.gifts.sent.insert(0, tx);
       widget.state.activities.addGiftScore(account.userId, tx.totalCost);
@@ -2541,7 +2545,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
         if (!mounted) return;
         setState(() {
-          _luckyAnimationReceiverId = null;
+          _luckyAnimationReceiverIds.clear();
           _luckyLastMultiplier = 0;
         });
       });
@@ -3384,24 +3388,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (gift.lucky) {
         final selectedRecipients =
             _selectedGiftRecipients.toList(growable: false);
-        var sentCount = 0;
-        var allSent = true;
-        for (var sendIndex = 0;
-            sendIndex < luckyQuantity;
-            sendIndex++) {
-          final sent = await _sendLuckyGift(
-            gift,
-            selectedRecipients,
-          );
-          if (!sent) {
-            allSent = false;
-            break;
-          }
-          sentCount++;
-        }
-        if (allSent &&
-            sentCount == luckyQuantity &&
-            sheetContext.mounted) {
+        final sent = await _sendLuckyGift(
+          gift,
+          selectedRecipients,
+          quantity: luckyQuantity,
+        );
+        if (sent && sheetContext.mounted) {
           Navigator.pop(sheetContext);
         }
         return;
