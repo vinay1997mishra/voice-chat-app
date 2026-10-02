@@ -4947,10 +4947,10 @@ export class AppDirectoryStore extends DurableObject {
     let totalRebate = 0;
     let highestMultiplier = 0;
     let totalPoolContribution = 0;
-    const hostRewardPercent = Math.max(
-      0,
-      Math.min(100, Number(giftData.host_reward_percent ?? luckyConfig.host_reward_percent ?? 10)),
-    );
+    // Latest Tinni gift rule: every selected recipient receives diamonds.
+    // Normal gifts credit 100% of sent gift value; Lucky gifts credit 10%.
+    // Sender Lucky rebate/return remains a separate coin flow.
+    const receiverDiamondPercent = isLucky ? 10 : 100;
     const prizePoolPercent = Math.max(
       0,
       Math.min(100, Number(giftData.prize_pool_percent ?? luckyConfig.prize_pool_percent ?? 2)),
@@ -4959,6 +4959,9 @@ export class AppDirectoryStore extends DurableObject {
     for (const receiverId of receivers) {
       const id = "gift-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 10);
       const receiverTotal = chargedUnitPrice * quantity;
+      const receiverDiamondCredit = Math.floor(
+        receiverTotal * receiverDiamondPercent / 100,
+      );
       this.ctx.storage.sql.exec(
         `INSERT INTO gift_transactions
           (id, room_id, sender_id, receiver_id, gift_id, gift_name, quantity, unit_price, total_cost, created_at)
@@ -4975,28 +4978,30 @@ export class AppDirectoryStore extends DurableObject {
         quantity,
         unit_price: chargedUnitPrice,
         total_cost: receiverTotal,
+        receiver_diamonds: receiverDiamondCredit,
         created_at: now,
       });
 
-      if (receiverTotal > 0 && this._isActiveHost(receiverId)) {
-        const hostCredit = isLucky
-          ? Math.floor(receiverTotal * hostRewardPercent / 100)
-          : receiverTotal;
-        if (hostCredit > 0) {
-          this.ctx.storage.sql.exec(
-            "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
-            receiverId, now,
-          );
-          this.ctx.storage.sql.exec(
-            "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
-            hostCredit, now, receiverId,
-          );
-          this.ctx.storage.sql.exec(
-            "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?)",
-            "wallet-" + crypto.randomUUID(), receiverId, hostCredit, id,
-            (isLucky ? "Lucky host gift 10%: " : "Host gift: ") + giftName, now,
-          );
-          this._recordHostEligibleGift(receiverId, hostCredit, now);
+      if (receiverDiamondCredit > 0) {
+        this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
+          receiverId, now,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
+          receiverDiamondCredit, now, receiverId,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'gift_receiver_diamonds',0,?,?,?,?)",
+          "wallet-" + crypto.randomUUID(),
+          receiverId,
+          receiverDiamondCredit,
+          id,
+          (isLucky ? "Lucky gift receiver 10%: " : "Gift receiver 100%: ") + giftName,
+          now,
+        );
+        if (this._isActiveHost(receiverId)) {
+          this._recordHostEligibleGift(receiverId, receiverDiamondCredit, now);
         }
       }
 
@@ -5122,6 +5127,10 @@ export class AppDirectoryStore extends DurableObject {
     return {
       ok: true,
       total_cost: totalCost,
+      receiver_diamonds_total: transactions.reduce(
+        (sum, tx) => sum + Number(tx.receiver_diamonds || 0),
+        0,
+      ),
       wallet: this.getWallet(senderId),
       transactions,
       lucky: isLucky ? {
