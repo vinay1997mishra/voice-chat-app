@@ -143,6 +143,10 @@ async function createLiveKitAccessToken({
   roomId,
   userId,
   displayName,
+  canPublish = true,
+  canSubscribe = true,
+  canPublishData = true,
+  ttlSeconds = 60 * 60,
 }) {
   const now = Math.floor(Date.now() / 1000);
   const header = stringToBase64Url(JSON.stringify({
@@ -154,13 +158,13 @@ async function createLiveKitAccessToken({
     sub: String(userId),
     name: String(displayName || userId),
     nbf: now - 5,
-    exp: now + 60 * 60,
+    exp: now + Math.max(60, Math.min(60 * 60, Number(ttlSeconds || 60 * 60))),
     video: {
       roomJoin: true,
       room: String(roomId),
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
+      canPublish: canPublish === true,
+      canSubscribe: canSubscribe !== false,
+      canPublishData: canPublishData === true,
     },
   }));
   const signingInput = header + "." + payload;
@@ -4776,6 +4780,60 @@ export default {
       }
 
       return json({ ok: true, detail: { ...detail, current_room } });
+    }
+
+    if (url.pathname === "/api/owner/listen-token" && request.method === "POST") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      if (!env.LIVEKIT_URL || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+        return json({ ok: false, error: "LiveKit is not configured on the server" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const monitorId = "owner-monitor-" + crypto.randomUUID().slice(0, 12);
+      const token = await createLiveKitAccessToken({
+        apiKey: env.LIVEKIT_API_KEY,
+        apiSecret: env.LIVEKIT_API_SECRET,
+        roomId,
+        userId: monitorId,
+        displayName: "Tinni Owner Monitor",
+        canPublish: false,
+        canSubscribe: true,
+        canPublishData: false,
+        ttlSeconds: 15 * 60,
+      });
+
+      await writeAudit(
+        env,
+        session,
+        "room.listen_only.start",
+        "room",
+        roomId,
+        {
+          mode: "listen_only",
+          can_publish: false,
+          expires_in: 15 * 60,
+        },
+      );
+
+      return json({
+        ok: true,
+        mode: "listen_only",
+        server_url: String(env.LIVEKIT_URL),
+        token,
+        room_id: roomId,
+        can_publish: false,
+        can_subscribe: true,
+        expires_in: 15 * 60,
+        audit_logged: true,
+      });
     }
 
     if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {

@@ -72,6 +72,10 @@ let currentSession = null;
 const ownerSelectedUsers = new Map();
 let ownerOfficials = [];
 let ownerOfficialPosition = "";
+let ownerListenRoom = null;
+let ownerListenModule = null;
+let ownerListenRoomId = "";
+let ownerListenAudioElements = [];
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -700,6 +704,115 @@ async function searchOwnerMessagingUsers(query) {
   }
 }
 
+function setOwnerListenStatus(text, active = false) {
+  const status = document.getElementById("ownerListenStatus");
+  if (status) {
+    status.textContent = text;
+    status.classList.toggle("active", active);
+  }
+}
+
+function clearOwnerListenAudio() {
+  for (const element of ownerListenAudioElements) {
+    try { element.remove(); } catch {}
+  }
+  ownerListenAudioElements = [];
+}
+
+async function stopOwnerListen() {
+  clearOwnerListenAudio();
+  const room = ownerListenRoom;
+  ownerListenRoom = null;
+  ownerListenRoomId = "";
+  if (room) {
+    try { await room.disconnect(); } catch {}
+  }
+  setOwnerListenStatus("Listen-only stopped", false);
+}
+
+function attachOwnerListenTrack(track) {
+  if (!track || String(track.kind || "").toLowerCase() !== "audio") return;
+  try {
+    const element = track.attach();
+    element.autoplay = true;
+    element.controls = false;
+    element.dataset.ownerListenAudio = "1";
+    element.style.display = "none";
+    document.body.appendChild(element);
+    ownerListenAudioElements.push(element);
+    const playResult = element.play?.();
+    if (playResult?.catch) {
+      playResult.catch(() => setOwnerListenStatus("Audio blocked by browser — tap Listen again", false));
+    }
+  } catch {}
+}
+
+async function startOwnerListen(roomId) {
+  const cleanRoomId = String(roomId || "").trim();
+  if (!cleanRoomId) return;
+  await stopOwnerListen();
+  setOwnerListenStatus("Connecting listen-only…", false);
+
+  try {
+    const credentials = await api("/api/owner/listen-token", {
+      method: "POST",
+      body: JSON.stringify({ room_id: cleanRoomId }),
+    });
+
+    if (!ownerListenModule) {
+      ownerListenModule = await import(
+        "https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.esm.mjs"
+      );
+    }
+
+    const LiveKit = ownerListenModule;
+    const room = new LiveKit.Room({
+      adaptiveStream: true,
+      dynacast: false,
+    });
+    ownerListenRoom = room;
+    ownerListenRoomId = cleanRoomId;
+
+    room.on(LiveKit.RoomEvent.TrackSubscribed, (track) => {
+      attachOwnerListenTrack(track);
+    });
+    room.on(LiveKit.RoomEvent.TrackUnsubscribed, (track) => {
+      try {
+        for (const element of track.detach()) {
+          element.remove();
+          ownerListenAudioElements = ownerListenAudioElements.filter((item) => item !== element);
+        }
+      } catch {}
+    });
+    room.on(LiveKit.RoomEvent.Disconnected, () => {
+      if (ownerListenRoom === room) {
+        ownerListenRoom = null;
+        ownerListenRoomId = "";
+        clearOwnerListenAudio();
+        setOwnerListenStatus("Listen-only disconnected", false);
+      }
+    });
+
+    await room.connect(credentials.server_url, credentials.token);
+    if (typeof room.startAudio === "function") {
+      try { await room.startAudio(); } catch {}
+    }
+
+    for (const participant of room.remoteParticipants.values()) {
+      for (const publication of participant.audioTrackPublications.values()) {
+        if (publication.track) attachOwnerListenTrack(publication.track);
+      }
+    }
+
+    setOwnerListenStatus("Listening to room " + cleanRoomId + " • microphone disabled", true);
+    toast("Listen-only connected. Owner microphone cannot publish.");
+  } catch (error) {
+    await stopOwnerListen();
+    setOwnerListenStatus(error.message || "Unable to listen to room", false);
+    toast(error.message || "Unable to listen to room.");
+  }
+}
+
 function officialBadgeHtml(item) {
   const bg = String(item?.background_color || "#69C9FF");
   return `<span class="owner-v-tag official-large" style="--official-bg:${escapeHtml(bg)}"><i>V</i><b>${escapeHtml(item?.designation || "Official")}</b></span>`;
@@ -819,7 +932,11 @@ async function openOwnerUserProfile(userId) {
       </div>
 
       <div class="button-row" style="margin-top:12px">
-        ${room ? `<button type="button" class="btn primary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>` : ""}
+        ${room ? `
+          <button type="button" class="btn primary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>
+          <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
+          <span id="ownerListenStatus" class="owner-listen-status">Listen-only idle</span>
+        ` : ""}
       </div>
 
       <div class="grid two owner-detail-sections">
@@ -2021,6 +2138,18 @@ document.body.addEventListener("click", async e => {
   const profileClose = e.target.closest("[data-owner-profile-close]");
   if (profileClose) {
     document.getElementById("ownerProfileDialog")?.close();
+    return;
+  }
+
+  const listenRoomButton = e.target.closest("[data-owner-listen-room]");
+  if (listenRoomButton) {
+    await startOwnerListen(listenRoomButton.dataset.ownerListenRoom);
+    return;
+  }
+
+  const stopListenButton = e.target.closest("[data-owner-stop-listen]");
+  if (stopListenButton) {
+    await stopOwnerListen();
     return;
   }
 

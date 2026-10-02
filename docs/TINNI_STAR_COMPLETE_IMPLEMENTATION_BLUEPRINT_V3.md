@@ -195,6 +195,9 @@ Gift panel:
 - Touching an Official ID opens its Owner-only full user detail/profile view. Each Official row provides Full Details/Open Profile, Edit Position and Remove Official.
 - Main Owner user search also provides **Open ID / Full Profile** so any searched ID can open the same consolidated user view.
 - Consolidated Owner user view includes Tinni Star profile/account, wallet, current identity tags/roles, current live room/seat when available, stored Tinni inbox/message history and stored Tinni call history.
+- If that ID is currently in a live Tinni voice room, Owner profile view provides **Listen to Room — no mic**.
+- Owner listening is strictly subscriber-only: its LiveKit grant has `canPublish=false` and `canPublishData=false`; the Owner Panel has no microphone/talk control in this mode.
+- Listen-only token issuance is Owner-only, short-lived and written to the Owner audit log. It applies only to Tinni Star live-room audio, not phone calls, WhatsApp, device microphone history or other apps.
 
 ## 12. Profile / Mine / CP
 
