@@ -2451,9 +2451,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return true;
   }
 
-  void _resetLuckyComboState() {
-    _luckyComboExpiryTimer?.cancel();
-    _luckyComboExpiryTimer = null;
+  void _clearLuckyComboFields() {
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
     _luckyComboCount = 0;
@@ -2464,11 +2462,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckySessionHighest = 0;
   }
 
+  void _resetLuckyComboState() {
+    _luckyComboExpiryTimer?.cancel();
+    _luckyComboExpiryTimer = null;
+    _luckyComboExpiryGeneration++;
+    _clearLuckyComboFields();
+  }
+
   void _armLuckyComboExpiry() {
     _luckyComboExpiryTimer?.cancel();
+    final generation = ++_luckyComboExpiryGeneration;
     _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
-      if (!mounted) return;
-      setState(_resetLuckyComboState);
+      if (!mounted || generation != _luckyComboExpiryGeneration) return;
+      _luckyComboExpiryTimer = null;
+      setState(_clearLuckyComboFields);
     });
   }
 
