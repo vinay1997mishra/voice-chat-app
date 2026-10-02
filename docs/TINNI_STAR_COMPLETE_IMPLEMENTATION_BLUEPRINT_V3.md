@@ -776,11 +776,13 @@ Effects:
 Feedback:
 - Opens the room feedback/report surface.
 
-Lock / Unlock:
-- Uses the existing owner-only password room flow.
-- Password is exactly 5 numeric digits; any 00000–99999 value is valid, and the existing failed-attempt rules remain unchanged.
-- VIP is **not required** to set or use a room password; any room owner can lock their own room with an exact 5-digit password.
-- Room lock is exposed **only** from the 4-box `Lock / Unlock` tile; duplicate lock controls are removed from Room Type, Room Setup, and legacy Room Settings.
+Room Lock — LATEST LOCKED RULE:
+- Room Lock exists **only inside Room Type → Setting → Room Lock**.
+- Do not show a separate Lock / Unlock tile in the 4-box/tools grid.
+- Do not duplicate Room Lock in Room Setup or legacy Room Settings.
+- Password is exactly **5 numeric digits**; any 00000–99999 value is valid, with existing failed-attempt protection preserved.
+- VIP is **not required**; the room owner can lock their own room.
+- Admin cannot change the room password/lock unless a future explicit owner rule says otherwise.
 
 Top room bar:
 - Share icon is visible beside the existing room actions.
@@ -814,18 +816,24 @@ Tinni Star must match the approved reference interaction for these room surfaces
 - Existing Tinni mute state remains functional; muted seats may additionally show the small red mic-off badge.
 - Tinni seat capacities remain 8–42 and the approved row-distribution rule is unchanged.
 
-**Seat tap**
-- Owner/Admin normal tap on a seat opens the reference-style bottom panel with:
-  - `Mic up`
-  - `Lock mic`
-  - `Confirm`
-- Long press keeps the advanced Tinni seat controls so existing moderation functions are not removed.
+**Seat tap — LATEST LOCKED RULE**
+- Do **not** restore the old `Mic up / Lock mic / Confirm` panel.
+- Owner/Admin normal tap on an empty seat opens the current Tinni controls:
+  - `Seat Lock / Seat Unlock`
+  - `Seat Mute / Seat Unmute`
+  - `Take Seat`
+- Owner/Admin tap on an occupied controllable seat uses the current moderation controls without reintroducing a second legacy panel.
+- Self DP/seat tap shows the current self actions including Down / Leave Seat as defined by the latest room UI.
+- Owner seat is immune to Admin control; Admin cannot control another Admin.
+- Owner can control Admin/member seats.
+- No seat may auto-open, auto-lock, auto-mute or auto-unmute.
 
 **Floating Game + Rocket**
 - Game remains outside the room 4-box.
 - Right-side floating stack shows a small Rocket icon above a short progress indicator and the purple/pink Game controller below it.
 - Game controller opens `Game Center`.
 - Game Center shows a room/profile progress card, coin balance, an `All Games` grid, and Tinni's Fruit Jackpot / Fruit Party entries.
+- Fruit Jackpot and Fruit Party active overlays use approximately **50% of screen height** per the latest approved room layout.
 - Rocket opens the reference-style rocket event panel with a large rocket, milestone row, 0–100% progress area, rewards grid, Record/Help affordances, reset timer and close control.
 - The floating stack hides while a Tinni game panel is actively open.
 
@@ -1865,6 +1873,22 @@ On reconnect:
 - fetch authoritative room snapshot;
 - reconcile sequence/version;
 - then resume incremental events.
+
+### T.1 Realtime room presence / seat DP delivery — LATEST LOCKED RULE
+
+- Room entry performs one authoritative presence join/snapshot.
+- After join, use one authenticated hibernating Durable Object WebSocket for room presence.
+- **Do not poll room presence every second.**
+- In the healthy realtime path there is **no recurring HTTP heartbeat**.
+- HTTP heartbeat is emergency fallback only while realtime is disconnected.
+- Current keepalive target is sparse (75-second application presence keepalive with 180-second member TTL); do not shorten this back to frequent polling without an explicit product change.
+- Seat take/leave, mic-state change, mute/unmute, lock/unlock, admin/permission change and user join/leave must push immediately through realtime state updates.
+- A DP must appear automatically when presence/seat state arrives; tapping the seat must never be required to make the DP appear.
+- Keep stable seat identity and stable avatar providers/cache. Never clear a valid DP to blank while applying a state update.
+- Reuse the last valid/cached DP until a replacement image is decoded/available.
+- Update only the changed seat/member state where possible; avoid timer-driven full-room clear/rebuild cycles.
+- On reconnect, reconcile authoritative server state before resuming incremental updates.
+- Realtime request budget is a product requirement: new room features must reuse the existing live channel or meaningful user-action requests rather than adding periodic REST polling.
 
 ## U. RTC / IM separation
 
