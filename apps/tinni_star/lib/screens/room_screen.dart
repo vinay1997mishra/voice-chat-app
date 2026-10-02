@@ -54,7 +54,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _luckySessionId;
   int _luckySessionHighest = 0;
   final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
-  Timer? _luckyFeedTimer;
   bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _emoteExpiryTimer;
@@ -71,8 +70,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   ImageProvider? _cachedThemeProvider;
   final Map<String, ImageProvider> _avatarProviderCache =
       <String, ImageProvider>{};
-  Timer? _ribbonTimer;
-  Timer? _roomSendingTimer;
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
@@ -127,17 +124,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
-    _ribbonTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshCountryRibbons());
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
     _primeRoomSendingSummary();
-    _roomSendingTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refreshRoomSendingSummary(),
-    );
-    _luckyFeedTimer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _refreshLuckyFeed(),
-    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLuckyFeed());
     widget.state.social.unreadMessages.addListener(_refresh);
     final account = widget.state.auth.current;
@@ -635,10 +623,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
-    _ribbonTimer?.cancel();
     _luckyBubbleTimer?.cancel();
-    _luckyFeedTimer?.cancel();
-    _roomSendingTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -7568,11 +7553,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final compact = seatDiameter < 44;
     final moderationMuted =
         seat.roomMuted || (presenceMember?.moderationMuted ?? false);
-    final selfMicOff = isMySeat &&
-        (controller.selfMuted || controller.micState != MicState.live);
+    final selfMuted = isMySeat && controller.selfMuted;
+    final selfMicOff =
+        isMySeat && controller.micState != MicState.live;
     final isMicBlocked =
-        moderationMuted || selfMicOff || (presenceMember?.micMuted ?? false);
-    final showMuteIndicator = moderationMuted || selfMicOff;
+        moderationMuted ||
+        selfMuted ||
+        selfMicOff ||
+        (presenceMember?.micMuted ?? false);
+    final showMuteIndicator = moderationMuted || selfMuted;
     final speakingUserId =
         presenceMember?.userId ?? (isMySeat ? account?.userId : null);
     final labelWidth = (seatDiameter + (compact ? 8 : 16))
@@ -7662,10 +7651,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ],
                             ),
                           )
-                        : AnimatedAvatarFrame(
-                            size: seatDiameter,
-                            frameId: presenceMember?.equippedFrameId,
-                            child: Container(
+                        : RepaintBoundary(
+                            child: AnimatedAvatarFrame(
+                              size: seatDiameter,
+                              frameId: presenceMember?.equippedFrameId,
+                              child: Container(
                               width: seatDiameter,
                               height: seatDiameter,
                               padding: EdgeInsets.all(
@@ -7728,6 +7718,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+                        ),
                     ),
                   if (occupied && speakingUserId != null)
                     Positioned(
@@ -8111,17 +8102,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: const Color(0xFF100A19),
-                    backgroundImage: _roomPhotoProvider,
-                    child: _roomPhotoProvider == null
-                        ? const Icon(
-                            Icons.meeting_room_rounded,
-                            color: Color(0xFFD7C7FF),
-                            size: 18,
-                          )
-                        : null,
+                  RepaintBoundary(
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: const Color(0xFF100A19),
+                      backgroundImage: _roomPhotoProvider,
+                      child: _roomPhotoProvider == null
+                          ? const Icon(
+                              Icons.meeting_room_rounded,
+                              color: Color(0xFFD7C7FF),
+                              size: 18,
+                            )
+                          : null,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
