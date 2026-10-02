@@ -1066,6 +1066,9 @@ export class AppDirectoryStore extends DurableObject {
         user_id TEXT NOT NULL,
         name TEXT NOT NULL,
         color TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'custom',
+        designation TEXT NOT NULL DEFAULT '',
+        background_color TEXT,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_owner_user_tags_user
@@ -1199,7 +1202,10 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE families ADD COLUMN notice TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE lucky_gift_results ADD COLUMN session_id TEXT",
       "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0"
+      "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE owner_user_tags ADD COLUMN kind TEXT NOT NULL DEFAULT 'custom'",
+      "ALTER TABLE owner_user_tags ADD COLUMN designation TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE owner_user_tags ADD COLUMN background_color TEXT"
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -1501,14 +1507,164 @@ export class AppDirectoryStore extends DurableObject {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return [];
     return this.ctx.storage.sql.exec(
-      `SELECT id, name, color, created_at
+      `SELECT id, name, color, kind, designation, background_color, created_at
          FROM owner_user_tags
         WHERE user_id = ?
         ORDER BY created_at DESC`, userId,
     ).toArray().map((row) => ({
-      id: String(row.id), name: String(row.name), color: String(row.color),
+      id: String(row.id),
+      name: String(row.name),
+      color: String(row.color),
+      kind: String(row.kind || "custom"),
+      designation: String(row.designation || ""),
+      background_color: row.background_color
+        ? String(row.background_color)
+        : String(row.color),
       created_at: Number(row.created_at),
     }));
+  }
+
+  listUserIdentityTags(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return [];
+    const tags = this.listUserTags(userId).map((tag) => ({
+      ...tag,
+      source: "owner",
+    }));
+    const roles = this.ctx.storage.sql.exec(
+      `SELECT role FROM owner_hierarchy
+        WHERE user_id = ? AND active = 1 AND role IN ('host','agency')
+        ORDER BY updated_at DESC`,
+      userId,
+    ).toArray().map((row) => {
+      const role = String(row.role || "").toLowerCase();
+      return {
+        id: "auto-role-" + role,
+        name: role === "agency" ? "Agency" : "Host",
+        color: role === "agency" ? "#AB47BC" : "#FFB74D",
+        kind: "auto_role",
+        designation: role === "agency" ? "Agency" : "Host",
+        background_color: role === "agency" ? "#4A1761" : "#5A3512",
+        source: "automatic",
+        created_at: 0,
+      };
+    });
+    return [...tags, ...roles].slice(0, 16);
+  }
+
+  listOfficials() {
+    return this.ctx.storage.sql.exec(
+      `SELECT t.id AS tag_id, t.user_id, t.designation, t.background_color,
+              t.color, t.created_at,
+              u.display_name, u.avatar_data_url, u.gender,
+              u.country_name, u.flag_emoji, u.email
+         FROM owner_user_tags t
+         JOIN app_users u ON u.user_id = t.user_id
+        WHERE t.kind = 'v_official'
+        ORDER BY LOWER(t.designation), u.display_name, t.created_at DESC`,
+    ).toArray().map((row) => ({
+      tag_id: String(row.tag_id),
+      user_id: String(row.user_id),
+      designation: String(row.designation || "Official"),
+      background_color: String(row.background_color || row.color || "#69C9FF"),
+      color: String(row.color || "#69C9FF"),
+      created_at: Number(row.created_at || 0),
+      display_name: String(row.display_name || row.user_id),
+      avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+      gender: String(row.gender || ""),
+      country_name: String(row.country_name || ""),
+      flag_emoji: String(row.flag_emoji || ""),
+      email: String(row.email || ""),
+    }));
+  }
+
+  ownerUserDetail(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row) return null;
+
+    const presence = this.ctx.storage.sql.exec(
+      `SELECT room_id, last_seen, room_socket_connected
+         FROM app_user_presence WHERE user_id = ? LIMIT 1`,
+      userId,
+    ).toArray()[0];
+
+    const hierarchy = this.ctx.storage.sql.exec(
+      `SELECT role, parent_user_id, active, data_json, updated_at
+         FROM owner_hierarchy
+        WHERE user_id = ?
+        ORDER BY active DESC, updated_at DESC`,
+      userId,
+    ).toArray().map((item) => {
+      let data = {};
+      try { data = JSON.parse(String(item.data_json || "{}")); } catch {}
+      return {
+        role: String(item.role || ""),
+        parent_user_id: item.parent_user_id ? String(item.parent_user_id) : null,
+        active: Number(item.active || 0) === 1,
+        data,
+        updated_at: Number(item.updated_at || 0),
+      };
+    });
+
+    const messages = this.ctx.storage.sql.exec(
+      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+         FROM direct_messages
+        WHERE from_user_id = ? OR to_user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      userId, userId,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      from_user_id: String(item.from_user_id),
+      to_user_id: String(item.to_user_id),
+      text: String(item.text || ""),
+      created_at: Number(item.created_at || 0),
+      seen_at: item.seen_at == null ? null : Number(item.seen_at),
+    }));
+
+    const calls = this.ctx.storage.sql.exec(
+      `SELECT id, caller_id, receiver_id, media, state, room_id, created_at, updated_at
+         FROM app_calls
+        WHERE caller_id = ? OR receiver_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 100`,
+      userId, userId,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      caller_id: String(item.caller_id),
+      receiver_id: String(item.receiver_id),
+      media: String(item.media || ""),
+      state: String(item.state || ""),
+      room_id: String(item.room_id || ""),
+      created_at: Number(item.created_at || 0),
+      updated_at: Number(item.updated_at || 0),
+    }));
+
+    return {
+      user: rowToUser(row),
+      controls: this._userControls(userId),
+      wallet: this.getWallet(userId),
+      tags: this.listUserTags(userId),
+      identity_tags: this.listUserIdentityTags(userId),
+      medals: this.listUserMedals(userId),
+      hierarchy,
+      presence: presence ? {
+        room_id: presence.room_id ? String(presence.room_id) : null,
+        last_seen: Number(presence.last_seen || 0),
+        room_socket_connected: Number(presence.room_socket_connected || 0) === 1,
+      } : {
+        room_id: null,
+        last_seen: 0,
+        room_socket_connected: false,
+      },
+      messages,
+      calls,
+    };
   }
 
   listUserMedals(userIdValue) {
@@ -1620,7 +1776,19 @@ export class AppDirectoryStore extends DurableObject {
         controls: this._userControls(user.user_id),
         wallet: this.getWallet(user.user_id),
         tags: this.listUserTags(user.user_id),
+        identity_tags: this.listUserIdentityTags(user.user_id),
         medals: this.listUserMedals(user.user_id),
+        presence: (() => {
+          const current = this.ctx.storage.sql.exec(
+            "SELECT room_id, last_seen, room_socket_connected FROM app_user_presence WHERE user_id = ? LIMIT 1",
+            user.user_id,
+          ).toArray()[0];
+          return current ? {
+            room_id: current.room_id ? String(current.room_id) : null,
+            last_seen: Number(current.last_seen || 0),
+            room_socket_connected: Number(current.room_socket_connected || 0) === 1,
+          } : null;
+        })(),
       };
     });
   }
@@ -1850,12 +2018,21 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, sent, requested: targets.length };
   }
 
-  applyOwnerTag(userIdsValue, nameValue, colorValue) {
+  applyOwnerTag(userIdsValue, nameValue, colorValue, optionsValue = {}) {
     const requested = Array.isArray(userIdsValue) ? userIdsValue : [];
     if (requested.length === 0) throw new Error("Select at least one user");
     if (requested.length > 500) throw new Error("Tag batch is limited to 500 IDs");
-    const name = cleanText(nameValue, 40);
+
+    const options = optionsValue && typeof optionsValue === "object" ? optionsValue : {};
+    const kind = cleanText(options.kind || "custom", 24).toLowerCase();
+    const isVOfficial = kind === "v_official";
+    const designation = cleanText(options.designation || "", 40);
+    const name = isVOfficial ? "V Official" : cleanText(nameValue, 40);
     const color = String(colorValue || "").trim();
+    const backgroundColor = String(
+      options.background_color || color || "#000000",
+    ).trim();
+
     const normalizedRoleTag = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const roleWalletType =
       normalizedRoleTag === "coinseller"
@@ -1863,8 +2040,18 @@ export class AppDirectoryStore extends DurableObject {
         : (normalizedRoleTag === "merchant" || normalizedRoleTag === "marchant")
           ? "merchant"
           : null;
+
     if (!name) throw new Error("Tag name is required");
-    if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Choose a valid tag color");
+    if (isVOfficial && !designation) {
+      throw new Error("Position / designation is required for V Official");
+    }
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
+      throw new Error("Choose a valid tag color");
+    }
+    if (!/^#[0-9a-fA-F]{6}$/.test(backgroundColor)) {
+      throw new Error("Choose a valid V Official background color");
+    }
+
     let tagged = 0;
     const now = Date.now();
     for (const value of [...new Set(requested)]) {
@@ -1873,27 +2060,52 @@ export class AppDirectoryStore extends DurableObject {
         "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
       ).toArray()[0];
       if (!exists) continue;
-      const duplicate = this.ctx.storage.sql.exec(
-        "SELECT id FROM owner_user_tags WHERE user_id = ? AND name = ? LIMIT 1",
-        userId, name,
-      ).toArray()[0];
+
+      const duplicate = isVOfficial
+        ? this.ctx.storage.sql.exec(
+            "SELECT id FROM owner_user_tags WHERE user_id = ? AND kind = 'v_official' LIMIT 1",
+            userId,
+          ).toArray()[0]
+        : this.ctx.storage.sql.exec(
+            "SELECT id FROM owner_user_tags WHERE user_id = ? AND name = ? AND kind = 'custom' LIMIT 1",
+            userId, name,
+          ).toArray()[0];
+
       if (duplicate) {
         this.ctx.storage.sql.exec(
-          "UPDATE owner_user_tags SET color = ? WHERE id = ?", color, String(duplicate.id),
+          `UPDATE owner_user_tags
+              SET name = ?, color = ?, kind = ?, designation = ?, background_color = ?
+            WHERE id = ?`,
+          name, color, isVOfficial ? "v_official" : "custom",
+          designation, backgroundColor, String(duplicate.id),
         );
       } else {
         this.ctx.storage.sql.exec(
-          "INSERT INTO owner_user_tags (id, user_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)",
+          `INSERT INTO owner_user_tags
+            (id, user_id, name, color, kind, designation, background_color, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           "tag-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8),
-          userId, name, color, now,
+          userId, name, color, isVOfficial ? "v_official" : "custom",
+          designation, backgroundColor, now,
         );
       }
+
       if (roleWalletType) {
         this._manageWallet(userId, roleWalletType, "create", 0);
       }
       tagged += 1;
     }
-    return { ok: true, tagged, name, color, activated_wallet_type: roleWalletType };
+
+    return {
+      ok: true,
+      tagged,
+      name,
+      color,
+      kind: isVOfficial ? "v_official" : "custom",
+      designation,
+      background_color: backgroundColor,
+      activated_wallet_type: roleWalletType,
+    };
   }
 
   removeOwnerTag(userIdValue, tagIdValue) {
