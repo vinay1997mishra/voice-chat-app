@@ -744,50 +744,6 @@ class _ProfileIdentityTag extends StatelessWidget {
   }
 }
 
-class _ProfileBadge extends StatelessWidget {
-  const _ProfileBadge({required this.title, required this.icon});
-
-  final String title;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 11),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF191610),
-            Color(0xFF080807),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: RoyalPalette.deepGold.withValues(alpha: .66),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: RoyalPalette.gold, size: 22),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: RoyalPalette.cream,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ProfileTabButton extends StatelessWidget {
   const _ProfileTabButton({
     required this.label,
