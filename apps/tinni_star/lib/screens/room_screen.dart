@@ -2411,6 +2411,152 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String _newLuckySessionId(String userId) =>
       'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
 
+  List<String> _giftResponseReceiverIds(
+    Map<String, dynamic> response,
+    List<String> fallback,
+  ) {
+    final raw = response['transactions'];
+    if (raw is! List) return List<String>.from(fallback);
+    final values = <String>[];
+    for (final item in raw.whereType<Map>()) {
+      final id = item['receiver_id']?.toString().trim() ?? '';
+      if (id.isNotEmpty && !values.contains(id)) values.add(id);
+    }
+    return values.isEmpty ? List<String>.from(fallback) : values;
+  }
+
+  String _giftResponseEventId(Map<String, dynamic> response) {
+    final raw = response['transactions'];
+    if (raw is List && raw.isNotEmpty && raw.first is Map) {
+      final id = (raw.first as Map)['id']?.toString().trim() ?? '';
+      if (id.isNotEmpty) return id;
+    }
+    return 'gift-local-' + DateTime.now().microsecondsSinceEpoch.toString();
+  }
+
+  GiftDefinition _giftDefinitionForLiveEvent(RoomGiftLiveEvent event) {
+    for (final gift in GiftService.luckyCatalog) {
+      if (gift.id == event.giftId) return gift;
+    }
+    for (final gift in GiftService.catalog) {
+      if (gift.id == event.giftId) return gift;
+    }
+    switch (event.giftId) {
+      case 'gold-dragon':
+        return const GiftDefinition(
+          id: 'gold-dragon',
+          name: 'Golden Dragon',
+          price: 5000,
+          effectKind: 'mp4',
+          emoji: '🐉',
+        );
+      case 'royal-crown':
+        return const GiftDefinition(
+          id: 'royal-crown',
+          name: 'Royal Crown',
+          price: 2500,
+          effectKind: 'pag',
+          emoji: '👑',
+        );
+      case 'star-castle':
+        return const GiftDefinition(
+          id: 'star-castle',
+          name: 'Star Castle',
+          price: 12000,
+          effectKind: 'mp4',
+          emoji: '🏰',
+        );
+      case 'heart-ring':
+        return const GiftDefinition(
+          id: 'heart-ring',
+          name: 'Heart Ring',
+          price: 1800,
+          effectKind: 'svga',
+          emoji: '💍',
+        );
+      case 'country-pride':
+        return GiftDefinition(
+          id: 'country-pride',
+          name: 'Country Pride',
+          price: 100,
+          effectKind: 'svga',
+          emoji: widget.state.auth.current?.flagEmoji ?? '🌐',
+        );
+      default:
+        return GiftDefinition(
+          id: event.giftId,
+          name: event.giftName,
+          price: 0,
+          effectKind: 'remote',
+          lucky: event.lucky,
+          emoji: '🎁',
+          maxMultiplier: event.lucky ? 1000 : 0,
+        );
+    }
+  }
+
+  void _startSeatGiftAnimation({
+    required String eventId,
+    required GiftDefinition gift,
+    required List<String> receiverIds,
+    required int quantity,
+    int multiplier = 0,
+  }) {
+    if (eventId.isEmpty || _handledGiftEventIds.contains(eventId)) return;
+    if (_handledGiftEventIds.length > 200) {
+      _handledGiftEventIds.clear();
+    }
+    _handledGiftEventIds.add(eventId);
+
+    final seatedIds = <String>{
+      for (final member in widget.state.roomSession.liveMembers)
+        if (member.seatIndex != null) member.userId,
+    };
+    final currentUserId = widget.state.auth.current?.userId;
+    if (currentUserId != null && controller.mySeat != null) {
+      seatedIds.add(currentUserId);
+    }
+    final activeReceivers = receiverIds
+        .where((id) => seatedIds.contains(id))
+        .toSet();
+
+    _luckyBubbleTimer?.cancel();
+    _luckyAnimationReceiverIds
+      ..clear()
+      ..addAll(activeReceivers);
+    _seatGiftAnimationGift = gift;
+    _seatGiftAnimationQuantity = math.max(1, quantity);
+    _luckyLastMultiplier = math.max(0, multiplier);
+    _luckyAnimationSequence++;
+
+    _luckyBubbleTimer = Timer(const Duration(milliseconds: 2600), () {
+      if (!mounted) return;
+      setState(() {
+        _luckyAnimationReceiverIds.clear();
+        _seatGiftAnimationGift = null;
+        _seatGiftAnimationQuantity = 1;
+        _luckyLastMultiplier = 0;
+      });
+    });
+  }
+
+  void _syncGiftLiveEvent() {
+    final event = widget.state.roomSession.lastGiftEvent;
+    if (event == null || _handledGiftEventIds.contains(event.id)) return;
+    if (DateTime.now().difference(event.createdAt).abs() >
+        const Duration(seconds: 6)) {
+      _handledGiftEventIds.add(event.id);
+      return;
+    }
+    _startSeatGiftAnimation(
+      eventId: event.id,
+      gift: _giftDefinitionForLiveEvent(event),
+      receiverIds: event.receiverIds,
+      quantity: event.quantity,
+      multiplier: event.multiplier,
+    );
+  }
+
   ImageProvider? _luckyAvatarProvider(dynamic value) {
     final source = value?.toString();
     if (source == null || !source.startsWith('data:image/')) return null;
