@@ -2668,6 +2668,103 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildGiftRecipientImpact({
+    required RoomGiftEvent event,
+    required String userId,
+    required double seatDiameter,
+  }) {
+    final diamonds = event.receiverDiamonds[userId] ?? 0;
+    final gift = _giftDefinitionForEvent(event);
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey<String>(
+          'gift-seat-impact-$_giftImpactSequence-$userId',
+        ),
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 1650),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, _) {
+          final fade = value < 0.72
+              ? 1.0
+              : ((1 - value) / 0.28).clamp(0.0, 1.0).toDouble();
+          final rise = seatDiameter * (0.9 - value * 1.55);
+          final scale = 0.42 + Curves.easeOutBack.transform(value) * 0.72;
+          return Transform.translate(
+            offset: Offset(0, rise),
+            child: Opacity(
+              opacity: fade,
+              child: Transform.scale(
+                scale: scale,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: seatDiameter * 0.72,
+                      height: seatDiameter * 0.72,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const RadialGradient(
+                          colors: <Color>[
+                            Color(0xFFFFF6A5),
+                            Color(0xCCB66CFF),
+                            Color(0x553B1F68),
+                            Colors.transparent,
+                          ],
+                        ),
+                        boxShadow: const <BoxShadow>[
+                          BoxShadow(
+                            color: Color(0x88B56CFF),
+                            blurRadius: 14,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: event.isLucky
+                          ? _luckyArtwork(
+                              gift,
+                              size: seatDiameter * 0.60,
+                            )
+                          : Icon(
+                              Icons.card_giftcard_rounded,
+                              size: seatDiameter * 0.46,
+                              color: const Color(0xFFFFD45A),
+                            ),
+                    ),
+                    if (diamonds > 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xE6261235),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF8EDCFF),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          '💎 +$diamonds',
+                          style: const TextStyle(
+                            color: Color(0xFFBCEBFF),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildLuckyImpactEffect({
     required GiftDefinition gift,
     required double seatDiameter,
@@ -7688,6 +7785,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 : null;
     final showLuckySeatEffect = authoritativeSeatUserId != null &&
         _luckyAnimationReceiverIds.contains(authoritativeSeatUserId);
+    final giftEvent = _activeGiftEvent;
+    final showGiftSeatEffect = authoritativeSeatUserId != null &&
+        giftEvent != null &&
+        giftEvent.receiverDiamonds.containsKey(authoritativeSeatUserId);
     final isMicBlocked =
         moderationMuted ||
         selfMuted ||
@@ -7905,8 +8006,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
+                  if (showGiftSeatEffect &&
+                      giftEvent != null &&
+                      authoritativeSeatUserId != null)
+                    _buildGiftRecipientImpact(
+                      event: giftEvent,
+                      userId: authoritativeSeatUserId,
+                      seatDiameter: seatDiameter,
+                    ),
                   if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                      _luckyImpactGift != null)
                     IgnorePointer(
                       child: TweenAnimationBuilder<double>(
                         key: ValueKey<String>(
@@ -7967,15 +8076,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           );
                         },
                         child: _luckyArtwork(
-                          _luckyComboGift!,
+                          _luckyImpactGift!,
                           size: seatDiameter * 0.74,
                         ),
                       ),
                     ),
                   if (showLuckySeatEffect &&
-                      _luckyComboGift != null)
+                      _luckyImpactGift != null)
                     _buildLuckyImpactEffect(
-                      gift: _luckyComboGift!,
+                      gift: _luckyImpactGift!,
                       seatDiameter: seatDiameter,
                     ),
                   if (showLuckySeatEffect &&
