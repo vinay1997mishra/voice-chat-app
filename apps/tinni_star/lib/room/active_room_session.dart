@@ -51,6 +51,10 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Timer? _presenceTimer;
   String? _activeAuthToken;
+  String? _activeUserId;
+  bool _liveSyncInitialized = false;
+  int? _lastSyncedSeatIndex;
+  bool? _lastSyncedMicEnabled;
   bool _roomSoundEnabled = true;
   bool _moderationForcedMicOff = false;
   final Set<String> _seenLuckyNumberEventIds = <String>{};
@@ -160,6 +164,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
       await foregroundService.start();
       _activeAuthToken = authToken;
+      _activeUserId = userId;
 
       // Voice and room-presence are independent network joins. Start both
       // together so the seat backend is ready by the time LiveKit audio is
@@ -542,6 +547,7 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
       );
+      _syncLiveState(force: true);
       await _applyForcedSeatChange();
       await _enforceModerationMute();
     } catch (_) {
@@ -549,12 +555,13 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 25), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      // Healthy rooms stay entirely on the hibernating WebSocket. HTTP is
+      // emergency fallback only while realtime is disconnected.
+      if (presence.liveConnected) return;
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
-      if (currentRoomId == null || currentAuthToken == null) {
-        return;
-      }
+      if (currentRoomId == null || currentAuthToken == null) return;
       try {
         await presence.heartbeat(
           roomId: currentRoomId,
@@ -568,6 +575,11 @@ class ActiveRoomSession extends ChangeNotifier {
           equippedEntryId: _equippedEntryId,
           equippedProfileCardId: _equippedProfileCardId,
         );
+        await presence.connectLive(
+          roomId: currentRoomId,
+          authToken: currentAuthToken,
+        );
+        _syncLiveState(force: true);
         await _applyForcedSeatChange();
         await _enforceModerationMute();
         if (!_roomSoundEnabled) {
@@ -577,9 +589,7 @@ class ActiveRoomSession extends ChangeNotifier {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
           await close();
-          return;
         }
-        // A later heartbeat/refresh will reconnect automatically.
       }
     });
   }
@@ -651,6 +661,10 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _activeAuthToken = null;
+    _activeUserId = null;
+    _liveSyncInitialized = false;
+    _lastSyncedSeatIndex = null;
+    _lastSyncedMicEnabled = null;
   }
 
   void _onPresenceChanged() {
@@ -669,7 +683,47 @@ class ActiveRoomSession extends ChangeNotifier {
         );
       }
     }
+    if (presence.selfSeatForced) {
+      unawaited(_applyForcedSeatChange());
+    } else {
+      _reconcileMySeatFromPresence();
+    }
+    unawaited(_enforceModerationMute());
     notifyListeners();
+  }
+
+  void _reconcileMySeatFromPresence() {
+    final userId = _activeUserId;
+    final roomController = controller;
+    if (userId == null || roomController == null) return;
+    RoomPresenceMember? me;
+    for (final member in presence.members) {
+      if (member.userId == userId) {
+        me = member;
+        break;
+      }
+    }
+    if (me == null || roomController.mySeat == me.seatIndex) return;
+    roomController.forceMySeat(me.seatIndex);
+  }
+
+  void _syncLiveState({bool force = false}) {
+    if (!presence.liveConnected) return;
+    final seatIndex = controller?.mySeat;
+    final micEnabled = _micEnabledForPresence;
+    if (!force &&
+        _liveSyncInitialized &&
+        _lastSyncedSeatIndex == seatIndex &&
+        _lastSyncedMicEnabled == micEnabled) {
+      return;
+    }
+    _liveSyncInitialized = true;
+    _lastSyncedSeatIndex = seatIndex;
+    _lastSyncedMicEnabled = micEnabled;
+    presence.syncLiveState(
+      seatIndex: seatIndex,
+      micEnabled: micEnabled,
+    );
   }
 
   void _syncLuckyNumberMessages() {
@@ -685,12 +739,14 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _onRoomChanged() {
+    _syncLiveState();
     notifyListeners();
   }
 
   @override
   void dispose() {
     _presenceTimer?.cancel();
+    unawaited(presence.disconnectLive());
     presence.removeListener(_onPresenceChanged);
     controller?.removeListener(_onRoomChanged);
     controller?.dispose();
