@@ -43,6 +43,9 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Timer? _presenceTimer;
   String? _activeAuthToken;
+  String? _activeUserId;
+  bool _seatSyncInitialized = false;
+  int? _lastSyncedSeatIndex;
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -123,6 +126,7 @@ class ActiveRoomSession extends ChangeNotifier {
         authToken: authToken,
       );
       _activeAuthToken = authToken;
+      _activeUserId = userId;
       await _startPresence();
       connected = true;
       connecting = false;
@@ -322,17 +326,7 @@ class ActiveRoomSession extends ChangeNotifier {
       throw StateError('You must be on a seat to use emotes.');
     }
 
-    // Push the current seat first so a just-seated user can use an emote
-    // immediately instead of waiting for the next presence heartbeat.
-    await presence.heartbeat(
-      roomId: roomId,
-      authToken: authToken,
-      seatIndex: seatIndex,
-      familyTag: _familyTag,
-      hostTag: _hostTag,
-      agencyName: _agencyName,
-      equippedFrameId: _equippedFrameId,
-    );
+    presence.syncRealtimeSeat(seatIndex);
     await presence.setEmote(
       roomId: roomId,
       authToken: authToken,
@@ -412,13 +406,21 @@ class ActiveRoomSession extends ChangeNotifier {
       // Keep the room open; presence will retry on the next heartbeat.
     }
 
+    await presence.connectRealtime(
+      roomId: roomId,
+      authToken: authToken,
+    );
+    _seatSyncInitialized = true;
+    _lastSyncedSeatIndex = controller?.mySeat;
+
+    // HTTP heartbeat is now emergency fallback only. In the normal path the
+    // hibernating WebSocket carries presence and seat deltas without polling.
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      if (presence.realtimeConnected) return;
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
-      if (currentRoomId == null || currentAuthToken == null) {
-        return;
-      }
+      if (currentRoomId == null || currentAuthToken == null) return;
       try {
         await presence.heartbeat(
           roomId: currentRoomId,
@@ -435,9 +437,7 @@ class ActiveRoomSession extends ChangeNotifier {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
           await close();
-          return;
         }
-        // A later heartbeat/refresh will reconnect automatically.
       }
     });
   }
@@ -475,6 +475,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceTimer?.cancel();
     _presenceTimer = null;
     presence.removeListener(_onPresenceChanged);
+    await presence.disconnectRealtime();
 
     if (sendLeave && roomId != null && authToken != null) {
       try {
@@ -485,20 +486,58 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _activeAuthToken = null;
+    _activeUserId = null;
+    _seatSyncInitialized = false;
+    _lastSyncedSeatIndex = null;
   }
 
   void _onPresenceChanged() {
     controller?.setInviteMode(presence.micMode != 'free');
+    if (presence.selfSeatForced) {
+      unawaited(_applyForcedSeatChange());
+    } else {
+      _reconcileMySeatFromPresence();
+    }
+    unawaited(_enforceModerationMute());
     notifyListeners();
   }
 
+  void _reconcileMySeatFromPresence() {
+    final userId = _activeUserId;
+    final roomController = controller;
+    if (userId == null || roomController == null) return;
+
+    RoomPresenceMember? me;
+    for (final member in presence.members) {
+      if (member.userId == userId) {
+        me = member;
+        break;
+      }
+    }
+    if (me == null) return;
+    if (roomController.mySeat != me.seatIndex) {
+      roomController.forceMySeat(me.seatIndex);
+    }
+  }
+
+  void _syncRealtimeSeat() {
+    if (!presence.realtimeConnected) return;
+    final seatIndex = controller?.mySeat;
+    if (_seatSyncInitialized && _lastSyncedSeatIndex == seatIndex) return;
+    _seatSyncInitialized = true;
+    _lastSyncedSeatIndex = seatIndex;
+    presence.syncRealtimeSeat(seatIndex);
+  }
+
   void _onRoomChanged() {
+    _syncRealtimeSeat();
     notifyListeners();
   }
 
   @override
   void dispose() {
     _presenceTimer?.cancel();
+    unawaited(presence.disconnectRealtime());
     presence.removeListener(_onPresenceChanged);
     controller?.removeListener(_onRoomChanged);
     controller?.dispose();
