@@ -174,7 +174,7 @@ void main() {
     expect(find.byKey(const Key('room-tool-event-mode')), findsNothing);
     expect(find.byKey(const Key('room-tool-launch-event')), findsNothing);
     expect(find.byKey(const Key('room-tool-stop-event')), findsNothing);
-    expect(find.byKey(const Key('room-tool-lock')), findsOneWidget);
+    expect(find.byKey(const Key('room-tool-lock')), findsNothing);
     expect(find.byKey(const Key('room-tool-settings')), findsNothing);
     expect(find.byKey(const Key('room-tool-game')), findsNothing);
     await tester.binding.handlePopRoute();
@@ -214,15 +214,22 @@ void main() {
 
     await tester.tap(find.byKey(const Key('room-tools-grid-button')));
     await tester.pumpAndSettle();
-    final lockTool = find.byKey(const Key('room-tool-lock'));
-    await tester.ensureVisible(lockTool);
-    await tester.tap(lockTool);
+    await tester.tap(find.byKey(const Key('room-tool-room-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Setting'));
+    await tester.pumpAndSettle();
+    final lockSetting =
+        find.byKey(const Key('room-type-setting-lock'));
+    await tester.ensureVisible(lockSetting);
+    await tester.tap(lockSetting);
     await tester.pumpAndSettle();
     expect(find.text('Exactly 5 digits'), findsOneWidget);
     final passwordField = tester.widget<TextField>(
       find.byType(TextField).last,
     );
     expect(passwordField.maxLength, 5);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -351,17 +358,19 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reference-seat-mic-up')),
+      find.byKey(const Key('seat-control-lock')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reference-seat-lock-mic')),
+      find.byKey(const Key('seat-control-mute')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('seat-control-take')),
       findsOneWidget,
     );
 
-    await tester.tap(find.byKey(const Key('reference-seat-mic-up')));
-    await tester.tap(find.byKey(const Key('reference-seat-lock-mic')));
-    await tester.tap(find.byKey(const Key('reference-seat-confirm')));
+    await tester.tap(find.byKey(const Key('seat-control-lock')));
     await tester.pumpAndSettle();
     expect(state.roomSession.controller!.seats[0].locked, isTrue);
 
