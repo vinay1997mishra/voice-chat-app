@@ -369,6 +369,8 @@ void main() {
       find.byKey(const Key('seat-control-take')),
       findsOneWidget,
     );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const Key('room-game-floating-button')),
