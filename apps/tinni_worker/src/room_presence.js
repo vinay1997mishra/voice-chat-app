@@ -274,12 +274,14 @@ export class RoomPresenceStore extends DurableObject {
       );
     }
 
-    return {
+    const result = {
       ok: true,
       target_user_id: targetUserId,
       chat_banned: banned,
       members: this._members(),
     };
+    this._broadcastPresence("chat_ban_changed");
+    return result;
   }
 
   setManager(userIdValue, enabled) {
@@ -301,12 +303,14 @@ export class RoomPresenceStore extends DurableObject {
         userId,
       );
     }
-    return {
+    const result = {
       ok: true,
       user_id: userId,
       enabled: Boolean(enabled),
       members: this._members(),
     };
+    this._broadcastPresence("admin_changed");
+    return result;
   }
 
   lockedSeats() {
@@ -365,7 +369,7 @@ export class RoomPresenceStore extends DurableObject {
         );
       }
     }
-    return {
+    const result = {
       ok: true,
       seat_index: seatIndex,
       muted,
@@ -373,6 +377,8 @@ export class RoomPresenceStore extends DurableObject {
       locked_seats: this.lockedSeats(),
       members: this._members(),
     };
+    this._broadcastPresence("mute_changed");
+    return result;
   }
 
   setSeatLock(input) {
@@ -391,7 +397,9 @@ export class RoomPresenceStore extends DurableObject {
     } else {
       this.ctx.storage.sql.exec("DELETE FROM room_seat_locks WHERE seat_index = ?", seatIndex);
     }
-    return { ok: true, seat_index: seatIndex, locked, locked_seats: this.lockedSeats(), members: this._members() };
+    const result = { ok: true, seat_index: seatIndex, locked, locked_seats: this.lockedSeats(), members: this._members() };
+    this._broadcastPresence("seat_lock_changed");
+    return result;
   }
 
   _assertSeatAvailable(seatIndex, userId = "") {
@@ -499,13 +507,19 @@ export class RoomPresenceStore extends DurableObject {
         seatIndex,
         Date.now(),
       );
+      this.ctx.storage.sql.exec(
+        "UPDATE room_members SET seat_index = ?, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+        seatIndex,
+        Date.now(),
+        targetUserId,
+      );
     }
 
     this.ctx.storage.sql.exec(
       "DELETE FROM room_seat_requests WHERE user_id = ?",
       targetUserId,
     );
-    return {
+    const result = {
       ok: true,
       approved,
       target_user_id: targetUserId,
@@ -514,6 +528,8 @@ export class RoomPresenceStore extends DurableObject {
       seat_requests: this.seatRequests(),
       members: this._members(),
     };
+    this._broadcastPresence(approved ? "seat_changed" : "seat_request_changed");
+    return result;
   }
 
     seatInviteFor(userIdValue) {
@@ -626,17 +642,25 @@ export class RoomPresenceStore extends DurableObject {
         seatIndex,
         Date.now(),
       );
+      this.ctx.storage.sql.exec(
+        "UPDATE room_members SET seat_index = ?, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+        seatIndex,
+        Date.now(),
+        userId,
+      );
     }
 
     this.ctx.storage.sql.exec(
       "DELETE FROM room_seat_invites WHERE target_user_id = ?",
       userId,
     );
-    return {
+    const result = {
       ok: true,
       accepted,
       seat_index: accepted ? seatIndex : null,
     };
+    this._broadcastPresence(accepted ? "seat_changed" : "seat_invite_changed");
+    return result;
   }
 
   removeFromSeat(input) {
@@ -671,12 +695,19 @@ export class RoomPresenceStore extends DurableObject {
       "DELETE FROM room_seat_invites WHERE target_user_id = ?",
       targetUserId,
     );
-    return {
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+      now,
+      targetUserId,
+    );
+    const result = {
       ok: true,
       target_user_id: targetUserId,
       server_time: now,
       members: this._members(now),
     };
+    this._broadcastPresence("seat_changed");
+    return result;
   }
 
     setEmote(input) {
@@ -712,12 +743,14 @@ export class RoomPresenceStore extends DurableObject {
       userId,
     );
 
-    return {
+    const result = {
       ok: true,
       server_time: now,
       mic_mode: this.micMode(),
       members: this._members(now),
     };
+    this._broadcastPresence("emote_changed");
+    return result;
   }
 
     muteStatus(userIdValue, seatIndexValue = null) {
@@ -787,7 +820,7 @@ export class RoomPresenceStore extends DurableObject {
       );
     }
 
-    return {
+    const result = {
       ok: true,
       server_time: now,
       target_user_id: targetUserId,
@@ -797,6 +830,8 @@ export class RoomPresenceStore extends DurableObject {
       locked_seats: this.lockedSeats(),
       members: this._members(now),
     };
+    this._broadcastPresence("mute_changed");
+    return result;
   }
 
     kick(input) {
@@ -1182,11 +1217,86 @@ export class RoomPresenceStore extends DurableObject {
       userId, seatIndex, now,
     );
     this.ctx.storage.sql.exec("DELETE FROM room_seat_requests WHERE user_id = ?", userId);
-    return { ok: true, seat_index: seatIndex, mic_mode: this.micMode(), members: this._members(now) };
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET seat_index = ?, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+      seatIndex,
+      now,
+      userId,
+    );
+    const result = {
+      ok: true,
+      seat_index: seatIndex,
+      mic_mode: this.micMode(),
+      members: this._members(now),
+    };
+    this._broadcastPresence("seat_changed");
+    return result;
   }
 
+  _presenceState(now = Date.now()) {
+    return {
+      ok: true,
+      server_time: now,
+      mic_mode: this.micMode(),
+      member_ttl_ms: MEMBER_TTL_MS,
+      lucky_number_events: this.luckyNumberEvents(),
+      seat_requests: this.seatRequests(),
+      locked_seats: this.lockedSeats(),
+      muted_seats: this.mutedSeats(),
+      members: this._members(now),
+    };
+  }
+
+  _broadcastPresence(type = "presence_state") {
+    const message = JSON.stringify({
+      type,
+      ...this._presenceState(),
+    });
+    for (const socket of this.ctx.getWebSockets("room-presence")) {
+      try {
+        socket.send(message);
+      } catch (_) {
+        // Hibernating WebSocket runtime cleans up closed sockets.
+      }
+    }
+  }
+
+  async fetch(request) {
+    if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("WebSocket required", { status: 426 });
+    }
+    const userId = String(request.headers.get("x-tinni-user-id") || "").trim();
+    if (!userId || !this.isMember(userId)) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.ctx.acceptWebSocket(server, ["room-presence"]);
+    server.send(JSON.stringify({
+      type: "presence_state",
+      ...this._presenceState(),
+    }));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(socket, message) {
+    if (String(message || "") === "ping") {
+      try {
+        socket.send(JSON.stringify({ type: "pong" }));
+      } catch (_) {}
+    }
+  }
+
+  webSocketClose() {}
+
+  webSocketError() {}
+
   async join(input) {
-    return this._upsert(input);
+    const result = this._upsert(input);
+    this._broadcastPresence("member_joined");
+    return result;
   }
 
   async heartbeat(input) {
@@ -1206,25 +1316,16 @@ export class RoomPresenceStore extends DurableObject {
         userId,
       );
     }
-    return {
+    const result = {
       ok: true,
       server_time: now,
       members: this._members(now),
     };
+    this._broadcastPresence("member_left");
+    return result;
   }
 
   async state() {
-    const now = Date.now();
-    return {
-      ok: true,
-      server_time: now,
-      mic_mode: this.micMode(),
-      member_ttl_ms: MEMBER_TTL_MS,
-      lucky_number_events: this.luckyNumberEvents(),
-      seat_requests: this.seatRequests(),
-      locked_seats: this.lockedSeats(),
-      muted_seats: this.mutedSeats(),
-      members: this._members(now),
-    };
+    return this._presenceState();
   }
 }
