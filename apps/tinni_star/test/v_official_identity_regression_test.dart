@@ -32,6 +32,31 @@ void main() {
     expect(js.contains('"v_official"'), true);
   });
 
+  test('V Official management stays Owner Master Panel only', () {
+    final lib = Directory('lib');
+    final source = lib
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+    for (final forbidden in <String>[
+      'Apply V Official to Selected',
+      'ownerVDesignation',
+      'ownerVBackground',
+      '/api/owner/officials',
+      'data-owner-v-official-selected',
+      'data-owner-official-remove',
+      'data-owner-official-edit',
+    ]) {
+      expect(
+        source.contains(forbidden),
+        false,
+        reason: 'Owner-only V Official management leaked into APK: $forbidden',
+      );
+    }
+  });
+
   test('backend keeps V tag metadata and automatic Host Agency identity', () {
     final directory =
         File('../tinni_worker/src/app_directory.js').readAsStringSync();
