@@ -84,6 +84,7 @@ let ownerHierarchyRole = "";
 let ownerHierarchyRange = "15d";
 let ownerHierarchyCustomFrom = "";
 let ownerHierarchyCustomTo = "";
+let ownerHierarchyPortal = null;
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -1116,6 +1117,289 @@ function ownerFullMessageRows(messages) {
         </div>
       `).join("")
     : '<div class="empty-state">No stored Tinni messages.</div>';
+}
+
+function hierarchyRangeBounds(keyValue, customFromValue = "", customToValue = "") {
+  const key = String(keyValue || "15d");
+  const now = new Date();
+  const toNow = Date.now();
+  if (key === "7d") {
+    return { from: toNow - (7 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 7 days" };
+  }
+  if (key === "15d") {
+    return { from: toNow - (15 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 15 days" };
+  }
+  if (key === "month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return { from, to: toNow, label: "This month" };
+  }
+  if (key === "last_month") {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    const to = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return { from, to, label: "Last month" };
+  }
+  if (key === "custom") {
+    const fromDate = customFromValue ? new Date(String(customFromValue) + "T00:00:00") : null;
+    const toDate = customToValue ? new Date(String(customToValue) + "T00:00:00") : null;
+    if (!fromDate || !toDate || Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      throw new Error("Select both custom dates.");
+    }
+    const from = fromDate.getTime();
+    const to = toDate.getTime() + (24 * 60 * 60 * 1000);
+    if (to <= from) throw new Error("Custom end date must be same as or after start date.");
+    return {
+      from,
+      to,
+      label: String(customFromValue) + " → " + String(customToValue),
+    };
+  }
+  return { from: toNow - (15 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 15 days" };
+}
+
+function ownerHierarchyStatsHtml(portal) {
+  const role = String(portal?.role || "");
+  const stats = portal?.stats || {};
+  const wallet = portal?.wallet || {};
+  const targets = portal?.targets || {};
+  const cards = [
+    ["Received coins", fmt(stats.received_coins || 0)],
+    ["Diamonds earned", fmt(stats.diamond_earned || 0)],
+  ];
+  if (role === "host") {
+    cards.push(
+      ["Target", fmt(stats.target_coins || targets.host_target_coins || 0)],
+      ["Target progress", Number(stats.target_progress_percent || 0).toFixed(1) + "%"],
+      ["Remaining", fmt(stats.target_remaining_coins || 0)],
+      ["Target payout", "$" + Number(stats.target_usd || targets.host_target_usd || 0).toFixed(2)],
+      ["Private chats", fmt(stats.private_chats || 0)],
+      ["Followers", fmt(stats.followers || 0)],
+    );
+  }
+  if (role === "agency") {
+    cards.push(
+      ["Hosts", fmt(stats.host_count || 0)],
+      ["Combined target", fmt(stats.combined_target_coins || 0)],
+      ["Target progress", Number(stats.combined_target_progress_percent || 0).toFixed(1) + "%"],
+      ["Commission", Number(stats.commission_percent || targets.agency_commission_percent || 0) + "%"],
+    );
+  }
+  if (role === "bd") {
+    cards.push(
+      ["Agencies", fmt(stats.agency_count || 0)],
+      ["Hosts", fmt(stats.host_count || 0)],
+      ["Combined target", fmt(stats.combined_target_coins || 0)],
+      ["Target progress", Number(stats.combined_target_progress_percent || 0).toFixed(1) + "%"],
+      ["Target 1", "$" + Number(targets.bd_target_1_usd || 0) + " @ " + Number(targets.bd_target_1_percent || 0) + "%"],
+      ["Target 2", "$" + Number(targets.bd_target_2_usd || 0) + " @ " + Number(targets.bd_target_2_percent || 0) + "%"],
+    );
+  }
+  cards.push(
+    ["Settlement balance", "$" + (Number(wallet.settlement_usd_cents || 0) / 100).toFixed(2)],
+    ["Withdrawable", "$" + (Number(wallet.withdrawable_usd_cents || 0) / 100).toFixed(2)],
+  );
+  return cards.map(([label, value]) =>
+    `<div class="rule"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`
+  ).join("");
+}
+
+function ownerHierarchyMembersHtml(portal) {
+  const role = String(portal?.role || "");
+  const members = Array.isArray(portal?.members) ? portal.members : [];
+  if (role === "host") {
+    const parent = portal?.parent;
+    return parent
+      ? `
+        <div class="owner-hierarchy-member" data-hierarchy-search="${escapeHtml((parent.display_name || "") + " " + (parent.user_id || ""))}">
+          <button type="button" class="owner-member-main" data-owner-hierarchy-user="${escapeHtml(parent.user_id)}">
+            <strong>${escapeHtml(parent.display_name || parent.user_id)}</strong>
+            <small>Agency • ID ${escapeHtml(parent.user_id)}</small>
+          </button>
+        </div>`
+      : '<div class="empty-state">No parent Agency linked.</div>';
+  }
+  if (!members.length) {
+    return role === "agency"
+      ? '<div class="empty-state">No active Hosts under this Agency.</div>'
+      : '<div class="empty-state">No active Agencies under this BD.</div>';
+  }
+
+  return members.map((member) => {
+    const memberRole = String(member.role || (role === "agency" ? "host" : "agency"));
+    const searchText = [
+      member.display_name, member.user_id, memberRole,
+      member.country_name,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const canRemoveHost = role === "agency" && memberRole === "host" &&
+      sessionCan("hierarchy.host_manage");
+    const canUnlinkAgency = role === "bd" && memberRole === "agency" &&
+      sessionCan("hierarchy.agency_bd_link");
+    const progress = member.target_progress_percent ??
+      member.combined_target_progress_percent ?? 0;
+    const target = member.target_coins ?? member.combined_target_coins ?? 0;
+    return `
+      <div class="owner-hierarchy-member" data-hierarchy-search="${escapeHtml(searchText)}">
+        <button type="button" class="owner-member-main" data-owner-hierarchy-user="${escapeHtml(member.user_id)}">
+          <strong>${escapeHtml(member.display_name || member.user_id)}</strong>
+          <small>${escapeHtml(memberRole.toUpperCase())} • ID ${escapeHtml(member.user_id)} • ${escapeHtml(member.country_name || "")}</small>
+        </button>
+        <div class="owner-member-stats">
+          <span>Received <b>${fmt(member.received_coins || 0)}</b></span>
+          ${memberRole === "host" ? `<span>Target <b>${fmt(target)}</b></span>` : `<span>Hosts <b>${fmt(member.host_count || 0)}</b></span>`}
+          <span>Progress <b>${Number(progress || 0).toFixed(1)}%</b></span>
+          <span>Joined <b>${escapeHtml(formatFullTimestamp(member.joined_at))}</b></span>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary compact" data-owner-hierarchy-user="${escapeHtml(member.user_id)}">Full ID View</button>
+          ${canRemoveHost ? `<button type="button" class="btn danger compact" data-owner-hierarchy-remove-host="${escapeHtml(member.user_id)}">Remove Host</button>` : ""}
+          ${canUnlinkAgency ? `<button type="button" class="btn danger compact" data-owner-hierarchy-unlink-agency="${escapeHtml(member.user_id)}">Remove from BD</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function openOwnerHierarchyDashboard(userIdValue, roleValue, rangeValue = ownerHierarchyRange) {
+  if (!sessionCan("users.full_dashboard") || !sessionCan("hierarchy.view_details")) {
+    toast("Hierarchy full-detail permission is not active.");
+    return;
+  }
+  const userId = String(userIdValue || "").trim();
+  const role = String(roleValue || "").trim().toLowerCase();
+  if (!userId || !["host","agency","bd"].includes(role)) return;
+
+  ownerHierarchyUserId = userId;
+  ownerHierarchyRole = role;
+  ownerHierarchyRange = String(rangeValue || "15d");
+
+  let range;
+  try {
+    range = hierarchyRangeBounds(
+      ownerHierarchyRange,
+      ownerHierarchyCustomFrom,
+      ownerHierarchyCustomTo,
+    );
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
+
+  const dialog = document.getElementById("ownerHierarchyDialog");
+  const root = document.getElementById("ownerHierarchyContent");
+  const title = document.getElementById("ownerHierarchyTitle");
+  if (!dialog || !root) return;
+
+  root.innerHTML = '<div class="empty-state">Loading role details…</div>';
+  if (title) title.textContent = pretty(role) + " Full Details";
+  document.getElementById("ownerProfileDialog")?.close();
+  document.getElementById("ownerFullDashboardDialog")?.close();
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api(
+      "/api/owner/hierarchy-detail?user_id=" + encodeURIComponent(userId) +
+      "&role=" + encodeURIComponent(role) +
+      "&from=" + encodeURIComponent(range.from) +
+      "&to=" + encodeURIComponent(range.to),
+    );
+    const portal = data.portal || {};
+    ownerHierarchyPortal = portal;
+    const profile = portal.profile || {};
+    const hierarchy = portal.hierarchy || {};
+    const canRemove = sessionCan(hierarchyManagePermission(role));
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        ${profile.avatar_data_url
+          ? `<img src="${escapeHtml(profile.avatar_data_url)}" alt="" class="owner-profile-avatar">`
+          : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(profile.display_name || userId)}</h2>
+          <p>${escapeHtml(role.toUpperCase())} • ID ${escapeHtml(profile.user_id || userId)} • ${escapeHtml(profile.country_name || "")}</p>
+          <small>Activated ${escapeHtml(formatFullTimestamp(hierarchy.activated_at))}</small>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary" data-owner-hierarchy-user="${escapeHtml(profile.user_id || userId)}">Full ID View</button>
+          ${canRemove ? `<button type="button" class="btn danger" data-owner-role-remove="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(profile.user_id || userId)}">Remove ${escapeHtml(pretty(role))}</button>` : ""}
+        </div>
+      </div>
+
+      <div class="owner-hierarchy-range">
+        <div class="button-row owner-range-buttons">
+          ${[
+            ["7d","7 Days"],
+            ["15d","15 Days"],
+            ["month","This Month"],
+            ["last_month","Last Month"],
+            ["custom","Custom Date"],
+          ].map(([key,label]) =>
+            `<button type="button" class="btn ${ownerHierarchyRange === key ? "primary" : "secondary"} compact" data-owner-hierarchy-range="${key}">${label}</button>`
+          ).join("")}
+        </div>
+        <div class="owner-custom-range">
+          <label>From <input type="date" id="ownerHierarchyFrom" value="${escapeHtml(ownerHierarchyCustomFrom)}"></label>
+          <label>To <input type="date" id="ownerHierarchyTo" value="${escapeHtml(ownerHierarchyCustomTo)}"></label>
+          <button type="button" class="btn secondary compact" data-owner-hierarchy-custom-apply>Apply Custom</button>
+        </div>
+        <small>Showing: ${escapeHtml(range.label)}</small>
+      </div>
+
+      <div class="rule-grid owner-profile-grid">
+        ${ownerHierarchyStatsHtml(portal)}
+      </div>
+
+      <section class="panel" style="margin-top:14px">
+        <div class="panel-head">
+          <div>
+            <h3>${role === "agency" ? "Hosts" : role === "bd" ? "Agencies" : "Agency Link"}</h3>
+            <p>${role === "agency" ? "Search Host ID/name, inspect target and remove Host." : role === "bd" ? "Inspect linked Agencies and their Host totals." : "Parent Agency details."}</p>
+          </div>
+          <span class="badge">${fmt((portal.members || []).length)}</span>
+        </div>
+        ${role !== "host" ? '<input id="ownerHierarchyMemberSearch" class="owner-hierarchy-search" type="search" placeholder="Search ID or name…">' : ""}
+        <div id="ownerHierarchyMemberList" class="owner-hierarchy-members">
+          ${ownerHierarchyMembersHtml(portal)}
+        </div>
+      </section>
+    `;
+  } catch (error) {
+    ownerHierarchyPortal = null;
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load role details.")}</div>`;
+  }
+}
+
+async function removeOwnerHierarchyRole(userIdValue, roleValue) {
+  const userId = String(userIdValue || "").trim();
+  const role = String(roleValue || "").trim().toLowerCase();
+  const permission = hierarchyManagePermission(role);
+  if (!userId || !permission || !sessionCan(permission)) {
+    toast("Role remove permission is not active.");
+    return;
+  }
+  if (!confirm("Remove " + pretty(role) + " from ID " + userId + "?")) return;
+  let action = "";
+  let data = {};
+  if (role === "host") {
+    action = "host-remove";
+    data = { host_user_id: userId, agency_owner_id: "" };
+  } else if (role === "agency") {
+    action = "agency-activate";
+    data = { user_id: userId, operation: "remove" };
+  } else if (role === "bd") {
+    action = "bd-activate";
+    data = { user_id: userId, operation: "remove" };
+  }
+  try {
+    await runOwnerAction(action, data);
+    toast(pretty(role) + " removed from ID " + userId + ".");
+    document.getElementById("ownerHierarchyDialog")?.close();
+    if (ownerFullDashboardUserId === userId) {
+      await openOwnerFullDashboard(userId);
+    } else {
+      await openOwnerUserProfile(userId);
+    }
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 async function openOwnerFullDashboard(userId) {
