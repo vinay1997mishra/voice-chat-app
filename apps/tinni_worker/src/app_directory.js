@@ -2557,6 +2557,17 @@ export class AppDirectoryStore extends DurableObject {
     if (!exists) throw new Error("User not found");
     const active = activeValue !== false;
     let parent = parentValue ? this._resolveOwnerUserId(parentValue) : null;
+    const previousHierarchy = this.ctx.storage.sql.exec(
+      "SELECT data_json FROM owner_hierarchy WHERE user_id=? AND role=? LIMIT 1",
+      userId, role,
+    ).toArray()[0];
+    let previousData = {};
+    try {
+      previousData = JSON.parse(String(previousHierarchy?.data_json || "{}"));
+    } catch {}
+    const incomingData =
+      dataValue && typeof dataValue === "object" ? dataValue : {};
+    const mergedData = { ...previousData, ...incomingData };
 
     if (role === "agency" && active) {
       // Agency Owner is always a Host of their own Agency.
@@ -2568,7 +2579,16 @@ export class AppDirectoryStore extends DurableObject {
          ON CONFLICT(user_id, role) DO UPDATE SET
            parent_user_id=excluded.parent_user_id, active=1,
            data_json=excluded.data_json, updated_at=excluded.updated_at`,
-        userId, userId, JSON.stringify({ agency_owner_host: true }), Date.now(),
+        userId, userId, JSON.stringify({
+          ...(() => {
+            const row = this.ctx.storage.sql.exec(
+              "SELECT data_json FROM owner_hierarchy WHERE user_id=? AND role='host' LIMIT 1",
+              userId,
+            ).toArray()[0];
+            try { return JSON.parse(String(row?.data_json || "{}")); } catch { return {}; }
+          })(),
+          agency_owner_host: true,
+        }), Date.now(),
       );
     }
 
@@ -2608,7 +2628,7 @@ export class AppDirectoryStore extends DurableObject {
          parent_user_id = excluded.parent_user_id, active = excluded.active,
          data_json = excluded.data_json, updated_at = excluded.updated_at`,
       userId, role, parent, active ? 1 : 0,
-      JSON.stringify(dataValue && typeof dataValue === "object" ? dataValue : {}),
+      JSON.stringify(mergedData),
       Date.now(),
     );
 
