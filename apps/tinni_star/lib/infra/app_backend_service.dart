@@ -1343,30 +1343,111 @@ class AppBackendService {
     required String role,
     required int fromMs,
     required int toMs,
+  }) async {
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final uri = apiBase.replace(
+      path: '/hierarchy/portal',
+      queryParameters: <String, String>{
+        'role': role.toLowerCase(),
+        'from': fromMs.toString(),
+        'to': toMs.toString(),
+      },
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load role portal');
+    }
+    return _map(data['portal']);
   }
 
   Future<List<Map<String, dynamic>>> hierarchyInvites(
     String token, {
     int limit = 100,
+  }) async {
+    if (token.trim().isEmpty) throw StateError('Login session is required');
+    final uri = apiBase.replace(
+      path: '/hierarchy/invites',
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final response = await request.close();
+    final text = await utf8.decoder.bind(response).join();
+    final data = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : _map(jsonDecode(text));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to load role invitations',
+      );
+    }
+    final raw = data['invites'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw.whereType<Map>().map(_map).toList(growable: false);
   }
 
   Future<Map<String, dynamic>> createHierarchyInvite(
     String token, {
     required String targetUserId,
     required String role,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/hierarchy/invite',
+      token,
+      body: <String, dynamic>{
+        'target_user_id': targetUserId,
+        'role': role.toLowerCase(),
+      },
+    );
+    return _map(data['invite']);
   }
 
   Future<Map<String, dynamic>> respondHierarchyInvite(
     String token, {
     required String inviteId,
     required bool accept,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/hierarchy/invite/respond',
+      token,
+      body: <String, dynamic>{
+        'invite_id': inviteId,
+        'accept': accept,
+      },
+    );
+    return <String, dynamic>{
+      'invite': _map(data['invite']),
+      'wallet': _map(data['wallet']),
+    };
   }
 
   Future<void> updateHierarchyContact(
     String token, {
     required String role,
     required String contact,
+  }) async {
+    await _request(
+      'POST',
+      '/hierarchy/contact',
+      token,
+      body: <String, dynamic>{
+        'role': role.toLowerCase(),
+        'contact': contact,
+      },
+    );
   }
+
+
 }
 
 RemoteRoleWallet? _roleWallet(dynamic value) {
