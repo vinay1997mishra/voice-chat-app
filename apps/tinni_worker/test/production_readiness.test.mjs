@@ -167,6 +167,32 @@ assert.match(
   "Sending from the Owner Panel must mark the message for panel-only 48-hour retention",
 );
 
+assert.match(
+  index,
+  /"hierarchy\.view_details"/,
+  "Hierarchy drill-down must be an explicit staff permission rather than an inherited module permission",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/api\/owner\/hierarchy-detail"[\s\S]{0,500}users\.full_dashboard[\s\S]{0,240}hierarchy\.view_details/,
+  "Owner hierarchy-detail API must require both Full ID Dashboard and hierarchy-detail permissions",
+);
+assert.match(
+  directory,
+  /target_progress_percent/,
+  "Host and Agency drill-down data must expose target progress for the selected date range",
+);
+assert.match(
+  directory,
+  /target_remaining_coins/,
+  "Host drill-down data must expose remaining target coins",
+);
+assert.match(
+  directory,
+  /combined_target_progress_percent/,
+  "Agency and BD drill-down data must expose combined target progress",
+);
+
 console.log("Production readiness guards passed");
 
 assert.match(
