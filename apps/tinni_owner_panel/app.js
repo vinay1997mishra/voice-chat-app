@@ -180,6 +180,7 @@ const staffPermissionGroups = [
     items: [
       ["users.search", "Search / view user details"],
       ["users.full_dashboard", "Open Full ID Dashboard"],
+      ["users.edit_profile", "Change user name / DP"],
       ["users.ban_id", "ID ban / unban"],
       ["users.ban_device", "Device ban / unban"],
       ["users.invisible", "Invisible ID"],
@@ -323,6 +324,8 @@ const staffPermissionGroups = [
 
 const actionPermission = {
   "user-search": "users.search",
+  "user-name": "users.edit_profile",
+  "user-dp": "users.edit_profile",
   "user-ban": "users.ban_id",
   "device-ban": "users.ban_device",
   "user-invisible": "users.invisible",
@@ -1184,7 +1187,7 @@ function applySession(session) {
       return;
     }
     const required = actionPermission[button.dataset.action];
-    if (required) button.hidden = !hasPermission(allowed, required);
+    button.hidden = !required || !hasPermission(allowed, required);
   });
 
   document.querySelectorAll("[data-vip-edit]").forEach((button) => {
@@ -1207,6 +1210,17 @@ function applySession(session) {
   const quickAction = document.getElementById("quickActionBtn");
   if (quickAction) quickAction.hidden = !owner && !hasPermission(allowed, "users.search");
 
+  document.querySelectorAll("[data-requires-permission]").forEach((element) => {
+    if (owner) {
+      element.hidden = false;
+      return;
+    }
+    element.hidden = !hasPermission(
+      allowed,
+      String(element.dataset.requiresPermission || ""),
+    );
+  });
+
   const clearAuditButton = document.getElementById("clearAuditBtn");
   if (clearAuditButton) clearAuditButton.hidden = !owner;
 
@@ -1228,10 +1242,22 @@ function applySession(session) {
   if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
   if (hasPermission(allowed, "audit.view")) loadAuditLog();
 
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
   const firstAllowed = Object.keys(permissionByView).find(
     (view) => hasAnyPermission(allowed, permissionByView[view]),
   );
-  if (firstAllowed) setView(firstAllowed);
+  if (firstAllowed) {
+    setView(firstAllowed);
+  } else {
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      button.hidden = true;
+      button.classList.remove("active");
+    });
+    document.getElementById("pageTitle").textContent =
+      session.panelName || "Staff Panel";
+    document.getElementById("pageSubtitle").textContent =
+      "No functions are active. The Owner must enable functions individually.";
+  }
   document.body.classList.remove("auth-loading");
   document.body.classList.add("auth-ready");
 }
