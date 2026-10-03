@@ -1099,9 +1099,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _toggleMic() async {
-    controller.toggleMic();
-    await widget.state.roomSession.setMicFromController();
-    setState(() {});
+    if (controller.selfMuted) {
+      await widget.state.roomSession.setSelfMute(false);
+    } else {
+      controller.toggleMic();
+      await widget.state.roomSession.setMicFromController();
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _leaveSeatAndMute() async {
@@ -1125,35 +1129,79 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             color: RoyalPalette.gold.withValues(alpha: 0.85),
           ),
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () async {
-            Navigator.pop(dialogContext);
-            await _leaveSeatAndMute();
-          },
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 34, vertical: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ShiningIcon(
-                  icon: Icons.keyboard_double_arrow_down_rounded,
-                  color: FeaturePalette.safety,
-                  size: 28,
-                  boxSize: 44,
-                  glow: 0.34,
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Leave Seat',
-                  style: TextStyle(
-                    color: RoyalPalette.cream,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: InkWell(
+                  key: const Key('my-seat-down-action'),
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    Navigator.pop(dialogContext);
+                    await _leaveSeatAndMute();
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ShiningIcon(
+                          icon: Icons.keyboard_double_arrow_down_rounded,
+                          color: FeaturePalette.safety,
+                          size: 26,
+                          boxSize: 42,
+                          glow: 0.34,
+                        ),
+                        SizedBox(height: 7),
+                        Text(
+                          'Down',
+                          style: TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: InkWell(
+                  key: const Key('my-seat-leave-action'),
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    Navigator.pop(dialogContext);
+                    await _leaveSeatAndMute();
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ShiningIcon(
+                          icon: Icons.logout_rounded,
+                          color: FeaturePalette.wallet,
+                          size: 24,
+                          boxSize: 42,
+                          glow: 0.30,
+                        ),
+                        SizedBox(height: 7),
+                        Text(
+                          'Leave Seat',
+                          style: TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -3439,9 +3487,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return;
       }
 
+      Map<String, dynamic>? serverGiftResponse;
       if (giftCategory != 'Backpack') {
         try {
-          await widget.state.roomSession.sendGift(
+          serverGiftResponse = await widget.state.roomSession.sendGift(
             roomId: widget.room.id,
             authToken: widget.state.auth.current!.authToken,
             giftId: gift.id,
@@ -3451,6 +3500,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             receiverIds:
                 _selectedGiftRecipients.toList(growable: false),
           );
+          _applyGiftServerWallet(serverGiftResponse);
           _refreshRoomSendingSummary();
         } catch (error) {
           final message =
@@ -3481,14 +3531,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           widget.state.gifts.sent.insert(0, tx);
         }
       } else {
-        tx = widget.state.gifts.send(
+        final responseCost = _giftInt(serverGiftResponse?['total_cost']);
+        tx = GiftTransaction(
           gift: gift,
           quantity: 1,
-          maxCombo: controller.config.maxGiftCombo,
           senderId: senderId,
           receiverIds:
               _selectedGiftRecipients.toList(growable: false),
+          totalCost: responseCost > 0
+              ? responseCost
+              : gift.price * _selectedGiftRecipients.length,
         );
+        widget.state.gifts.sent.insert(0, tx);
       }
       if (tx == null) {
         if (giftCategory != 'Backpack' && widget.state.wallet.coins <= 0) {
@@ -3532,6 +3586,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         builder: (context, setSheetState) {
           final roomRecipients = recipients();
           final filteredGifts = visibleGifts();
+          if (preselectedUserId != null &&
+              roomRecipients.any((item) => item.$1 == preselectedUserId)) {
+            _selectedGiftRecipients
+              ..clear()
+              ..add(preselectedUserId);
+          }
           return SafeArea(
             key: const Key('room-gift-panel'),
             child: SizedBox(
@@ -3700,13 +3760,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             }
                                           }
                                         }
-                                        if (avatar != null && avatar.isNotEmpty) {
-                                          return Image.network(
-                                            avatar,
+                                        final provider =
+                                            _roomAvatarProvider(avatar);
+                                        if (provider != null) {
+                                          return Image(
+                                            image: provider,
                                             fit: BoxFit.cover,
+                                            gaplessPlayback: true,
+                                            filterQuality: FilterQuality.medium,
                                             errorBuilder: (_, _, _) => Icon(
                                               Icons.person_rounded,
-                                              color: selected ? FeaturePalette.gift : FeaturePalette.social,
+                                              color: selected
+                                                  ? FeaturePalette.gift
+                                                  : FeaturePalette.social,
                                             ),
                                           );
                                         }
@@ -8801,13 +8867,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                       tooltip: widget.state.roomSession.moderationMicMuted
                           ? 'Muted by room owner/admin'
-                          : 'Microphone',
+                          : controller.selfMuted
+                              ? 'Unmute yourself'
+                              : 'Microphone',
                       onPressed: controller.mySeat == null ||
                               widget.state.roomSession.moderationMicMuted
                           ? null
                           : _toggleMic,
                       icon: ShiningIcon(
-                        icon: controller.micState == MicState.live
+                        icon: controller.micState == MicState.live &&
+                                !controller.selfMuted
                             ? Icons.mic_rounded
                             : Icons.mic_off_rounded,
                         color: controller.mySeat == null ||
