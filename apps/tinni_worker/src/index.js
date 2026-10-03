@@ -137,63 +137,146 @@ async function enforceImageSafety(env, {
     throw new Error("Animated WebP images are not allowed");
   }
 
+  const imageDataUrl =
+    "data:" + String(mimeType) + ";base64," + bytesToBase64(bytes);
+
+  if (env.AI) {
+    let verdict;
+    try {
+      verdict = await env.AI.run("@cf/cloudflare/clef-flash", {
+        model: "clef-flash",
+        state: {
+          surface: String(surface || "user_image"),
+          policy: "tinni-star-user-image-safety-v2",
+          instruction:
+            "Evaluate only the attached image for whether it may be published on a general-audience social/voice-chat app.",
+        },
+        images: [imageDataUrl],
+        questions: {
+          sexual_minor: {
+            type: "noul",
+            instructions:
+              "Does the image depict or sexualize a person who appears under 18 in a sexual, nude, exploitative, abusive, or fetishized context?",
+          },
+          explicit_sexual: {
+            type: "noul",
+            instructions:
+              "Does the image contain explicit sexual activity, exposed genitals, pornographic nudity, or sexualized nudity inappropriate for a general-audience social app?",
+          },
+          nonconsensual_intimate: {
+            type: "noul",
+            instructions:
+              "Does the image appear to show non-consensual intimate imagery, sexual assault, voyeuristic sexual imagery, or sexual abuse?",
+          },
+          graphic_abuse: {
+            type: "noul",
+            instructions:
+              "Does the image contain graphic gore, torture, severe mutilation, animal cruelty, or real-world abuse presented in a shocking or exploitative way?",
+          },
+          terror_extremism: {
+            type: "noul",
+            instructions:
+              "Does the image praise, recruit for, instruct for, or materially promote a terrorist or violent extremist organization or violent extremist act?",
+          },
+          serious_illegal_activity: {
+            type: "noul",
+            instructions:
+              "Does the image clearly promote, advertise, facilitate, or instruct serious illegal activity such as trafficking, sale of illegal drugs, or violent criminal conduct?",
+          },
+          unsafe_or_unclear: {
+            type: "noul",
+            instructions:
+              "Is the image too obscured, ambiguous, manipulated, or unclear to confidently rule out the prohibited categories above?",
+          },
+        },
+      });
+    } catch (_) {
+      verdict = null;
+    }
+
+    if (verdict?.answers && typeof verdict.answers === "object") {
+      const probability = (key) => {
+        const answer = verdict.answers?.[key];
+        const value = typeof answer === "number"
+          ? answer
+          : Number(answer?.noul ?? answer?.probability);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
+      };
+
+      const values = {
+        sexual_minor: probability("sexual_minor"),
+        explicit_sexual: probability("explicit_sexual"),
+        nonconsensual_intimate: probability("nonconsensual_intimate"),
+        graphic_abuse: probability("graphic_abuse"),
+        terror_extremism: probability("terror_extremism"),
+        serious_illegal_activity: probability("serious_illegal_activity"),
+        unsafe_or_unclear: probability("unsafe_or_unclear"),
+      };
+      if (Object.values(values).every((value) => value !== null)) {
+        const blocked =
+          values.sexual_minor >= 0.08 ||
+          values.explicit_sexual >= 0.20 ||
+          values.nonconsensual_intimate >= 0.15 ||
+          values.graphic_abuse >= 0.22 ||
+          values.terror_extremism >= 0.20 ||
+          values.serious_illegal_activity >= 0.25 ||
+          values.unsafe_or_unclear >= 0.45;
+        if (blocked) {
+          throw new Error(
+            "This image cannot be used because it failed Tinni Star safety checks.",
+          );
+        }
+        return {
+          allowed: true,
+          provider: "@cf/cloudflare/clef-flash",
+          model: String(verdict.model || "clef-flash"),
+        };
+      }
+    }
+  }
+
   const moderationUrl = String(env.IMAGE_MODERATION_URL || "").trim();
-  if (!moderationUrl) {
-    throw new Error(
-      "Image safety check is temporarily unavailable. Upload blocked.",
-    );
+  if (moderationUrl) {
+    const headers = { "content-type": "application/json" };
+    if (env.IMAGE_MODERATION_TOKEN) {
+      headers.authorization = "Bearer " + String(env.IMAGE_MODERATION_TOKEN);
+    }
+    let response;
+    try {
+      response = await fetch(moderationUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          mime_type: String(mimeType),
+          image_base64: bytesToBase64(bytes),
+          surface: String(surface || "user_image"),
+          policy: "tinni-star-user-image-safety-v2",
+        }),
+      });
+    } catch (_) {
+      response = null;
+    }
+    if (response?.ok) {
+      let verdict;
+      try { verdict = await response.json(); } catch (_) { verdict = null; }
+      if (verdict?.allowed === true && verdict?.flagged !== true) {
+        return {
+          allowed: true,
+          provider: String(verdict?.provider || "configured-moderation-service"),
+          request_id: verdict?.request_id ? String(verdict.request_id) : null,
+        };
+      }
+      if (verdict) {
+        throw new Error(
+          "This image cannot be used because it failed Tinni Star safety checks.",
+        );
+      }
+    }
   }
 
-  const headers = { "content-type": "application/json" };
-  if (env.IMAGE_MODERATION_TOKEN) {
-    headers.authorization = "Bearer " + String(env.IMAGE_MODERATION_TOKEN);
-  }
-
-  let response;
-  try {
-    response = await fetch(moderationUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        mime_type: String(mimeType),
-        image_base64: bytesToBase64(bytes),
-        surface: String(surface || "user_image"),
-        policy: "tinni-star-user-image-safety-v1",
-      }),
-    });
-  } catch (_) {
-    throw new Error(
-      "Image safety check failed. Upload blocked.",
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      "Image safety check failed. Upload blocked.",
-    );
-  }
-
-  let verdict;
-  try {
-    verdict = await response.json();
-  } catch (_) {
-    throw new Error(
-      "Image safety check returned an invalid response. Upload blocked.",
-    );
-  }
-
-  const allowed = verdict?.allowed === true && verdict?.flagged !== true;
-  if (!allowed) {
-    throw new Error(
-      "This image cannot be used because it failed Tinni Star safety checks.",
-    );
-  }
-
-  return {
-    allowed: true,
-    provider: String(verdict?.provider || "configured-moderation-service"),
-    request_id: verdict?.request_id ? String(verdict.request_id) : null,
-  };
+  throw new Error(
+    "Image safety check is temporarily unavailable. Upload blocked.",
+  );
 }
 
 function getCookie(request, name) {
@@ -1196,7 +1279,7 @@ export default {
           env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
         ),
         effect_media_configured: Boolean(env.EFFECT_MEDIA),
-        image_moderation_configured: Boolean(env.IMAGE_MODERATION_URL),
+        image_moderation_configured: Boolean(env.AI || env.IMAGE_MODERATION_URL),
         remote_config: {
           room_recommendation_enabled: true,
           gift_effects_enabled: true,
