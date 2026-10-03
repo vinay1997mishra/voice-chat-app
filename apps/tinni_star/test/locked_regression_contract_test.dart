@@ -102,6 +102,10 @@ void main() {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     expect(room, contains("Key('room-game-floating-button')"));
     expect(room, contains('child: const _ReferenceGameLogo(size: 54)'));
+    expect(room, contains("Key('game-keyboard-logo')"));
+    expect(room, contains('width: size'));
+    expect(room, contains('height: size * 0.66'));
+    expect(room, contains('whiteKeyWidth = constraints.maxWidth / 6'));
     expect(room, isNot(contains("Key('room-tool-game')")));
     for (final target in <String>[
       '8000000',
