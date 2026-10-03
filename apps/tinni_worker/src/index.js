@@ -5180,6 +5180,21 @@ export default {
       return json({ ok: false, error: "API endpoint not implemented" }, 404);
     }
 
+    const authorization = String(request.headers.get("authorization") || "");
+    const acceptsJson = String(request.headers.get("accept") || "")
+      .toLowerCase()
+      .includes("application/json");
+    if (authorization.toLowerCase().startsWith("bearer ") || acceptsJson) {
+      // Mobile app endpoints live at root paths such as /wallet and /messages.
+      // Never fall through to the Owner Panel static assets for an unknown
+      // authenticated app route, otherwise Flutter receives <!doctype html>
+      // and surfaces a FormatException.
+      return json({
+        ok: false,
+        error: "Tinni Star app endpoint is unavailable",
+      }, 404);
+    }
+
     if (url.pathname === "/") {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = "/index.html";

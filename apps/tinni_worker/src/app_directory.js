@@ -11,6 +11,7 @@ const RECHARGE_PROVIDER_MIN_USD = 5;
 const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
+const PBKDF2_MAX_ITERATIONS = 100000;
 const encoder = new TextEncoder();
 
 function toBase64Url(bytes) {
@@ -39,6 +40,14 @@ function safeEqualBytes(a, b) {
 }
 
 async function deriveSecret(secret, saltBytes, iterations) {
+  // workerd rejects PBKDF2 iteration counts above 100,000. Clamp every
+  // credential/OTP flow here so future callers cannot reintroduce the same
+  // production failure.
+  const requested = Math.floor(Number(iterations || PBKDF2_MAX_ITERATIONS));
+  const safeIterations = Math.max(
+    1,
+    Math.min(PBKDF2_MAX_ITERATIONS, requested),
+  );
   const material = await crypto.subtle.importKey(
     "raw",
     encoder.encode(String(secret)),
@@ -51,7 +60,7 @@ async function deriveSecret(secret, saltBytes, iterations) {
       name: "PBKDF2",
       hash: "SHA-256",
       salt: saltBytes,
-      iterations,
+      iterations: safeIterations,
     },
     material,
     256,

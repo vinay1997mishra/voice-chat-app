@@ -141,7 +141,7 @@ class _MedalOfHonorScreenState extends State<MedalOfHonorScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -252,7 +252,7 @@ class _RewardRecordsScreenState extends State<RewardRecordsScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -372,7 +372,7 @@ class _TaskScreenState extends State<TaskScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -416,7 +416,7 @@ class _TaskScreenState extends State<TaskScreen> {
       if (!mounted) return;
       setState(() => claiming = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     }
   }
@@ -570,7 +570,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     } finally {
       if (mounted) setState(() => sending = false);
@@ -731,7 +731,7 @@ class _MessageNotificationScreenState extends State<MessageNotificationScreen> {
         floatingOnly = previous.$3;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     }
   }
@@ -885,7 +885,7 @@ class _BindAccountScreenState extends State<BindAccountScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     } finally {
       if (mounted) setState(() => binding = false);
@@ -1009,7 +1009,7 @@ class _BindAccountScreenState extends State<BindAccountScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     } finally {
       if (mounted) setState(() => binding = false);
@@ -1148,7 +1148,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
       if (!mounted) return;
       setState(() => selected = old);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     }
   }
@@ -1300,7 +1300,7 @@ class _BlocklistScreenState extends State<BlocklistScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -1326,7 +1326,7 @@ class _BlocklistScreenState extends State<BlocklistScreen> {
       if (!mounted) return;
       setState(() => movingOut = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     }
   }
@@ -1454,7 +1454,7 @@ class _PropsScreenState extends State<PropsScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -1482,7 +1482,7 @@ class _PropsScreenState extends State<PropsScreen> {
       if (!mounted) return;
       setState(() => busyId = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+        SnackBar(content: Text(widget.state.backend.userSafeError(e))),
       );
     }
   }
@@ -1627,7 +1627,7 @@ class _WealthLevelScreenState extends State<WealthLevelScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
+        error = widget.state.backend.userSafeError(e);
       });
     }
   }
@@ -1765,25 +1765,33 @@ class _HostDataScreenState extends State<HostDataScreen> {
   Future<void> _load() async {
     final account = widget.state.auth.current;
     if (account == null) return;
+
+    String? nextError;
+    List<Map<String, dynamic>> nextTransfers = transfers;
+
     try {
-      final results = await Future.wait<dynamic>([
-        widget.state.backend.wallet(account.authToken),
-        widget.state.backend.settlementTransfers(account.authToken),
-      ]);
-      widget.state.wallet.applyRemote(results[0]);
-      if (!mounted) return;
-      setState(() {
-        transfers = List<Map<String, dynamic>>.from(results[1] as List);
-        loading = false;
-        error = null;
-      });
+      final remoteWallet =
+          await widget.state.backend.wallet(account.authToken);
+      widget.state.wallet.applyRemote(remoteWallet);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        error = e.toString().replaceFirst('Bad state: ', '');
-      });
+      nextError = widget.state.backend.userSafeError(e);
     }
+
+    try {
+      nextTransfers =
+          await widget.state.backend.settlementTransfers(account.authToken);
+    } catch (e) {
+      // A secondary history failure must never blank the Host/Agency/BD
+      // panel after wallet/diamond changes. Keep the live role wallet visible.
+      nextError ??= widget.state.backend.userSafeError(e);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      transfers = nextTransfers;
+      loading = false;
+      error = nextError;
+    });
   }
 
   String _usd(int cents) => '\$' + (cents / 100).toStringAsFixed(2);

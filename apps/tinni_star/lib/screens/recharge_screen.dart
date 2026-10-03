@@ -75,7 +75,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
       if (!mounted) return;
       setState(() {
         loading = false;
-        errorText = error.toString().replaceFirst('Bad state: ', '');
+        errorText = widget.state.backend.userSafeError(error);
       });
     }
   }
@@ -251,6 +251,18 @@ class _RechargeScreenState extends State<RechargeScreen> {
                           walletType: walletType,
                           password: password,
                         );
+                        final confirmed = await widget.state.backend
+                            .roleWalletPasswordConfigured(
+                          account.authToken,
+                          walletType: walletType,
+                        );
+                        if (!confirmed) {
+                          throw StateError(
+                            _isCoinSellerPin(walletType)
+                                ? 'Coin Seller PIN could not be saved. Please retry.'
+                                : 'Wallet password could not be saved. Please retry.',
+                          );
+                        }
                         saved = true;
                         _passwordConfigured[walletType] = true;
                         if (dialogContext.mounted) {
@@ -310,7 +322,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          content: Text(widget.state.backend.userSafeError(error)),
         ),
       );
       return;
