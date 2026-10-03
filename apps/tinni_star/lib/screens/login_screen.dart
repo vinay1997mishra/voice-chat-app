@@ -12,6 +12,7 @@ import '../app/tinni_app.dart';
 import '../app/tinni_state.dart';
 import '../auth/app_auth_api.dart';
 import '../auth/auth_service.dart';
+import '../i18n/tinni_localization.dart';
 import '../ui/royal_theme.dart';
 import 'reset_password_screen.dart';
 
@@ -67,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Country? selectedCountry;
   String? selectedGender;
+  String selectedLanguage = 'English';
   String? avatarDataUrl;
 
   @override
@@ -638,6 +640,7 @@ class _LoginScreenState extends State<LoginScreen> {
       'country_name': country.name,
       'flag_emoji': country.flagEmoji,
       'gender': selectedGender,
+      'language': selectedLanguage,
       'avatar_data_url': avatarDataUrl,
     };
 
@@ -688,6 +691,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!mounted) return;
+      widget.state.setLanguagePreference(selectedLanguage);
       await _finishLogin(result);
     } catch (error) {
       if (!mounted) return;
@@ -1278,6 +1282,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                key: const Key('create-id-language'),
+                initialValue: selectedLanguage,
+                decoration: const InputDecoration(
+                  labelText: 'Language',
+                  border: OutlineInputBorder(),
+                ),
+                items: tinniSupportedLanguages
+                    .map(
+                      (language) => DropdownMenuItem<String>(
+                        value: language,
+                        child: Text(language),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: busy
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() => selectedLanguage = value);
+                      },
               ),
               const SizedBox(height: 14),
               TextField(
