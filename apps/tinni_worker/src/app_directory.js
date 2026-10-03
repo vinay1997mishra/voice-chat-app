@@ -6021,8 +6021,6 @@ export class AppDirectoryStore extends DurableObject {
         regular_gift_intimacy_percent: 100,
         lucky_gift_intimacy_percent: 10,
         mutual_daily_multiplier: 1.2,
-        mic_task_minutes: 5,
-        mic_task_intimacy: 200,
         level_cycle_days: 7,
         idle_grace_days: 3,
         daily_decay_percent: 5,
