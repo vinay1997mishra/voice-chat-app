@@ -1005,8 +1005,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                     message.to == _myUserId) ...[
                                   const SizedBox(height: 8),
                                   if (inviteStatus == 'pending')
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
                                       children: [
                                         OutlinedButton(
                                           key: Key(
@@ -1021,7 +1022,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                                   ),
                                           child: const Text('Reject'),
                                         ),
-                                        const SizedBox(width: 8),
                                         FilledButton(
                                           key: Key(
                                             'role-invite-accept-' + inviteId,
