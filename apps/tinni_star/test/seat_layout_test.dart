@@ -16,8 +16,11 @@ void main() {
     for (final count in [25, 26, 27, 28, 29, 30]) {
       expect(SeatLayoutSpec.forCount(count).rows, 5);
     }
-    for (final count in [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42]) {
+    for (final count in [31, 32, 33, 34, 35, 36]) {
       expect(SeatLayoutSpec.forCount(count).rows, 6);
+    }
+    for (final count in [37, 38, 39, 40, 41, 42]) {
+      expect(SeatLayoutSpec.forCount(count).rows, 7);
     }
   });
 
@@ -53,8 +56,12 @@ void main() {
     expect(SeatLayoutSpec.forCount(32).rowLengths, [6, 6, 6, 6, 4, 4]);
     expect(SeatLayoutSpec.forCount(33).rowLengths, [6, 6, 6, 6, 5, 4]);
     expect(SeatLayoutSpec.forCount(36).rowLengths, [6, 6, 6, 6, 6, 6]);
-    expect(SeatLayoutSpec.forCount(37).rowLengths, [7, 7, 7, 7, 5, 4]);
-    expect(SeatLayoutSpec.forCount(42).rowLengths, [7, 7, 7, 7, 7, 7]);
+    expect(SeatLayoutSpec.forCount(37).rowLengths, [6, 6, 6, 6, 6, 4, 3]);
+    expect(SeatLayoutSpec.forCount(38).rowLengths, [6, 6, 6, 6, 6, 4, 4]);
+    expect(SeatLayoutSpec.forCount(39).rowLengths, [6, 6, 6, 6, 6, 5, 4]);
+    expect(SeatLayoutSpec.forCount(40).rowLengths, [6, 6, 6, 6, 6, 5, 5]);
+    expect(SeatLayoutSpec.forCount(41).rowLengths, [6, 6, 6, 6, 6, 6, 5]);
+    expect(SeatLayoutSpec.forCount(42).rowLengths, [6, 6, 6, 6, 6, 6, 6]);
   });
 
   test('every layout preserves the requested total seat count', () {
