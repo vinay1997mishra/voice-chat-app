@@ -9210,11 +9210,6 @@ class _RoomMemberProfilePage extends StatelessWidget {
 
   final RoomPresenceMember member;
 
-  Color _color(String hex) {
-    final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
-    return Color(0xFF000000 | (value ?? 0xFFD54F));
-  }
-
   ImageProvider? get _avatar {
     final value = member.avatarDataUrl;
     if (value == null || !value.startsWith('data:image/')) return null;
