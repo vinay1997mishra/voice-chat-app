@@ -8607,6 +8607,122 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  ownerInboxThreads(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("user ID is required");
+
+    const cutoff = Date.now() - (48 * 60 * 60 * 1000);
+    const peerRows = this.ctx.storage.sql.exec(
+      `SELECT DISTINCT
+          CASE WHEN d.from_user_id=? THEN d.to_user_id ELSE d.from_user_id END AS peer_id
+         FROM direct_messages d
+         LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+        WHERE (d.from_user_id=? OR d.to_user_id=?)
+          AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+      userId, userId, userId, cutoff,
+    ).toArray();
+
+    const threads = [];
+    for (const peerRow of peerRows) {
+      const peerId = String(peerRow.peer_id || "").trim();
+      if (!peerId) continue;
+
+      const last = this.ctx.storage.sql.exec(
+        `SELECT d.id,d.from_user_id,d.to_user_id,d.text,d.message_kind,
+                d.media_url,d.created_at,d.seen_at
+           FROM direct_messages d
+           LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+          WHERE ((d.from_user_id=? AND d.to_user_id=?)
+              OR (d.from_user_id=? AND d.to_user_id=?))
+            AND (opm.message_id IS NULL OR opm.created_at>=?)
+          ORDER BY d.created_at DESC
+          LIMIT 1`,
+        userId, peerId, peerId, userId, cutoff,
+      ).toArray()[0];
+      if (!last) continue;
+
+      const count = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM direct_messages d
+           LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+          WHERE ((d.from_user_id=? AND d.to_user_id=?)
+              OR (d.from_user_id=? AND d.to_user_id=?))
+            AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+        userId, peerId, peerId, userId, cutoff,
+      ).toArray()[0];
+
+      let displayName = peerId;
+      let avatarDataUrl = null;
+      if (peerId === "tinni-official") {
+        displayName = "Tinni Official";
+      } else {
+        const peer = this.ctx.storage.sql.exec(
+          "SELECT display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          peerId,
+        ).toArray()[0];
+        if (peer) {
+          displayName = String(peer.display_name || peerId);
+          avatarDataUrl = peer.avatar_data_url
+            ? String(peer.avatar_data_url)
+            : null;
+        }
+      }
+
+      threads.push({
+        peer_user_id: peerId,
+        display_name: displayName,
+        avatar_data_url: avatarDataUrl,
+        message_count: Number(count?.count || 0),
+        last_message: {
+          id: String(last.id),
+          from_user_id: String(last.from_user_id),
+          to_user_id: String(last.to_user_id),
+          text: String(last.text || ""),
+          message_kind: String(last.message_kind || "text"),
+          media_url: last.media_url ? String(last.media_url) : null,
+          created_at: Number(last.created_at || 0),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        },
+      });
+    }
+
+    threads.sort((a, b) =>
+      Number(b.last_message?.created_at || 0) -
+      Number(a.last_message?.created_at || 0)
+    );
+    return threads.slice(0, 500);
+  }
+
+  ownerInboxConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const peerUserId = String(peerUserIdValue || "").trim();
+    const limit = Math.max(1, Math.min(1000, Number(limitValue || 500)));
+    if (!userId || !peerUserId) throw new Error("user IDs are required");
+
+    const cutoff = Date.now() - (48 * 60 * 60 * 1000);
+    return this.ctx.storage.sql.exec(
+      `SELECT d.id,d.from_user_id,d.to_user_id,d.text,d.message_kind,
+              d.media_url,d.created_at,d.seen_at
+         FROM direct_messages d
+         LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+        WHERE ((d.from_user_id=? AND d.to_user_id=?)
+            OR (d.from_user_id=? AND d.to_user_id=?))
+          AND (opm.message_id IS NULL OR opm.created_at>=?)
+        ORDER BY d.created_at ASC
+        LIMIT ?`,
+      userId, peerUserId, peerUserId, userId, cutoff, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from_user_id: String(row.from_user_id),
+      to_user_id: String(row.to_user_id),
+      text: String(row.text || ""),
+      message_kind: String(row.message_kind || "text"),
+      media_url: row.media_url ? String(row.media_url) : null,
+      created_at: Number(row.created_at || 0),
+      seen_at: row.seen_at == null ? null : Number(row.seen_at),
+    }));
+  }
+
   listMessageThreads(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
