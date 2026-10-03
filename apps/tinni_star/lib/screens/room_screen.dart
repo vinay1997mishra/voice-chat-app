@@ -940,11 +940,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _refresh() {
     if (!mounted) return;
+    final messageCount =
+        widget.state.roomSession.controller?.messages.length ?? 0;
+    final hasNewMessage = messageCount > _lastRoomMessageCount;
+    _lastRoomMessageCount = messageCount;
     _scheduleEmoteExpiry();
     _syncMyAdminRole();
     _maybeShowSeatInvite();
     _syncEntranceQueue();
     setState(() {});
+    if (hasNewMessage) {
+      _scrollRoomCommentsToNewest();
+    }
   }
 
   void _syncEntranceQueue() {
