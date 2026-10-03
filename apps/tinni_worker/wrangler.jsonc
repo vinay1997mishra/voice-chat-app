@@ -6,6 +6,15 @@
   "observability": {
     "enabled": true
   },
+  "ai": {
+    "binding": "AI"
+  },
+  "r2_buckets": [
+    {
+      "binding": "EFFECT_MEDIA",
+      "bucket_name": "tinni-star-effects"
+    }
+  ],
   "vars": {
     "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev"
   },
