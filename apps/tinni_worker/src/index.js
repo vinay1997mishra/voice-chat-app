@@ -3827,6 +3827,136 @@ export default {
       }
     }
 
+    if (url.pathname.startsWith("/message-media/") && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Message media storage is not configured" }, 503);
+      }
+      let messageId = "";
+      try {
+        messageId = decodeURIComponent(
+          url.pathname.slice("/message-media/".length),
+        ).trim();
+      } catch (_) {
+        messageId = "";
+      }
+      if (!messageId) {
+        return json({ ok: false, error: "Message photo ID is required" }, 400);
+      }
+      const allowed = await getAppDirectoryStore(env).canAccessDirectMessageMedia(
+        appSession.user.user_id,
+        messageId,
+      );
+      if (!allowed) {
+        return json({ ok: false, error: "Message photo is unavailable" }, 403);
+      }
+      const object = await env.EFFECT_MEDIA.get("messages/" + messageId);
+      if (!object) {
+        return json({ ok: false, error: "Message photo not found" }, 404);
+      }
+      const headers = new Headers();
+      headers.set(
+        "content-type",
+        object.httpMetadata?.contentType || "application/octet-stream",
+      );
+      headers.set("cache-control", "private, no-store");
+      headers.set("x-content-type-options", "nosniff");
+      return new Response(object.body, { status: 200, headers });
+    }
+
+    if (url.pathname === "/message-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Message media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const senderId = String(appSession.user.user_id || "").trim();
+      const toUserId = String(body.to_user_id || "").trim();
+      if (!toUserId) {
+        return json({ ok: false, error: "to_user_id is required" }, 400);
+      }
+      const store = getAppDirectoryStore(env);
+      if (!(await store.areFriends(senderId, toUserId))) {
+        return json({
+          ok: false,
+          error: "Photos can only be sent to mutual friends",
+        }, 403);
+      }
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({
+          ok: false,
+          error: "Chat photo must be JPEG, PNG or WebP",
+        }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid chat photo data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 4000000) {
+        return json({
+          ok: false,
+          error: "Chat photo must be 4 MB or smaller",
+        }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "message_image",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Chat photo is not allowed"),
+        }, 400);
+      }
+
+      const now = Date.now();
+      const messageId =
+        "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+      const mediaKey = "messages/" + messageId;
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/message-media/" +
+        encodeURIComponent(messageId);
+      await env.EFFECT_MEDIA.put(mediaKey, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          from_user_id: senderId,
+          to_user_id: toUserId,
+          message_id: messageId,
+          kind: "direct_message_image",
+          created_at: String(now),
+        },
+      });
+      try {
+        const message = await store.sendDirectMessage(
+          senderId,
+          toUserId,
+          "Photo",
+          {
+            id: messageId,
+            message_kind: "image",
+            media_url: mediaUrl,
+          },
+        );
+        return json({ ok: true, message }, 201);
+      } catch (error) {
+        try { await env.EFFECT_MEDIA.delete(mediaKey); } catch (_) {}
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send photo"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/messages" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
