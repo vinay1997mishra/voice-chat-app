@@ -2704,8 +2704,26 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     if (operation === "credit") {
       this._creditPrivilegedWalletAuthorized(userId, walletType, amount);
+      this._recordPrivilegedWalletTransaction({
+        userId,
+        walletType,
+        kind: "company_credit",
+        coinsDelta: amount,
+        referenceId: "owner-wallet:" + crypto.randomUUID(),
+        note: "Company / Owner credit",
+        createdAt: now,
+      });
     } else if (operation === "debit") {
       this._debitPrivilegedWalletAuthorized(userId, walletType, amount);
+      this._recordPrivilegedWalletTransaction({
+        userId,
+        walletType,
+        kind: "owner_debit",
+        coinsDelta: -amount,
+        referenceId: "owner-wallet:" + crypto.randomUUID(),
+        note: "Owner debit",
+        createdAt: now,
+      });
     } else if (operation === "ban" || operation === "unban") {
       this.ctx.storage.sql.exec(
         "UPDATE owner_wallets SET banned=?,updated_at=? WHERE user_id=? AND wallet_type=?",
@@ -8925,6 +8943,16 @@ export class AppDirectoryStore extends DurableObject {
 
     const now = Date.now();
     const reference = source.wallet_type + "-transfer:" + crypto.randomUUID();
+    this._recordPrivilegedWalletTransaction({
+      userId: senderId,
+      walletType: source.wallet_type,
+      kind: "coins_sent",
+      coinsDelta: -amount,
+      counterpartyUserId: recipientId,
+      referenceId: reference,
+      note: "Coins sent to ID " + recipientId,
+      createdAt: now,
+    });
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?, ?,0,?,?,?)",
       "wallet-" + crypto.randomUUID(),
