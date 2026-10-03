@@ -857,6 +857,84 @@ class AppBackendService {
     await _request('POST', '/cp/memories', token, body: {'text': text});
   }
 
+  Future<Map<String, dynamic>> coinsHistory(
+    String token, {
+    int limit = 200,
+  }) {
+    return _request(
+      'GET',
+      '/wallet/coins/history',
+      token,
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+  }
+
+  Future<Map<String, dynamic>> diamondsHistory(
+    String token, {
+    int limit = 200,
+  }) {
+    return _request(
+      'GET',
+      '/wallet/diamonds/history',
+      token,
+      queryParameters: <String, String>{'limit': limit.toString()},
+    );
+  }
+
+  Future<Map<String, dynamic>> convertDiamonds(
+    String token, {
+    required int diamonds,
+  }) {
+    return _request(
+      'POST',
+      '/wallet/diamonds/convert',
+      token,
+      body: <String, dynamic>{'diamonds': diamonds},
+    );
+  }
+
+  Future<Map<String, dynamic>> roleWalletDetail(
+    String token, {
+    required String walletType,
+    int limit = 200,
+  }) async {
+    final data = await _request(
+      'GET',
+      '/wallet/role-detail',
+      token,
+      queryParameters: <String, String>{
+        'wallet_type': walletType,
+        'limit': limit.toString(),
+      },
+    );
+    return _map(data['wallet']);
+  }
+
+  Future<Map<String, dynamic>> transferRoleDollars(
+    String token, {
+    required String walletType,
+    required String destinationType,
+    String? recipientUserId,
+    required int usdCents,
+    required String password,
+    required String requestId,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/wallet/role-dollars/transfer',
+      token,
+      body: <String, dynamic>{
+        'wallet_type': walletType,
+        'destination_type': destinationType,
+        'recipient_user_id': recipientUserId,
+        'usd_cents': usdCents,
+        'password': password,
+        'request_id': requestId,
+      },
+    );
+    return _map(data['wallet']);
+  }
+
   Future<List<Map<String, dynamic>>> walletTransactions(String token) async {
     final data = await _request('GET', '/wallet/transactions', token);
     final raw = data['transactions'];
