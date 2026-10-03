@@ -80,20 +80,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _showSettlementTransfer() async {
+  Future<void> _showSettlementTransfer(String senderRoleValue) async {
     final account = widget.state.auth.current;
     if (account == null) return;
 
+    final senderRole = senderRoleValue.trim().toLowerCase();
+    if (!const <String>{'host', 'agency', 'bd'}.contains(senderRole)) return;
+    final minimumCents = senderRole == 'host' ? 200 : 1000;
+    int availableForRole(RemoteWallet wallet) => senderRole == 'host'
+        ? wallet.diamondUsdCents
+        : wallet.commissionUsdCents;
+
+    RemoteWallet liveWallet;
     try {
-      final liveWallet = await widget.state.backend.wallet(account.authToken);
+      liveWallet = await widget.state.backend.wallet(account.authToken);
       widget.state.wallet.applyRemote(liveWallet);
       if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (_) {
+      return;
+    }
     if (!mounted) return;
 
+    var availableCents = availableForRole(liveWallet);
     final recipientController = TextEditingController();
     final amountController = TextEditingController(
-      text: widget.state.wallet.withdrawableUsdCents >= 200 ? '2.00' : '',
+      text: availableCents >= minimumCents
+          ? (minimumCents / 100).toStringAsFixed(2)
+          : '',
     );
     SettlementRecipient? recipient;
     String? errorText;
@@ -141,8 +154,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
             final amount = double.tryParse(amountController.text.trim()) ?? 0;
             final cents = (amount * 100).round();
-            if (cents < 200) {
-              setDialogState(() => errorText = 'Minimum transfer is \$2.00.');
+            if (cents < minimumCents) {
+              setDialogState(
+                () => errorText = 'Minimum ' +
+                    senderRole.toUpperCase() +
+                    ' transfer is \\$' +
+                    (minimumCents / 100).toStringAsFixed(2) +
+                    '.',
+              );
               return;
             }
             setDialogState(() {
@@ -150,16 +169,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               errorText = null;
             });
             try {
-              final liveWallet =
+              final refreshed =
                   await widget.state.backend.wallet(account.authToken);
-              widget.state.wallet.applyRemote(liveWallet);
-              if (cents > liveWallet.withdrawableUsdCents) {
+              widget.state.wallet.applyRemote(refreshed);
+              availableCents = availableForRole(refreshed);
+              if (cents > availableCents) {
                 if (!dialogContext.mounted) return;
                 setDialogState(() {
                   sending = false;
-                  errorText = 'Available balance is only \$' +
-                      (liveWallet.withdrawableUsdCents / 100)
-                          .toStringAsFixed(2) +
+                  errorText = 'Available ' +
+                      senderRole.toUpperCase() +
+                      ' balance is only \\$' +
+                      (availableCents / 100).toStringAsFixed(2) +
                       '.';
                 });
                 return;
@@ -168,6 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 account.authToken,
                 recipientUserId: selected.userId,
                 usdCents: cents,
+                senderRole: senderRole,
               );
               widget.state.wallet.applyRemote(remote);
               if (!dialogContext.mounted) return;
@@ -177,7 +199,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Transferred \$' +
+                      senderRole.toUpperCase() +
+                          ' transferred \\$' +
                           (cents / 100).toStringAsFixed(2) +
                           ' to ID ' +
                           selected.userId,
@@ -195,13 +218,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
 
           return AlertDialog(
-            title: const Text('Transfer settlement'),
+            title: Text(senderRole.toUpperCase() + ' dollar transfer'),
             content: SizedBox(
               width: 420,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Available: ' + widget.state.wallet.withdrawableUsdText),
+                  Text(
+                    'Available ' +
+                        senderRole.toUpperCase() +
+                        ': \\$' +
+                        (availableCents / 100).toStringAsFixed(2),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: recipientController,
@@ -234,8 +262,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: amountController,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'USD amount (minimum \$2)',
+                    decoration: InputDecoration(
+                      labelText: 'USD amount (minimum \\$' +
+                          (minimumCents / 100).toStringAsFixed(0) +
+                          ')',
                     ),
                   ),
                   if (errorText != null) ...[
@@ -1133,7 +1163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'BD',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('bd'),
                       ),
                     ),
                   ),
@@ -1146,7 +1176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'Agency',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('agency'),
                       ),
                     ),
                   ),
@@ -1159,7 +1189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'Host',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('host'),
                       ),
                     ),
                   ),
