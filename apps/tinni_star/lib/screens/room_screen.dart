@@ -9316,31 +9316,6 @@ class _ReferenceGameTile extends StatelessWidget {
   }
 }
 
-class _RocketReward extends StatelessWidget {
-  const _RocketReward({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF6E3EB3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFCCA7FF),
-          width: 0.8,
-        ),
-      ),
-      child: Icon(
-        icon,
-        color: const Color(0xFFFFD45A),
-        size: 27,
-      ),
-    );
-  }
-}
-
 class _RoomThemeChoice {
   const _RoomThemeChoice({
     required this.id,
