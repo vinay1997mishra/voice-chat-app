@@ -5151,13 +5151,20 @@ export default {
       }
 
       try {
-        const officialMessage = await getAppDirectoryStore(env).sendOfficialMessage(
+        const directory = getAppDirectoryStore(env);
+        const officialMessage = await directory.sendOfficialMessage(
           targetUserId,
           message,
           {
+            action: "owner_message",
             report_id: reportId || null,
             recipient_kind: recipientKind || null,
           },
+        );
+        await directory.markOwnerPanelMessage(
+          officialMessage.id,
+          targetUserId,
+          officialMessage.created_at,
         );
 
         await writeAudit(
