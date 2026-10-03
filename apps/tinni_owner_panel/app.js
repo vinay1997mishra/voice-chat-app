@@ -76,6 +76,8 @@ let ownerListenRoom = null;
 let ownerListenModule = null;
 let ownerListenRoomId = "";
 let ownerListenAudioElements = [];
+let ownerFullDashboardUserId = "";
+let ownerFullDashboardRoomId = "";
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -83,6 +85,22 @@ function pretty(key) {
 
 function fmt(n) {
   return new Intl.NumberFormat("en-US").format(Number(n || 0));
+}
+
+function sessionCan(permission) {
+  if (currentSession?.role === "owner") return true;
+  return hasPermission(
+    new Set(Array.isArray(currentSession?.permissions) ? currentSession.permissions : []),
+    permission,
+  );
+}
+
+function fullDashboardActionButton(action, label, className = "btn secondary") {
+  const permission = actionPermission[action];
+  if (currentSession?.role !== "owner" && (!permission || !sessionCan(permission))) {
+    return "";
+  }
+  return `<button type="button" class="${className}" data-full-owner-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
 }
 
 function toast(message) {
@@ -128,7 +146,7 @@ async function checkHealth() {
 
 const permissionByView = {
   users: [
-    "users.search", "users.full_dashboard", "users.ban_id", "users.ban_device",
+    "users.search", "users.full_dashboard", "users.edit_profile", "users.ban_id", "users.ban_device",
     "users.invisible", "users.locked_room_bypass", "users.change_id", "users.unique_id",
   ],
   verification: [
