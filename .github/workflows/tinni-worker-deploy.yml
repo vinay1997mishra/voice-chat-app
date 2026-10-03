@@ -3,7 +3,7 @@ name: Tinni Worker Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, fix/final-gift-rocket-flow]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
