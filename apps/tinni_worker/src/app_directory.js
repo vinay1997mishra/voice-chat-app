@@ -2030,7 +2030,20 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0] || { balance: 0, updated_at: 0 };
     return {
       features: { ...defaultFeatures, ...(this._ownerSetting("features", {}) || {}) },
-      policies: { ...defaultPolicies, ...(this._ownerSetting("policies", {}) || {}) },
+      policies: {
+        ...defaultPolicies,
+        ...(this._ownerSetting("policies", {}) || {}),
+        // Final locked money rules. Stale Owner settings must not regress them.
+        diamond_usd_reference_diamonds: HOST_TARGET_RECEIVED_COINS,
+        diamond_usd_reference_cents: HOST_TARGET_USD_CENTS,
+        host_first_target_received_coins: HOST_TARGET_RECEIVED_COINS,
+        host_first_target_usd: HOST_TARGET_USD_CENTS / 100,
+        agency_commission_percent: 20,
+        minimum_transfer_usd: HOST_SETTLEMENT_MIN_USD_CENTS / 100,
+        agency_bd_minimum_transfer_usd: AGENCY_BD_SETTLEMENT_MIN_USD_CENTS / 100,
+        coin_seller_settlement_coins_per_usd:
+          COIN_SELLER_SETTLEMENT_COINS_PER_USD,
+      },
       game_config: this._ownerSetting("game_config", {
         enabled: true, min_bet: 1, max_bet: 1000000,
       }),
