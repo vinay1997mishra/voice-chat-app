@@ -1687,8 +1687,18 @@ export class AppDirectoryStore extends DurableObject {
       updated_at: Number(item.updated_at || 0),
     }));
 
+    const ownedRoom = this.ctx.storage.sql.exec(
+      `SELECT *
+         FROM app_rooms
+        WHERE owner_id = ?
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1`,
+      userId,
+    ).toArray()[0];
+
     return {
       user: rowToUser(row),
+      owned_room: ownedRoom ? rowToRoom(ownedRoom) : null,
       controls: this._userControls(userId),
       wallet: this.getWallet(userId),
       tags: this.listUserTags(userId),
@@ -3301,6 +3311,40 @@ export class AppDirectoryStore extends DurableObject {
       case "treasury-send": return this._ownerTreasurySend(data.user_id, data.wallet_type, data.amount);
       case "wallet-security-unfreeze": return this._ownerUnfreezeWalletSecurity(data.user_id, data.wallet_type);
       case "user-search": return { users: this.ownerSearchUsers(data.user_id || data.query, 50) };
+      case "user-name": {
+        const userId = this._resolveOwnerUserId(data.user_id);
+        const displayName = cleanText(data.display_name, 40);
+        if (!userId) throw new Error("User ID is required");
+        if (!displayName) throw new Error("Display name is required");
+        const exists = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1",
+          userId,
+        ).toArray()[0];
+        if (!exists) throw new Error("User not found");
+        this.ctx.storage.sql.exec(
+          "UPDATE app_users SET display_name=?,updated_at=? WHERE user_id=?",
+          displayName, Date.now(), userId,
+        );
+        return { user_id: userId, display_name: displayName };
+      }
+      case "user-dp": {
+        const userId = this._resolveOwnerUserId(data.user_id);
+        const asset = String(data.asset_url || "").trim();
+        if (!userId) throw new Error("User ID is required");
+        if (asset && !/^https:\/\//i.test(asset)) {
+          throw new Error("Profile DP must use an HTTPS media URL");
+        }
+        const exists = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1",
+          userId,
+        ).toArray()[0];
+        if (!exists) throw new Error("User not found");
+        this.ctx.storage.sql.exec(
+          "UPDATE app_users SET avatar_data_url=?,updated_at=? WHERE user_id=?",
+          asset || null, Date.now(), userId,
+        );
+        return { user_id: userId, avatar_data_url: asset || null };
+      }
       case "user-ban": return this._setUserControl(data.user_id, { banned: String(data.status) === "ban" });
       case "device-ban": return this._setUserControl(data.user_id, { device_banned: String(data.status) === "ban" });
       case "user-invisible": return this._setUserControl(data.user_id, { invisible: on(data.status) });
