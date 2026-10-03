@@ -356,6 +356,7 @@ class SocialService {
     } else {
       following.remove(targetUserId);
     }
+    await syncFriends(authToken);
     return value;
   }
 
@@ -382,7 +383,9 @@ class SocialService {
     required String text,
   }) {
     final value = text.trim();
-    if (value.isEmpty || blocked.contains(to)) return false;
+    if (value.isEmpty || blocked.contains(to) || !friends.contains(to)) {
+      return false;
+    }
     directMessages.add(ChatMessage(from: from, to: to, text: value));
     return true;
   }
@@ -560,6 +563,11 @@ class SocialService {
   }) async {
     final value = text.trim();
     if (value.isEmpty) throw StateError('Message cannot be empty');
+    if (!friends.contains(to)) {
+      throw StateError(
+        'Both users must follow each other before messaging.',
+      );
+    }
     if (blocked.contains(to)) throw StateError('User is blocked');
 
     final request = await _httpClient.postUrl(
@@ -613,7 +621,9 @@ class SocialService {
     required String dataUrl,
   }) async {
     if (!friends.contains(to)) {
-      throw StateError('Photos can only be sent to friends');
+      throw StateError(
+        'Both users must follow each other before sending photos.',
+      );
     }
     if (blocked.contains(to)) throw StateError('User is blocked');
     if (!dataUrl.startsWith('data:image/')) {
