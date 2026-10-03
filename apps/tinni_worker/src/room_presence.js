@@ -1173,6 +1173,11 @@ export class RoomPresenceStore extends DurableObject {
           .map((item) => ({
             name: String(item?.name || "").trim().slice(0, 40),
             color: String(item?.color || "#FFD54F").trim(),
+            kind: String(item?.kind || "custom").trim().slice(0, 24),
+            designation: String(item?.designation || "").trim().slice(0, 40),
+            background_color: String(
+              item?.background_color || item?.color || "#FFD54F",
+            ).trim(),
           }))
           .filter((item) => item.name && /^#[0-9a-fA-F]{6}$/.test(item.color))
           .slice(0, 12)
