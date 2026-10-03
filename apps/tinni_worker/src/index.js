@@ -9,11 +9,21 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const STAFF_PERMISSIONS = new Set([
-  // Legacy whole-module permissions are kept for existing staff panels.
-  "users", "rooms", "wallets", "hierarchy", "roles", "vip",
-  "gifts", "assets", "banners", "games", "policies", "audit",
-
+  // Strict allowlist: only individually selected functions are valid.
+  // Whole-module permissions are intentionally not accepted.
   "users.search",
+  "users.full_dashboard",
+  "users.view_call_history",
+  "users.edit_profile",
+  "verification.view",
+  "verification.review",
+  "verification.direct_verify",
+  "verification.revoke",
+  "messaging.search",
+  "messaging.view_inbox",
+  "messaging.send",
+  "messaging.tags",
+  "messaging.officials",
   "users.ban_id",
   "users.ban_device",
   "users.invisible",
@@ -36,6 +46,7 @@ const STAFF_PERMISSIONS = new Set([
   "wallets.merchant",
   "wallets.treasury_send",
 
+  "hierarchy.view_details",
   "hierarchy.bd_manage",
   "hierarchy.agency_manage",
   "hierarchy.agency_bd_link",
@@ -86,6 +97,276 @@ function json(data, status = 200, headers = {}) {
       "cache-control": "no-store",
       ...headers,
     },
+  });
+}
+
+function bytesToBase64(bytes) {
+  let out = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(bytes.length, i + chunkSize));
+    out += String.fromCharCode(...chunk);
+  }
+  return btoa(out);
+}
+
+function validateImageMagic(bytes, mimeType) {
+  const mime = String(mimeType || "").toLowerCase();
+  if (mime === "image/jpeg") {
+    return bytes.length >= 3 &&
+      bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mime === "image/png") {
+    return bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e &&
+      bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a &&
+      bytes[6] === 0x1a && bytes[7] === 0x0a;
+  }
+  if (mime === "image/webp") {
+    return bytes.length >= 12 &&
+      String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
+  }
+  return false;
+}
+
+function isAnimatedWebp(bytes) {
+  if (bytes.length < 16) return false;
+  const text = new TextDecoder("latin1").decode(bytes);
+  return text.includes("ANIM") || text.includes("ANMF");
+}
+
+async function enforceImageSafety(env, {
+  bytes,
+  mimeType,
+  surface,
+}) {
+  if (!validateImageMagic(bytes, mimeType)) {
+    throw new Error("Image file signature does not match its declared type");
+  }
+  if (String(mimeType).toLowerCase() === "image/webp" && isAnimatedWebp(bytes)) {
+    throw new Error("Animated WebP images are not allowed");
+  }
+
+  const imageDataUrl =
+    "data:" + String(mimeType) + ";base64," + bytesToBase64(bytes);
+  const imageSurface = String(surface || "user_image");
+  const isMessageImage = imageSurface === "message_image";
+
+  if (env.AI) {
+    let verdict;
+    try {
+      verdict = await env.AI.run("@cf/cloudflare/clef-flash", {
+        model: "clef-flash",
+        state: {
+          surface: imageSurface,
+          policy: "tinni-star-user-image-safety-v2",
+          instruction:
+            "Evaluate only the attached image for whether it may be published on a general-audience social/voice-chat app.",
+        },
+        images: [imageDataUrl],
+        questions: {
+          sexual_minor: {
+            type: "noul",
+            instructions:
+              "Does the image depict or sexualize a person who appears under 18 in a sexual, nude, exploitative, abusive, or fetishized context?",
+          },
+          explicit_sexual: {
+            type: "noul",
+            instructions:
+              "Does the image contain explicit sexual activity, exposed genitals, pornographic nudity, or sexualized nudity inappropriate for a general-audience social app?",
+          },
+          nonconsensual_intimate: {
+            type: "noul",
+            instructions:
+              "Does the image appear to show non-consensual intimate imagery, sexual assault, voyeuristic sexual imagery, or sexual abuse?",
+          },
+          graphic_abuse: {
+            type: "noul",
+            instructions:
+              "Does the image contain graphic gore, torture, severe mutilation, animal cruelty, or real-world abuse presented in a shocking or exploitative way?",
+          },
+          terror_extremism: {
+            type: "noul",
+            instructions:
+              "Does the image praise, recruit for, instruct for, or materially promote a terrorist or violent extremist organization or violent extremist act?",
+          },
+          serious_illegal_activity: {
+            type: "noul",
+            instructions:
+              "Does the image clearly promote, advertise, facilitate, or instruct serious illegal activity such as trafficking, sale of illegal drugs, or violent criminal conduct?",
+          },
+          unsafe_or_unclear: {
+            type: "noul",
+            instructions:
+              "Is the image too obscured, ambiguous, manipulated, or unclear to confidently rule out the prohibited categories above?",
+          },
+          third_party_app_branding: {
+            type: "noul",
+            instructions:
+              "Does the image visibly contain the logo, name, branded interface, screenshot, watermark, or recognizable identity of another app, social platform, messaging app, game, payment app, website/app service, or software product other than Tinni Star?",
+          },
+          external_link_or_qr: {
+            type: "noul",
+            instructions:
+              "Does the image visibly contain an external URL, domain name, web link, referral link/code, QR code, app-store link, social handle used to redirect users, or scannable code leading outside Tinni Star?",
+          },
+        },
+      });
+    } catch (_) {
+      verdict = null;
+    }
+
+    if (verdict?.answers && typeof verdict.answers === "object") {
+      const probability = (key) => {
+        const answer = verdict.answers?.[key];
+        const value = typeof answer === "number"
+          ? answer
+          : Number(answer?.noul ?? answer?.probability);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
+      };
+
+      const values = {
+        sexual_minor: probability("sexual_minor"),
+        explicit_sexual: probability("explicit_sexual"),
+        nonconsensual_intimate: probability("nonconsensual_intimate"),
+        graphic_abuse: probability("graphic_abuse"),
+        terror_extremism: probability("terror_extremism"),
+        serious_illegal_activity: probability("serious_illegal_activity"),
+        unsafe_or_unclear: probability("unsafe_or_unclear"),
+        third_party_app_branding: probability("third_party_app_branding"),
+        external_link_or_qr: probability("external_link_or_qr"),
+      };
+      if (Object.values(values).every((value) => value !== null)) {
+        const blocked =
+          values.sexual_minor >= 0.08 ||
+          values.explicit_sexual >= 0.20 ||
+          values.nonconsensual_intimate >= 0.15 ||
+          values.graphic_abuse >= 0.22 ||
+          values.terror_extremism >= 0.20 ||
+          values.serious_illegal_activity >= 0.25 ||
+          values.unsafe_or_unclear >= 0.45 ||
+          (isMessageImage && values.third_party_app_branding >= 0.20) ||
+          (isMessageImage && values.external_link_or_qr >= 0.18);
+        if (blocked) {
+          throw new Error(
+            "This image cannot be used because it failed Tinni Star safety checks.",
+          );
+        }
+        return {
+          allowed: true,
+          provider: "@cf/cloudflare/clef-flash",
+          model: String(verdict.model || "clef-flash"),
+        };
+      }
+    }
+  }
+
+  if (isMessageImage) {
+    throw new Error(
+      "Photo check is temporarily unavailable. Image message blocked.",
+    );
+  }
+
+  const moderationUrl = String(env.IMAGE_MODERATION_URL || "").trim();
+  if (moderationUrl) {
+    const headers = { "content-type": "application/json" };
+    if (env.IMAGE_MODERATION_TOKEN) {
+      headers.authorization = "Bearer " + String(env.IMAGE_MODERATION_TOKEN);
+    }
+    let response;
+    try {
+      response = await fetch(moderationUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          mime_type: String(mimeType),
+          image_base64: bytesToBase64(bytes),
+          surface: String(surface || "user_image"),
+          policy: "tinni-star-user-image-safety-v2",
+        }),
+      });
+    } catch (_) {
+      response = null;
+    }
+    if (response?.ok) {
+      let verdict;
+      try { verdict = await response.json(); } catch (_) { verdict = null; }
+      if (verdict?.allowed === true && verdict?.flagged !== true) {
+        return {
+          allowed: true,
+          provider: String(verdict?.provider || "configured-moderation-service"),
+          request_id: verdict?.request_id ? String(verdict.request_id) : null,
+        };
+      }
+      if (verdict) {
+        throw new Error(
+          "This image cannot be used because it failed Tinni Star safety checks.",
+        );
+      }
+    }
+  }
+
+  throw new Error(
+    "Image safety check is temporarily unavailable. Upload blocked.",
+  );
+}
+
+function isApprovedUserMediaUrl(env, value, userId, kind) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  let parsed;
+  let publicOrigin;
+  try {
+    parsed = new URL(raw);
+    publicOrigin = new URL(String(env.PUBLIC_API_ORIGIN || ""));
+  } catch (_) {
+    return false;
+  }
+  if (parsed.origin !== publicOrigin.origin) return false;
+  if (!parsed.pathname.startsWith("/media/")) return false;
+  let key;
+  try {
+    key = decodeURIComponent(parsed.pathname.slice("/media/".length));
+  } catch (_) {
+    return false;
+  }
+  const id = String(userId || "").trim();
+  if (kind === "avatar") {
+    return key === "profiles/" + id + "/avatar";
+  }
+  if (kind === "room_dp") {
+    return key === "rooms/" + id + "/dp";
+  }
+  if (kind === "room_theme") {
+    return key.startsWith("rooms/" + id + "/themes/") &&
+      key.length > ("rooms/" + id + "/themes/").length;
+  }
+  return false;
+}
+
+async function enforceSignupAvatarSafety(env, profile) {
+  if (!profile || typeof profile !== "object") return;
+  const raw = String(profile.avatar_data_url || "").trim();
+  if (!raw) return;
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+  if (!match) {
+    throw new Error("Signup profile photo must be JPEG, PNG or WebP");
+  }
+  let bytes;
+  try {
+    const decoded = atob(match[2]);
+    bytes = Uint8Array.from(decoded, (ch) => ch.charCodeAt(0));
+  } catch (_) {
+    throw new Error("Signup profile photo data is invalid");
+  }
+  if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
+    throw new Error("Signup profile photo must be 650 KB or smaller");
+  }
+  await enforceImageSafety(env, {
+    bytes,
+    mimeType: match[1],
+    surface: "signup_avatar",
   });
 }
 
@@ -143,6 +424,10 @@ async function createLiveKitAccessToken({
   roomId,
   userId,
   displayName,
+  canPublish = true,
+  canSubscribe = true,
+  canPublishData = true,
+  ttlSeconds = 60 * 60,
 }) {
   const now = Math.floor(Date.now() / 1000);
   const header = stringToBase64Url(JSON.stringify({
@@ -154,13 +439,13 @@ async function createLiveKitAccessToken({
     sub: String(userId),
     name: String(displayName || userId),
     nbf: now - 5,
-    exp: now + 60 * 60,
+    exp: now + Math.max(60, Math.min(60 * 60, Number(ttlSeconds || 60 * 60))),
     video: {
       roomJoin: true,
       room: String(roomId),
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
+      canPublish: canPublish === true,
+      canSubscribe: canSubscribe !== false,
+      canPublishData: canPublishData === true,
     },
   }));
   const signingInput = header + "." + payload;
@@ -437,9 +722,77 @@ function ownerOnly(session) {
 function sessionHasPermission(session, permission) {
   if (ownerOnly(session)) return true;
   if (session?.role !== "staff") return false;
-  const permissions = new Set(Array.isArray(session.permissions) ? session.permissions : []);
-  const group = String(permission || "").split(".")[0];
-  return permissions.has(group) || permissions.has(permission);
+  const permissions = new Set(
+    normalizePermissions(session.permissions),
+  );
+  return permissions.has(String(permission || ""));
+}
+
+function sessionHasAnyPermission(session, permissions) {
+  if (ownerOnly(session)) return true;
+  return (Array.isArray(permissions) ? permissions : [permissions])
+    .some((permission) => sessionHasPermission(session, permission));
+}
+
+function sessionHasPermissionPrefix(session, prefix) {
+  if (ownerOnly(session)) return true;
+  if (session?.role !== "staff") return false;
+  const cleanPrefix = String(prefix || "");
+  return normalizePermissions(session.permissions)
+    .some((permission) => permission.startsWith(cleanPrefix));
+}
+
+function filterOwnerStateForSession(session, fullState, dashboard) {
+  if (ownerOnly(session)) return { state: fullState, dashboard };
+  const catalog = Array.isArray(fullState?.catalog) ? fullState.catalog : [];
+  const canPolicies = sessionHasPermissionPrefix(session, "policies.") ||
+    sessionHasPermission(session, "hierarchy.targets");
+  const canGames = sessionHasPermissionPrefix(session, "games.");
+  const canGifts = sessionHasPermissionPrefix(session, "gifts.");
+  const canTreasury = sessionHasPermission(session, "wallets.treasury_send");
+  const canFeatures = sessionHasAnyPermission(session, [
+    "policies.view", "policies.edit",
+  ]);
+
+  const allowedCatalog = catalog.filter((item) => {
+    const kind = String(item?.kind || "");
+    if (kind === "role" || kind === "post") {
+      return sessionHasAnyPermission(session, ["roles.view", "roles.manage"]);
+    }
+    if (kind === "vip") return sessionHasPermissionPrefix(session, "vip.");
+    if (kind === "gift") return sessionHasPermissionPrefix(session, "gifts.");
+    if (kind === "entry" || kind === "vehicle") {
+      return sessionHasPermission(session, "assets.entries");
+    }
+    if (kind === "frame" || kind === "profile_card") {
+      return sessionHasPermission(session, "assets.frames");
+    }
+    if (kind === "banner") return sessionHasPermissionPrefix(session, "banners.");
+    return false;
+  });
+
+  const filteredState = {
+    features: canFeatures ? (fullState?.features || {}) : {},
+    policies: canPolicies ? (fullState?.policies || {}) : {},
+    game_config: canGames ? (fullState?.game_config || {}) : {},
+    lucky_gift_config: canGifts ? (fullState?.lucky_gift_config || {}) : {},
+    treasury: canTreasury ? (fullState?.treasury || { balance: 0 }) : { balance: 0 },
+    catalog: allowedCatalog,
+  };
+  const filteredDashboard = {
+    users: sessionHasAnyPermission(session, [
+      "users.search", "users.full_dashboard", "users.view_call_history",
+      "messaging.search", "messaging.view_inbox",
+      "verification.view", "verification.direct_verify",
+    ]) ? Number(dashboard?.users || 0) : 0,
+    active_rooms: sessionHasPermissionPrefix(session, "rooms.")
+      ? Number(dashboard?.active_rooms || 0) : 0,
+    sending_today: sessionHasAnyPermission(session, [
+      "games.investigate", "wallets.normal", "wallets.seller", "wallets.merchant",
+    ]) ? Number(dashboard?.sending_today || 0) : 0,
+    treasury: canTreasury ? Number(dashboard?.treasury || 0) : 0,
+  };
+  return { state: filteredState, dashboard: filteredDashboard };
 }
 
 function normalizePermissions(value) {
@@ -540,7 +893,6 @@ export class StaffAuthStore extends DurableObject {
     if (!name) throw new Error("Panel name is required");
     if (!email || !email.includes("@")) throw new Error("Valid staff email is required");
     if (password.length < 10) throw new Error("Staff password must be at least 10 characters");
-    if (permissions.length === 0) throw new Error("Select at least one staff permission");
 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const hash = await derivePassword(password, salt);
@@ -607,7 +959,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: true,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -630,7 +982,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: Number(row.enabled) === 1,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -647,7 +999,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: Number(row.enabled) === 1,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -675,10 +1027,6 @@ export class StaffAuthStore extends DurableObject {
     const enabled = input?.enabled === undefined
       ? Number(current.enabled) === 1
       : Boolean(input.enabled);
-
-    if (enabled && permissions.length === 0) {
-      throw new Error("Active staff panel must have at least one permission");
-    }
 
     const nextEmail = input?.staff_email === undefined
       ? String(current.email)
@@ -1085,6 +1433,7 @@ export default {
           env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
         ),
         effect_media_configured: Boolean(env.EFFECT_MEDIA),
+        image_moderation_configured: Boolean(env.AI || env.IMAGE_MODERATION_URL),
         remote_config: {
           room_recommendation_enabled: true,
           gift_effects_enabled: true,
@@ -1126,6 +1475,18 @@ export default {
       if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
         return json({ ok: false, error: "Room photo must be 650 KB or smaller" }, 400);
       }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "room_dp",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Room image failed safety checks"),
+        }, 400);
+      }
       const userId = String(appSession.user.user_id || "").trim();
       const key = "rooms/" + userId + "/dp";
       const updatedAt = Date.now();
@@ -1134,6 +1495,62 @@ export default {
         customMetadata: {
           user_id: userId,
           kind: "room_dp",
+          updated_at: String(updatedAt),
+        },
+      });
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/media/" +
+        encodeURIComponent(key) +
+        "?v=" +
+        updatedAt;
+      return json({ ok: true, url: mediaUrl }, 201);
+    }
+
+    if (url.pathname === "/room-theme-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Room media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({ ok: false, error: "Room background must be JPEG, PNG or WebP" }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid room background data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 2500000) {
+        return json({ ok: false, error: "Room background must be 2.5 MB or smaller" }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "room_theme",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Room background failed safety checks"),
+        }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const key =
+        "rooms/" + userId + "/themes/" +
+        Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 10);
+      const updatedAt = Date.now();
+      await env.EFFECT_MEDIA.put(key, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          user_id: userId,
+          kind: "room_theme",
           updated_at: String(updatedAt),
         },
       });
@@ -1196,6 +1613,18 @@ export default {
       if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
         return json({ ok: false, error: "Profile photo must be 650 KB or smaller" }, 400);
       }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "profile_" + slot,
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Profile image failed safety checks"),
+        }, 400);
+      }
       const userId = String(appSession.user.user_id || "").trim();
       const key = "profiles/" + userId + "/" + slot;
       const updatedAt = Date.now();
@@ -1228,9 +1657,15 @@ export default {
       if (!allowed.has(slot)) {
         return json({ ok: false, error: "Invalid profile photo slot" }, 400);
       }
+      if (body.confirm_remove !== true) {
+        return json({
+          ok: false,
+          error: "Explicit profile media removal confirmation is required",
+        }, 400);
+      }
       const userId = String(appSession.user.user_id || "").trim();
       await env.EFFECT_MEDIA.delete("profiles/" + userId + "/" + slot);
-      return json({ ok: true, slot });
+      return json({ ok: true, slot, removed_explicitly: true });
     }
 
     if (url.pathname.startsWith("/media/") && request.method === "GET") {
@@ -1326,6 +1761,7 @@ export default {
         }
 
         if (!user) {
+          await enforceSignupAvatarSafety(env, profile);
           user = await store.createUser({
             auth_provider: "google",
             auth_subject: google.sub,
@@ -1338,7 +1774,6 @@ export default {
             country_name: profile.country_name,
             flag_emoji: profile.flag_emoji,
             gender: profile.gender,
-            language: profile.language,
             avatar_data_url: profile.avatar_data_url,
           });
         }
@@ -1557,6 +1992,7 @@ export default {
           }
         }
         if (!user) {
+          await enforceSignupAvatarSafety(env, profile);
           const email = pending.email ||
             ("facebook-" + pending.facebook_id + "@tinni.invalid");
           user = await store.createUser({
@@ -1570,7 +2006,6 @@ export default {
             country_name: profile.country_name,
             flag_emoji: profile.flag_emoji,
             gender: profile.gender,
-            language: profile.language,
             avatar_data_url: profile.avatar_data_url,
           });
         }
@@ -1677,6 +2112,7 @@ export default {
         : null;
       const store = getAppDirectoryStore(env);
       try {
+        await enforceSignupAvatarSafety(env, profile);
         const completed = await store.completeEmailPassword(
           setup.requestId,
           body.password,
@@ -1813,6 +2249,25 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (body.avatar_data_url !== undefined && body.avatar_data_url !== null) {
+        const nextAvatar = String(body.avatar_data_url || "").trim();
+        const currentAvatar = String(appSession.user.avatar_data_url || "").trim();
+        if (
+          nextAvatar &&
+          nextAvatar !== currentAvatar &&
+          !isApprovedUserMediaUrl(
+            env,
+            nextAvatar,
+            appSession.user.user_id,
+            "avatar",
+          )
+        ) {
+          return json({
+            ok: false,
+            error: "Profile photo must be uploaded and safety-approved first",
+          }, 400);
+        }
+      }
       try {
         const user = await getAppDirectoryStore(env).updateUserProfile(
           appSession.user.user_id,
@@ -2479,80 +2934,6 @@ export default {
       }
     }
 
-    if (url.pathname === "/wallet/coins/history" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({
-        ok: true,
-        ...(await getAppDirectoryStore(env).coinsHistory(
-          appSession.user.user_id,
-          url.searchParams.get("limit") || 200,
-        )),
-      });
-    }
-
-    if (url.pathname === "/wallet/diamonds/history" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({
-        ok: true,
-        ...(await getAppDirectoryStore(env).diamondHistory(
-          appSession.user.user_id,
-          url.searchParams.get("limit") || 200,
-        )),
-      });
-    }
-
-    if (url.pathname === "/wallet/diamonds/convert" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      try {
-        return json(await getAppDirectoryStore(env).convertDiamonds(
-          appSession.user.user_id,
-          body.diamonds,
-        ), 201);
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to convert diamonds") }, 400);
-      }
-    }
-
-    if (url.pathname === "/wallet/role-detail" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      try {
-        return json({
-          ok: true,
-          wallet: await getAppDirectoryStore(env).roleWalletDetail(
-            appSession.user.user_id,
-            url.searchParams.get("wallet_type") || "",
-            url.searchParams.get("limit") || 200,
-          ),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load role wallet") }, 400);
-      }
-    }
-
-    if (url.pathname === "/wallet/role-dollars/transfer" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      try {
-        return json(await getAppDirectoryStore(env).transferRoleDollars(
-          appSession.user.user_id,
-          body.wallet_type,
-          body.destination_type,
-          body.recipient_user_id,
-          body.usd_cents,
-          body.password,
-          body.request_id,
-        ), 201);
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
-      }
-    }
-
     if (url.pathname === "/wallet/transactions" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -2636,6 +3017,92 @@ export default {
         ));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to mark notification") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/portal" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          portal: await getAppDirectoryStore(env).hierarchyPortal(
+            appSession.user.user_id,
+            url.searchParams.get("role") || "",
+            url.searchParams.get("from") || 0,
+            url.searchParams.get("to") || Date.now(),
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role portal") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invites" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          invites: await getAppDirectoryStore(env).listHierarchyInvites(
+            appSession.user.user_id,
+            url.searchParams.get("limit") || 100,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role invitations") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invite" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          invite: await getAppDirectoryStore(env).createHierarchyInvite(
+            appSession.user.user_id,
+            body.target_user_id,
+            body.role,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send role invitation") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invite/respond" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          invite: await getAppDirectoryStore(env).respondHierarchyInvite(
+            appSession.user.user_id,
+            body.invite_id,
+            body.accept === true,
+          ),
+          wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to respond to role invitation") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/contact" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).updateHierarchyContact(
+          appSession.user.user_id,
+          body.role,
+          body.contact,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update role contact") }, 400);
       }
     }
 
@@ -2955,6 +3422,20 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (
+        body.photo_data_url &&
+        !isApprovedUserMediaUrl(
+          env,
+          body.photo_data_url,
+          appSession.user.user_id,
+          "room_dp",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Room photo must be uploaded and safety-approved first",
+        }, 400);
+      }
       try {
         const room = await getAppDirectoryStore(env).createRoom(
           appSession.user.user_id,
@@ -3000,6 +3481,20 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (
+        body.photo_data_url &&
+        !isApprovedUserMediaUrl(
+          env,
+          body.photo_data_url,
+          appSession.user.user_id,
+          "room_dp",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Room photo must be uploaded and safety-approved first",
+        }, 400);
+      }
       const roomId = String(body.room_id || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       try {
@@ -3406,6 +3901,136 @@ export default {
       }
     }
 
+    if (url.pathname.startsWith("/message-media/") && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Message media storage is not configured" }, 503);
+      }
+      let messageId = "";
+      try {
+        messageId = decodeURIComponent(
+          url.pathname.slice("/message-media/".length),
+        ).trim();
+      } catch (_) {
+        messageId = "";
+      }
+      if (!messageId) {
+        return json({ ok: false, error: "Message photo ID is required" }, 400);
+      }
+      const allowed = await getAppDirectoryStore(env).canAccessDirectMessageMedia(
+        appSession.user.user_id,
+        messageId,
+      );
+      if (!allowed) {
+        return json({ ok: false, error: "Message photo is unavailable" }, 403);
+      }
+      const object = await env.EFFECT_MEDIA.get("messages/" + messageId);
+      if (!object) {
+        return json({ ok: false, error: "Message photo not found" }, 404);
+      }
+      const headers = new Headers();
+      headers.set(
+        "content-type",
+        object.httpMetadata?.contentType || "application/octet-stream",
+      );
+      headers.set("cache-control", "private, no-store");
+      headers.set("x-content-type-options", "nosniff");
+      return new Response(object.body, { status: 200, headers });
+    }
+
+    if (url.pathname === "/message-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Message media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const senderId = String(appSession.user.user_id || "").trim();
+      const toUserId = String(body.to_user_id || "").trim();
+      if (!toUserId) {
+        return json({ ok: false, error: "to_user_id is required" }, 400);
+      }
+      const store = getAppDirectoryStore(env);
+      if (!(await store.areFriends(senderId, toUserId))) {
+        return json({
+          ok: false,
+          error: "Photos can only be sent to mutual friends",
+        }, 403);
+      }
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({
+          ok: false,
+          error: "Chat photo must be JPEG, PNG or WebP",
+        }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid chat photo data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 4000000) {
+        return json({
+          ok: false,
+          error: "Chat photo must be 4 MB or smaller",
+        }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "message_image",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Chat photo is not allowed"),
+        }, 400);
+      }
+
+      const now = Date.now();
+      const messageId =
+        "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+      const mediaKey = "messages/" + messageId;
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/message-media/" +
+        encodeURIComponent(messageId);
+      await env.EFFECT_MEDIA.put(mediaKey, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          from_user_id: senderId,
+          to_user_id: toUserId,
+          message_id: messageId,
+          kind: "direct_message_image",
+          created_at: String(now),
+        },
+      });
+      try {
+        const message = await store.sendDirectMessage(
+          senderId,
+          toUserId,
+          "Photo",
+          {
+            id: messageId,
+            message_kind: "image",
+            media_url: mediaUrl,
+          },
+        );
+        return json({ ok: true, message }, 201);
+      } catch (error) {
+        try { await env.EFFECT_MEDIA.delete(mediaKey); } catch (_) {}
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to send photo"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/messages" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -3502,6 +4127,19 @@ export default {
       const roomId = String(body.room_id || "").trim();
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      if (
+        !isApprovedUserMediaUrl(
+          env,
+          body.asset,
+          appSession.user.user_id,
+          "room_theme",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Custom room background must be uploaded and safety-approved first",
+        }, 400);
       }
       try {
         const theme = await getAppDirectoryStore(env).createUserRoomTheme(
@@ -4557,8 +5195,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/official-message" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.send")) {
+        return json({ ok: false, error: "Official message permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       const targetUserId = String(body.target_user_id || "").trim();
@@ -4577,13 +5215,20 @@ export default {
       }
 
       try {
-        const officialMessage = await getAppDirectoryStore(env).sendOfficialMessage(
+        const directory = getAppDirectoryStore(env);
+        const officialMessage = await directory.sendOfficialMessage(
           targetUserId,
           message,
           {
+            action: "owner_message",
             report_id: reportId || null,
             recipient_kind: recipientKind || null,
           },
+        );
+        await directory.markOwnerPanelMessage(
+          officialMessage.id,
+          targetUserId,
+          officialMessage.created_at,
         );
 
         await writeAudit(
@@ -4652,8 +5297,8 @@ export default {
       url.pathname === "/api/call-verifications" &&
       request.method === "GET"
     ) {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.view")) {
+        return json({ ok: false, error: "Verification view permission required" }, 403);
       }
       return json({
         ok: true,
@@ -4666,8 +5311,8 @@ export default {
       /^\/api\/call-verifications\/([^/]+)\/review$/,
     );
     if (callVerificationReviewMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.review")) {
+        return json({ ok: false, error: "Verification review permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -4721,8 +5366,8 @@ export default {
       /^\/api\/call-verifications\/user\/([^/]+)\/verify$/,
     );
     if (callVerificationManualVerifyMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.direct_verify")) {
+        return json({ ok: false, error: "Direct Verify permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -4762,8 +5407,8 @@ export default {
       /^\/api\/call-verifications\/user\/([^/]+)\/revoke$/,
     );
     if (callVerificationRevokeMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.revoke")) {
+        return json({ ok: false, error: "Verification revoke permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -4795,19 +5440,24 @@ export default {
     }
 
     if (url.pathname === "/api/owner/state" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
-      }
-      return json({
-        ok: true,
-        state: await getAppDirectoryStore(env).ownerState(),
-        dashboard: await getAppDirectoryStore(env).ownerDashboard(),
-      });
+      const directory = getAppDirectoryStore(env);
+      const filtered = filterOwnerStateForSession(
+        session,
+        await directory.ownerState(),
+        await directory.ownerDashboard(),
+      );
+      return json({ ok: true, ...filtered });
     }
 
     if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasAnyPermission(session, [
+        "users.search",
+        "users.full_dashboard",
+        "messaging.search",
+        "messaging.tags",
+        "verification.direct_verify",
+      ])) {
+        return json({ ok: false, error: "User search permission required" }, 403);
       }
       const query = String(url.searchParams.get("q") || "");
       const users = await getAppDirectoryStore(env).ownerSearchUsers(
@@ -4818,8 +5468,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/officials" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.officials")) {
+        return json({ ok: false, error: "V Official permission required" }, 403);
       }
       return json({
         ok: true,
@@ -4828,14 +5478,21 @@ export default {
     }
 
     if (url.pathname === "/api/owner/user-detail" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "users.full_dashboard")) {
+        return json({ ok: false, error: "Full ID Dashboard permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
       const directory = getAppDirectoryStore(env);
       const detail = await directory.ownerUserDetail(userId);
       if (!detail) return json({ ok: false, error: "User not found" }, 404);
+
+      if (!sessionHasPermission(session, "messaging.view_inbox")) {
+        detail.messages = [];
+      }
+      if (!sessionHasPermission(session, "users.view_call_history")) {
+        detail.calls = [];
+      }
 
       let current_room = null;
       const roomId = String(detail.presence?.room_id || "").trim();
@@ -4859,26 +5516,31 @@ export default {
       return json({ ok: true, detail: { ...detail, current_room } });
     }
 
-    if (url.pathname === "/api/owner/user-inbox" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+    if (url.pathname === "/api/owner/inbox-threads" && request.method === "GET") {
+      if (
+        !sessionHasPermission(session, "users.full_dashboard") ||
+        !sessionHasPermission(session, "messaging.view_inbox")
+      ) {
+        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
       try {
-        const result = await getAppDirectoryStore(env).ownerMessageThreads(userId);
-        await writeAudit(env, session, "user.inbox.view", "user", userId, {
-          thread_count: Array.isArray(result?.threads) ? result.threads.length : 0,
+        return json({
+          ok: true,
+          threads: await getAppDirectoryStore(env).ownerInboxThreads(userId),
         });
-        return json({ ok: true, ...result });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
       }
     }
 
-    if (url.pathname === "/api/owner/user-conversation" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+    if (url.pathname === "/api/owner/inbox-conversation" && request.method === "GET") {
+      if (
+        !sessionHasPermission(session, "users.full_dashboard") ||
+        !sessionHasPermission(session, "messaging.view_inbox")
+      ) {
+        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
@@ -4886,24 +5548,105 @@ export default {
         return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
       }
       try {
-        const result = await getAppDirectoryStore(env).ownerConversation(
-          userId,
-          peerUserId,
-          url.searchParams.get("limit") || 500,
-        );
-        await writeAudit(env, session, "user.inbox.thread.view", "user", userId, {
-          peer_user_id: peerUserId,
-          message_count: Array.isArray(result?.messages) ? result.messages.length : 0,
+        return json({
+          ok: true,
+          messages: await getAppDirectoryStore(env).ownerInboxConversation(
+            userId,
+            peerUserId,
+            url.searchParams.get("limit") || 500,
+          ),
         });
-        return json({ ok: true, ...result });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
       }
     }
 
-    if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
+    if (url.pathname === "/api/owner/hierarchy-detail" && request.method === "GET") {
+      if (!sessionHasPermission(session, "users.full_dashboard") ||
+          !sessionHasPermission(session, "hierarchy.view_details")) {
+        return json({
+          ok: false,
+          error: "Full ID Dashboard and hierarchy-detail permissions are required",
+        }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const role = String(url.searchParams.get("role") || "").trim().toLowerCase();
+      if (!userId || !["host", "agency", "bd"].includes(role)) {
+        return json({ ok: false, error: "Valid user_id and hierarchy role are required" }, 400);
+      }
+      try {
+        const portal = await getAppDirectoryStore(env).hierarchyPortal(
+          userId,
+          role,
+          url.searchParams.get("from") || 0,
+          url.searchParams.get("to") || Date.now(),
+        );
+        return json({ ok: true, portal });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load hierarchy details"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/listen-token" && request.method === "POST") {
       if (!ownerOnly(session)) {
         return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      if (!env.LIVEKIT_URL || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+        return json({ ok: false, error: "LiveKit is not configured on the server" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const monitorId = "owner-monitor-" + crypto.randomUUID().slice(0, 12);
+      const token = await createLiveKitAccessToken({
+        apiKey: env.LIVEKIT_API_KEY,
+        apiSecret: env.LIVEKIT_API_SECRET,
+        roomId,
+        userId: monitorId,
+        displayName: "Tinni Owner Monitor",
+        canPublish: false,
+        canSubscribe: true,
+        canPublishData: false,
+        ttlSeconds: 15 * 60,
+      });
+
+      await writeAudit(
+        env,
+        session,
+        "room.listen_only.start",
+        "room",
+        roomId,
+        {
+          mode: "listen_only",
+          can_publish: false,
+          expires_in: 15 * 60,
+        },
+      );
+
+      return json({
+        ok: true,
+        mode: "listen_only",
+        server_url: String(env.LIVEKIT_URL),
+        token,
+        room_id: roomId,
+        can_publish: false,
+        can_subscribe: true,
+        expires_in: 15 * 60,
+        audit_logged: true,
+      });
+    }
+
+    if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
+      if (!sessionHasPermission(session, "verification.view")) {
+        return json({ ok: false, error: "Verification view permission required" }, 403);
       }
       return json({
         ok: true,
@@ -4914,8 +5657,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/messages" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.send")) {
+        return json({ ok: false, error: "Official message permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -4939,8 +5682,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/tags" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.tags")) {
+        return json({ ok: false, error: "User tag permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -4979,8 +5722,8 @@ export default {
       /^\/api\/owner\/tags\/([^/]+)\/([^/]+)$/,
     );
     if (ownerTagDeleteMatch && request.method === "DELETE") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.tags")) {
+        return json({ ok: false, error: "User tag permission required" }, 403);
       }
       const userId = decodeURIComponent(ownerTagDeleteMatch[1]);
       const tagId = decodeURIComponent(ownerTagDeleteMatch[2]);
@@ -4990,8 +5733,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/room-live" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "rooms.live_seats")) {
+        return json({ ok: false, error: "Room live-seat permission required" }, 403);
       }
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
@@ -5003,8 +5746,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/game-stats" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "games.investigate")) {
+        return json({ ok: false, error: "Game investigation permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       const jackpot = await getFruitGameStore(env).ownerStats(userId);
@@ -5043,12 +5786,11 @@ export default {
         }, 403);
       }
       const actionPermissions = {
-        "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
+        "user-search":"users.search","user-name":"users.edit_profile","user-dp":"users.edit_profile","user-ban":"users.ban_id","device-ban":"users.ban_device",
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
         "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
         "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
-        "treasury-send":"wallets.treasury_send","company-dollar-deduct":"__owner_only__",
-        "bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
+        "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
@@ -5064,7 +5806,7 @@ export default {
         const operation = String(body.action).replace("catalog-", "");
         const kind = String(item.kind || "");
         if (kind === "vip") requiredPermission = operation === "toggle" ? "vip.toggle" : "vip.edit";
-        else if (kind === "gift") requiredPermission = operation === "edit" ? "gifts.edit" : "gifts.remove";
+        else if (kind === "gift") requiredPermission = operation === "remove" ? "gifts.remove" : "gifts.edit";
         else if (kind === "entry") requiredPermission = "assets.entries";
         else if (kind === "frame") requiredPermission = "assets.frames";
         else if (kind === "banner") requiredPermission = operation === "remove" ? "banners.remove" : "banners.create";
@@ -5080,9 +5822,7 @@ export default {
           session,
           "owner.action." + String(body.action || "unknown"),
           "owner_action",
-          actionName === "company-dollar-deduct"
-            ? "company"
-            : String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
+          String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
           { data: body.data || {}, result },
         );
         return json({ ok: true, result, state: await getAppDirectoryStore(env).ownerState() });
@@ -5093,13 +5833,38 @@ export default {
 
     const ownerCatalogMatch = url.pathname.match(/^\/api\/owner\/catalog\/([^/]+)$/);
     if (ownerCatalogMatch && request.method === "PATCH") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
-      }
+      const catalogId = decodeURIComponent(ownerCatalogMatch[1]);
       const body = await request.json().catch(() => ({}));
+      const currentItem = (await getAppDirectoryStore(env).ownerCatalog())
+        .find((entry) => String(entry.id) === String(catalogId));
+      if (!currentItem) return json({ ok: false, error: "Catalog item not found" }, 404);
+
+      if (!ownerOnly(session)) {
+        const kind = String(currentItem.kind || "");
+        const toggleOnly = body.enabled !== undefined &&
+          body.name === undefined && body.data === undefined;
+        let requiredPermission = "";
+        if (kind === "vip") {
+          requiredPermission = toggleOnly ? "vip.toggle" : "vip.edit";
+        } else if (kind === "gift") {
+          requiredPermission = "gifts.edit";
+        } else if (kind === "entry" || kind === "vehicle") {
+          requiredPermission = "assets.entries";
+        } else if (kind === "frame" || kind === "profile_card") {
+          requiredPermission = "assets.frames";
+        } else if (kind === "banner") {
+          requiredPermission = "banners.create";
+        } else if (kind === "role" || kind === "post") {
+          requiredPermission = "roles.manage";
+        }
+        if (!requiredPermission || !sessionHasPermission(session, requiredPermission)) {
+          return json({ ok: false, error: "Assigned catalog permission required" }, 403);
+        }
+      }
+
       try {
         const item = await getAppDirectoryStore(env).ownerCatalogPatch(
-          decodeURIComponent(ownerCatalogMatch[1]),
+          catalogId,
           body,
         );
         await writeAudit(env, session, "owner.catalog.update", "catalog", item.id, body);
@@ -5255,23 +6020,124 @@ export default {
       }
     }
 
-    if (url.pathname.startsWith("/api/")) {
-      return json({ ok: false, error: "API endpoint not implemented" }, 404);
+    if (url.pathname === "/api/owner/user-conversation" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
+      if (!userId || !peerUserId) {
+        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
+      }
+      try {
+        const result = await getAppDirectoryStore(env).ownerConversation(
+          userId,
+          peerUserId,
+          url.searchParams.get("limit") || 500,
+        );
+        await writeAudit(env, session, "user.inbox.thread.view", "user", userId, {
+          peer_user_id: peerUserId,
+          message_count: Array.isArray(result?.messages) ? result.messages.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
+      }
     }
 
-    const authorization = String(request.headers.get("authorization") || "");
-    const acceptsJson = String(request.headers.get("accept") || "")
-      .toLowerCase()
-      .includes("application/json");
-    if (authorization.toLowerCase().startsWith("bearer ") || acceptsJson) {
-      // Mobile app endpoints live at root paths such as /wallet and /messages.
-      // Never fall through to the Owner Panel static assets for an unknown
-      // authenticated app route, otherwise Flutter receives <!doctype html>
-      // and surfaces a FormatException.
+    if (url.pathname === "/api/owner/user-inbox" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
+      try {
+        const result = await getAppDirectoryStore(env).ownerMessageThreads(userId);
+        await writeAudit(env, session, "user.inbox.view", "user", userId, {
+          thread_count: Array.isArray(result?.threads) ? result.threads.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/coins/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
-        ok: false,
-        error: "Tinni Star app endpoint is unavailable",
-      }, 404);
+        ok: true,
+        ...(await getAppDirectoryStore(env).coinsHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/diamonds/convert" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).convertDiamonds(
+          appSession.user.user_id,
+          body.diamonds,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to convert diamonds") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/diamonds/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).diamondHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/role-detail" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          wallet: await getAppDirectoryStore(env).roleWalletDetail(
+            appSession.user.user_id,
+            url.searchParams.get("wallet_type") || "",
+            url.searchParams.get("limit") || 200,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role wallet") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-dollars/transfer" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).transferRoleDollars(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.destination_type,
+          body.recipient_user_id,
+          body.usd_cents,
+          body.password,
+          body.request_id,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
+      }
+    }
+
+    if (url.pathname.startsWith("/api/")) {
+      return json({ ok: false, error: "API endpoint not implemented" }, 404);
     }
 
     if (url.pathname === "/") {
