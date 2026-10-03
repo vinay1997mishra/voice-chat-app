@@ -218,3 +218,8 @@ body.auth-ready .app-shell{visibility:visible}
 .owner-member-stats span{display:grid;gap:2px;padding:7px;border:1px solid #2d281c;border-radius:8px;color:var(--muted);font-size:10px}
 .owner-member-stats b{color:var(--cream);font-size:11px}
 @media(max-width:760px){.owner-member-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.owner-custom-range{align-items:stretch}.owner-custom-range label{flex:1 1 120px}}
+
+.owner-history-people{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.owner-inline-user{border:0;background:transparent;color:#ffd76a;padding:0;font:inherit;font-weight:900;cursor:pointer;text-decoration:underline;text-decoration-color:#6d5521;text-underline-offset:3px}
+.owner-inline-user:hover,.owner-inline-user:focus-visible{color:#fff0a6;text-decoration-color:#ffd76a;outline:none}
+.owner-inline-user-name{text-align:left}
