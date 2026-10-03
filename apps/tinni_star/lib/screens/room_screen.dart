@@ -3288,16 +3288,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ..add(preselectedUserId);
     }
 
-    var giftCategory = 'Popular';
+    var giftCategory = 'Normal';
     var luckyQuantity = 1;
     GiftDefinition? selectedGift;
     const giftCategories = <String>[
-      'Popular',
-      'Lucky',
       'Normal',
-      'Luxury',
+      'Lucky',
       'CP',
-      'Backpack',
+      'Country',
+      'Luxury',
     ];
 
     final roomGifts = <GiftDefinition>[
@@ -3363,15 +3362,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     gift.id == 'cp-invite',
               )
               .toList();
-        case 'Backpack':
+        case 'Country':
           return roomGifts
               .where(
                 (gift) =>
-                    (widget.state.backpack.items[gift.id]?.quantity ?? 0) > 0,
+                    !gift.lucky &&
+                    gift.id != 'cp-heart' &&
+                    gift.id != 'cp-invite' &&
+                    gift.id != 'gold-dragon' &&
+                    gift.id != 'royal-crown' &&
+                    gift.id != 'star-castle' &&
+                    gift.id != 'crown',
               )
               .toList();
         default:
-          return roomGifts;
+          return roomGifts.where((gift) => !gift.lucky).toList();
       }
     }
 
@@ -3586,6 +3591,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             ? FeaturePalette.social
                                             : FeaturePalette.gift;
                         return ChoiceChip(
+                          key: Key(
+                            'gift-category-' + value.toLowerCase(),
+                          ),
                           label: Text(value),
                           selected: giftCategory == value,
                           selectedColor: color.withValues(alpha: 0.28),
