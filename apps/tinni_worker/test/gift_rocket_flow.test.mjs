@@ -93,8 +93,8 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /_luckyComboExpiryTimer\?\.cancel\(\);\s*_luckyComboExpiryTimer = null;\s*_luckyComboEpoch\+\+;/,
-  "Touching/sending Combo must pause the old 12-second expiry while the request is in flight",
+  /A tap\/send inside the 12-second Combo window counts as activity\.[\s\S]{0,600}_luckyComboExpiryTimer\?\.cancel\(\);[\s\S]{0,220}_luckyComboCountdownTimer\?\.cancel\(\);[\s\S]{0,220}_luckyComboEpoch\+\+;/,
+  "Touching/sending Combo must pause both old 12-second timers while the request is in flight",
 );
 assert.match(
   roomScreen,
