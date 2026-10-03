@@ -7131,11 +7131,17 @@ export class AppDirectoryStore extends DurableObject {
   updateUserPreferences(userIdValue, input = {}) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const current = this.userPreferences(userId);
+    const requestedLanguage = cleanText(
+      input.language === undefined ? current.language : input.language,
+      40,
+    ) || "English";
     const next = {
       message_voice: input.message_voice === undefined ? current.message_voice : input.message_voice === true,
       message_vibration: input.message_vibration === undefined ? current.message_vibration : input.message_vibration === true,
       room_floating_only: input.room_floating_only === undefined ? current.room_floating_only : input.room_floating_only === true,
-      language: cleanText(input.language === undefined ? current.language : input.language, 40) || "English",
+      language: SUPPORTED_LANGUAGES.has(requestedLanguage)
+        ? requestedLanguage
+        : "English",
     };
     const now = Date.now();
     this.ctx.storage.sql.exec(
@@ -7709,6 +7715,13 @@ export class AppDirectoryStore extends DurableObject {
     if (wallet.withdrawable_usd_cents < usdCents) {
       throw new Error("Settlement balance is not enough");
     }
+    const recipientWallet = this._privilegedWalletGuard(
+      recipient.user_id,
+      recipient.role,
+    );
+    if (recipientWallet.security_frozen) {
+      throw new Error("Recipient Coin Seller or Merchant wallet is security-frozen");
+    }
 
     let remaining = usdCents;
     let diamondsDebited = 0;
@@ -7741,13 +7754,6 @@ export class AppDirectoryStore extends DurableObject {
       creditedCoins = Math.floor(
         usdCents * COIN_SELLER_SETTLEMENT_COINS_PER_USD / 100,
       );
-      const sellerWallet = this._privilegedWalletGuard(
-        recipient.user_id,
-        "coin_seller",
-      );
-      if (sellerWallet.security_frozen) {
-        throw new Error("Recipient Coin Seller wallet is security-frozen");
-      }
       this._creditPrivilegedWalletAuthorized(
         recipient.user_id,
         "coin_seller",
