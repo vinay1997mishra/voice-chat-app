@@ -10,9 +10,24 @@ void main() {
     expect(room.contains('seat-owner-medal-'), false);
     expect(room.contains('room-live-owner-badges'), false);
     expect(room.contains('room-comment-tag-'), true);
+    expect(room.contains("label: 'Host'"), false);
+    expect(room.contains("label: 'Agency'"), false);
     expect(room.contains('_roomMessageScrollController'), true);
     expect(room.contains('position.maxScrollExtent'), true);
     expect(room.contains('fontSize: 10.5'), true);
+
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    expect(session.contains('_syncRoomJoinMessages'), true);
+    expect(session.contains("'entered the room'"), true);
+
+    final presenceWorker =
+        File('../tinni_worker/src/room_presence.js').readAsStringSync();
+    final workerIndex =
+        File('../tinni_worker/src/index.js').readAsStringSync();
+    expect(presenceWorker.contains('designation:'), true);
+    expect(presenceWorker.contains('background_color:'), true);
+    expect(workerIndex.contains('listUserIdentityTags(user.user_id)'), true);
   });
 
   test('Mine hierarchy panel order is BD Agency Host', () {
