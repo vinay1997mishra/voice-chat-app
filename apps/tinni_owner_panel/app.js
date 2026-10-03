@@ -690,6 +690,46 @@ function userTagHtml(tags) {
   }).join(" ");
 }
 
+function hierarchyManagePermission(roleValue) {
+  const role = String(roleValue || "").toLowerCase();
+  if (role === "host") return "hierarchy.host_manage";
+  if (role === "agency") return "hierarchy.agency_manage";
+  if (role === "bd") return "hierarchy.bd_manage";
+  return "";
+}
+
+function ownerIdentityControlsHtml(tags, userIdValue) {
+  const items = Array.isArray(tags) ? tags : [];
+  const userId = String(userIdValue || "");
+  if (items.length === 0) return '<span class="muted">No identity tags</span>';
+  return items.map((tag) => {
+    const label = String(tag.designation || tag.name || "Tag");
+    const kind = String(tag.kind || "");
+    const tagId = String(tag.id || tag.tag_id || "");
+    const autoRole = kind === "auto_role"
+      ? String(tag.designation || tag.name || "").trim().toLowerCase()
+      : "";
+    const canOpenRole = autoRole && sessionCan("hierarchy.view_details");
+    const canRemoveRole = autoRole && sessionCan(hierarchyManagePermission(autoRole));
+    const canRemoveTag = !autoRole && tagId && sessionCan("messaging.tags");
+    const badge = kind === "v_official"
+      ? `<span class="owner-v-tag" style="--official-bg:${escapeHtml(tag.background_color || tag.color || "#69C9FF")}"><i>V</i><b>${escapeHtml(label)}</b></span>`
+      : `<span class="badge" style="border-color:${escapeHtml(tag.color || "#FFD54F")};color:${escapeHtml(tag.color || "#FFD54F")}">${escapeHtml(label)}</span>`;
+    return `
+      <div class="owner-tag-control">
+        <button type="button" class="owner-tag-main"
+          ${canOpenRole ? `data-owner-role-open="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}"` : ""}
+          ${!canOpenRole ? "disabled" : ""}>
+          ${badge}
+        </button>
+        <span class="owner-tag-meta">${escapeHtml(kind || "tag")}</span>
+        ${canRemoveRole ? `<button type="button" class="btn danger compact" data-owner-role-remove="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}">Remove</button>` : ""}
+        ${canRemoveTag ? `<button type="button" class="btn danger compact" data-owner-tag-remove="${escapeHtml(tagId)}" data-owner-tag-user="${escapeHtml(userId)}">Remove</button>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
 async function searchDirectVerifyUsers(query) {
   const root = document.getElementById("manualCallVerifyResults");
   if (!root || !sessionCan("verification.direct_verify")) return;
@@ -959,11 +999,24 @@ async function loadOfficials(preferredPosition = "") {
   }
 }
 
-function ownerDetailRoleHtml(roles) {
+function ownerDetailRoleHtml(roles, userIdValue = "") {
   const items = Array.isArray(roles) ? roles.filter((item) => item.active !== false) : [];
-  return items.length
-    ? items.map((item) => `<span class="badge gold">${escapeHtml(item.role || "Role")}</span>`).join(" ")
-    : '<span class="muted">No active hierarchy role</span>';
+  const userId = String(userIdValue || "");
+  if (!items.length) return '<span class="muted">No active hierarchy role</span>';
+  return items.map((item) => {
+    const role = String(item.role || "role").toLowerCase();
+    const canOpen = sessionCan("hierarchy.view_details") && ["host","agency","bd"].includes(role);
+    const canRemove = sessionCan(hierarchyManagePermission(role));
+    return `
+      <span class="owner-role-chip">
+        <button type="button" class="badge gold owner-role-open"
+          ${canOpen ? `data-owner-role-open="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(userId)}"` : "disabled"}>
+          ${escapeHtml(item.role || "Role")}
+        </button>
+        ${canRemove ? `<button type="button" class="owner-role-remove" title="Remove ${escapeHtml(role)}" data-owner-role-remove="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(userId)}">×</button>` : ""}
+      </span>
+    `;
+  }).join(" ");
 }
 
 async function openOwnerUserProfile(userId) {
@@ -990,7 +1043,7 @@ async function openOwnerUserProfile(userId) {
         <div>
           <h2>${escapeHtml(user.display_name || user.user_id || "User")}</h2>
           <p>ID ${escapeHtml(user.user_id || "")} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
-          <div class="chips">${userTagHtml(identityTags)}</div>
+          <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, user.user_id || userId)}</div>
         </div>
       </div>
 
@@ -999,7 +1052,7 @@ async function openOwnerUserProfile(userId) {
         <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
         <div class="rule"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
         <div class="rule"><strong>VIP</strong><span>${Number(detail.controls?.vip_level || 0) || "None"}</span></div>
-        <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy)}</span></div>
+        <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy, user.user_id || userId)}</span></div>
         <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
         <div class="rule"><strong>Current room</strong><span>${room ? escapeHtml(room.room_name + " • " + room.room_id) : "Not in a live room"}</span></div>
         <div class="rule"><strong>Seat</strong><span>${room ? (room.seat_index === null || room.seat_index === undefined ? "Audience" : "Seat " + (Number(room.seat_index) + 1)) : "—"}</span></div>
