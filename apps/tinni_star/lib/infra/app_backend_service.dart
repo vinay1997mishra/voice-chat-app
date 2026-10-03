@@ -1336,6 +1336,37 @@ class AppBackendService {
   }
 
   void dispose() => _httpClient.close(force: true);
+
+
+  Future<Map<String, dynamic>> hierarchyPortal(
+    String token, {
+    required String role,
+    required int fromMs,
+    required int toMs,
+  }
+
+  Future<List<Map<String, dynamic>>> hierarchyInvites(
+    String token, {
+    int limit = 100,
+  }
+
+  Future<Map<String, dynamic>> createHierarchyInvite(
+    String token, {
+    required String targetUserId,
+    required String role,
+  }
+
+  Future<Map<String, dynamic>> respondHierarchyInvite(
+    String token, {
+    required String inviteId,
+    required bool accept,
+  }
+
+  Future<void> updateHierarchyContact(
+    String token, {
+    required String role,
+    required String contact,
+  }
 }
 
 RemoteRoleWallet? _roleWallet(dynamic value) {
