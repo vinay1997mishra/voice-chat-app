@@ -5144,7 +5144,10 @@ export class AppDirectoryStore extends DurableObject {
       if (receivers.length !== 1 || receivers[0] === senderId) {
         throw new Error("CP Invite must be sent to one other user");
       }
-      if (this.cpState(senderId) || this.cpState(receivers[0])) {
+      if (
+        this._cpHasBlockingFlow(senderId) ||
+        this._cpHasBlockingFlow(receivers[0])
+      ) {
         throw new Error("A CP flow is already active");
       }
     }
@@ -5277,7 +5280,20 @@ export class AppDirectoryStore extends DurableObject {
       const targetId = receivers[0];
       const pair = [senderId, targetId].sort();
       this.ctx.storage.sql.exec(
-        "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,decay_applied_days,cycle_started_at,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)",
+        `INSERT INTO cp_relationships
+          (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,
+           decay_applied_days,cycle_started_at,created_at,updated_at)
+         VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)
+         ON CONFLICT(user_a,user_b) DO UPDATE SET
+           state='pending',
+           intimacy=0,
+           level=1,
+           ring_id=NULL,
+           requested_by=excluded.requested_by,
+           last_intimacy_at=excluded.last_intimacy_at,
+           decay_applied_days=0,
+           cycle_started_at=excluded.cycle_started_at,
+           updated_at=excluded.updated_at`,
         pair[0], pair[1], senderId, now, now, now, now,
       );
     }
@@ -5856,6 +5872,18 @@ export class AppDirectoryStore extends DurableObject {
     return points;
   }
 
+  _cpHasBlockingFlow(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT state FROM cp_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      userId,
+      userId,
+    ).toArray()[0];
+    const state = String(row?.state || "").trim().toLowerCase();
+    return state === "pending" || state === "accepted";
+  }
+
   cpState(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
@@ -5935,7 +5963,9 @@ export class AppDirectoryStore extends DurableObject {
     const targetId = String(targetIdValue || "").trim();
     if (!userId || !targetId || userId === targetId) throw new Error("Choose another user for CP");
     if (!this.getUserById(targetId)) throw new Error("User not found");
-    if (this.cpState(userId) || this.cpState(targetId)) throw new Error("A CP flow is already active");
+    if (this._cpHasBlockingFlow(userId) || this._cpHasBlockingFlow(targetId)) {
+      throw new Error("A CP flow is already active");
+    }
     const policies = this.ownerState().policies;
     const configuredInvite = Math.max(
       0,
@@ -5955,7 +5985,20 @@ export class AppDirectoryStore extends DurableObject {
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_connect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + targetId, "CP connect", now);
     }
     this.ctx.storage.sql.exec(
-      "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,decay_applied_days,cycle_started_at,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)",
+      `INSERT INTO cp_relationships
+        (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,
+         decay_applied_days,cycle_started_at,created_at,updated_at)
+       VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)
+       ON CONFLICT(user_a,user_b) DO UPDATE SET
+         state='pending',
+         intimacy=0,
+         level=1,
+         ring_id=NULL,
+         requested_by=excluded.requested_by,
+         last_intimacy_at=excluded.last_intimacy_at,
+         decay_applied_days=0,
+         cycle_started_at=excluded.cycle_started_at,
+         updated_at=excluded.updated_at`,
       pair[0], pair[1], userId, now, now, now, now,
     );
     return this.cpState(userId);
