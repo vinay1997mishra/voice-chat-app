@@ -4478,15 +4478,21 @@ export class AppDirectoryStore extends DurableObject {
       d.setDate(d.getDate() - delta); start = d.getTime();
     } else start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const rows = this.ctx.storage.sql.exec(
-      `SELECT g.sender_id, SUM(g.total_cost) AS sending, u.display_name, u.avatar_data_url
+      `SELECT g.sender_id,
+              SUM(COALESCE(l.social_value_coins, g.total_cost)) AS sending,
+              u.display_name, u.avatar_data_url
          FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id = g.id
          LEFT JOIN app_users u ON u.user_id = g.sender_id
          WHERE g.room_id = ? AND g.created_at >= ?
          GROUP BY g.sender_id, u.display_name, u.avatar_data_url
          ORDER BY sending DESC, g.sender_id ASC LIMIT 100`, roomId, start,
     ).toArray();
     const lifetimeRow = this.ctx.storage.sql.exec(
-      "SELECT COALESCE(SUM(total_cost), 0) AS total FROM gift_transactions WHERE room_id = ?",
+      `SELECT COALESCE(SUM(COALESCE(l.social_value_coins, g.total_cost)), 0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id = g.id
+        WHERE g.room_id = ?`,
       roomId,
     ).toArray()[0];
     return {
@@ -5097,10 +5103,9 @@ export class AppDirectoryStore extends DurableObject {
     const luckySessionId = isLucky
       ? cleanText(input?.lucky_session_id || ("lucky-session-" + crypto.randomUUID()), 96)
       : "";
-    const charmWealthPercent = Math.max(
-      0,
-      Math.min(100, Number(giftData.charm_wealth_percent ?? luckyConfig.charm_wealth_percent ?? 10)),
-    );
+    // Fixed product rule: Lucky contributes 10%; every other gift contributes 100%.
+    const socialValuePercent = isLucky ? 10 : 100;
+    const charmWealthPercent = socialValuePercent;
     if (isLucky) {
       const dailyCap = Math.max(0, Math.floor(Number(luckyConfig.daily_send_cap || 0)));
       if (dailyCap > 0) {
@@ -5159,10 +5164,7 @@ export class AppDirectoryStore extends DurableObject {
     let totalRebate = 0;
     let highestMultiplier = 0;
     let totalPoolContribution = 0;
-    const hostRewardPercent = Math.max(
-      0,
-      Math.min(100, Number(giftData.host_reward_percent ?? luckyConfig.host_reward_percent ?? 10)),
-    );
+    const hostRewardPercent = 10;
     const prizePoolPercent = Math.max(
       0,
       Math.min(100, Number(giftData.prize_pool_percent ?? luckyConfig.prize_pool_percent ?? 2)),
@@ -5177,6 +5179,11 @@ export class AppDirectoryStore extends DurableObject {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, roomId, senderId, receiverId, giftId, giftName, quantity, chargedUnitPrice, receiverTotal, now,
       );
+      const socialValueCoins = Math.floor(
+        receiverTotal * socialValuePercent / 100,
+      );
+      const receiverIsHost = this._isActiveHost(receiverId);
+      const receiverDiamonds = receiverIsHost ? socialValueCoins : 0;
       transactions.push({
         id,
         room_id: roomId,
@@ -5187,13 +5194,14 @@ export class AppDirectoryStore extends DurableObject {
         quantity,
         unit_price: chargedUnitPrice,
         total_cost: receiverTotal,
+        social_value_coins: socialValueCoins,
+        receiver_diamonds: receiverDiamonds,
+        ranking_value: socialValueCoins,
         created_at: now,
       });
 
-      if (receiverTotal > 0 && this._isActiveHost(receiverId)) {
-        const hostCredit = isLucky
-          ? Math.floor(receiverTotal * hostRewardPercent / 100)
-          : receiverTotal;
+      if (receiverDiamonds > 0) {
+        const hostCredit = receiverDiamonds;
         if (hostCredit > 0) {
           this.ctx.storage.sql.exec(
             "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,banned,updated_at) VALUES (?,0,0,0,?)",
