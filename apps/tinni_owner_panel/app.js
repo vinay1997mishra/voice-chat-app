@@ -127,36 +127,50 @@ async function checkHealth() {
 }
 
 const permissionByView = {
-  users: "users",
-  verification: "users",
-  messaging: "users",
-  rooms: "rooms",
-  wallets: "wallets",
-  hierarchy: "hierarchy",
-  roles: "roles",
-  vip: "vip",
-  gifts: "gifts",
-  assets: "assets",
-  banners: "banners",
-  games: "games",
-  policies: "policies",
-  audit: "audit",
+  users: [
+    "users.search", "users.full_dashboard", "users.ban_id", "users.ban_device",
+    "users.invisible", "users.locked_room_bypass", "users.change_id", "users.unique_id",
+  ],
+  verification: [
+    "verification.view", "verification.review",
+    "verification.direct_verify", "verification.revoke",
+  ],
+  messaging: [
+    "messaging.search", "messaging.send", "messaging.tags", "messaging.officials",
+  ],
+  rooms: [
+    "rooms.search", "rooms.ban", "rooms.rename", "rooms.dp", "rooms.background",
+    "rooms.live_seats", "rooms.theme_view", "rooms.theme_create", "rooms.theme_remove",
+  ],
+  wallets: ["wallets.normal", "wallets.seller", "wallets.merchant", "wallets.treasury_send"],
+  hierarchy: [
+    "hierarchy.bd_manage", "hierarchy.agency_manage", "hierarchy.agency_bd_link",
+    "hierarchy.host_manage", "hierarchy.targets", "hierarchy.complaints",
+  ],
+  roles: ["roles.view", "roles.manage"],
+  vip: ["vip.view", "vip.create", "vip.edit", "vip.toggle", "vip.grant_remove"],
+  gifts: ["gifts.view", "gifts.create", "gifts.edit", "gifts.remove"],
+  assets: ["assets.entries", "assets.frames"],
+  banners: ["banners.view", "banners.create", "banners.remove"],
+  games: ["games.view", "games.toggle", "games.limits", "games.investigate"],
+  policies: ["policies.view", "policies.create", "policies.edit", "policies.pricing"],
+  audit: ["audit.view", "audit.export"],
 };
 
 const permissionByModule = {
-  "Users": "users",
-  "Call Verification": "users",
-  "Messages & Tags": "users",
-  "Rooms": "rooms",
-  "Wallets": "wallets",
-  "BD / Agency / Host": "hierarchy",
-  "Roles / Posts": "roles",
-  "VIP": "vip",
-  "Gifts": "gifts",
-  "Entries / Frames": "assets",
-  "Banners": "banners",
-  "Games": "games",
-  "Policies": "policies",
+  "Users": permissionByView.users,
+  "Call Verification": permissionByView.verification,
+  "Messages & Tags": permissionByView.messaging,
+  "Rooms": permissionByView.rooms,
+  "Wallets": permissionByView.wallets,
+  "BD / Agency / Host": permissionByView.hierarchy,
+  "Roles / Posts": permissionByView.roles,
+  "VIP": permissionByView.vip,
+  "Gifts": permissionByView.gifts,
+  "Entries / Frames": permissionByView.assets,
+  "Banners": permissionByView.banners,
+  "Games": permissionByView.games,
+  "Policies": permissionByView.policies,
 };
 
 const staffPermissionGroups = [
@@ -165,12 +179,33 @@ const staffPermissionGroups = [
     label: "Users",
     items: [
       ["users.search", "Search / view user details"],
+      ["users.full_dashboard", "Open Full ID Dashboard"],
       ["users.ban_id", "ID ban / unban"],
       ["users.ban_device", "Device ban / unban"],
       ["users.invisible", "Invisible ID"],
       ["users.locked_room_bypass", "Locked-room bypass"],
       ["users.change_id", "Change public ID"],
       ["users.unique_id", "Create and price purchasable unique IDs"],
+    ],
+  },
+  {
+    key: "verification",
+    label: "Call Verification",
+    items: [
+      ["verification.view", "View verification pages / status"],
+      ["verification.review", "Approve / reject verification requests"],
+      ["verification.direct_verify", "Direct Verify an ID"],
+      ["verification.revoke", "Remove Verified status"],
+    ],
+  },
+  {
+    key: "messaging",
+    label: "Messages & Tags",
+    items: [
+      ["messaging.search", "Search IDs for messaging / tags"],
+      ["messaging.send", "Send Tinni Official messages"],
+      ["messaging.tags", "Create / apply user tags"],
+      ["messaging.officials", "View / manage V Official positions"],
     ],
   },
   {
@@ -350,12 +385,16 @@ function catalogPermission(item, operation) {
 
 function hasPermission(allowed, permission) {
   if (!permission) return false;
-  const group = permission.split(".")[0];
-  return allowed.has(group) || allowed.has(permission);
+  return allowed.has(permission);
+}
+
+function hasAnyPermission(allowed, permissions) {
+  const required = Array.isArray(permissions) ? permissions : [permissions];
+  return required.some((permission) => allowed.has(permission));
 }
 
 function hasGroupPermission(allowed, group) {
-  return allowed.has(group) || [...allowed].some((permission) => permission.startsWith(group + "."));
+  return [...allowed].some((permission) => permission.startsWith(group + "."));
 }
 
 function escapeHtml(value) {
@@ -421,8 +460,8 @@ async function loadStaffPanels() {
           <div class="staff-power-title">Powers / Permissions</div>
           <div class="staff-permission-groups">
             ${staffPermissionGroups.map(group => {
-              const inherited = activePermissions.has(group.key);
-              const allChildren = group.items.every(([key]) => inherited || activePermissions.has(key));
+              const inherited = false;
+              const allChildren = group.items.every(([key]) => activePermissions.has(key));
               return `
                 <details class="staff-permission-group" open>
                   <summary>
@@ -446,7 +485,7 @@ async function loadStaffPanels() {
                           data-staff-permission
                           data-panel-id="${panelId}"
                           data-permission="${key}"
-                          ${inherited || activePermissions.has(key) ? "checked" : ""}
+                          ${activePermissions.has(key) ? "checked" : ""}
                         >
                         <span>${label}</span>
                       </label>
@@ -1126,8 +1165,8 @@ function applySession(session) {
       button.hidden = false;
       return;
     }
-    const permission = permissionByView[view];
-    button.hidden = !permission || !hasGroupPermission(allowed, permission);
+    const permissions = permissionByView[view];
+    button.hidden = !permissions || !hasAnyPermission(allowed, permissions);
   });
 
   document.querySelectorAll(".module-card").forEach((button) => {
@@ -1135,8 +1174,8 @@ function applySession(session) {
       button.hidden = false;
       return;
     }
-    const permission = permissionByModule[button.dataset.module];
-    button.hidden = !permission || !hasGroupPermission(allowed, permission);
+    const permissions = permissionByModule[button.dataset.module];
+    button.hidden = !permissions || !hasAnyPermission(allowed, permissions);
   });
 
   document.querySelectorAll("[data-action]").forEach((button) => {
@@ -1189,7 +1228,9 @@ function applySession(session) {
   if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
   if (hasPermission(allowed, "audit.view")) loadAuditLog();
 
-  const firstAllowed = Object.keys(permissionByView).find((view) => hasGroupPermission(allowed, permissionByView[view]));
+  const firstAllowed = Object.keys(permissionByView).find(
+    (view) => hasAnyPermission(allowed, permissionByView[view]),
+  );
   if (firstAllowed) setView(firstAllowed);
   document.body.classList.remove("auth-loading");
   document.body.classList.add("auth-ready");
