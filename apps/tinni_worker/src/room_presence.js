@@ -100,6 +100,12 @@ export class RoomPresenceStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_cp_runtime (
+        id INTEGER PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_gift_totals (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
@@ -1432,6 +1438,69 @@ export class RoomPresenceStore extends DurableObject {
     } catch (_) {}
   }
 
+  _rememberRoomId(roomIdValue, now = Date.now()) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_cp_runtime (id,room_id,updated_at)
+       VALUES (1,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         room_id=excluded.room_id,
+         updated_at=excluded.updated_at`,
+      roomId,
+      now,
+    );
+  }
+
+  _cpMicUserIds(now = Date.now()) {
+    return this._members(now)
+      .filter((member) => member.mic_enabled === true && member.seat_index !== null)
+      .map((member) => String(member.user_id || "").trim())
+      .filter(Boolean);
+  }
+
+  async _syncCpMicProgress(roomIdValue, now = Date.now()) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return;
+    this._rememberRoomId(roomId, now);
+    try {
+      const directoryId = this.env.APP_DIRECTORY.idFromName("tinni-app-directory");
+      const directory = this.env.APP_DIRECTORY.get(directoryId);
+      await directory.recordCpMicPresence(
+        roomId,
+        this._cpMicUserIds(now),
+        now,
+      );
+    } catch (_) {}
+  }
+
+  async _scheduleCpMicAlarm(roomIdValue, now = Date.now()) {
+    const roomId = String(roomIdValue || "").trim();
+    if (!roomId) return;
+    this._rememberRoomId(roomId, now);
+    const micUsers = this._cpMicUserIds(now);
+    if (micUsers.length === 0) {
+      try { await this.ctx.storage.deleteAlarm(); } catch (_) {}
+      return;
+    }
+    try {
+      await this.ctx.storage.setAlarm(now + 60000);
+    } catch (_) {}
+  }
+
+  async alarm() {
+    const now = Date.now();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT room_id FROM room_cp_runtime WHERE id=1 LIMIT 1",
+    ).toArray()[0];
+    const roomId = String(row?.room_id || "").trim();
+    if (!roomId) return;
+    await this._syncCpMicProgress(roomId, now);
+    if (this._cpMicUserIds(now).length > 0) {
+      try { await this.ctx.storage.setAlarm(now + 60000); } catch (_) {}
+    }
+  }
+
   _touchSocketMember(userIdValue, now = Date.now()) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user_id is required");
@@ -1587,6 +1656,8 @@ export class RoomPresenceStore extends DurableObject {
           now,
         );
         if (changed) this._broadcastPresence("seat_changed", now);
+        await this._syncCpMicProgress(roomId, now);
+        await this._scheduleCpMicAlarm(roomId, now);
         return;
       }
       if (payload?.type === "presence_sync") {
@@ -1626,6 +1697,15 @@ export class RoomPresenceStore extends DurableObject {
         return String(other.userId || "").trim() === userId;
       });
     if (!replacementActive) {
+      if (userId) {
+        this.ctx.storage.sql.exec(
+          "UPDATE room_members SET mic_enabled=0,last_seen=? WHERE user_id=?",
+          now,
+          userId,
+        );
+      }
+      await this._syncCpMicProgress(roomId, now);
+      await this._scheduleCpMicAlarm(roomId, now);
       await this._clearDirectoryPresence(userId, roomId, now);
     }
   }
@@ -1640,6 +1720,9 @@ export class RoomPresenceStore extends DurableObject {
 
   async join(input) {
     const result = this._upsert(input);
+    const roomId = String(input?.room_id || "").trim();
+    await this._syncCpMicProgress(roomId);
+    await this._scheduleCpMicAlarm(roomId);
     this._broadcastPresence("member_joined");
     return result;
   }
@@ -1670,6 +1753,9 @@ export class RoomPresenceStore extends DurableObject {
     if (beforeSeat !== afterSeat || beforeMic !== afterMic) {
       this._broadcastPresence("seat_changed");
     }
+    const roomId = String(input?.room_id || "").trim();
+    await this._syncCpMicProgress(roomId);
+    await this._scheduleCpMicAlarm(roomId);
     return result;
   }
 
@@ -1695,6 +1781,9 @@ export class RoomPresenceStore extends DurableObject {
       server_time: now,
       members: this._members(now),
     };
+    const roomId = String(input?.room_id || "").trim();
+    await this._syncCpMicProgress(roomId, now);
+    await this._scheduleCpMicAlarm(roomId, now);
     this._broadcastPresence("member_left");
     return result;
   }
