@@ -2962,6 +2962,7 @@ export default {
           appSession.user.user_id,
           body.recipient_user_id,
           body.usd_cents,
+          body.sender_role,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer settlement") }, 400);
@@ -2973,7 +2974,10 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        transfers: await getAppDirectoryStore(env).settlementTransfers(appSession.user.user_id),
+        transfers: await getAppDirectoryStore(env).settlementTransfers(
+          appSession.user.user_id,
+          url.searchParams.get("role") || "host",
+        ),
       });
     }
 
