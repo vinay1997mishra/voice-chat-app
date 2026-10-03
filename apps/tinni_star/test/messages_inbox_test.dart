@@ -133,8 +133,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const Key('message-conversation')), findsOneWidget);
+    expect(find.byKey(const Key('message-mutual-follow-lock')), findsOneWidget);
     expect(find.byKey(const Key('message-photo-button')), findsNothing);
-    expect(find.byKey(const Key('message-input')), findsOneWidget);
+    expect(find.byKey(const Key('message-input')), findsNothing);
+    expect(find.byKey(const Key('message-send-button')), findsNothing);
   });
 
   testWidgets('Official paid call notice shows verification action',
