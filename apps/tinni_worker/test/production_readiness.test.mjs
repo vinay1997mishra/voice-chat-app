@@ -2,6 +2,10 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 
 const index = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+const directory = fs.readFileSync(
+  new URL("../src/app_directory.js", import.meta.url),
+  "utf8",
+);
 
 assert.match(
   index,
@@ -82,6 +86,41 @@ assert.match(
   index,
   /url\.pathname === "\/room-theme-media"/,
   "User custom room backgrounds must have a dedicated moderated upload route",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/message-media"/,
+  "Direct-message photos must use the protected message media endpoint",
+);
+assert.match(
+  index,
+  /surface: "message_image"/,
+  "Message photos must pass the dedicated chat-photo safety decision",
+);
+assert.match(
+  index,
+  /third_party_app_branding/,
+  "Message photos must reject visible third-party app branding or interfaces",
+);
+assert.match(
+  index,
+  /external_link_or_qr/,
+  "Message photos must reject external links, domains and QR codes",
+);
+assert.match(
+  index,
+  /Photos can only be sent to mutual friends/,
+  "Message photo upload must reject non-friends before storage",
+);
+assert.match(
+  directory,
+  /messageKind === "image"[\s\S]{0,500}this\.areFriends\(fromUserId, toUserId\)/,
+  "Message persistence must independently enforce mutual friendship for images",
+);
+assert.match(
+  directory,
+  /canAccessDirectMessageMedia\(userIdValue, messageIdValue\)/,
+  "Stored message photos must only be readable by conversation participants",
 );
 
 console.log("Production readiness guards passed");
