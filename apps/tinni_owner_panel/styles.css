@@ -154,6 +154,16 @@ body.auth-ready .app-shell{visibility:visible}
 .owner-search-user-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .owner-search-user-select{display:flex;align-items:center;gap:12px;flex:1;cursor:pointer}
 .owner-profile-dialog{width:min(980px,94vw);max-height:92vh;overflow:auto}
+.owner-full-dashboard-dialog{width:min(1220px,96vw);max-height:94vh}
+.owner-full-dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.owner-full-dashboard-grid>.panel{min-width:0}
+.owner-full-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.owner-full-action-grid .btn,.owner-full-action-grid button{width:100%}
+.owner-full-message-box{display:grid;gap:8px}
+.owner-full-message-box textarea{min-height:110px}
+.owner-full-dashboard-note{padding:9px 11px;border:1px solid #40361f;border-radius:10px;background:#0e0d0a;color:var(--muted);font-size:12px}
+@media(max-width:760px){.owner-full-dashboard-grid,.owner-full-action-grid{grid-template-columns:1fr}}
+
 .owner-profile-content{padding:4px 2px 12px}
 .owner-profile-hero{display:flex;align-items:center;gap:14px;padding:12px;border:1px solid #40361f;border-radius:14px;background:#0e0d0a}
 .owner-profile-avatar{width:76px;height:76px}
