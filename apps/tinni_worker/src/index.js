@@ -5295,8 +5295,8 @@ export default {
       /^\/api\/call-verifications\/user\/([^/]+)\/verify$/,
     );
     if (callVerificationManualVerifyMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.direct_verify")) {
+        return json({ ok: false, error: "Direct Verify permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -5336,8 +5336,8 @@ export default {
       /^\/api\/call-verifications\/user\/([^/]+)\/revoke$/,
     );
     if (callVerificationRevokeMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.revoke")) {
+        return json({ ok: false, error: "Verification revoke permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -5380,7 +5380,13 @@ export default {
     }
 
     if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
-      if (!sessionHasAnyPermission(session, ["users.search", "messaging.search", "messaging.tags"])) {
+      if (!sessionHasAnyPermission(session, [
+        "users.search",
+        "users.full_dashboard",
+        "messaging.search",
+        "messaging.tags",
+        "verification.direct_verify",
+      ])) {
         return json({ ok: false, error: "User search permission required" }, 403);
       }
       const query = String(url.searchParams.get("q") || "");
