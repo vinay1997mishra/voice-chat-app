@@ -588,7 +588,7 @@ function auditDetailsText(details) {
 
 async function loadCallVerifications() {
   const root = document.getElementById("callVerificationList");
-  if (!root || currentSession?.role !== "owner") return;
+  if (!root || !sessionCan("verification.review")) return;
   try {
     const data = await api("/api/call-verifications");
     const items = (Array.isArray(data.submissions) ? data.submissions : [])
@@ -638,7 +638,7 @@ async function loadCallVerifications() {
 
 async function loadVerifiedUsers(query = "") {
   const root = document.getElementById("verifiedUsersList");
-  if (!root || currentSession?.role !== "owner") return;
+  if (!root || !sessionCan("verification.view")) return;
   try {
     const data = await api("/api/owner/verified-users?q=" + encodeURIComponent(query));
     const users = Array.isArray(data.users) ? data.users : [];
@@ -658,9 +658,10 @@ async function loadVerifiedUsers(query = "") {
           </div>
           <span class="badge gold">Verified</span>
         </div>
-        <div class="button-row">
-          <button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>
-        </div>
+        ${sessionCan("verification.revoke") ? `
+          <div class="button-row">
+            <button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>
+          </div>` : ""}
       </div>
     `).join("");
   } catch (error) {
@@ -683,7 +684,7 @@ function userTagHtml(tags) {
 
 async function searchDirectVerifyUsers(query) {
   const root = document.getElementById("manualCallVerifyResults");
-  if (!root) return;
+  if (!root || !sessionCan("verification.direct_verify")) return;
   const value = String(query || "").trim();
   if (!value) {
     root.className = "empty-state";
@@ -711,7 +712,9 @@ async function searchDirectVerifyUsers(query) {
         </div>
         <div class="button-row">
           ${user.call_verified
-            ? `<button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>`
+            ? (sessionCan("verification.revoke")
+                ? `<button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>`
+                : "")
             : `<button type="button" class="btn primary" data-direct-verify-user="${escapeHtml(user.user_id)}">Verify This ID</button>`}
         </div>
       </div>
@@ -932,6 +935,7 @@ function renderOfficials() {
 
 async function loadOfficials(preferredPosition = "") {
   const page = document.getElementById("officialPositionPage");
+  if (!sessionCan("messaging.officials")) return;
   try {
     const data = await api("/api/owner/officials");
     ownerOfficials = Array.isArray(data.officials) ? data.officials : [];
