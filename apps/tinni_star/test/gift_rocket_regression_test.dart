@@ -52,6 +52,27 @@ void main() {
     expect(room.contains('(1 - value) * seatDiameter * 2.8'), false);
   });
 
+  test('approved Rocket and Game logos stay locked', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+
+    expect(room.contains("Key('realistic-black-rocket-logo')"), true);
+    expect(room.contains('class _StealthRocketPainter'), true);
+    expect(room.contains("Key('game-keyboard-logo')"), true);
+    expect(room.contains('whiteKeyWidth = constraints.maxWidth / 6'), true);
+
+    final gameStart = room.indexOf('class _ReferenceGameLogo');
+    final rocketStart = room.indexOf('class _ReferenceRocketLogo');
+    final tileStart = room.indexOf('class _ReferenceGameTile');
+    expect(gameStart, greaterThanOrEqualTo(0));
+    expect(rocketStart, greaterThan(gameStart));
+    expect(tileStart, greaterThan(rocketStart));
+
+    final gameLogo = room.substring(gameStart, rocketStart);
+    final rocketLogo = room.substring(rocketStart, tileStart);
+    expect(gameLogo.contains('Icons.sports_esports'), false);
+    expect(rocketLogo.contains('Icons.rocket_launch'), false);
+  });
+
   test('Rocket keeps the locked ten sequential stage requirements', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
 
