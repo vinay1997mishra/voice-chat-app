@@ -356,3 +356,14 @@ For every future intentional feature/layout change:
 - The floating **Rocket** uses the approved realistic stealth-black design: matte/graphite metallic body, sharp glossy black nose, dark aerodynamic fins with restrained red accents, cyan/blue glass window, metallic steel nozzle, and white-hot/yellow/orange exhaust flame. The old emoji/cartoon/simple rocket icon must not return.
 - The floating **Game** button uses the compact **black-and-white keyboard/keys logo**: six white keys with black keys, compressed/flat proportions, black outer body and white edging. The old purple/pink/controller/gamepad icon must not return.
 - Rocket stays above Game in the room floating stack and both continue opening their existing Rocket/Game panels without changing gift, room, seat or game logic.
+
+
+## Owner Wallet & Permanent Ledger Connection Lock
+
+- Owner Panel **Company Dollars** is backed by Worker persistent storage, not a UI-only counter. It shows current company dollar balance and a permanent ledger with sender name/ID, sender wallet type, amount, before/after balance, transaction/reference and timestamp.
+- **Company dollar deduction is Owner-only**, requires an explicit USD amount, writes a permanent ledger entry and is audit logged by the Worker route.
+- Owner normal-user wallet controls can add/remove **Coins or Diamonds**. Coin Seller and Merchant wallet controls remain separate.
+- Coin Seller/Merchant permanent wallet ledgers record Company/Owner credits, Owner debits, coin sends to users, settlement receipts, dollar transfers, and received dollars.
+- User Wallet opens permanent **Coins History**, **Diamonds / conversion history**, **Coin Seller/Merchant wallet details**, **Received Dollars** and sent-dollar history through Worker APIs.
+- Dollar transfer ledger is replay-safe through unique request IDs. Coin Seller dollar-transfer minimum remains **$300** and Merchant remains **$1000** for their role-wallet transfer flow.
+- Latest settlement lock remains unchanged: Agency/BD transfer minimum **$10**; Coin Seller settlement receipts convert immediately at **$1 = 2,220,000 seller coins**; Agency/BD commission remains dollars.
