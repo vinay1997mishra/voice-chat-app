@@ -5751,7 +5751,7 @@ export default {
         const operation = String(body.action).replace("catalog-", "");
         const kind = String(item.kind || "");
         if (kind === "vip") requiredPermission = operation === "toggle" ? "vip.toggle" : "vip.edit";
-        else if (kind === "gift") requiredPermission = operation === "edit" ? "gifts.edit" : "gifts.remove";
+        else if (kind === "gift") requiredPermission = operation === "remove" ? "gifts.remove" : "gifts.edit";
         else if (kind === "entry") requiredPermission = "assets.entries";
         else if (kind === "frame") requiredPermission = "assets.frames";
         else if (kind === "banner") requiredPermission = operation === "remove" ? "banners.remove" : "banners.create";
