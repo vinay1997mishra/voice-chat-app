@@ -105,6 +105,36 @@ void main() {
     expect(find.text('Seen'), findsOneWidget);
     expect(find.byKey(const Key('message-input')), findsOneWidget);
     expect(find.byKey(const Key('message-send-button')), findsOneWidget);
+    expect(find.byKey(const Key('message-photo-button')), findsOneWidget);
+  });
+
+  testWidgets('non-friend conversation has no photo send action',
+      (tester) async {
+    final state = makeState();
+    state.social.directMessages.add(
+      const ChatMessage(
+        id: 'non-friend-message',
+        from: 'stranger-1',
+        to: '91000001',
+        text: 'Hello',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MessagesScreen(
+          state: state,
+          targetUserId: 'stranger-1',
+          targetName: 'Stranger',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const Key('message-conversation')), findsOneWidget);
+    expect(find.byKey(const Key('message-photo-button')), findsNothing);
+    expect(find.byKey(const Key('message-input')), findsOneWidget);
   });
 
   testWidgets('Official paid call notice shows verification action',
