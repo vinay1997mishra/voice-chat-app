@@ -2341,7 +2341,7 @@ class _HostDataScreenState extends State<HostDataScreen> {
                   label: Text(
                     _role == 'host'
                         ? 'Exchange / Transfer'
-                        : 'Transfer commission ($10 minimum)',
+                        : 'Transfer commission (\$10 minimum)',
                   ),
                 ),
               ),
