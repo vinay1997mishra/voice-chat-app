@@ -2069,16 +2069,29 @@ export class AppDirectoryStore extends DurableObject {
         text,
         { action: "owner_message" },
       );
-      this.ctx.storage.sql.exec(
-        `INSERT OR REPLACE INTO owner_panel_message_log(message_id,user_id,created_at)
-         VALUES (?,?,?)`,
-        String(message.id),
+      this.markOwnerPanelMessage(
+        message.id,
         userId,
-        Number(message.created_at || Date.now()),
+        message.created_at,
       );
       sent += 1;
     }
     return { ok: true, sent, requested: targets.length };
+  }
+
+  markOwnerPanelMessage(messageIdValue, userIdValue, createdAtValue = Date.now()) {
+    const messageId = String(messageIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const createdAt = Math.max(0, Number(createdAtValue || Date.now()));
+    if (!messageId || !userId) throw new Error("Owner Panel message marker is invalid");
+    this.ctx.storage.sql.exec(
+      `INSERT OR REPLACE INTO owner_panel_message_log(message_id,user_id,created_at)
+       VALUES (?,?,?)`,
+      messageId,
+      userId,
+      createdAt,
+    );
+    return { ok: true, message_id: messageId, user_id: userId, created_at: createdAt };
   }
 
   applyOwnerTag(userIdsValue, nameValue, colorValue, optionsValue = {}) {
