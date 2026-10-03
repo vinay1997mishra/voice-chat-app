@@ -349,3 +349,10 @@ For every future intentional feature/layout change:
 - English remains the default language until the user chooses another language.
 - Create Tinni ID and Settings > Language use the same supported-language registry: English, Hindi, Urdu, Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese (Simplified), Chinese (Traditional), Korean.
 - User-generated names, room text and numeric IDs are not auto-translated; unsupported UI strings fall back to English.
+
+
+## Locked Room Rocket & Game Visuals
+
+- The floating **Rocket** uses the approved realistic stealth-black design: matte/graphite metallic body, sharp glossy black nose, dark aerodynamic fins with restrained red accents, cyan/blue glass window, metallic steel nozzle, and white-hot/yellow/orange exhaust flame. The old emoji/cartoon/simple rocket icon must not return.
+- The floating **Game** button uses the compact **black-and-white keyboard/keys logo**: six white keys with black keys, compressed/flat proportions, black outer body and white edging. The old purple/pink/controller/gamepad icon must not return.
+- Rocket stays above Game in the room floating stack and both continue opening their existing Rocket/Game panels without changing gift, room, seat or game logic.
