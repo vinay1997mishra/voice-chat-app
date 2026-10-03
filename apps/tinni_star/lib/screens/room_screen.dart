@@ -7969,10 +7969,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ..rotateX((1 - value) * -0.48)
                             ..rotateZ((1 - value) * 0.72)
                             ..scaleByDouble(scale, scale, 1.0, 1.0);
+                          final origin =
+                              _giftFlightOriginOffset(context);
                           return Transform.translate(
                             offset: Offset(
-                              (1 - value) * seatDiameter * 2.15,
-                              (1 - value) * seatDiameter * 2.8 - arc,
+                              origin.dx * (1 - value),
+                              origin.dy * (1 - value) - arc,
                             ),
                             child: Transform(
                               alignment: Alignment.center,
