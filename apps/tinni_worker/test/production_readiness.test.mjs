@@ -6,6 +6,10 @@ const directory = fs.readFileSync(
   new URL("../src/app_directory.js", import.meta.url),
   "utf8",
 );
+const wranglerConfig = fs.readFileSync(
+  new URL("../wrangler.jsonc", import.meta.url),
+  "utf8",
+);
 
 assert.match(
   index,
@@ -26,6 +30,11 @@ assert.match(
   index,
   /effect_media_configured:\s*Boolean\(env\.EFFECT_MEDIA\)/,
   "App config must report R2 media binding availability",
+);
+assert.match(
+  wranglerConfig,
+  /"binding":\s*"EFFECT_MEDIA"[\s\S]{0,160}"bucket_name":\s*"tinni-star-effects"/,
+  "Tinni Worker must bind the existing R2 media bucket for profile, room and inbox photos",
 );
 assert.match(
   index,
