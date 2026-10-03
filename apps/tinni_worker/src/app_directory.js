@@ -791,15 +791,6 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_cp_relationships_users ON cp_relationships(user_a, user_b, state);
 
-      CREATE TABLE IF NOT EXISTS cp_mic_sessions (
-        pair_key TEXT NOT NULL,
-        room_id TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        last_award_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (pair_key, room_id)
-      );
-
       CREATE TABLE IF NOT EXISTS cp_memories (
         id TEXT PRIMARY KEY,
         user_a TEXT NOT NULL,
@@ -5962,106 +5953,6 @@ export class AppDirectoryStore extends DurableObject {
       intimacy, level, now, now, cp.user_a, cp.user_b,
     );
     return points;
-  }
-
-  recordCpMicPresence(roomIdValue, micUserIdsValue, nowValue = Date.now()) {
-    const roomId = String(roomIdValue || "").trim();
-    if (!roomId) return { ok: true, awarded_pairs: 0, awarded_intimacy: 0 };
-
-    const micUsers = new Set(
-      (Array.isArray(micUserIdsValue) ? micUserIdsValue : [])
-        .map((value) => String(value || "").trim())
-        .filter(Boolean),
-    );
-    const now = Math.max(0, Number(nowValue || Date.now()));
-    const accepted = this.ctx.storage.sql.exec(
-      "SELECT user_a,user_b,intimacy,level FROM cp_relationships WHERE state='accepted'",
-    ).toArray();
-
-    let awardedPairs = 0;
-    let awardedIntimacy = 0;
-    const activePairKeys = new Set();
-
-    for (const row of accepted) {
-      const userA = String(row.user_a || "").trim();
-      const userB = String(row.user_b || "").trim();
-      if (!userA || !userB) continue;
-      const pairKey = userA + ":" + userB;
-      const bothOnMic = micUsers.has(userA) && micUsers.has(userB);
-      if (!bothOnMic) continue;
-      activePairKeys.add(pairKey);
-
-      const session = this.ctx.storage.sql.exec(
-        "SELECT started_at,last_award_at FROM cp_mic_sessions WHERE pair_key=? AND room_id=? LIMIT 1",
-        pairKey,
-        roomId,
-      ).toArray()[0];
-
-      if (!session) {
-        this.ctx.storage.sql.exec(
-          `INSERT INTO cp_mic_sessions
-            (pair_key,room_id,started_at,last_award_at,updated_at)
-           VALUES (?,?,?,?,?)`,
-          pairKey, roomId, now, now, now,
-        );
-        continue;
-      }
-
-      const lastAwardAt = Math.max(
-        Number(session.started_at || now),
-        Number(session.last_award_at || now),
-      );
-      const completedBlocks = Math.floor((now - lastAwardAt) / 300000);
-      if (completedBlocks <= 0) {
-        this.ctx.storage.sql.exec(
-          "UPDATE cp_mic_sessions SET updated_at=? WHERE pair_key=? AND room_id=?",
-          now, pairKey, roomId,
-        );
-        continue;
-      }
-
-      const points = completedBlocks * 200;
-      const nextIntimacy = Math.max(0, Number(row.intimacy || 0)) + points;
-      const nextLevel = this._cpLevelForIntimacy(nextIntimacy);
-      const nextAwardAt = lastAwardAt + completedBlocks * 300000;
-      this.ctx.storage.sql.exec(
-        `UPDATE cp_relationships
-            SET intimacy=?, level=?, last_intimacy_at=?,
-                decay_applied_days=0, updated_at=?
-          WHERE user_a=? AND user_b=? AND state='accepted'`,
-        nextIntimacy, nextLevel, now, now, userA, userB,
-      );
-      this.ctx.storage.sql.exec(
-        `UPDATE cp_mic_sessions
-            SET last_award_at=?, updated_at=?
-          WHERE pair_key=? AND room_id=?`,
-        nextAwardAt, now, pairKey, roomId,
-      );
-      awardedPairs += 1;
-      awardedIntimacy += points;
-    }
-
-    const roomSessions = this.ctx.storage.sql.exec(
-      "SELECT pair_key FROM cp_mic_sessions WHERE room_id=?",
-      roomId,
-    ).toArray();
-    for (const session of roomSessions) {
-      const pairKey = String(session.pair_key || "");
-      if (activePairKeys.has(pairKey)) continue;
-      this.ctx.storage.sql.exec(
-        "DELETE FROM cp_mic_sessions WHERE pair_key=? AND room_id=?",
-        pairKey, roomId,
-      );
-    }
-
-    return {
-      ok: true,
-      awarded_pairs: awardedPairs,
-      awarded_intimacy: awardedIntimacy,
-      mic_users: micUsers.size,
-      block_minutes: 5,
-      intimacy_per_block: 200,
-    };
   }
 
   cpState(userIdValue) {
