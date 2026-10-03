@@ -20,8 +20,13 @@ const roomScreen = fs.readFileSync(
 
 assert.match(
   directory,
-  /const receiverDiamondPercent = isLucky \? 10 : 100;/,
-  "Lucky receivers must get 10% diamonds and every non-Lucky gift must get 100%",
+  /const socialValuePercent = isLucky \? 10 : 100;/,
+  "Lucky social value must remain 10% and every non-Lucky gift must remain 100%",
+);
+assert.match(
+  directory,
+  /const receiverIsHost = this\._isActiveHost\(receiverId\);\s*const receiverDiamonds = receiverIsHost \? socialValueCoins : 0;/,
+  "Gift Diamonds must remain Host-only while using the same Lucky 10% / normal 100% social value",
 );
 assert.match(
   directory,
