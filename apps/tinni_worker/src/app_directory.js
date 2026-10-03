@@ -1028,6 +1028,21 @@ export class AppDirectoryStore extends DurableObject {
         PRIMARY KEY(user_id, role)
       );
 
+      CREATE TABLE IF NOT EXISTS hierarchy_invites (
+        id TEXT PRIMARY KEY,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        parent_user_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        responded_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_hierarchy_invites_to_status
+        ON hierarchy_invites(to_user_id, status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_hierarchy_invites_from_time
+        ON hierarchy_invites(from_user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS hierarchy_period_earnings (
         period_key TEXT NOT NULL,
         user_id TEXT NOT NULL,
@@ -2622,6 +2637,381 @@ export class AppDirectoryStore extends DurableObject {
     return this._activeHierarchy(userIdValue).some((row) => row.role === "host");
   }
 
+  _hierarchyRoleRow(userIdValue, roleValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!userId || !["host", "agency", "bd"].includes(role)) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id,role,parent_user_id,active,data_json,updated_at FROM owner_hierarchy WHERE user_id=? AND role=? LIMIT 1",
+      userId, role,
+    ).toArray()[0];
+    if (!row) return null;
+    let data = {};
+    try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
+    return {
+      user_id: String(row.user_id),
+      role: String(row.role),
+      parent_user_id: row.parent_user_id ? String(row.parent_user_id) : null,
+      active: Number(row.active || 0) === 1,
+      data,
+      activated_at: Number(row.updated_at || 0),
+    };
+  }
+
+  _hierarchyGiftStats(userIdsValue, fromValue, toValue) {
+    const userIds = [...new Set(
+      (Array.isArray(userIdsValue) ? userIdsValue : [userIdsValue])
+        .map((value) => this._resolveOwnerUserId(value))
+        .filter(Boolean),
+    )];
+    const from = Math.max(0, Number(fromValue || 0));
+    const to = Math.max(from + 1, Number(toValue || Date.now()));
+    let receivedCoins = 0;
+    let senderCount = 0;
+    const senders = new Set();
+    for (const userId of userIds) {
+      const row = this.ctx.storage.sql.exec(
+        `SELECT COALESCE(SUM(COALESCE(l.social_value_coins,g.total_cost)),0) AS received
+           FROM gift_transactions g
+           LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+          WHERE g.receiver_id=? AND g.created_at>=? AND g.created_at<?`,
+        userId, from, to,
+      ).toArray()[0];
+      receivedCoins += Math.max(0, Number(row?.received || 0));
+      const senderRows = this.ctx.storage.sql.exec(
+        `SELECT DISTINCT g.sender_id
+           FROM gift_transactions g
+          WHERE g.receiver_id=? AND g.created_at>=? AND g.created_at<?`,
+        userId, from, to,
+      ).toArray();
+      for (const sender of senderRows) senders.add(String(sender.sender_id || ""));
+    }
+    senderCount = [...senders].filter(Boolean).length;
+    return {
+      received_coins: receivedCoins,
+      diamond_earned: receivedCoins,
+      gift_senders: senderCount,
+    };
+  }
+
+  hierarchyPortal(userIdValue, roleValue, fromValue = 0, toValue = Date.now()) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!["host", "agency", "bd"].includes(role)) throw new Error("Unsupported hierarchy role");
+    const hierarchy = this._hierarchyRoleRow(userId, role);
+    if (!hierarchy || hierarchy.active !== true) throw new Error(role.toUpperCase() + " role is not active");
+
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,email,country_code,country_name,flag_emoji,avatar_data_url,created_at FROM app_users WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+
+    const from = Math.max(0, Number(fromValue || 0));
+    const to = Math.max(from + 1, Number(toValue || Date.now()));
+    const wallet = this.getWallet(userId);
+    const settlement = this._ensureSettlementBalance(userId);
+    const result = {
+      role,
+      profile: {
+        user_id: String(user.user_id),
+        display_name: String(user.display_name || user.user_id),
+        email: String(user.email || ""),
+        country_code: String(user.country_code || ""),
+        country_name: String(user.country_name || ""),
+        flag_emoji: String(user.flag_emoji || ""),
+        avatar_data_url: user.avatar_data_url ? String(user.avatar_data_url) : null,
+      },
+      hierarchy,
+      contact: String(hierarchy.data?.contact || ""),
+      range: { from, to },
+      wallet: {
+        diamonds: Number(wallet.diamonds || 0),
+        diamond_usd_cents: Number(wallet.diamond_usd_cents || 0),
+        commission_usd_cents: Number(wallet.commission_usd_cents || 0),
+        withdrawable_usd_cents: Number(wallet.withdrawable_usd_cents || 0),
+        can_transfer_settlement: wallet.can_transfer_settlement === true,
+        settlement_usd_cents: Number(settlement?.usd_cents || 0),
+      },
+      stats: {},
+      members: [],
+      parent: null,
+    };
+
+    if (role === "host") {
+      result.stats = {
+        ...this._hierarchyGiftStats([userId], from, to),
+        online_minutes: 0,
+        valid_mic_minutes: 0,
+        valid_days: 0,
+        private_chats: Number(this.ctx.storage.sql.exec(
+          `SELECT COUNT(DISTINCT CASE WHEN from_user_id=? THEN to_user_id ELSE from_user_id END) AS count
+             FROM direct_messages
+            WHERE (from_user_id=? OR to_user_id=?)
+              AND created_at>=? AND created_at<?`,
+          userId, userId, userId, from, to,
+        ).toArray()[0]?.count || 0),
+        followers: Number(this.ctx.storage.sql.exec(
+          "SELECT COUNT(*) AS count FROM app_follows WHERE target_id=?",
+          userId,
+        ).toArray()[0]?.count || 0),
+      };
+      const agencyId = hierarchy.parent_user_id;
+      if (agencyId) {
+        const agency = this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,country_code,country_name,flag_emoji,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          agencyId,
+        ).toArray()[0];
+        if (agency) {
+          result.parent = {
+            role: "agency",
+            user_id: String(agency.user_id),
+            display_name: String(agency.display_name || agency.user_id),
+            country_code: String(agency.country_code || ""),
+            country_name: String(agency.country_name || ""),
+            flag_emoji: String(agency.flag_emoji || ""),
+            avatar_data_url: agency.avatar_data_url ? String(agency.avatar_data_url) : null,
+          };
+        }
+      }
+    }
+
+    if (role === "agency") {
+      const hosts = this.ctx.storage.sql.exec(
+        `SELECT h.user_id,h.updated_at,u.display_name,u.country_code,u.country_name,u.flag_emoji,u.avatar_data_url
+           FROM owner_hierarchy h
+           JOIN app_users u ON u.user_id=h.user_id
+          WHERE h.role='host' AND h.active=1 AND h.parent_user_id=?
+          ORDER BY h.updated_at ASC`,
+        userId,
+      ).toArray();
+      result.members = hosts.map((row) => {
+        const stats = this._hierarchyGiftStats([String(row.user_id)], from, to);
+        return {
+          role: "host",
+          user_id: String(row.user_id),
+          display_name: String(row.display_name || row.user_id),
+          country_code: String(row.country_code || ""),
+          country_name: String(row.country_name || ""),
+          flag_emoji: String(row.flag_emoji || ""),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          joined_at: Number(row.updated_at || 0),
+          ...stats,
+        };
+      });
+      result.stats = {
+        ...this._hierarchyGiftStats(hosts.map((row) => String(row.user_id)), from, to),
+        host_count: hosts.length,
+      };
+      const bdId = hierarchy.parent_user_id;
+      if (bdId) {
+        const bd = this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,country_code,country_name,flag_emoji,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          bdId,
+        ).toArray()[0];
+        if (bd) result.parent = {
+          role: "bd",
+          user_id: String(bd.user_id),
+          display_name: String(bd.display_name || bd.user_id),
+          country_code: String(bd.country_code || ""),
+          country_name: String(bd.country_name || ""),
+          flag_emoji: String(bd.flag_emoji || ""),
+          avatar_data_url: bd.avatar_data_url ? String(bd.avatar_data_url) : null,
+        };
+      }
+    }
+
+    if (role === "bd") {
+      const agencies = this.ctx.storage.sql.exec(
+        `SELECT h.user_id,h.updated_at,u.display_name,u.country_code,u.country_name,u.flag_emoji,u.avatar_data_url
+           FROM owner_hierarchy h
+           JOIN app_users u ON u.user_id=h.user_id
+          WHERE h.role='agency' AND h.active=1 AND h.parent_user_id=?
+          ORDER BY h.updated_at ASC`,
+        userId,
+      ).toArray();
+      const allHosts = [];
+      result.members = agencies.map((row) => {
+        const agencyId = String(row.user_id);
+        const hostRows = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM owner_hierarchy WHERE role='host' AND active=1 AND parent_user_id=?",
+          agencyId,
+        ).toArray();
+        const hostIds = hostRows.map((host) => String(host.user_id));
+        allHosts.push(...hostIds);
+        const stats = this._hierarchyGiftStats(hostIds, from, to);
+        return {
+          role: "agency",
+          user_id: agencyId,
+          display_name: String(row.display_name || agencyId),
+          country_code: String(row.country_code || ""),
+          country_name: String(row.country_name || ""),
+          flag_emoji: String(row.flag_emoji || ""),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          joined_at: Number(row.updated_at || 0),
+          host_count: hostIds.length,
+          ...stats,
+        };
+      });
+      result.stats = {
+        ...this._hierarchyGiftStats(allHosts, from, to),
+        agency_count: agencies.length,
+        host_count: allHosts.length,
+      };
+    }
+
+    return result;
+  }
+
+  updateHierarchyContact(userIdValue, roleValue, contactValue) {
+    const row = this._hierarchyRoleRow(userIdValue, roleValue);
+    if (!row || row.active !== true) throw new Error("Active role is required");
+    const contact = cleanText(contactValue, 100);
+    const data = { ...(row.data || {}), contact };
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_hierarchy SET data_json=?,updated_at=? WHERE user_id=? AND role=?",
+      JSON.stringify(data), Date.now(), row.user_id, row.role,
+    );
+    return { ok: true, role: row.role, contact };
+  }
+
+  listHierarchyInvites(userIdValue, limitValue = 100) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT i.*,fu.display_name AS from_name,tu.display_name AS to_name
+         FROM hierarchy_invites i
+         LEFT JOIN app_users fu ON fu.user_id=i.from_user_id
+         LEFT JOIN app_users tu ON tu.user_id=i.to_user_id
+        WHERE i.from_user_id=? OR i.to_user_id=?
+        ORDER BY i.created_at DESC
+        LIMIT ?`,
+      userId, userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from_user_id: String(row.from_user_id),
+      from_name: String(row.from_name || row.from_user_id),
+      to_user_id: String(row.to_user_id),
+      to_name: String(row.to_name || row.to_user_id),
+      role: String(row.role),
+      parent_user_id: String(row.parent_user_id),
+      status: String(row.status || "pending"),
+      created_at: Number(row.created_at || 0),
+      responded_at: row.responded_at == null ? null : Number(row.responded_at),
+    }));
+  }
+
+  createHierarchyInvite(fromUserIdValue, toUserIdValue, roleValue) {
+    const fromUserId = this._resolveOwnerUserId(fromUserIdValue);
+    const toUserId = this._resolveOwnerUserId(toUserIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!fromUserId || !toUserId || fromUserId === toUserId) {
+      throw new Error("Choose another valid user ID");
+    }
+    if (!["host", "agency"].includes(role)) throw new Error("Unsupported invitation role");
+
+    const actorRole = role === "host" ? "agency" : "bd";
+    const actorHierarchy = this._hierarchyRoleRow(fromUserId, actorRole);
+    if (!actorHierarchy || actorHierarchy.active !== true) {
+      throw new Error("Active " + actorRole.toUpperCase() + " role is required");
+    }
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,country_code FROM app_users WHERE user_id=? LIMIT 1",
+      toUserId,
+    ).toArray()[0];
+    const actor = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,country_code FROM app_users WHERE user_id=? LIMIT 1",
+      fromUserId,
+    ).toArray()[0];
+    if (!target || !actor) throw new Error("User not found");
+    if (role === "host" &&
+        String(target.country_code || "").toUpperCase() !== String(actor.country_code || "").toUpperCase()) {
+      throw new Error("Host and Agency must be from the same country");
+    }
+
+    const already = this._hierarchyRoleRow(toUserId, role);
+    if (already?.active === true &&
+        String(already.parent_user_id || "") === fromUserId) {
+      throw new Error("This user is already linked to your " + actorRole);
+    }
+    const pending = this.ctx.storage.sql.exec(
+      "SELECT id FROM hierarchy_invites WHERE from_user_id=? AND to_user_id=? AND role=? AND status='pending' LIMIT 1",
+      fromUserId, toUserId, role,
+    ).toArray()[0];
+    if (pending) throw new Error("An invitation is already pending");
+
+    const id = "hier-" + Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO hierarchy_invites(id,from_user_id,to_user_id,role,parent_user_id,status,created_at,responded_at) VALUES (?,?,?,?,?,'pending',?,NULL)",
+      id, fromUserId, toUserId, role, fromUserId, now,
+    );
+    const roleLabel = role === "host" ? "Host" : "Agency";
+    const actorLabel = actorRole === "agency" ? "Agency" : "BD";
+    const text = "[ROLE_INVITE:" + id + ":" + role + "] " +
+      String(actor.display_name || fromUserId) + " (ID " + fromUserId +
+      ") invited you to become " + roleLabel + " under this " + actorLabel + ".";
+    this.sendDirectMessage(fromUserId, toUserId, text);
+    this._notifyUser(
+      toUserId,
+      "hierarchy_invite",
+      roleLabel + " invitation",
+      String(actor.display_name || fromUserId) + " invited you to become " + roleLabel + ".",
+      { source_user_id: fromUserId, metadata: { invite_id: id, role, parent_user_id: fromUserId } },
+    );
+    return this.listHierarchyInvites(toUserId, 200).find((item) => item.id === id);
+  }
+
+  respondHierarchyInvite(userIdValue, inviteIdValue, acceptValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const inviteId = String(inviteIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM hierarchy_invites WHERE id=? AND to_user_id=? LIMIT 1",
+      inviteId, userId,
+    ).toArray()[0];
+    if (!row) throw new Error("Invitation not found");
+    const currentStatus = String(row.status || "pending");
+    if (currentStatus !== "pending") {
+      return this.listHierarchyInvites(userId, 200).find((item) => item.id === inviteId);
+    }
+    const accepted = acceptValue === true;
+    const now = Date.now();
+    if (accepted) {
+      this._setHierarchy(userId, String(row.role), String(row.parent_user_id), true, {
+        invited_by: String(row.from_user_id),
+        invite_id: inviteId,
+      });
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE hierarchy_invites SET status=?,responded_at=? WHERE id=?",
+      accepted ? "accepted" : "rejected", now, inviteId,
+    );
+    const roleLabel = String(row.role) === "host" ? "Host" : "Agency";
+    const statusText = accepted ? "accepted" : "rejected";
+    try {
+      this.sendDirectMessage(
+        userId,
+        String(row.from_user_id),
+        roleLabel + " invitation " + statusText + ".",
+      );
+    } catch {}
+    this._notifyUser(
+      String(row.from_user_id),
+      "hierarchy_invite_response",
+      roleLabel + " invitation " + statusText,
+      "ID " + userId + " " + statusText + " your " + roleLabel + " invitation.",
+      { source_user_id: userId, metadata: { invite_id: inviteId, role: String(row.role), accepted } },
+    );
+    this.sendOfficialMessage(
+      userId,
+      accepted
+        ? "Your " + roleLabel + " role is active. Open Mine → " + roleLabel + " Panel to view your portal."
+        : "You rejected the " + roleLabel + " invitation.",
+      { action: "hierarchy_invite_response", invite_id: inviteId, role: String(row.role), accepted },
+    );
+    return this.listHierarchyInvites(userId, 200).find((item) => item.id === inviteId);
+  }
+
   _periodKey(nowValue = Date.now()) {
     const d = new Date(Number(nowValue || Date.now()));
     const y = d.getUTCFullYear();
@@ -2766,6 +3156,8 @@ export class AppDirectoryStore extends DurableObject {
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
       ["owner_hierarchy","user_id"], ["owner_hierarchy","parent_user_id"],
+      ["hierarchy_invites","from_user_id"], ["hierarchy_invites","to_user_id"],
+      ["hierarchy_invites","parent_user_id"],
       ["hierarchy_period_earnings","user_id"], ["settlement_balances","user_id"],
       ["settlement_transfers","sender_user_id"], ["settlement_transfers","recipient_user_id"],
       ["room_lock_attempts","user_id"], ["room_access_grants","user_id"],
@@ -7989,69 +8381,75 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
 
-    const threads = this.listFriends(userId).map((friend) => {
-      const friendId = String(friend.user_id);
+    const friendRows = this.listFriends(userId);
+    const friendIds = new Set(friendRows.map((friend) => String(friend.user_id)));
+    const friendById = new Map(friendRows.map((friend) => [String(friend.user_id), friend]));
+    const peerRows = this.ctx.storage.sql.exec(
+      `SELECT DISTINCT
+          CASE WHEN from_user_id=? THEN to_user_id ELSE from_user_id END AS peer_id
+         FROM direct_messages
+        WHERE (from_user_id=? OR to_user_id=?)
+          AND from_user_id<>'tinni-official'
+          AND to_user_id<>'tinni-official'`,
+      userId, userId, userId,
+    ).toArray();
+    const peerIds = new Set([
+      ...friendIds,
+      ...peerRows.map((row) => String(row.peer_id || "")).filter(Boolean),
+    ]);
+    const threads = [];
+
+    for (const peerId of peerIds) {
+      const friend = friendById.get(peerId);
+      const peer = this.ctx.storage.sql.exec(
+        "SELECT display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+        peerId,
+      ).toArray()[0];
+      if (!peer && !friend) continue;
       const last = this.ctx.storage.sql.exec(
-        `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+        `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
            FROM direct_messages
-          WHERE (from_user_id = ? AND to_user_id = ?)
-             OR (from_user_id = ? AND to_user_id = ?)
-          ORDER BY created_at DESC
-          LIMIT 1`,
-        userId,
-        friendId,
-        friendId,
-        userId,
+          WHERE (from_user_id=? AND to_user_id=?)
+             OR (from_user_id=? AND to_user_id=?)
+          ORDER BY created_at DESC LIMIT 1`,
+        userId, peerId, peerId, userId,
       ).toArray()[0];
       const unread = this.ctx.storage.sql.exec(
-        `SELECT COUNT(*) AS count
-           FROM direct_messages
-          WHERE from_user_id = ?
-            AND to_user_id = ?
-            AND seen_at IS NULL`,
-        friendId,
-        userId,
+        `SELECT COUNT(*) AS count FROM direct_messages
+          WHERE from_user_id=? AND to_user_id=? AND seen_at IS NULL`,
+        peerId, userId,
       ).toArray()[0];
-
-      return {
-        user_id: friendId,
-        display_name: String(friend.display_name || friendId),
-        avatar_data_url: friend.avatar_data_url
-          ? String(friend.avatar_data_url)
-          : null,
-        is_friend: true,
-        last_message: last
-          ? {
-              id: String(last.id),
-              from: String(last.from_user_id),
-              to: String(last.to_user_id),
-              text: String(last.text),
-              created_at: Number(last.created_at),
-              seen_at: last.seen_at == null ? null : Number(last.seen_at),
-            }
-          : null,
+      threads.push({
+        user_id: peerId,
+        display_name: String(peer?.display_name || friend?.display_name || peerId),
+        avatar_data_url: peer?.avatar_data_url
+          ? String(peer.avatar_data_url)
+          : (friend?.avatar_data_url ? String(friend.avatar_data_url) : null),
+        is_friend: friendIds.has(peerId),
+        last_message: last ? {
+          id: String(last.id),
+          from: String(last.from_user_id),
+          to: String(last.to_user_id),
+          text: String(last.text),
+          created_at: Number(last.created_at),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        } : null,
         unread_count: Number(unread?.count || 0),
-      };
-    });
+      });
+    }
 
     const official = this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+      `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
          FROM direct_messages
-        WHERE (from_user_id = 'tinni-official' AND to_user_id = ?)
-           OR (from_user_id = ? AND to_user_id = 'tinni-official')
-        ORDER BY created_at DESC
-        LIMIT 1`,
-      userId,
-      userId,
+        WHERE (from_user_id='tinni-official' AND to_user_id=?)
+           OR (from_user_id=? AND to_user_id='tinni-official')
+        ORDER BY created_at DESC LIMIT 1`,
+      userId, userId,
     ).toArray()[0];
-
     if (official) {
       const unreadOfficial = this.ctx.storage.sql.exec(
-        `SELECT COUNT(*) AS count
-           FROM direct_messages
-          WHERE from_user_id = 'tinni-official'
-            AND to_user_id = ?
-            AND seen_at IS NULL`,
+        `SELECT COUNT(*) AS count FROM direct_messages
+          WHERE from_user_id='tinni-official' AND to_user_id=? AND seen_at IS NULL`,
         userId,
       ).toArray()[0];
       threads.push({
