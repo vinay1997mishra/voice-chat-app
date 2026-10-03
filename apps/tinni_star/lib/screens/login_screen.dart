@@ -392,6 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
       if (!mounted) return;
+      widget.state.setLanguagePreference(selectedLanguage);
       await _finishLogin(result);
     } catch (error) {
       if (!mounted) return;
@@ -711,7 +712,6 @@ class _LoginScreenState extends State<LoginScreen> {
     widget.state.auth.setAuthenticatedAccount(account);
     await widget.state.authPersistence?.save(account);
     widget.state.profile.loadFromAccount(account);
-    widget.state.setLanguagePreference(selectedLanguage);
 
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
