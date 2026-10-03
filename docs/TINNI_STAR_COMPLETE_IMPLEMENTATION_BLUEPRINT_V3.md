@@ -306,3 +306,18 @@ For every future intentional feature/layout change:
 - **CP Invite** is the confession/invitation flow and may be sent only when neither side already has an active/pending CP flow. Active CP appears on the ID/Profile CP card with the two avatars, heart/CP identity, level/intimacy/day information, and an All my CP entry to the CP area.
 - **CP intimacy rules:** regular gifts use 100% of the normalized reference-coin intimacy value; Lucky gifts use 10%; same-day mutual CP gifting gives the eligible gift a 1.2x exchange multiplier; known first level threshold is Lv.1 -> Lv.2 at 200K intimacy; level-cycle duration is 7 days; after 3 consecutive days without intimacy, decay starts on day 4 at 5% per day until activity resumes. Do not invent later level thresholds that were not supplied; keep later thresholds owner-configurable.
 
+
+## LOCKED — Owner Full ID drill-down and zero-default Staff Panels
+
+- **View ID remains the first compact account summary.** Tapping **Full View** from that summary opens the selected user's **Full ID Dashboard** rather than replacing the compact summary.
+- **Full ID Dashboard is drill-down based.** Profile/ID, wallet/VIP, room, verification, tags, hierarchy roles, inbox/history and other supported owner controls are grouped by function; a function is opened/tapped before its deeper detail/action surface is shown.
+- **Identity tags must expose removal from the selected ID view** wherever the authenticated panel has the matching exact permission. Custom/V Official tags use the protected tag-removal API. Host/Agency/BD use hierarchy-role operations instead of merely hiding the badge.
+- **Host / Agency / BD labels are actionable.** Tapping an active hierarchy role from View ID or Full View opens its full role dashboard. The role dashboard must be backed by server-authoritative hierarchy data, not client-only totals.
+- **Agency drill-down** shows its active Hosts, each Host ID/name, received coins, target, target progress, remaining target where applicable, join time and aggregate Agency totals. It includes Host search and authorized Host removal. Tapping a Host ID/name opens that Host's compact ID view, from which **Full View** opens the Host's Full ID Dashboard.
+- **BD drill-down** shows linked Agencies, each Agency's Host count and aggregate progress, and allows authorized unlink/removal operations. Tapping an Agency/user row drills into that ID.
+- **Host drill-down** shows Host target/received/progress/remaining data plus the linked Agency and relevant wallet/settlement information.
+- **Hierarchy investigation date ranges are fixed:** last 7 days, last 15 days, current month, last month, plus a custom From/To date range. All role totals/targets shown for these views must be calculated from backend records for the selected range.
+- **Staff Panels start with zero selected functions.** Creating or activating a Staff Panel must not automatically grant, inherit or display any Owner function. The Owner explicitly selects each function.
+- **Unselected Staff functions are hidden and server-blocked.** A function with no selected permission must not appear in the Staff navigation, dashboard, buttons or drill-down controls, and its protected API/action must reject access.
+- **New future Owner functions never auto-inherit into existing or new Staff Panels.** Every new function requires its own explicit Staff permission before it can appear or work.
+- **Hierarchy full-detail access is separately permissioned.** `users.full_dashboard` alone does not grant Host/Agency/BD drill-down to staff; `hierarchy.view_details` is also required, while mutation permissions such as Host removal remain separate.
