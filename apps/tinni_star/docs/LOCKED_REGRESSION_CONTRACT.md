@@ -40,6 +40,8 @@ This file defines features that must survive future updates. A feature may be ch
 - Rocket keeps 10 stages: 8M, 15M, 30M, 50M, 90M, 150M, 200M, 250M, 350M and 500M.
 - User-created room names and comments are stored/displayed as entered, without automatic translation.
 - Room public ID remains the owner User ID.
+- Seat layout maximum is locked to **6 seats per row × 7 rows** for 42 seats: 42 = 6+6+6+6+6+6+6.
+- Seat counts 37–42 use 7 rows and keep the same balanced final-two-row distribution rule; 31–36 use 6 rows.
 
 ## Mine / profile
 - Existing locked Mine menu/order and reference-video rules in TINNI_PRODUCT_BLUEPRINT.md remain authoritative.
