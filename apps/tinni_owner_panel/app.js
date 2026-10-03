@@ -3269,9 +3269,14 @@ document.getElementById("actionForm").addEventListener("submit", async e => {
   try {
     await handleAction(pendingAction, data);
     dialog.close();
+    if (ownerFullRefreshAfterAction && ownerFullDashboardUserId) {
+      ownerFullRefreshAfterAction = false;
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    }
   } catch (err) {
     toast(err.message);
   } finally {
+    if (!dialog.open) ownerFullRefreshAfterAction = false;
     dialogSubmit.disabled = false;
     dialogSubmit.textContent = "Confirm";
   }
