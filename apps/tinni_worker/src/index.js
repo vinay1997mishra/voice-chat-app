@@ -139,6 +139,8 @@ async function enforceImageSafety(env, {
 
   const imageDataUrl =
     "data:" + String(mimeType) + ";base64," + bytesToBase64(bytes);
+  const imageSurface = String(surface || "user_image");
+  const isMessageImage = imageSurface === "message_image";
 
   if (env.AI) {
     let verdict;
@@ -146,7 +148,7 @@ async function enforceImageSafety(env, {
       verdict = await env.AI.run("@cf/cloudflare/clef-flash", {
         model: "clef-flash",
         state: {
-          surface: String(surface || "user_image"),
+          surface: imageSurface,
           policy: "tinni-star-user-image-safety-v2",
           instruction:
             "Evaluate only the attached image for whether it may be published on a general-audience social/voice-chat app.",
@@ -188,6 +190,16 @@ async function enforceImageSafety(env, {
             instructions:
               "Is the image too obscured, ambiguous, manipulated, or unclear to confidently rule out the prohibited categories above?",
           },
+          third_party_app_branding: {
+            type: "noul",
+            instructions:
+              "Does the image visibly contain the logo, name, branded interface, screenshot, watermark, or recognizable identity of another app, social platform, messaging app, game, payment app, website/app service, or software product other than Tinni Star?",
+          },
+          external_link_or_qr: {
+            type: "noul",
+            instructions:
+              "Does the image visibly contain an external URL, domain name, web link, referral link/code, QR code, app-store link, social handle used to redirect users, or scannable code leading outside Tinni Star?",
+          },
         },
       });
     } catch (_) {
@@ -211,6 +223,8 @@ async function enforceImageSafety(env, {
         terror_extremism: probability("terror_extremism"),
         serious_illegal_activity: probability("serious_illegal_activity"),
         unsafe_or_unclear: probability("unsafe_or_unclear"),
+        third_party_app_branding: probability("third_party_app_branding"),
+        external_link_or_qr: probability("external_link_or_qr"),
       };
       if (Object.values(values).every((value) => value !== null)) {
         const blocked =
@@ -220,7 +234,9 @@ async function enforceImageSafety(env, {
           values.graphic_abuse >= 0.22 ||
           values.terror_extremism >= 0.20 ||
           values.serious_illegal_activity >= 0.25 ||
-          values.unsafe_or_unclear >= 0.45;
+          values.unsafe_or_unclear >= 0.45 ||
+          (isMessageImage && values.third_party_app_branding >= 0.20) ||
+          (isMessageImage && values.external_link_or_qr >= 0.18);
         if (blocked) {
           throw new Error(
             "This image cannot be used because it failed Tinni Star safety checks.",
@@ -233,6 +249,12 @@ async function enforceImageSafety(env, {
         };
       }
     }
+  }
+
+  if (isMessageImage) {
+    throw new Error(
+      "Photo check is temporarily unavailable. Image message blocked.",
+    );
   }
 
   const moderationUrl = String(env.IMAGE_MODERATION_URL || "").trim();
