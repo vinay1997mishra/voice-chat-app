@@ -7134,6 +7134,17 @@ export class AppDirectoryStore extends DurableObject {
     );
 
     const id = "settle-" + crypto.randomUUID();
+    this._recordPrivilegedWalletTransaction({
+      userId: recipient.user_id,
+      walletType: recipient.role,
+      kind: "settlement_received",
+      coinsDelta: creditedCoins,
+      usdCents,
+      counterpartyUserId: senderId,
+      referenceId: id,
+      note: "Settlement received from ID " + senderId,
+      createdAt: Date.now(),
+    });
     const now = Date.now();
     this.ctx.storage.sql.exec(
       "INSERT INTO settlement_transfers(id,sender_user_id,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?)",
