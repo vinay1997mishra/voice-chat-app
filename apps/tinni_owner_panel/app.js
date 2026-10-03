@@ -1223,7 +1223,11 @@ function ownerFullMessageRows(messages) {
   return items.length
     ? items.map((message) => `
         <div class="owner-history-row">
-          <strong>${escapeHtml(message.from_user_id)} → ${escapeHtml(message.to_user_id)}</strong>
+          <div class="owner-history-people">
+            <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(message.from_user_id)}">${escapeHtml(message.from_user_id)}</button>
+            <span>→</span>
+            <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(message.to_user_id)}">${escapeHtml(message.to_user_id)}</button>
+          </div>
           <span>${escapeHtml(message.message_kind === "image" ? "📷 Photo" : message.text)}</span>
           <small>${escapeHtml(formatFullTimestamp(message.created_at))}</small>
         </div>
@@ -1711,7 +1715,11 @@ async function openOwnerFullDashboard(userId) {
         <div class="owner-history-list">
           ${calls.length ? calls.map((call) => `
             <div class="owner-history-row">
-              <strong>${escapeHtml(call.caller_id)} → ${escapeHtml(call.receiver_id)}</strong>
+              <div class="owner-history-people">
+                <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(call.caller_id)}">${escapeHtml(call.caller_id)}</button>
+                <span>→</span>
+                <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(call.receiver_id)}">${escapeHtml(call.receiver_id)}</button>
+              </div>
               <span>${escapeHtml(call.media)} • ${escapeHtml(call.state)}</span>
               <small>${escapeHtml(formatFullTimestamp(call.updated_at || call.created_at))}</small>
             </div>
@@ -3155,6 +3163,17 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
+  const nestedUserButton = e.target.closest("[data-owner-nested-user]");
+  if (nestedUserButton) {
+    const targetId = String(nestedUserButton.dataset.ownerNestedUser || "").trim();
+    if (!targetId) return;
+    document.getElementById("ownerFullDashboardDialog")?.close();
+    document.getElementById("ownerHierarchyDialog")?.close();
+    document.getElementById("ownerIdentityDialog")?.close();
+    await openOwnerUserProfile(targetId);
+    return;
+  }
+
   const fullViewButton = e.target.closest("[data-owner-full-view]");
   if (fullViewButton) {
     await openOwnerFullDashboard(fullViewButton.dataset.ownerFullView);
@@ -3191,7 +3210,7 @@ document.body.addEventListener("click", async e => {
           liveRoot.innerHTML = members.length
             ? members.map((member) => `
                 <div class="owner-history-row">
-                  <strong>${escapeHtml(member.display_name || member.user_id)}</strong>
+                  <button type="button" class="owner-inline-user owner-inline-user-name" data-owner-nested-user="${escapeHtml(member.user_id)}">${escapeHtml(member.display_name || member.user_id)}</button>
                   <span>ID ${escapeHtml(member.user_id)} • ${member.seat_index === null || member.seat_index === undefined ? "Audience" : "Seat " + (Number(member.seat_index) + 1)}</span>
                 </div>
               `).join("")
