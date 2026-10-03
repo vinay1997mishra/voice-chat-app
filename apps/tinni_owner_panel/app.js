@@ -79,6 +79,11 @@ let ownerListenAudioElements = [];
 let ownerFullDashboardUserId = "";
 let ownerFullDashboardRoomId = "";
 let ownerFullRefreshAfterAction = false;
+let ownerHierarchyUserId = "";
+let ownerHierarchyRole = "";
+let ownerHierarchyRange = "15d";
+let ownerHierarchyCustomFrom = "";
+let ownerHierarchyCustomTo = "";
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -163,8 +168,9 @@ const permissionByView = {
   ],
   wallets: ["wallets.normal", "wallets.seller", "wallets.merchant", "wallets.treasury_send"],
   hierarchy: [
-    "hierarchy.bd_manage", "hierarchy.agency_manage", "hierarchy.agency_bd_link",
-    "hierarchy.host_manage", "hierarchy.targets", "hierarchy.complaints",
+    "hierarchy.view_details", "hierarchy.bd_manage", "hierarchy.agency_manage",
+    "hierarchy.agency_bd_link", "hierarchy.host_manage", "hierarchy.targets",
+    "hierarchy.complaints",
   ],
   roles: ["roles.view", "roles.manage"],
   vip: ["vip.view", "vip.create", "vip.edit", "vip.toggle", "vip.grant_remove"],
@@ -257,6 +263,7 @@ const staffPermissionGroups = [
     key: "hierarchy",
     label: "BD / Agency / Host",
     items: [
+      ["hierarchy.view_details", "Open full Host / Agency / BD details"],
       ["hierarchy.bd_manage", "Activate / remove BD"],
       ["hierarchy.agency_manage", "Activate / remove Agency"],
       ["hierarchy.agency_bd_link", "Add / remove Agency under BD"],
