@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
+import '../infra/app_backend_service.dart';
 import '../moderation/user_safety_menu.dart';
+import '../social/social.dart';
 import '../ui/royal_theme.dart';
 import 'call_screen.dart';
 import 'call_verification_screen.dart';
@@ -36,6 +38,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   CallSession? incomingCall;
   List<Map<String, dynamic>> targetIdentityTags =
       const <Map<String, dynamic>>[];
+  List<RemoteNotification> activityNotifications =
+      const <RemoteNotification>[];
+  Map<String, String> roleInviteStatuses = const <String, String>{};
+  final Set<String> respondingRoleInvites = <String>{};
 
   bool get _isInbox => widget.targetUserId == null;
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
@@ -126,6 +132,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     try {
       if (_isInbox) {
         await widget.state.social.syncInbox(account.authToken);
+        await _loadInboxExtras();
       } else {
         await widget.state.social.syncBlocked(account.authToken);
         if (!_isOfficial && !_isFriend) {
@@ -136,6 +143,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           myUserId: _myUserId,
           peerUserId: _targetUserId,
         );
+        await _loadInviteStatuses();
       }
       await _checkIncoming();
       if (mounted) {
@@ -171,6 +179,83 @@ class _MessagesScreenState extends State<MessagesScreen> {
       if (mounted) setState(() {});
     } catch (_) {
       // Keep the last loaded inbox/conversation while reconnecting.
+    }
+  }
+
+  Future<void> _loadInboxExtras() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final results = await Future.wait<dynamic>(<Future<dynamic>>[
+      widget.state.backend.notifications(account.authToken),
+      widget.state.backend.hierarchyInvites(account.authToken),
+    ]);
+    activityNotifications =
+        List<RemoteNotification>.from(results[0] as List<RemoteNotification>);
+    final invites =
+        List<Map<String, dynamic>>.from(results[1] as List<Map<String, dynamic>>);
+    roleInviteStatuses = <String, String>{
+      for (final invite in invites)
+        if ((invite['id']?.toString() ?? '').isNotEmpty)
+          invite['id'].toString():
+              (invite['status']?.toString() ?? 'pending'),
+    };
+  }
+
+  Future<void> _loadInviteStatuses() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final invites = await widget.state.backend.hierarchyInvites(
+      account.authToken,
+    );
+    roleInviteStatuses = <String, String>{
+      for (final invite in invites)
+        if ((invite['id']?.toString() ?? '').isNotEmpty)
+          invite['id'].toString():
+              (invite['status']?.toString() ?? 'pending'),
+    };
+  }
+
+  Future<void> _respondRoleInvite(String inviteId, bool accept) async {
+    final account = widget.state.auth.current;
+    if (account == null || respondingRoleInvites.contains(inviteId)) return;
+    setState(() => respondingRoleInvites.add(inviteId));
+    try {
+      await widget.state.backend.respondHierarchyInvite(
+        account.authToken,
+        inviteId: inviteId,
+        accept: accept,
+      );
+      final wallet = await widget.state.backend.wallet(account.authToken);
+      widget.state.wallet.applyRemote(wallet);
+      await _loadInviteStatuses();
+      if (!_isInbox) {
+        await widget.state.social.loadConversation(
+          authToken: account.authToken,
+          myUserId: _myUserId,
+          peerUserId: _targetUserId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept ? 'Role invitation accepted.' : 'Role invitation rejected.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Bad state: ', ''),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => respondingRoleInvites.remove(inviteId));
+      }
     }
   }
 
@@ -465,8 +550,205 @@ class _MessagesScreenState extends State<MessagesScreen> {
     );
   }
 
+  Widget _messageThreadTile(MessageThread thread) {
+    final last = thread.lastMessage;
+    final mine = last?.from == _myUserId;
+    final avatar = _avatarProvider(thread.avatarDataUrl);
+    final isOfficial = thread.userId == 'tinni-official';
+    final isActivity = thread.userId == 'tinni-activity';
+    String subtitle;
+    if (last == null) {
+      subtitle = isOfficial
+          ? 'Official notices from Tinni Star'
+          : isActivity
+              ? 'Rewards, events and account activity'
+              : 'Start a conversation';
+    } else {
+      subtitle = (mine ? 'You: ' : '') +
+          last.text.replaceFirst(
+            RegExp(r'^\[ROLE_INVITE:[^\]]+\]\s*'),
+            '',
+          );
+    }
+
+    return RoyalPanel(
+      key: Key('message-thread-' + thread.userId),
+      onTap: () async {
+        if (isActivity) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => _ActivityInboxScreen(state: widget.state),
+            ),
+          );
+          if (mounted) {
+            await _loadInboxExtras();
+            setState(() {});
+          }
+          return;
+        }
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MessagesScreen(
+              state: widget.state,
+              targetUserId: thread.userId,
+              targetName: thread.displayName,
+              targetAvatarDataUrl: thread.avatarDataUrl,
+            ),
+          ),
+        );
+        if (mounted) {
+          await _refreshSilently();
+          setState(() {});
+        }
+      },
+      gradient: FeaturePalette.glow(
+        isOfficial
+            ? FeaturePalette.rank
+            : isActivity
+                ? FeaturePalette.social
+                : FeaturePalette.message,
+      ),
+      accentColor: isOfficial
+          ? FeaturePalette.rank
+          : isActivity
+              ? FeaturePalette.social
+              : FeaturePalette.message,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundImage: avatar,
+            backgroundColor: RoyalPalette.panel,
+            child: avatar == null
+                ? Icon(
+                    isOfficial
+                        ? Icons.verified_rounded
+                        : isActivity
+                            ? Icons.notifications_active_rounded
+                            : Icons.person_rounded,
+                    color: isOfficial
+                        ? FeaturePalette.rank
+                        : isActivity
+                            ? FeaturePalette.social
+                            : FeaturePalette.message,
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        thread.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: RoyalPalette.cream,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _timeLabel(last?.createdAt),
+                      style: const TextStyle(
+                        color: RoyalPalette.muted,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: thread.unreadCount > 0
+                        ? RoyalPalette.cream
+                        : RoyalPalette.muted,
+                    fontWeight: thread.unreadCount > 0
+                        ? FontWeight.w800
+                        : FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (thread.unreadCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: isOfficial
+                    ? FeaturePalette.rank
+                    : isActivity
+                        ? FeaturePalette.social
+                        : FeaturePalette.message,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                thread.unreadCount > 99 ? '99+' : thread.unreadCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInbox() {
     final threads = widget.state.social.messageThreads;
+    MessageThread? official;
+    final normal = <MessageThread>[];
+    for (final thread in threads) {
+      if (thread.userId == 'tinni-official') {
+        official = thread;
+      } else {
+        normal.add(thread);
+      }
+    }
+    official ??= const MessageThread(
+      userId: 'tinni-official',
+      displayName: 'Tinni Official',
+      isFriend: false,
+    );
+    final latestActivity = activityNotifications.isEmpty
+        ? null
+        : activityNotifications.first;
+    final activityThread = MessageThread(
+      userId: 'tinni-activity',
+      displayName: 'Activity',
+      isFriend: false,
+      lastMessage: latestActivity == null
+          ? null
+          : ChatMessage(
+              from: 'tinni-activity',
+              to: _myUserId,
+              text: latestActivity.title + ': ' + latestActivity.message,
+              createdAt: DateTime.fromMillisecondsSinceEpoch(
+                latestActivity.createdAt,
+              ),
+            ),
+      unreadCount:
+          activityNotifications.where((notice) => !notice.read).length,
+    );
+    final visible = <MessageThread>[
+      official,
+      activityThread,
+      ...normal,
+    ];
+
     return Scaffold(
       key: const Key('messages-inbox'),
       appBar: AppBar(
@@ -504,178 +786,19 @@ class _MessagesScreenState extends State<MessagesScreen> {
               ),
             ),
           Expanded(
-            child: loading && threads.isEmpty
+            child: loading && threads.isEmpty && activityNotifications.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
                     onRefresh: _load,
-                    child: threads.isEmpty
-                        ? ListView(
-                            children: const [
-                              SizedBox(height: 180),
-                              Center(
-                                child: Text(
-                                  'No friend messages yet.',
-                                  style: TextStyle(color: RoyalPalette.muted),
-                                ),
-                              ),
-                            ],
-                          )
-                        : ListView.separated(
-                            key: const Key('message-thread-list'),
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-                            itemCount: threads.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (_, index) {
-                              final thread = threads[index];
-                              final last = thread.lastMessage;
-                              final mine = last?.from == _myUserId;
-                              final avatar =
-                                  _avatarProvider(thread.avatarDataUrl);
-                              return RoyalPanel(
-                                key: Key(
-                                  'message-thread-' + thread.userId,
-                                ),
-                                onTap: () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => MessagesScreen(
-                                        state: widget.state,
-                                        targetUserId: thread.userId,
-                                        targetName: thread.displayName,
-                                        targetAvatarDataUrl:
-                                            thread.avatarDataUrl,
-                                      ),
-                                    ),
-                                  );
-                                  if (mounted) setState(() {});
-                                },
-                                gradient: FeaturePalette.glow(
-                                  FeaturePalette.message,
-                                ),
-                                accentColor: FeaturePalette.message,
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 24,
-                                      backgroundImage: avatar,
-                                      backgroundColor: RoyalPalette.panel,
-                                      child: avatar == null
-                                          ? (thread.userId ==
-                                                  'tinni-official'
-                                              ? const Icon(
-                                                  Icons.verified_rounded,
-                                                  color: FeaturePalette.rank,
-                                                )
-                                              : Text(
-                                                  thread.displayName.isEmpty
-                                                      ? '?'
-                                                      : thread.displayName
-                                                          .characters.first
-                                                          .toUpperCase(),
-                                                  style: const TextStyle(
-                                                    color:
-                                                        FeaturePalette.message,
-                                                    fontWeight:
-                                                        FontWeight.w900,
-                                                  ),
-                                                ))
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  thread.displayName,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    color:
-                                                        RoyalPalette.cream,
-                                                    fontWeight:
-                                                        FontWeight.w900,
-                                                  ),
-                                                ),
-                                              ),
-                                              Text(
-                                                _timeLabel(last?.createdAt),
-                                                style: const TextStyle(
-                                                  color: RoyalPalette.muted,
-                                                  fontSize: 10,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            last == null
-                                                ? 'Start a conversation'
-                                                : (mine ? 'You: ' : '') +
-                                                    last.text,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: thread.unreadCount > 0
-                                                  ? RoyalPalette.cream
-                                                  : RoyalPalette.muted,
-                                              fontWeight:
-                                                  thread.unreadCount > 0
-                                                      ? FontWeight.w800
-                                                      : FontWeight.w500,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          if (mine && last != null)
-                                            Text(
-                                              last.seenAt != null
-                                                  ? 'Seen'
-                                                  : 'Sent',
-                                              style: TextStyle(
-                                                color: last.seenAt != null
-                                                    ? FeaturePalette.social
-                                                    : RoyalPalette.muted,
-                                                fontSize: 10,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    if (thread.unreadCount > 0)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: FeaturePalette.message,
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          thread.unreadCount > 99
-                                              ? '99+'
-                                              : thread.unreadCount.toString(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
+                    child: ListView.separated(
+                      key: const Key('message-thread-list'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                      itemCount: visible.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (_, index) =>
+                          _messageThreadTile(visible[index]),
+                    ),
                   ),
           ),
         ],
@@ -823,11 +946,338 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         final verificationNotice = _isOfficial &&
                             !mine &&
                             message.text.startsWith('[CALL_VERIFY]');
+                        final roleInviteMatch = !mine
+                            ? RegExp(
+                                r'^\[ROLE_INVITE:([^:\]]+):(host|agency)\]\s*(.*)
+                        return Align(
+                          alignment: mine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 300),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              gradient: FeaturePalette.glow(
+                                mine
+                                    ? FeaturePalette.social
+                                    : FeaturePalette.message,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: (mine
+                                        ? FeaturePalette.social
+                                        : FeaturePalette.message)
+                                    .withValues(alpha: 0.70),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (mine
+                                          ? FeaturePalette.social
+                                          : FeaturePalette.message)
+                                      .withValues(alpha: 0.18),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: mine
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                SelectableText(
+                                  displayText,
+                                  key: Key(
+                                    'message-selectable-' +
+                                        (message.id ?? index.toString()),
+                                  ),
+                                ),
+                                if (verificationNotice) ...[
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    key: Key(
+                                      'official-call-verify-' +
+                                          (message.id ?? index.toString()),
+                                    ),
+                                    onPressed: _openCallVerification,
+                                    icon: const Icon(
+                                      Icons.verified_user_rounded,
+                                    ),
+                                    label: const Text('Verify Call ID'),
+                                  ),
+                                ],
+                                if (roleInviteMatch != null &&
+                                    message.to == _myUserId) ...[
+                                  const SizedBox(height: 8),
+                                  if (inviteStatus == 'pending')
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        OutlinedButton(
+                                          key: Key(
+                                            'role-invite-reject-' + inviteId,
+                                          ),
+                                          onPressed:
+                                              respondingRoleInvites.contains(inviteId)
+                                                  ? null
+                                                  : () => _respondRoleInvite(
+                                                        inviteId,
+                                                        false,
+                                                      ),
+                                          child: const Text('Reject'),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton(
+                                          key: Key(
+                                            'role-invite-accept-' + inviteId,
+                                          ),
+                                          onPressed:
+                                              respondingRoleInvites.contains(inviteId)
+                                                  ? null
+                                                  : () => _respondRoleInvite(
+                                                        inviteId,
+                                                        true,
+                                                      ),
+                                          child: Text(
+                                            'Accept ' +
+                                                (inviteRole == 'host'
+                                                    ? 'Host'
+                                                    : 'Agency'),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Text(
+                                      inviteStatus == 'accepted'
+                                          ? 'Accepted'
+                                          : 'Rejected',
+                                      style: TextStyle(
+                                        color: inviteStatus == 'accepted'
+                                            ? FeaturePalette.social
+                                            : Colors.redAccent,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                ],
+                                const SizedBox(height: 3),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _timeLabel(message.createdAt),
+                                      style: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                    if (mine) ...[
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        message.seenAt != null
+                                            ? 'Seen'
+                                            : 'Sent',
+                                        key: Key(
+                                          'message-status-' +
+                                              (message.id ??
+                                                  index.toString()),
+                                        ),
+                                        style: TextStyle(
+                                          color: message.seenAt != null
+                                              ? FeaturePalette.social
+                                              : RoyalPalette.muted,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: RoyalPalette.nearBlack,
+                border: Border(
+                  top: BorderSide(
+                    color: (_isOfficial
+                            ? FeaturePalette.rank
+                            : FeaturePalette.social)
+                        .withValues(alpha: 0.72),
+                  ),
+                ),
+              ),
+              child: _isOfficial
+                  ? const Row(
+                      children: [
+                        ShiningIcon(
+                          icon: Icons.verified_rounded,
+                          color: FeaturePalette.rank,
+                          size: 18,
+                          boxSize: 34,
+                          glow: 0.34,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Messages from Tinni Official are official platform notices.',
+                            style: TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('message-input'),
+                            controller: controller,
+                            onSubmitted: (_) => send(),
+                            decoration: InputDecoration(
+                              hintText: 'Message ' + _targetName + '…',
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('message-send-button'),
+                          onPressed: sending ? null : send,
+                          icon: sending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const ShiningIcon(
+                                  icon: Icons.send_rounded,
+                                  color: FeaturePalette.message,
+                                  size: 20,
+                                  boxSize: 36,
+                                  glow: 0.34,
+                                ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _isInbox ? _buildInbox() : _buildConversation();
+  }
+}
+
+
+class _MessageIdentityTag extends StatelessWidget {
+  const _MessageIdentityTag({required this.tag});
+
+  final Map<String, dynamic> tag;
+
+  Color _hex(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = tag['kind']?.toString() ?? 'custom';
+    final label = (tag['designation']?.toString().trim().isNotEmpty ?? false)
+        ? tag['designation']!.toString().trim()
+        : (tag['name']?.toString() ?? 'Tag');
+    if (kind == 'v_official') {
+      final bg = _hex(tag['background_color']?.toString(), const Color(0xFF69C9FF));
+      return Container(
+        padding: const EdgeInsets.fromLTRB(3, 2, 7, 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: RoyalPalette.deepGold),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: bg,
+                border: Border.all(color: RoyalPalette.gold, width: 1.5),
+              ),
+              child: const Text(
+                'V',
+                style: TextStyle(
+                  color: Color(0xFFE4E7ED),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final color = _hex(tag['color']?.toString(), RoyalPalette.gold);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .75)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: kind == 'auto_role' ? RoyalPalette.gold : color,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+,
+                              ).firstMatch(message.text)
+                            : null;
+                        final inviteId = roleInviteMatch?.group(1) ?? '';
+                        final inviteRole = roleInviteMatch?.group(2) ?? '';
+                        final inviteStatus =
+                            roleInviteStatuses[inviteId] ?? 'pending';
                         final displayText = verificationNotice
                             ? message.text
                                 .replaceFirst('[CALL_VERIFY]', '')
                                 .trim()
-                            : message.text;
+                            : roleInviteMatch != null
+                                ? (roleInviteMatch.group(3) ?? '').trim()
+                                : message.text;
                         return Align(
                           alignment: mine
                               ? Alignment.centerRight
@@ -1009,6 +1459,179 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 }
 
+
+
+class _ActivityInboxScreen extends StatefulWidget {
+  const _ActivityInboxScreen({required this.state});
+
+  final TinniState state;
+
+  @override
+  State<_ActivityInboxScreen> createState() => _ActivityInboxScreenState();
+}
+
+class _ActivityInboxScreenState extends State<_ActivityInboxScreen> {
+  bool loading = true;
+  String? error;
+  List<RemoteNotification> notices = const <RemoteNotification>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final values = await widget.state.backend.notifications(account.authToken);
+      if (!mounted) return;
+      setState(() {
+        notices = values;
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  Future<void> _markRead(RemoteNotification notice) async {
+    if (notice.read) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.markNotificationRead(
+        account.authToken,
+        notice.id,
+      );
+      await _load();
+    } catch (_) {}
+  }
+
+  String _date(RemoteNotification notice) {
+    if (notice.createdAt <= 0) return '';
+    final d = DateTime.fromMillisecondsSinceEpoch(notice.createdAt).toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${d.year} '
+        '${two(d.hour)}:${two(d.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: const Key('activity-inbox'),
+      appBar: AppBar(
+        title: const Text(
+          'Activity',
+          style: TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  if (notices.isEmpty)
+                    const RoyalPanel(
+                      child: Padding(
+                        padding: EdgeInsets.all(18),
+                        child: Text(
+                          'No activity yet.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    ),
+                  for (final notice in notices)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: RoyalPanel(
+                        key: Key('activity-notice-' + notice.id),
+                        onTap: () => _markRead(notice),
+                        gradient: FeaturePalette.glow(
+                          notice.read
+                              ? RoyalPalette.muted
+                              : FeaturePalette.social,
+                        ),
+                        accentColor: notice.read
+                            ? RoyalPalette.muted
+                            : FeaturePalette.social,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  notice.read
+                                      ? Icons.notifications_none_rounded
+                                      : Icons.notifications_active_rounded,
+                                  color: FeaturePalette.social,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    notice.title,
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                if (!notice.read)
+                                  const Text(
+                                    'NEW',
+                                    style: TextStyle(
+                                      color: FeaturePalette.social,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              notice.message,
+                              style: const TextStyle(
+                                color: RoyalPalette.cream,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _date(notice),
+                              style: const TextStyle(
+                                color: RoyalPalette.muted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+}
 
 class _MessageIdentityTag extends StatelessWidget {
   const _MessageIdentityTag({required this.tag});
