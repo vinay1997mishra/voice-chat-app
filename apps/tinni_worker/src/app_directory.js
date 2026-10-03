@@ -5459,7 +5459,6 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
         totalCost, now, senderId,
       );
-      this._recordRoomGiftSending(room, totalCost, now);
     }
 
     const transactions = [];
@@ -5557,6 +5556,14 @@ export class AppDirectoryStore extends DurableObject {
           social_value_coins: socialValueCoins,
         });
       }
+    }
+
+    const roomSocialValue = transactions.reduce(
+      (sum, item) => sum + Math.max(0, Number(item.social_value_coins || 0)),
+      0,
+    );
+    if (roomSocialValue > 0) {
+      this._recordRoomGiftSending(room, roomSocialValue, now);
     }
 
     if (isCpInvite) {
@@ -9595,9 +9602,14 @@ export class AppDirectoryStore extends DurableObject {
             GROUP BY room_id
          ) live ON live.room_id = r.id
          LEFT JOIN (
-           SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
-             FROM gift_transactions
-            GROUP BY room_id
+           SELECT g.room_id,
+                  COALESCE(
+                    SUM(COALESCE(l.social_value_coins, g.total_cost)),
+                    0
+                  ) AS gift_coins
+             FROM gift_transactions g
+             LEFT JOIN lucky_gift_results l ON l.transaction_id = g.id
+            GROUP BY g.room_id
          ) gx ON gx.room_id = r.id
         WHERE COALESCE(r.closed, 0) = 0
           AND COALESCE(r.locked, 0) = 0

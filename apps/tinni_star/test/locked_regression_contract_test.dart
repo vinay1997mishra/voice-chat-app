@@ -86,6 +86,29 @@ void main() {
     expect(room, isNot(contains('live-owner-tag-')));
     expect(room, isNot(contains('full-profile-tag-')));
     expect(room, isNot(contains('room-owner-tag-')));
+    expect(room, isNot(contains('seat-owner-tag-')));
+    expect(room, isNot(contains('seat-owner-medal-')));
+  });
+
+  test('room game logo and Rocket stages stay on latest reference layout', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room, contains("Key('room-game-floating-button')"));
+    expect(room, contains('child: const _ReferenceGameLogo(size: 54)'));
+    expect(room, isNot(contains("Key('room-tool-game')")));
+    for (final target in <String>[
+      '8000000',
+      '15000000',
+      '30000000',
+      '50000000',
+      '90000000',
+      '150000000',
+      '200000000',
+      '250000000',
+      '350000000',
+      '500000000',
+    ]) {
+      expect(room, contains(target));
+    }
   });
 
   test('gift panel locked categories and Lucky presets stay present', () {

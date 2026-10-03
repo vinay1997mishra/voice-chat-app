@@ -47,3 +47,27 @@ test("public room directory derives online count from live user presence", () =>
   assert.match(listRooms, /Date\.now\(\) - 90000/);
   assert.doesNotMatch(listRooms, /LEFT JOIN app_room_presence_counts/);
 });
+
+
+test("Lucky Gift keeps 10 percent social value across room surfaces", () => {
+  const source = read("src/app_directory.js");
+  const sendStart = source.indexOf("sendGift(senderIdValue, input)");
+  const sendEnd = source.indexOf("listRoomGifts(", sendStart);
+  assert.ok(sendStart >= 0 && sendEnd > sendStart);
+  const sendGift = source.slice(sendStart, sendEnd);
+  assert.match(sendGift, /const socialValuePercent = isLucky \? 10 : 100/);
+  assert.match(sendGift, /const receiverDiamonds = receiverIsHost \? socialValueCoins : 0/);
+  assert.match(sendGift, /ranking_value: socialValueCoins/);
+  assert.match(sendGift, /_recordRoomGiftSending\(room, roomSocialValue, now\)/);
+
+  const listStart = source.indexOf("async listRooms()");
+  const listEnd = source.indexOf("_pruneRoomThemes(", listStart);
+  const listRooms = source.slice(listStart, listEnd);
+  assert.match(listRooms, /LEFT JOIN lucky_gift_results l ON l\.transaction_id = g\.id/);
+  assert.match(listRooms, /COALESCE\(l\.social_value_coins, g\.total_cost\)/);
+
+  const rankingStart = source.indexOf("roomGiftRanking(");
+  const rankingEnd = source.indexOf("createLuckyPouch(", rankingStart);
+  const ranking = source.slice(rankingStart, rankingEnd);
+  assert.match(ranking, /COALESCE\(l\.social_value_coins, g\.total_cost\)/);
+});
