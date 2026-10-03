@@ -552,6 +552,15 @@ It is not a room-owner panel and is not shown inside the app.
 
 It controls platform configuration, users, rooms, wallets, Host/Agency/BD policy, VIP, gifts, entries, frames, banners, custom panels and audit history after protected Owner APIs are connected.
 
+## 14.1 Language and user-generated text — LOCKED
+
+- English is the default language until the user selects another language.
+- Create Tinni ID and Settings > Language use the same supported-language registry.
+- Supported choices are English, Hindi, Urdu, Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese (Simplified), Chinese (Traditional) and Korean.
+- User-entered display names/ID names, room names, room comments/chat, signature/bio and similar content are displayed exactly as entered. Tinni Star does not automatically translate or transliterate this user-generated content.
+- Numeric User ID / Room ID is never translated.
+- Localized UI text may fall back to English when a translation is not yet available.
+
 ## 15. KTV / Music local storage
 
 - Music/KTV songs added or downloaded by a user are stored in that phone's app-private local storage.

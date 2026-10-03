@@ -55,7 +55,7 @@ Status meanings:
 | Feedback | `mine_function_screens.dart`, `/feedback` | Implemented submit + user feedback history |
 | Message notification preferences | `mine_function_screens.dart`, `/account/preferences` | Implemented persisted Voice/Vibration/room-floating preferences |
 | Bind account | `mine_function_screens.dart`, account-link APIs | Google + Email OTP binding implemented; Facebook hidden unless deliberately re-enabled |
-| Language preference | `mine_function_screens.dart`, `/account/preferences` | Account preference implemented for English/Hindi/Urdu; full-screen localization continues as translations are added |
+| Language preference | `mine_function_screens.dart`, `login_screen.dart`, `/account/preferences` | Shared Create-ID/Settings registry implemented for English, Hindi, Urdu, Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese Simplified/Traditional and Korean; English fallback remains default while translations expand |
 | Blocklist | `mine_function_screens.dart`, social block APIs | Implemented real blocked-user list + Move out/Unblock |
 | Privacy / Service Agreement | `privacy_policy_screen.dart` | Implemented real in-app Tinni Star policy page; effective 30 Sep 2026 |
 | Sign out | `mine_function_screens.dart` | Implemented confirmation, room/push cleanup, persisted-auth clear, return to Login |
