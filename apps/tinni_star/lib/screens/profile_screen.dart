@@ -289,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final decoded = body.trim().isEmpty ? null : jsonDecode(body);
       if (decoded is! Map) return;
-      final rawTags = decoded['tags'];
+      final rawTags = decoded['identity_tags'] ?? decoded['tags'];
       final tags = rawTags is List
           ? rawTags
               .whereType<Map>()
