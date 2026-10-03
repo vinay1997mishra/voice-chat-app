@@ -198,6 +198,22 @@ assert.match(
 );
 
 assert.match(
+  directory,
+  /role IN \('host','agency','bd'\)/,
+  "Host, Agency and BD must all surface as automatic removable drill-down identity roles",
+);
+assert.match(
+  ownerPanelApp,
+  /data-owner-nested-user/,
+  "Nested Owner Panel records must let the operator drill into the referenced user ID",
+);
+assert.match(
+  ownerPanelApp,
+  /ownerFullDashboardDialog"\)\?\.close\(\)[\s\S]{0,260}openOwnerUserProfile\(targetId\)/,
+  "Nested ID drill-down must leave the current detail layer and open the referenced full profile",
+);
+
+assert.match(
   ownerPanelApp,
   /checkboxField\("permission_" \+ key, label, false\)/,
   "New Staff Panel permission checkboxes must default to OFF",
