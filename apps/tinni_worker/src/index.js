@@ -2573,6 +2573,92 @@ export default {
       }
     }
 
+    if (url.pathname === "/hierarchy/portal" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          portal: await getAppDirectoryStore(env).hierarchyPortal(
+            appSession.user.user_id,
+            url.searchParams.get("role") || "",
+            url.searchParams.get("from") || 0,
+            url.searchParams.get("to") || Date.now(),
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role portal") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invites" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          invites: await getAppDirectoryStore(env).listHierarchyInvites(
+            appSession.user.user_id,
+            url.searchParams.get("limit") || 100,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role invitations") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invite" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          invite: await getAppDirectoryStore(env).createHierarchyInvite(
+            appSession.user.user_id,
+            body.target_user_id,
+            body.role,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to send role invitation") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/invite/respond" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          invite: await getAppDirectoryStore(env).respondHierarchyInvite(
+            appSession.user.user_id,
+            body.invite_id,
+            body.accept === true,
+          ),
+          wallet: await getAppDirectoryStore(env).getWallet(appSession.user.user_id),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to respond to role invitation") }, 400);
+      }
+    }
+
+    if (url.pathname === "/hierarchy/contact" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).updateHierarchyContact(
+          appSession.user.user_id,
+          body.role,
+          body.contact,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to update role contact") }, 400);
+      }
+    }
+
     if (url.pathname === "/unique-ids/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
