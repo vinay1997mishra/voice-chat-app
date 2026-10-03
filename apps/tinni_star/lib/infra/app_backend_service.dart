@@ -120,6 +120,65 @@ class AppBackendService {
   final Uri apiBase;
   final HttpClient _httpClient;
 
+  String userSafeError(Object error) {
+    var text = error.toString().replaceFirst('Bad state: ', '').trim();
+    final lower = text.toLowerCase();
+
+    if (lower.contains('socketexception') ||
+        lower.contains('connection timed out') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('handshakeexception') ||
+        lower.contains('connection closed') ||
+        lower.contains('timed out')) {
+      return 'Connection problem. Please check your internet and retry.';
+    }
+
+    if (lower.contains('formatexception') ||
+        lower.contains('<!doctype') ||
+        lower.contains('<html') ||
+        lower.contains('invalid response')) {
+      return 'Tinni Star server returned an invalid response. Please retry.';
+    }
+
+    if (lower.contains('pbkdf2 failed') ||
+        lower.contains('iteration counts above')) {
+      return 'Unable to save the wallet PIN right now. Please retry.';
+    }
+
+    if (lower.contains('endpoint not implemented') ||
+        lower.contains('app endpoint is unavailable')) {
+      return 'Tinni Star server function is temporarily unavailable. Please retry.';
+    }
+
+    // Defense in depth: never surface infrastructure details even for an
+    // unexpected error shape.
+    text = text
+        .replaceAll(
+          RegExp(r'https?://[^\s,]+', caseSensitive: false),
+          'server',
+        )
+        .replaceAll(
+          RegExp(r'address\s*=\s*[^,\n]+', caseSensitive: false),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'port\s*=\s*\d+', caseSensitive: false),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'errno\s*=\s*\d+', caseSensitive: false),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+,\s+'), ', ')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
+
+    return text.isEmpty ? 'Something went wrong. Please retry.' : text;
+  }
+
+
   Future<Map<String, dynamic>> currentUser(String token) async {
     final data = await _request('GET', '/app/me', token);
     final user = _map(data['user']);
@@ -1302,36 +1361,79 @@ class AppBackendService {
     return List.unmodifiable(items);
   }
 
-  Future<Map<String, dynamic>> _request(String method, String path, String token, {Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String path,
+    String token, {
+    Map<String, dynamic>? body,
+    Map<String, String>? queryParameters,
+  }) async {
     if (token.trim().isEmpty) throw StateError('Login session is required');
-    final uri = apiBase.replace(path: path);
-    final request = method == 'POST' ? await _httpClient.postUrl(uri) : await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    if (body != null) {
-      request.headers.contentType = ContentType.json;
-      request.write(jsonEncode(body));
-    }
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    Map<String, dynamic> data = <String, dynamic>{};
-    if (text.trim().isNotEmpty) {
-      try {
-        data = _map(jsonDecode(text));
-      } on FormatException {
-        final body = text.trim();
-        if (body.contains('error code: 1101')) {
+
+    try {
+      final uri = apiBase.replace(
+        path: path,
+        queryParameters: queryParameters,
+      );
+      final verb = method.trim().toUpperCase();
+      late final HttpClientRequest request;
+      switch (verb) {
+        case 'POST':
+          request = await _httpClient.postUrl(uri);
+          break;
+        case 'PATCH':
+          request = await _httpClient.patchUrl(uri);
+          break;
+        case 'PUT':
+          request = await _httpClient.putUrl(uri);
+          break;
+        case 'DELETE':
+          request = await _httpClient.deleteUrl(uri);
+          break;
+        default:
+          request = await _httpClient.getUrl(uri);
+      }
+
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      if (body != null) {
+        request.headers.contentType = ContentType.json;
+        request.write(jsonEncode(body));
+      }
+
+      final response = await request.close().timeout(
+        const Duration(seconds: 20),
+      );
+      final text = await utf8.decoder.bind(response).join();
+      Map<String, dynamic> data = <String, dynamic>{};
+
+      if (text.trim().isNotEmpty) {
+        try {
+          data = _map(jsonDecode(text));
+        } on FormatException {
+          final rawBody = text.trim().toLowerCase();
+          if (rawBody.contains('error code: 1101')) {
+            throw StateError(
+              'Tinni Star server is temporarily unavailable. Please retry.',
+            );
+          }
           throw StateError(
-            'Tinni Star server is temporarily unavailable (1101). Please pull to retry.',
+            'Tinni Star server returned an invalid response. Please retry.',
           );
         }
-        throw StateError('Tinni Star server returned an invalid response.');
       }
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final message = data['error']?.toString() ?? 'Server request failed';
+        throw StateError(userSafeError(StateError(message)));
+      }
+      return data;
+    } on StateError {
+      rethrow;
+    } catch (error) {
+      throw StateError(userSafeError(error));
     }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Server request failed');
-    }
-    return data;
   }
 
   RemoteCp? _cp(dynamic value) {
