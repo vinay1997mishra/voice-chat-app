@@ -14,7 +14,7 @@ void main() {
     expect(room.contains("label: 'Agency'"), false);
     expect(room.contains('_roomMessageScrollController'), true);
     expect(room.contains('position.maxScrollExtent'), true);
-    expect(room.contains('fontSize: 10.5'), true);
+    expect(room.contains('fontSize: 11.5'), true);
 
     final session =
         File('lib/room/active_room_session.dart').readAsStringSync();
