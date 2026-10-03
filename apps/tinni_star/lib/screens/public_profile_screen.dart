@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
 import 'guardian_screen.dart';
+import 'cp_screen.dart';
 import 'personal_profile_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, dynamic> guardian = const <String, dynamic>{};
   List<Map<String, dynamic>> identityTags = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> trends = const <Map<String, dynamic>>[];
+  Map<String, dynamic>? cpPartnerProfile;
   bool loading = true;
   bool posting = false;
   int tab = 0;
@@ -86,6 +88,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         ),
       ),
       _safeProfileLoad(widget.state.backend.profileTrends(account.authToken)),
+      _safeProfileLoad(widget.state.backend.cpState(account.authToken)),
     ]);
 
     if (!mounted) return;
@@ -95,6 +98,28 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     final guardianResult = results[2];
     final tagResult = results[3];
     final trendsResult = results[4];
+    final cpResult = results.length > 5 ? results[5] : null;
+
+    widget.state.cp.applyRemote(
+      cpResult,
+      currentUserId: account.userId,
+    );
+    Map<String, dynamic>? partnerProfile;
+    final relationship = widget.state.cp.relationship;
+    if (relationship != null) {
+      final partnerId = relationship.userA == account.userId
+          ? relationship.userB
+          : relationship.userA;
+      final partnerResult = await _safeProfileLoad(
+        widget.state.backend.searchUserById(
+          account.authToken,
+          partnerId,
+        ),
+      );
+      if (partnerResult is Map) {
+        partnerProfile = Map<String, dynamic>.from(partnerResult);
+      }
+    }
 
     final tagData = tagResult is Map
         ? Map<String, dynamic>.from(tagResult)
@@ -126,6 +151,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               ),
         );
       }
+      cpPartnerProfile = partnerProfile;
       loading = false;
     });
   }
@@ -475,6 +501,170 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     );
   }
 
+  Widget _buildCpProfileCard() {
+    final account = widget.state.auth.current;
+    final cp = widget.state.cp.relationship;
+    if (account == null) return const SizedBox.shrink();
+
+    final myAvatar = _provider(account.avatarDataUrl);
+    String partnerName = '?';
+    ImageProvider? partnerAvatar;
+    var subtitle = 'Invite a CP • 2,222,222 coins';
+    var levelText = 'CP';
+    if (cp != null) {
+      final partnerId = cp.userA == account.userId ? cp.userB : cp.userA;
+      partnerName =
+          cpPartnerProfile?['display_name']?.toString().trim().isNotEmpty == true
+              ? cpPartnerProfile!['display_name'].toString()
+              : partnerId;
+      partnerAvatar = _provider(
+        cpPartnerProfile?['avatar_data_url']?.toString(),
+      );
+      final days = DateTime.now()
+              .difference(
+                DateTime(
+                  cp.startedAt.year,
+                  cp.startedAt.month,
+                  cp.startedAt.day,
+                ),
+              )
+              .inDays +
+          1;
+      subtitle = 'Lv.' +
+          cp.level.toString() +
+          ' • ' +
+          cp.intimacy.toString() +
+          ' intimacy • ' +
+          (days < 1 ? 1 : days).toString() +
+          ' days';
+      levelText = 'CP Lv.' + cp.level.toString();
+    }
+
+    Widget avatar({
+      required ImageProvider? image,
+      required String name,
+    }) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: FeaturePalette.cpSoft,
+                width: 1.6,
+              ),
+            ),
+            child: CircleAvatar(
+              radius: 25,
+              backgroundColor: const Color(0xFF301126),
+              backgroundImage: image,
+              child: image == null
+                  ? Text(
+                      name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                        color: FeaturePalette.cpSoft,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 3),
+          SizedBox(
+            width: 76,
+            child: Text(
+              name,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: RoyalPalette.cream,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return RoyalPanel(
+      key: const Key('profile-cp-card'),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CpScreen(state: widget.state),
+        ),
+      ),
+      accentColor: FeaturePalette.cp,
+      child: Row(
+        children: [
+          avatar(image: myAvatar, name: account.displayName),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.favorite_rounded,
+                  color: FeaturePalette.cp,
+                  size: 28,
+                ),
+                Text(
+                  'CP',
+                  style: TextStyle(
+                    color: FeaturePalette.cpSoft,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          avatar(image: partnerAvatar, name: partnerName),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  levelText,
+                  style: const TextStyle(
+                    color: FeaturePalette.cpSoft,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: RoyalPalette.muted,
+                    fontSize: 10,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'All my CP  ›',
+                  style: TextStyle(
+                    color: FeaturePalette.cp,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAboutMe({
     required Map<String, dynamic>? guardianRow,
     required String accountName,
@@ -483,6 +673,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Column(
         children: [
+          _buildCpProfileCard(),
+          const SizedBox(height: 10),
           RoyalPanel(
             onTap: () => Navigator.push(
               context,
