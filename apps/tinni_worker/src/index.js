@@ -5045,7 +5045,8 @@ export default {
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
         "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
         "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
-        "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
+        "treasury-send":"wallets.treasury_send","company-dollar-deduct":"__owner_only__",
+        "bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
@@ -5077,7 +5078,9 @@ export default {
           session,
           "owner.action." + String(body.action || "unknown"),
           "owner_action",
-          String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
+          actionName === "company-dollar-deduct"
+            ? "company"
+            : String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
           { data: body.data || {}, result },
         );
         return json({ ok: true, result, state: await getAppDirectoryStore(env).ownerState() });
