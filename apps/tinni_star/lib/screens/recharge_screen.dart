@@ -833,7 +833,7 @@ class _RechargeScreenState extends State<RechargeScreen> {
             subtitle: Text(
               frozen
                   ? 'Security frozen'
-                  : 'Balance: \${balance == 0 ? \'00\' : _formatCoins(balance)}',
+                  : "Balance: ${balance == 0 ? '00' : _formatCoins(balance)}",
             ),
             trailing: FilledButton(
               onPressed: frozen
