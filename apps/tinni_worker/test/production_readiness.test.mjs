@@ -10,6 +10,10 @@ const wranglerConfig = fs.readFileSync(
   new URL("../wrangler.jsonc", import.meta.url),
   "utf8",
 );
+const ownerPanelApp = fs.readFileSync(
+  new URL("../../tinni_owner_panel/app.js", import.meta.url),
+  "utf8",
+);
 
 assert.match(
   index,
@@ -191,6 +195,37 @@ assert.match(
   directory,
   /combined_target_progress_percent/,
   "Agency and BD drill-down data must expose combined target progress",
+);
+
+assert.match(
+  ownerPanelApp,
+  /checkboxField\("permission_" \+ key, label, false\)/,
+  "New Staff Panel permission checkboxes must default to OFF",
+);
+assert.match(
+  ownerPanelApp,
+  /No functions are active\. The Owner must enable functions individually\./,
+  "A Staff Panel with zero permissions must show no automatic functions",
+);
+assert.match(
+  ownerPanelApp,
+  /\["7d","7 Days"\][\s\S]{0,260}\["15d","15 Days"\][\s\S]{0,260}\["month","This Month"\][\s\S]{0,260}\["last_month","Last Month"\][\s\S]{0,260}\["custom","Custom Date"\]/,
+  "Owner hierarchy drill-down must expose week, 15-day, month, last-month and custom date ranges",
+);
+assert.match(
+  ownerPanelApp,
+  /data-owner-hierarchy-remove-host/,
+  "Agency drill-down must expose authorized Host removal",
+);
+assert.match(
+  ownerPanelApp,
+  /data-owner-hierarchy-user/,
+  "Hierarchy member IDs must drill back into the selected user's ID view",
+);
+assert.match(
+  ownerPanelApp,
+  /data-owner-tag-remove/,
+  "Full ID views must expose tag removal controls when permission allows",
 );
 
 console.log("Production readiness guards passed");
