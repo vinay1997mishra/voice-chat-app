@@ -2,7 +2,6 @@ const API_BASE = window.location.origin;
 
 const state = {
   treasury: 0,
-  companyDollars: { usd_cents: 0, ledger: [] },
   features: {},
   policies: {},
   gameConfig: {},
@@ -73,6 +72,21 @@ let currentSession = null;
 const ownerSelectedUsers = new Map();
 let ownerOfficials = [];
 let ownerOfficialPosition = "";
+let ownerListenRoom = null;
+let ownerListenModule = null;
+let ownerListenRoomId = "";
+let ownerListenAudioElements = [];
+let ownerFullDashboardUserId = "";
+let ownerFullDashboardRoomId = "";
+let ownerFullRefreshAfterAction = false;
+let ownerIdentityReturnUserId = "";
+let ownerIdentityReturnMode = "";
+let ownerHierarchyUserId = "";
+let ownerHierarchyRole = "";
+let ownerHierarchyRange = "15d";
+let ownerHierarchyCustomFrom = "";
+let ownerHierarchyCustomTo = "";
+let ownerHierarchyPortal = null;
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -80,6 +94,22 @@ function pretty(key) {
 
 function fmt(n) {
   return new Intl.NumberFormat("en-US").format(Number(n || 0));
+}
+
+function sessionCan(permission) {
+  if (currentSession?.role === "owner") return true;
+  return hasPermission(
+    new Set(Array.isArray(currentSession?.permissions) ? currentSession.permissions : []),
+    permission,
+  );
+}
+
+function fullDashboardActionButton(action, label, className = "btn secondary") {
+  const permission = actionPermission[action];
+  if (currentSession?.role !== "owner" && (!permission || !sessionCan(permission))) {
+    return "";
+  }
+  return `<button type="button" class="${className}" data-full-owner-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
 }
 
 function toast(message) {
@@ -124,36 +154,51 @@ async function checkHealth() {
 }
 
 const permissionByView = {
-  users: "users",
-  verification: "users",
-  messaging: "users",
-  rooms: "rooms",
-  wallets: "wallets",
-  hierarchy: "hierarchy",
-  roles: "roles",
-  vip: "vip",
-  gifts: "gifts",
-  assets: "assets",
-  banners: "banners",
-  games: "games",
-  policies: "policies",
-  audit: "audit",
+  users: [
+    "users.search", "users.full_dashboard", "users.edit_profile", "users.ban_id", "users.ban_device",
+    "users.invisible", "users.locked_room_bypass", "users.change_id", "users.unique_id",
+  ],
+  verification: [
+    "verification.view", "verification.review",
+    "verification.direct_verify", "verification.revoke",
+  ],
+  messaging: [
+    "messaging.search", "messaging.send", "messaging.tags", "messaging.officials",
+  ],
+  rooms: [
+    "rooms.search", "rooms.ban", "rooms.rename", "rooms.dp", "rooms.background",
+    "rooms.live_seats", "rooms.theme_view", "rooms.theme_create", "rooms.theme_remove",
+  ],
+  wallets: ["wallets.normal", "wallets.seller", "wallets.merchant", "wallets.treasury_send"],
+  hierarchy: [
+    "hierarchy.view_details", "hierarchy.bd_manage", "hierarchy.agency_manage",
+    "hierarchy.agency_bd_link", "hierarchy.host_manage", "hierarchy.targets",
+    "hierarchy.complaints",
+  ],
+  roles: ["roles.view", "roles.manage"],
+  vip: ["vip.view", "vip.create", "vip.edit", "vip.toggle", "vip.grant_remove"],
+  gifts: ["gifts.view", "gifts.create", "gifts.edit", "gifts.remove"],
+  assets: ["assets.entries", "assets.frames"],
+  banners: ["banners.view", "banners.create", "banners.remove"],
+  games: ["games.view", "games.toggle", "games.limits", "games.investigate"],
+  policies: ["policies.view", "policies.create", "policies.edit", "policies.pricing"],
+  audit: ["audit.view", "audit.export"],
 };
 
 const permissionByModule = {
-  "Users": "users",
-  "Call Verification": "users",
-  "Messages & Tags": "users",
-  "Rooms": "rooms",
-  "Wallets": "wallets",
-  "BD / Agency / Host": "hierarchy",
-  "Roles / Posts": "roles",
-  "VIP": "vip",
-  "Gifts": "gifts",
-  "Entries / Frames": "assets",
-  "Banners": "banners",
-  "Games": "games",
-  "Policies": "policies",
+  "Users": permissionByView.users,
+  "Call Verification": permissionByView.verification,
+  "Messages & Tags": permissionByView.messaging,
+  "Rooms": permissionByView.rooms,
+  "Wallets": permissionByView.wallets,
+  "BD / Agency / Host": permissionByView.hierarchy,
+  "Roles / Posts": permissionByView.roles,
+  "VIP": permissionByView.vip,
+  "Gifts": permissionByView.gifts,
+  "Entries / Frames": permissionByView.assets,
+  "Banners": permissionByView.banners,
+  "Games": permissionByView.games,
+  "Policies": permissionByView.policies,
 };
 
 const staffPermissionGroups = [
@@ -162,12 +207,34 @@ const staffPermissionGroups = [
     label: "Users",
     items: [
       ["users.search", "Search / view user details"],
+      ["users.full_dashboard", "Open Full ID Dashboard"],
+      ["users.edit_profile", "Change user name / DP"],
       ["users.ban_id", "ID ban / unban"],
       ["users.ban_device", "Device ban / unban"],
       ["users.invisible", "Invisible ID"],
       ["users.locked_room_bypass", "Locked-room bypass"],
       ["users.change_id", "Change public ID"],
       ["users.unique_id", "Create and price purchasable unique IDs"],
+    ],
+  },
+  {
+    key: "verification",
+    label: "Call Verification",
+    items: [
+      ["verification.view", "View verification pages / status"],
+      ["verification.review", "Approve / reject verification requests"],
+      ["verification.direct_verify", "Direct Verify an ID"],
+      ["verification.revoke", "Remove Verified status"],
+    ],
+  },
+  {
+    key: "messaging",
+    label: "Messages & Tags",
+    items: [
+      ["messaging.search", "Search IDs for messaging / tags"],
+      ["messaging.send", "Send Tinni Official messages"],
+      ["messaging.tags", "Create / apply user tags"],
+      ["messaging.officials", "View / manage V Official positions"],
     ],
   },
   {
@@ -199,6 +266,7 @@ const staffPermissionGroups = [
     key: "hierarchy",
     label: "BD / Agency / Host",
     items: [
+      ["hierarchy.view_details", "Open full Host / Agency / BD details"],
       ["hierarchy.bd_manage", "Activate / remove BD"],
       ["hierarchy.agency_manage", "Activate / remove Agency"],
       ["hierarchy.agency_bd_link", "Add / remove Agency under BD"],
@@ -285,6 +353,8 @@ const staffPermissionGroups = [
 
 const actionPermission = {
   "user-search": "users.search",
+  "user-name": "users.edit_profile",
+  "user-dp": "users.edit_profile",
   "user-ban": "users.ban_id",
   "device-ban": "users.ban_device",
   "user-invisible": "users.invisible",
@@ -302,7 +372,6 @@ const actionPermission = {
   "wallet-seller": "wallets.seller",
   "wallet-merchant": "wallets.merchant",
   "treasury-send": "wallets.treasury_send",
-  "company-dollar-deduct": "__owner_only__",
   "wallet-security-unfreeze": "__owner_only__",
   "bd-activate": "hierarchy.bd_manage",
   "agency-activate": "hierarchy.agency_manage",
@@ -340,7 +409,7 @@ const actionPermission = {
 function catalogPermission(item, operation) {
   const kind = String(item?.kind || "");
   if (kind === "vip") return operation === "toggle" ? "vip.toggle" : "vip.edit";
-  if (kind === "gift") return operation === "remove" ? "gifts.remove" : (operation === "edit" ? "gifts.edit" : "gifts.remove");
+  if (kind === "gift") return operation === "remove" ? "gifts.remove" : "gifts.edit";
   if (kind === "entry" || kind === "vehicle" || kind === "frame" || kind === "profile_card") return (kind === "entry" || kind === "vehicle") ? "assets.entries" : "assets.frames";
   if (kind === "banner") return operation === "remove" ? "banners.remove" : "banners.create";
   return "roles.manage";
@@ -348,12 +417,16 @@ function catalogPermission(item, operation) {
 
 function hasPermission(allowed, permission) {
   if (!permission) return false;
-  const group = permission.split(".")[0];
-  return allowed.has(group) || allowed.has(permission);
+  return allowed.has(permission);
+}
+
+function hasAnyPermission(allowed, permissions) {
+  const required = Array.isArray(permissions) ? permissions : [permissions];
+  return required.some((permission) => allowed.has(permission));
 }
 
 function hasGroupPermission(allowed, group) {
-  return allowed.has(group) || [...allowed].some((permission) => permission.startsWith(group + "."));
+  return [...allowed].some((permission) => permission.startsWith(group + "."));
 }
 
 function escapeHtml(value) {
@@ -419,8 +492,8 @@ async function loadStaffPanels() {
           <div class="staff-power-title">Powers / Permissions</div>
           <div class="staff-permission-groups">
             ${staffPermissionGroups.map(group => {
-              const inherited = activePermissions.has(group.key);
-              const allChildren = group.items.every(([key]) => inherited || activePermissions.has(key));
+              const inherited = false;
+              const allChildren = group.items.every(([key]) => activePermissions.has(key));
               return `
                 <details class="staff-permission-group" open>
                   <summary>
@@ -444,7 +517,7 @@ async function loadStaffPanels() {
                           data-staff-permission
                           data-panel-id="${panelId}"
                           data-permission="${key}"
-                          ${inherited || activePermissions.has(key) ? "checked" : ""}
+                          ${activePermissions.has(key) ? "checked" : ""}
                         >
                         <span>${label}</span>
                       </label>
@@ -526,7 +599,7 @@ function auditDetailsText(details) {
 
 async function loadCallVerifications() {
   const root = document.getElementById("callVerificationList");
-  if (!root || currentSession?.role !== "owner") return;
+  if (!root || !sessionCan("verification.review")) return;
   try {
     const data = await api("/api/call-verifications");
     const items = (Array.isArray(data.submissions) ? data.submissions : [])
@@ -576,7 +649,7 @@ async function loadCallVerifications() {
 
 async function loadVerifiedUsers(query = "") {
   const root = document.getElementById("verifiedUsersList");
-  if (!root || currentSession?.role !== "owner") return;
+  if (!root || !sessionCan("verification.view")) return;
   try {
     const data = await api("/api/owner/verified-users?q=" + encodeURIComponent(query));
     const users = Array.isArray(data.users) ? data.users : [];
@@ -596,9 +669,10 @@ async function loadVerifiedUsers(query = "") {
           </div>
           <span class="badge gold">Verified</span>
         </div>
-        <div class="button-row">
-          <button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>
-        </div>
+        ${sessionCan("verification.revoke") ? `
+          <div class="button-row">
+            <button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>
+          </div>` : ""}
       </div>
     `).join("");
   } catch (error) {
@@ -619,9 +693,159 @@ function userTagHtml(tags) {
   }).join(" ");
 }
 
+function hierarchyManagePermission(roleValue) {
+  const role = String(roleValue || "").toLowerCase();
+  if (role === "host") return "hierarchy.host_manage";
+  if (role === "agency") return "hierarchy.agency_manage";
+  if (role === "bd") return "hierarchy.bd_manage";
+  return "";
+}
+
+function ownerIdentityControlsHtml(tags, userIdValue) {
+  const items = Array.isArray(tags) ? tags : [];
+  const userId = String(userIdValue || "");
+  if (items.length === 0) return '<span class="muted">No identity tags</span>';
+  return items.map((tag) => {
+    const label = String(tag.designation || tag.name || "Tag");
+    const kind = String(tag.kind || "");
+    const tagId = String(tag.id || tag.tag_id || "");
+    const autoRole = kind === "auto_role"
+      ? String(tag.designation || tag.name || "").trim().toLowerCase()
+      : "";
+    const canOpenRole = autoRole && sessionCan("hierarchy.view_details");
+    const canOpenTag = !autoRole && sessionCan("users.full_dashboard");
+    const canRemoveRole = autoRole && sessionCan(hierarchyManagePermission(autoRole));
+    const canRemoveTag = !autoRole && tagId && sessionCan("messaging.tags");
+    const badge = kind === "v_official"
+      ? `<span class="owner-v-tag" style="--official-bg:${escapeHtml(tag.background_color || tag.color || "#69C9FF")}"><i>V</i><b>${escapeHtml(label)}</b></span>`
+      : `<span class="badge" style="border-color:${escapeHtml(tag.color || "#FFD54F")};color:${escapeHtml(tag.color || "#FFD54F")}">${escapeHtml(label)}</span>`;
+    const openAttrs = canOpenRole
+      ? `data-owner-role-open="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}"`
+      : canOpenTag
+        ? `data-owner-tag-open="${escapeHtml(tagId || label)}"
+             data-owner-tag-user="${escapeHtml(userId)}"
+             data-owner-tag-label="${escapeHtml(label)}"
+             data-owner-tag-kind="${escapeHtml(kind || "custom")}"
+             data-owner-tag-color="${escapeHtml(tag.color || "")}"
+             data-owner-tag-background="${escapeHtml(tag.background_color || "")}"
+             data-owner-tag-created="${escapeHtml(tag.created_at || 0)}"`
+        : "";
+    return `
+      <div class="owner-tag-control">
+        <button type="button" class="owner-tag-main" ${openAttrs}
+          ${!canOpenRole && !canOpenTag ? "disabled" : ""}>
+          ${badge}
+        </button>
+        <span class="owner-tag-meta">${escapeHtml(kind || (autoRole ? "role" : "tag"))}</span>
+        ${canRemoveRole ? `<button type="button" class="btn danger compact" data-owner-role-remove="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}">Remove</button>` : ""}
+        ${canRemoveTag ? `<button type="button" class="btn danger compact" data-owner-tag-remove="${escapeHtml(tagId)}" data-owner-tag-user="${escapeHtml(userId)}">Remove</button>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+async function openOwnerIdentityDetails(button) {
+  if (!sessionCan("users.full_dashboard")) {
+    toast("Full ID Dashboard permission is not active.");
+    return;
+  }
+  const userId = String(button?.dataset?.ownerTagUser || "").trim();
+  const tagId = String(button?.dataset?.ownerTagOpen || "").trim();
+  const label = String(button?.dataset?.ownerTagLabel || "Tag");
+  const kind = String(button?.dataset?.ownerTagKind || "custom");
+  if (!userId) return;
+
+  ownerIdentityReturnUserId = userId;
+  ownerIdentityReturnMode = document.getElementById("ownerFullDashboardDialog")?.open
+    ? "full"
+    : "profile";
+
+  document.getElementById("ownerProfileDialog")?.close();
+  document.getElementById("ownerFullDashboardDialog")?.close();
+
+  const dialog = document.getElementById("ownerIdentityDialog");
+  const root = document.getElementById("ownerIdentityContent");
+  const title = document.getElementById("ownerIdentityTitle");
+  if (!dialog || !root) return;
+  if (title) title.textContent = label + " Details";
+  root.innerHTML = '<div class="empty-state">Loading identity details…</div>';
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api(
+      "/api/owner/user-detail?user_id=" + encodeURIComponent(userId),
+    );
+    const detail = data.detail || {};
+    const wallet = detail.wallet || {};
+    const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const walletType = normalized === "coinseller"
+      ? "coin_seller"
+      : normalized === "merchant"
+        ? "merchant"
+        : "";
+    const roleWallet = walletType === "coin_seller"
+      ? wallet.coin_seller_wallet
+      : walletType === "merchant"
+        ? wallet.merchant_wallet
+        : null;
+    const walletPermission = walletType === "coin_seller"
+      ? "wallets.seller"
+      : walletType === "merchant"
+        ? "wallets.merchant"
+        : "";
+    const walletAction = walletType === "coin_seller"
+      ? "wallet-seller"
+      : walletType === "merchant"
+        ? "wallet-merchant"
+        : "";
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        <div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(label)}</h2>
+          <p>ID ${escapeHtml(userId)} • ${escapeHtml(kind || "custom tag")}</p>
+          <small>Assigned ${escapeHtml(formatFullTimestamp(Number(button.dataset.ownerTagCreated || 0)))}</small>
+        </div>
+        <button type="button" class="btn secondary" data-owner-identity-full-view="${escapeHtml(userId)}">Full ID View</button>
+      </div>
+      <div class="rule-grid owner-profile-grid">
+        <div class="rule"><strong>Tag ID</strong><span>${escapeHtml(tagId || "—")}</span></div>
+        <div class="rule"><strong>Type</strong><span>${escapeHtml(kind || "custom")}</span></div>
+        <div class="rule"><strong>Color</strong><span>${escapeHtml(button.dataset.ownerTagColor || "—")}</span></div>
+        <div class="rule"><strong>Background</strong><span>${escapeHtml(button.dataset.ownerTagBackground || "—")}</span></div>
+      </div>
+      ${walletType ? `
+        <section class="panel" style="margin-top:12px">
+          <div class="panel-head">
+            <div><h3>${walletType === "coin_seller" ? "Coin Seller Wallet" : "Merchant Wallet"}</h3>
+            <p>Wallet status linked to this selected identity.</p></div>
+            <span class="badge ${roleWallet?.active ? "gold" : ""}">${roleWallet?.active ? "Active" : "Not active"}</span>
+          </div>
+          <div class="rule-grid">
+            <div class="rule"><strong>Balance</strong><span>${fmt(roleWallet?.balance || 0)}</span></div>
+            <div class="rule"><strong>Banned</strong><span>${roleWallet?.banned ? "Yes" : "No"}</span></div>
+            <div class="rule"><strong>Security freeze</strong><span>${roleWallet?.security_frozen ? "Yes" : "No"}</span></div>
+            <div class="rule"><strong>Updated</strong><span>${escapeHtml(formatFullTimestamp(roleWallet?.updated_at))}</span></div>
+          </div>
+          ${walletPermission && sessionCan(walletPermission)
+            ? `<div class="button-row" style="margin-top:10px"><button type="button" class="btn primary" data-owner-identity-wallet-action="${walletAction}" data-owner-identity-user="${escapeHtml(userId)}">Manage Wallet</button></div>`
+            : ""}
+        </section>` : ""}
+      <div class="button-row" style="margin-top:12px">
+        ${tagId && sessionCan("messaging.tags")
+          ? `<button type="button" class="btn danger" data-owner-tag-remove="${escapeHtml(tagId)}" data-owner-tag-user="${escapeHtml(userId)}">Remove Tag</button>`
+          : ""}
+      </div>
+    `;
+  } catch (error) {
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load identity details.")}</div>`;
+  }
+}
+
 async function searchDirectVerifyUsers(query) {
   const root = document.getElementById("manualCallVerifyResults");
-  if (!root) return;
+  if (!root || !sessionCan("verification.direct_verify")) return;
   const value = String(query || "").trim();
   if (!value) {
     root.className = "empty-state";
@@ -649,7 +873,9 @@ async function searchDirectVerifyUsers(query) {
         </div>
         <div class="button-row">
           ${user.call_verified
-            ? `<button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>`
+            ? (sessionCan("verification.revoke")
+                ? `<button type="button" class="btn secondary" data-call-verify-revoke="${escapeHtml(user.user_id)}">Remove Verified</button>`
+                : "")
             : `<button type="button" class="btn primary" data-direct-verify-user="${escapeHtml(user.user_id)}">Verify This ID</button>`}
         </div>
       </div>
@@ -702,6 +928,115 @@ async function searchOwnerMessagingUsers(query) {
   }
 }
 
+function setOwnerListenStatus(text, active = false) {
+  const status = document.getElementById("ownerListenStatus");
+  if (status) {
+    status.textContent = text;
+    status.classList.toggle("active", active);
+  }
+}
+
+function clearOwnerListenAudio() {
+  for (const element of ownerListenAudioElements) {
+    try { element.remove(); } catch {}
+  }
+  ownerListenAudioElements = [];
+}
+
+async function stopOwnerListen() {
+  clearOwnerListenAudio();
+  const room = ownerListenRoom;
+  ownerListenRoom = null;
+  ownerListenRoomId = "";
+  if (room) {
+    try { await room.disconnect(); } catch {}
+  }
+  setOwnerListenStatus("Listen-only stopped", false);
+}
+
+function attachOwnerListenTrack(track) {
+  if (!track || String(track.kind || "").toLowerCase() !== "audio") return;
+  try {
+    const element = track.attach();
+    element.autoplay = true;
+    element.controls = false;
+    element.dataset.ownerListenAudio = "1";
+    element.style.display = "none";
+    document.body.appendChild(element);
+    ownerListenAudioElements.push(element);
+    const playResult = element.play?.();
+    if (playResult?.catch) {
+      playResult.catch(() => setOwnerListenStatus("Audio blocked by browser — tap Listen again", false));
+    }
+  } catch {}
+}
+
+async function startOwnerListen(roomId) {
+  const cleanRoomId = String(roomId || "").trim();
+  if (!cleanRoomId) return;
+  await stopOwnerListen();
+  setOwnerListenStatus("Connecting listen-only…", false);
+
+  try {
+    const credentials = await api("/api/owner/listen-token", {
+      method: "POST",
+      body: JSON.stringify({ room_id: cleanRoomId }),
+    });
+
+    if (!ownerListenModule) {
+      ownerListenModule = await import(
+        "https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.esm.mjs"
+      );
+    }
+
+    const LiveKit = ownerListenModule;
+    const room = new LiveKit.Room({
+      adaptiveStream: true,
+      dynacast: false,
+    });
+    ownerListenRoom = room;
+    ownerListenRoomId = cleanRoomId;
+
+    room.on(LiveKit.RoomEvent.TrackSubscribed, (track) => {
+      attachOwnerListenTrack(track);
+    });
+    room.on(LiveKit.RoomEvent.TrackUnsubscribed, (track) => {
+      try {
+        for (const element of track.detach()) {
+          element.remove();
+          ownerListenAudioElements = ownerListenAudioElements.filter((item) => item !== element);
+        }
+      } catch {}
+    });
+    room.on(LiveKit.RoomEvent.Disconnected, () => {
+      if (ownerListenRoom === room) {
+        ownerListenRoom = null;
+        ownerListenRoomId = "";
+        clearOwnerListenAudio();
+        setOwnerListenStatus("Listen-only disconnected", false);
+      }
+    });
+
+    await room.connect(credentials.server_url, credentials.token);
+    if (typeof room.startAudio === "function") {
+      try { await room.startAudio(); } catch {}
+    }
+
+    for (const participant of room.remoteParticipants.values()) {
+      for (const publication of participant.audioTrackPublications.values()) {
+        if (publication.track) attachOwnerListenTrack(publication.track);
+      }
+    }
+
+    setOwnerListenStatus("Listening to room " + cleanRoomId + " • microphone disabled", true);
+    toast("Listen-only connected. Owner microphone cannot publish.");
+  } catch (error) {
+    await stopOwnerListen();
+    setOwnerListenStatus(error.message || "Unable to listen to room", false);
+    toast(error.message || "Unable to listen to room.");
+  }
+}
+
 function officialBadgeHtml(item) {
   const bg = String(item?.background_color || "#69C9FF");
   return `<span class="owner-v-tag official-large" style="--official-bg:${escapeHtml(bg)}"><i>V</i><b>${escapeHtml(item?.designation || "Official")}</b></span>`;
@@ -747,7 +1082,9 @@ function renderOfficials() {
         </div>
       </div>
       <div class="button-row official-actions">
-        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(item.user_id)}">Full Details</button>
+${sessionCan("users.full_dashboard")
+          ? `<button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(item.user_id)}">Full Details</button>`
+          : ""}
         <button type="button" class="btn secondary" data-owner-official-edit="${escapeHtml(item.user_id)}"
           data-tag-id="${escapeHtml(item.tag_id)}"
           data-designation="${escapeHtml(item.designation)}"
@@ -761,6 +1098,7 @@ function renderOfficials() {
 
 async function loadOfficials(preferredPosition = "") {
   const page = document.getElementById("officialPositionPage");
+  if (!sessionCan("messaging.officials")) return;
   try {
     const data = await api("/api/owner/officials");
     ownerOfficials = Array.isArray(data.officials) ? data.officials : [];
@@ -774,93 +1112,85 @@ async function loadOfficials(preferredPosition = "") {
   }
 }
 
-function ownerDetailRoleHtml(roles) {
+function ownerDetailRoleHtml(roles, userIdValue = "") {
   const items = Array.isArray(roles) ? roles.filter((item) => item.active !== false) : [];
-  return items.length
-    ? items.map((item) => `<span class="badge gold">${escapeHtml(item.role || "Role")}</span>`).join(" ")
-    : '<span class="muted">No active hierarchy role</span>';
+  const userId = String(userIdValue || "");
+  if (!items.length) return '<span class="muted">No active hierarchy role</span>';
+  return items.map((item) => {
+    const role = String(item.role || "role").toLowerCase();
+    const canOpen = sessionCan("hierarchy.view_details") && ["host","agency","bd"].includes(role);
+    const canRemove = sessionCan(hierarchyManagePermission(role));
+    return `
+      <span class="owner-role-chip">
+        <button type="button" class="badge gold owner-role-open"
+          ${canOpen ? `data-owner-role-open="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(userId)}"` : "disabled"}>
+          ${escapeHtml(item.role || "Role")}
+        </button>
+        ${canRemove ? `<button type="button" class="owner-role-remove" title="Remove ${escapeHtml(role)}" data-owner-role-remove="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(userId)}">×</button>` : ""}
+      </span>
+    `;
+  }).join(" ");
 }
 
 async function openOwnerUserProfile(userId) {
   const dialog = document.getElementById("ownerProfileDialog");
   const root = document.getElementById("ownerProfileContent");
   if (!dialog || !root) return;
-  const requestedUserId = String(userId || "").trim();
   root.innerHTML = '<div class="empty-state">Loading full ID…</div>';
-  root.dataset.ownerProfileUserId = requestedUserId;
   if (!dialog.open) dialog.showModal();
 
   try {
-    const data = await api("/api/owner/user-detail?user_id=" + encodeURIComponent(requestedUserId));
+    const data = await api("/api/owner/user-detail?user_id=" + encodeURIComponent(String(userId || "")));
     const detail = data.detail || {};
     const user = detail.user || {};
     const room = detail.current_room;
     const messages = Array.isArray(detail.messages) ? detail.messages : [];
     const calls = Array.isArray(detail.calls) ? detail.calls : [];
     const identityTags = Array.isArray(detail.identity_tags) ? detail.identity_tags : [];
-    const currentVip = Number(detail.controls?.vip_level || 0);
 
-    root.dataset.ownerProfileUserId = String(user.user_id || requestedUserId);
     root.innerHTML = `
       <div class="owner-profile-hero">
         ${user.avatar_data_url
           ? `<img src="${escapeHtml(user.avatar_data_url)}" alt="" class="owner-profile-avatar">`
           : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
-        <div class="owner-profile-main-copy">
+        <div>
           <h2>${escapeHtml(user.display_name || user.user_id || "User")}</h2>
           <p>ID ${escapeHtml(user.user_id || "")} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
-          <div class="chips">${userTagHtml(identityTags)}</div>
+          <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, user.user_id || userId)}</div>
         </div>
       </div>
 
       <div class="rule-grid owner-profile-grid">
         <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
-        <div class="rule owner-control-rule">
-          <div class="owner-control-head"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
-          <div class="owner-inline-control">
-            <input type="number" min="1" step="1" inputmode="numeric" placeholder="Amount" data-owner-wallet-amount="coins">
-            <button type="button" class="btn primary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="coins" data-operation="credit">+ Add</button>
-            <button type="button" class="btn secondary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="coins" data-operation="debit">− Remove</button>
-          </div>
-        </div>
-        <div class="rule owner-control-rule">
-          <div class="owner-control-head"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
-          <div class="owner-inline-control">
-            <input type="number" min="1" step="1" inputmode="numeric" placeholder="Amount" data-owner-wallet-amount="diamonds">
-            <button type="button" class="btn primary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="diamonds" data-operation="credit">+ Add</button>
-            <button type="button" class="btn secondary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="diamonds" data-operation="debit">− Remove</button>
-          </div>
-        </div>
-        <div class="rule owner-control-rule">
-          <div class="owner-control-head"><strong>VIP</strong><span>${currentVip || "None"}</span></div>
-          <div class="owner-inline-control owner-vip-control">
-            <input type="number" min="1" step="1" inputmode="numeric" placeholder="VIP level" data-owner-vip-level value="${currentVip || ""}">
-            <button type="button" class="btn primary" data-owner-vip-change data-user-id="${escapeHtml(user.user_id)}" data-operation="grant">Add / Change</button>
-            <button type="button" class="btn secondary" data-owner-vip-change data-user-id="${escapeHtml(user.user_id)}" data-operation="remove">Remove</button>
-          </div>
-        </div>
-        <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy)}</span></div>
+        <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
+        <div class="rule"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
+        <div class="rule"><strong>VIP</strong><span>${Number(detail.controls?.vip_level || 0) || "None"}</span></div>
+        <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy, user.user_id || userId)}</span></div>
         <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
         <div class="rule"><strong>Current room</strong><span>${room ? escapeHtml(room.room_name + " • " + room.room_id) : "Not in a live room"}</span></div>
         <div class="rule"><strong>Seat</strong><span>${room ? (room.seat_index === null || room.seat_index === undefined ? "Audience" : "Seat " + (Number(room.seat_index) + 1)) : "—"}</span></div>
       </div>
 
-      <div class="button-row owner-profile-actions" style="margin-top:12px">
-        <button type="button" class="btn primary" data-owner-profile-fullview>Full View</button>
-        ${room ? `<button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>` : ""}
+      <div class="button-row" style="margin-top:12px">
+        <button type="button" class="btn primary" data-owner-full-view="${escapeHtml(user.user_id || userId)}">Full View</button>
+        ${room && currentSession?.role === "owner" ? `
+          <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>
+          <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
+          <span id="ownerListenStatus" class="owner-listen-status">Listen-only idle</span>
+        ` : ""}
       </div>
 
       <div class="grid two owner-detail-sections">
-        <section class="panel owner-inbox-card">
+        <section class="panel">
           <div class="panel-head">
-            <div><h3>Inbox / Messages</h3><p>Open every conversation for this ID.</p></div>
-            <div class="button-row">
-              <span class="badge">${messages.length}</span>
-              <button type="button" class="btn primary" data-owner-open-inbox="${escapeHtml(user.user_id)}">Open all inbox</button>
+            <div>
+              <h3>Inbox / Messages</h3>
+              <p>Owner-panel sent messages stay visible here for 48 hours only. They remain in the user's app inbox.</p>
             </div>
+            <span class="badge">${messages.length}</span>
           </div>
           <div class="owner-history-list">
-            ${messages.length ? messages.slice(0, 8).map((message) => `
+            ${messages.length ? messages.map((message) => `
               <div class="owner-history-row">
                 <strong>${escapeHtml(message.from_user_id)} → ${escapeHtml(message.to_user_id)}</strong>
                 <span>${escapeHtml(message.text)}</span>
@@ -882,108 +1212,579 @@ async function openOwnerUserProfile(userId) {
           </div>
         </section>
       </div>
-
-      <section id="ownerInboxBrowser" class="panel owner-inbox-browser" hidden></section>
     `;
   } catch (error) {
     root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to open ID.")}</div>`;
   }
 }
 
-async function loadOwnerInbox(userId) {
-  const browser = document.getElementById("ownerInboxBrowser");
-  if (!browser) return;
-  browser.hidden = false;
-  browser.innerHTML = '<div class="empty-state">Loading complete inbox…</div>';
-  browser.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  try {
-    const data = await api("/api/owner/user-inbox?user_id=" + encodeURIComponent(String(userId || "")));
-    const threads = Array.isArray(data.threads) ? data.threads : [];
-    const target = data.user || {};
-    browser.innerHTML = `
-      <div class="panel-head">
-        <div>
-          <h3>${escapeHtml(target.display_name || target.user_id || "User")} — All Inbox</h3>
-          <p>ID ${escapeHtml(target.user_id || userId)} • ${threads.length} conversations</p>
+function ownerFullMessageRows(messages) {
+  const items = Array.isArray(messages) ? messages : [];
+  return items.length
+    ? items.map((message) => `
+        <div class="owner-history-row">
+          <div class="owner-history-people">
+            <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(message.from_user_id)}">${escapeHtml(message.from_user_id)}</button>
+            <span>→</span>
+            <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(message.to_user_id)}">${escapeHtml(message.to_user_id)}</button>
+          </div>
+          <span>${escapeHtml(message.message_kind === "image" ? "📷 Photo" : message.text)}</span>
+          <small>${escapeHtml(formatFullTimestamp(message.created_at))}</small>
         </div>
-        <button type="button" class="btn secondary" data-owner-close-inbox>Close Inbox</button>
-      </div>
-      <div class="owner-thread-list">
-        ${threads.length ? threads.map((thread) => `
-          <button type="button" class="owner-thread-row"
-            data-owner-open-thread
-            data-owner-user-id="${escapeHtml(target.user_id || userId)}"
-            data-peer-user-id="${escapeHtml(thread.user_id)}"
-            data-peer-name="${escapeHtml(thread.display_name || thread.user_id)}">
-            <div class="owner-thread-avatar">
-              ${thread.avatar_data_url
-                ? `<img src="${escapeHtml(thread.avatar_data_url)}" alt="">`
-                : '<span>◎</span>'}
-            </div>
-            <div class="owner-thread-copy">
-              <strong>${escapeHtml(thread.display_name || thread.user_id)}</strong>
-              <small>ID ${escapeHtml(thread.user_id)}${thread.is_friend ? " • Friend" : ""}</small>
-              <span>${escapeHtml(thread.last_message?.text || "No messages yet")}</span>
-            </div>
-            <div class="owner-thread-meta">
-              <b>${fmt(thread.message_count || 0)}</b>
-              <small>${thread.last_message?.created_at ? escapeHtml(formatFullTimestamp(thread.last_message.created_at)) : ""}</small>
-            </div>
-          </button>
-        `).join("") : '<div class="empty-state">No friend or message conversations found.</div>'}
-      </div>
-    `;
-  } catch (error) {
-    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load inbox.")}</div>`;
-  }
+      `).join("")
+    : '<div class="empty-state">No stored Tinni messages.</div>';
 }
 
-async function loadOwnerConversation(userId, peerUserId, peerName = "") {
-  const browser = document.getElementById("ownerInboxBrowser");
-  if (!browser) return;
-  browser.hidden = false;
-  browser.innerHTML = '<div class="empty-state">Loading conversation…</div>';
+function hierarchyRangeBounds(keyValue, customFromValue = "", customToValue = "") {
+  const key = String(keyValue || "15d");
+  const now = new Date();
+  const toNow = Date.now();
+  if (key === "7d") {
+    return { from: toNow - (7 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 7 days" };
+  }
+  if (key === "15d") {
+    return { from: toNow - (15 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 15 days" };
+  }
+  if (key === "month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return { from, to: toNow, label: "This month" };
+  }
+  if (key === "last_month") {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    const to = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return { from, to, label: "Last month" };
+  }
+  if (key === "custom") {
+    const fromDate = customFromValue ? new Date(String(customFromValue) + "T00:00:00") : null;
+    const toDate = customToValue ? new Date(String(customToValue) + "T00:00:00") : null;
+    if (!fromDate || !toDate || Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      throw new Error("Select both custom dates.");
+    }
+    const from = fromDate.getTime();
+    const to = toDate.getTime() + (24 * 60 * 60 * 1000);
+    if (to <= from) throw new Error("Custom end date must be same as or after start date.");
+    return {
+      from,
+      to,
+      label: String(customFromValue) + " → " + String(customToValue),
+    };
+  }
+  return { from: toNow - (15 * 24 * 60 * 60 * 1000), to: toNow, label: "Last 15 days" };
+}
+
+function ownerHierarchyStatsHtml(portal) {
+  const role = String(portal?.role || "");
+  const stats = portal?.stats || {};
+  const wallet = portal?.wallet || {};
+  const targets = portal?.targets || {};
+  const cards = [
+    ["Received coins", fmt(stats.received_coins || 0)],
+    ["Diamonds earned", fmt(stats.diamond_earned || 0)],
+  ];
+  if (role === "host") {
+    cards.push(
+      ["Target", fmt(stats.target_coins || targets.host_target_coins || 0)],
+      ["Target progress", Number(stats.target_progress_percent || 0).toFixed(1) + "%"],
+      ["Remaining", fmt(stats.target_remaining_coins || 0)],
+      ["Target payout", "$" + Number(stats.target_usd || targets.host_target_usd || 0).toFixed(2)],
+      ["Private chats", fmt(stats.private_chats || 0)],
+      ["Followers", fmt(stats.followers || 0)],
+    );
+  }
+  if (role === "agency") {
+    cards.push(
+      ["Hosts", fmt(stats.host_count || 0)],
+      ["Combined target", fmt(stats.combined_target_coins || 0)],
+      ["Target progress", Number(stats.combined_target_progress_percent || 0).toFixed(1) + "%"],
+      ["Commission", Number(stats.commission_percent || targets.agency_commission_percent || 0) + "%"],
+    );
+  }
+  if (role === "bd") {
+    cards.push(
+      ["Agencies", fmt(stats.agency_count || 0)],
+      ["Hosts", fmt(stats.host_count || 0)],
+      ["Combined target", fmt(stats.combined_target_coins || 0)],
+      ["Target progress", Number(stats.combined_target_progress_percent || 0).toFixed(1) + "%"],
+      ["Target 1", "$" + Number(targets.bd_target_1_usd || 0) + " @ " + Number(targets.bd_target_1_percent || 0) + "%"],
+      ["Target 2", "$" + Number(targets.bd_target_2_usd || 0) + " @ " + Number(targets.bd_target_2_percent || 0) + "%"],
+    );
+  }
+  cards.push(
+    ["Settlement balance", "$" + (Number(wallet.settlement_usd_cents || 0) / 100).toFixed(2)],
+    ["Withdrawable", "$" + (Number(wallet.withdrawable_usd_cents || 0) / 100).toFixed(2)],
+  );
+  return cards.map(([label, value]) =>
+    `<div class="rule"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`
+  ).join("");
+}
+
+function ownerHierarchyMembersHtml(portal) {
+  const role = String(portal?.role || "");
+  const members = Array.isArray(portal?.members) ? portal.members : [];
+  if (role === "host") {
+    const parent = portal?.parent;
+    return parent
+      ? `
+        <div class="owner-hierarchy-member" data-hierarchy-search="${escapeHtml((parent.display_name || "") + " " + (parent.user_id || ""))}">
+          <button type="button" class="owner-member-main" data-owner-hierarchy-user="${escapeHtml(parent.user_id)}">
+            <strong>${escapeHtml(parent.display_name || parent.user_id)}</strong>
+            <small>Agency • ID ${escapeHtml(parent.user_id)}</small>
+          </button>
+        </div>`
+      : '<div class="empty-state">No parent Agency linked.</div>';
+  }
+  if (!members.length) {
+    return role === "agency"
+      ? '<div class="empty-state">No active Hosts under this Agency.</div>'
+      : '<div class="empty-state">No active Agencies under this BD.</div>';
+  }
+
+  return members.map((member) => {
+    const memberRole = String(member.role || (role === "agency" ? "host" : "agency"));
+    const searchText = [
+      member.display_name, member.user_id, memberRole,
+      member.country_name,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const canRemoveHost = role === "agency" && memberRole === "host" &&
+      sessionCan("hierarchy.host_manage");
+    const canUnlinkAgency = role === "bd" && memberRole === "agency" &&
+      sessionCan("hierarchy.agency_bd_link");
+    const progress = member.target_progress_percent ??
+      member.combined_target_progress_percent ?? 0;
+    const target = member.target_coins ?? member.combined_target_coins ?? 0;
+    return `
+      <div class="owner-hierarchy-member" data-hierarchy-search="${escapeHtml(searchText)}">
+        <button type="button" class="owner-member-main" data-owner-hierarchy-user="${escapeHtml(member.user_id)}">
+          <strong>${escapeHtml(member.display_name || member.user_id)}</strong>
+          <small>${escapeHtml(memberRole.toUpperCase())} • ID ${escapeHtml(member.user_id)} • ${escapeHtml(member.country_name || "")}</small>
+        </button>
+        <div class="owner-member-stats">
+          <span>Received <b>${fmt(member.received_coins || 0)}</b></span>
+          ${memberRole === "host" ? `<span>Target <b>${fmt(target)}</b></span>` : `<span>Hosts <b>${fmt(member.host_count || 0)}</b></span>`}
+          <span>Progress <b>${Number(progress || 0).toFixed(1)}%</b></span>
+          <span>Joined <b>${escapeHtml(formatFullTimestamp(member.joined_at))}</b></span>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary compact" data-owner-hierarchy-user="${escapeHtml(member.user_id)}">Full ID View</button>
+          ${canRemoveHost ? `<button type="button" class="btn danger compact" data-owner-hierarchy-remove-host="${escapeHtml(member.user_id)}">Remove Host</button>` : ""}
+          ${canUnlinkAgency ? `<button type="button" class="btn danger compact" data-owner-hierarchy-unlink-agency="${escapeHtml(member.user_id)}">Remove from BD</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function openOwnerHierarchyDashboard(userIdValue, roleValue, rangeValue = ownerHierarchyRange) {
+  if (!sessionCan("users.full_dashboard") || !sessionCan("hierarchy.view_details")) {
+    toast("Hierarchy full-detail permission is not active.");
+    return;
+  }
+  const userId = String(userIdValue || "").trim();
+  const role = String(roleValue || "").trim().toLowerCase();
+  if (!userId || !["host","agency","bd"].includes(role)) return;
+
+  ownerHierarchyUserId = userId;
+  ownerHierarchyRole = role;
+  ownerHierarchyRange = String(rangeValue || "15d");
+
+  let range;
+  try {
+    range = hierarchyRangeBounds(
+      ownerHierarchyRange,
+      ownerHierarchyCustomFrom,
+      ownerHierarchyCustomTo,
+    );
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
+
+  const dialog = document.getElementById("ownerHierarchyDialog");
+  const root = document.getElementById("ownerHierarchyContent");
+  const title = document.getElementById("ownerHierarchyTitle");
+  if (!dialog || !root) return;
+
+  root.innerHTML = '<div class="empty-state">Loading role details…</div>';
+  if (title) title.textContent = pretty(role) + " Full Details";
+  document.getElementById("ownerProfileDialog")?.close();
+  document.getElementById("ownerFullDashboardDialog")?.close();
+  if (!dialog.open) dialog.showModal();
 
   try {
     const data = await api(
-      "/api/owner/user-conversation?user_id=" + encodeURIComponent(String(userId || "")) +
-      "&peer_user_id=" + encodeURIComponent(String(peerUserId || "")) +
-      "&limit=1000"
+      "/api/owner/hierarchy-detail?user_id=" + encodeURIComponent(userId) +
+      "&role=" + encodeURIComponent(role) +
+      "&from=" + encodeURIComponent(range.from) +
+      "&to=" + encodeURIComponent(range.to),
     );
-    const messages = Array.isArray(data.messages) ? data.messages : [];
-    const target = data.user || {};
-    const peer = data.peer || {};
-    const targetId = String(target.user_id || userId);
-    browser.innerHTML = `
-      <div class="panel-head">
-        <div>
-          <h3>${escapeHtml(target.display_name || targetId)} ↔ ${escapeHtml(peer.display_name || peerName || peerUserId)}</h3>
-          <p>ID ${escapeHtml(targetId)} ↔ ID ${escapeHtml(peer.user_id || peerUserId)} • ${messages.length} messages</p>
+    const portal = data.portal || {};
+    ownerHierarchyPortal = portal;
+    const profile = portal.profile || {};
+    const hierarchy = portal.hierarchy || {};
+    const canRemove = sessionCan(hierarchyManagePermission(role));
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        ${profile.avatar_data_url
+          ? `<img src="${escapeHtml(profile.avatar_data_url)}" alt="" class="owner-profile-avatar">`
+          : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(profile.display_name || userId)}</h2>
+          <p>${escapeHtml(role.toUpperCase())} • ID ${escapeHtml(profile.user_id || userId)} • ${escapeHtml(profile.country_name || "")}</p>
+          <small>Activated ${escapeHtml(formatFullTimestamp(hierarchy.activated_at))}</small>
         </div>
         <div class="button-row">
-          <button type="button" class="btn secondary" data-owner-back-inbox="${escapeHtml(targetId)}">Back to Inbox</button>
-          <button type="button" class="btn secondary" data-owner-close-inbox>Close</button>
+          <button type="button" class="btn secondary" data-owner-hierarchy-user="${escapeHtml(profile.user_id || userId)}">Full ID View</button>
+          ${canRemove ? `<button type="button" class="btn danger" data-owner-role-remove="${escapeHtml(role)}" data-owner-role-user="${escapeHtml(profile.user_id || userId)}">Remove ${escapeHtml(pretty(role))}</button>` : ""}
         </div>
       </div>
-      <div class="owner-conversation-list">
-        ${messages.length ? messages.map((message) => {
-          const fromTarget = String(message.from) === targetId;
-          const senderName = fromTarget
-            ? (target.display_name || targetId)
-            : (peer.display_name || peer.user_id || peerUserId);
-          return `
-            <div class="owner-message-row ${fromTarget ? "from-target" : "from-peer"}">
-              <strong>${escapeHtml(senderName)} <small>ID ${escapeHtml(message.from)}</small></strong>
-              <span>${escapeHtml(message.text)}</span>
-              <small>${escapeHtml(formatFullTimestamp(message.created_at))}${message.seen_at ? " • Seen" : ""}</small>
-            </div>
-          `;
-        }).join("") : '<div class="empty-state">No messages in this conversation.</div>'}
+
+      <div class="owner-hierarchy-range">
+        <div class="button-row owner-range-buttons">
+          ${[
+            ["7d","7 Days"],
+            ["15d","15 Days"],
+            ["month","This Month"],
+            ["last_month","Last Month"],
+            ["custom","Custom Date"],
+          ].map(([key,label]) =>
+            `<button type="button" class="btn ${ownerHierarchyRange === key ? "primary" : "secondary"} compact" data-owner-hierarchy-range="${key}">${label}</button>`
+          ).join("")}
+        </div>
+        <div class="owner-custom-range">
+          <label>From <input type="date" id="ownerHierarchyFrom" value="${escapeHtml(ownerHierarchyCustomFrom)}"></label>
+          <label>To <input type="date" id="ownerHierarchyTo" value="${escapeHtml(ownerHierarchyCustomTo)}"></label>
+          <button type="button" class="btn secondary compact" data-owner-hierarchy-custom-apply>Apply Custom</button>
+        </div>
+        <small>Showing: ${escapeHtml(range.label)}</small>
       </div>
+
+      <div class="rule-grid owner-profile-grid">
+        ${ownerHierarchyStatsHtml(portal)}
+      </div>
+
+      <section class="panel" style="margin-top:14px">
+        <div class="panel-head">
+          <div>
+            <h3>${role === "agency" ? "Hosts" : role === "bd" ? "Agencies" : "Agency Link"}</h3>
+            <p>${role === "agency" ? "Search Host ID/name, inspect target and remove Host." : role === "bd" ? "Inspect linked Agencies and their Host totals." : "Parent Agency details."}</p>
+          </div>
+          <span class="badge">${fmt((portal.members || []).length)}</span>
+        </div>
+        ${role !== "host" ? '<input id="ownerHierarchyMemberSearch" class="owner-hierarchy-search" type="search" placeholder="Search ID or name…">' : ""}
+        <div id="ownerHierarchyMemberList" class="owner-hierarchy-members">
+          ${ownerHierarchyMembersHtml(portal)}
+        </div>
+      </section>
     `;
   } catch (error) {
-    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load conversation.")}</div>`;
+    ownerHierarchyPortal = null;
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load role details.")}</div>`;
+  }
+}
+
+async function removeOwnerHierarchyRole(userIdValue, roleValue) {
+  const userId = String(userIdValue || "").trim();
+  const role = String(roleValue || "").trim().toLowerCase();
+  const permission = hierarchyManagePermission(role);
+  if (!userId || !permission || !sessionCan(permission)) {
+    toast("Role remove permission is not active.");
+    return;
+  }
+  if (!confirm("Remove " + pretty(role) + " from ID " + userId + "?")) return;
+  let action = "";
+  let data = {};
+  if (role === "host") {
+    action = "host-remove";
+    data = { host_user_id: userId, agency_owner_id: "" };
+  } else if (role === "agency") {
+    action = "agency-activate";
+    data = { user_id: userId, operation: "remove" };
+  } else if (role === "bd") {
+    action = "bd-activate";
+    data = { user_id: userId, operation: "remove" };
+  }
+  try {
+    await runOwnerAction(action, data);
+    toast(pretty(role) + " removed from ID " + userId + ".");
+    document.getElementById("ownerHierarchyDialog")?.close();
+    if (ownerFullDashboardUserId === userId) {
+      await openOwnerFullDashboard(userId);
+    } else {
+      await openOwnerUserProfile(userId);
+    }
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+function ownerDrillPanel(key, title, subtitle, body, badge = "") {
+  return `
+    <details class="panel owner-drill-section" data-owner-drill="${escapeHtml(key)}">
+      <summary class="owner-drill-summary">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+        <div class="owner-drill-summary-meta">
+          ${badge ? `<span class="badge">${escapeHtml(badge)}</span>` : ""}
+          <span class="owner-drill-open-label">Open</span>
+        </div>
+      </summary>
+      <div class="owner-drill-body">${body}</div>
+    </details>
+  `;
+}
+async function openOwnerFullDashboard(userId) {
+  if (!sessionCan("users.full_dashboard")) {
+    toast("Full ID Dashboard permission is not active.");
+    return;
+  }
+  const dialog = document.getElementById("ownerFullDashboardDialog");
+  const root = document.getElementById("ownerFullDashboardContent");
+  if (!dialog || !root) return;
+
+  ownerFullDashboardUserId = String(userId || "").trim();
+  ownerFullDashboardRoomId = "";
+  if (!ownerFullDashboardUserId) return;
+
+  root.innerHTML = '<div class="empty-state">Loading Full ID Dashboard…</div>';
+  document.getElementById("ownerProfileDialog")?.close();
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api(
+      "/api/owner/user-detail?user_id=" +
+        encodeURIComponent(ownerFullDashboardUserId),
+    );
+    const detail = data.detail || {};
+    const user = detail.user || {};
+    const controls = detail.controls || {};
+    const wallet = detail.wallet || {};
+    const room = detail.owned_room || detail.current_room || null;
+    const messages = Array.isArray(detail.messages) ? detail.messages : [];
+    const calls = Array.isArray(detail.calls) ? detail.calls : [];
+    const identityTags = Array.isArray(detail.identity_tags)
+      ? detail.identity_tags
+      : [];
+    const hierarchy = Array.isArray(detail.hierarchy) ? detail.hierarchy : [];
+    ownerFullDashboardUserId = String(user.user_id || ownerFullDashboardUserId);
+    ownerFullDashboardRoomId = String(
+      room?.id || room?.room_id || "",
+    );
+
+    const verified = user.call_verified === true ||
+      Number(user.call_verified || 0) === 1;
+    const roomName = String(room?.title || room?.room_name || "");
+    const roomDp = String(room?.photo_data_url || "");
+    const roomBackground = String(room?.theme_asset || "");
+    const profileButtons = [
+      fullDashboardActionButton("user-name", "Change Name", "btn primary"),
+      fullDashboardActionButton("user-dp", "Change DP"),
+      fullDashboardActionButton("id-change", "Change Public ID"),
+      fullDashboardActionButton("user-ban", controls.banned ? "Unban ID" : "Ban / Unban ID"),
+      fullDashboardActionButton("device-ban", "Device Ban / Unban"),
+      fullDashboardActionButton("user-invisible", "Invisible ON / OFF"),
+      fullDashboardActionButton("locked-bypass", "Locked-room Bypass"),
+    ].filter(Boolean).join("");
+
+    const walletButtons = [
+      fullDashboardActionButton("wallet-normal", "Normal Wallet", "btn primary"),
+      fullDashboardActionButton("wallet-seller", "Coin Seller Wallet"),
+      fullDashboardActionButton("wallet-merchant", "Merchant Wallet"),
+      fullDashboardActionButton("vip-grant", "VIP Add / Remove"),
+    ].filter(Boolean).join("");
+
+    const hierarchyButtons = [
+      fullDashboardActionButton("bd-activate", "BD Add / Remove"),
+      fullDashboardActionButton("agency-activate", "Agency Add / Remove"),
+      fullDashboardActionButton("host-add", "Add as Host"),
+      fullDashboardActionButton("host-remove", "Remove Host"),
+    ].filter(Boolean).join("");
+
+    const roomButtons = ownerFullDashboardRoomId
+      ? [
+          fullDashboardActionButton("room-name", "Change Room Name", "btn primary"),
+          fullDashboardActionButton("room-dp", "Change Room DP"),
+          fullDashboardActionButton("room-bg", "Change Room Background"),
+          fullDashboardActionButton("room-ban", "Room Ban / Unban"),
+          fullDashboardActionButton("room-live", "View Live Users / Seats"),
+        ].filter(Boolean).join("")
+      : "";
+
+    const sellerWallet = wallet.coin_seller_wallet || null;
+    const merchantWallet = wallet.merchant_wallet || null;
+    const profilePanel = ownerDrillPanel(
+      "profile",
+      "Profile / ID Control",
+      "Tap to open name, DP, public ID and account restriction controls.",
+      `<div class="owner-full-action-grid">${profileButtons || '<span class="muted">No profile-control permission active.</span>'}</div>`,
+    );
+    const walletPanel = ownerDrillPanel(
+      "wallet",
+      "Wallet / VIP",
+      "Tap to open all selected-ID wallet balances, seller/merchant state and VIP controls.",
+      `
+        <div class="rule-grid">
+          <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
+          <div class="rule"><strong>Diamonds</strong><span>${fmt(wallet.diamonds || 0)}</span></div>
+          <div class="rule"><strong>Withdrawable USD</strong><span>${(Number(wallet.withdrawable_usd_cents || 0) / 100).toFixed(2)}</span></div>
+          <div class="rule"><strong>Settlement USD</strong><span>${(Number(wallet.commission_usd_cents || 0) / 100).toFixed(2)}</span></div>
+          <div class="rule"><strong>Coin Seller</strong><span>${sellerWallet ? (sellerWallet.banned ? "Banned • " : "Active • ") + fmt(sellerWallet.balance || 0) : "Not active"}</span></div>
+          <div class="rule"><strong>Merchant</strong><span>${merchantWallet ? (merchantWallet.banned ? "Banned • " : "Active • ") + fmt(merchantWallet.balance || 0) : "Not active"}</span></div>
+        </div>
+        <div class="owner-full-action-grid">${walletButtons || '<span class="muted">No wallet/VIP permission active.</span>'}</div>
+      `,
+    );
+    const hierarchyPanel = ownerDrillPanel(
+      "hierarchy",
+      "BD / Agency / Host",
+      "Tap to open active roles. Tap a role badge again for full target/member/date-range details.",
+      `
+        <div class="owner-role-control-list">${ownerDetailRoleHtml(hierarchy, ownerFullDashboardUserId)}</div>
+        <div class="owner-full-action-grid">${hierarchyButtons || '<span class="muted">No hierarchy permission active.</span>'}</div>
+      `,
+      String(hierarchy.filter((item) => item.active !== false).length) + " active",
+    );
+    const verificationPanel = ownerDrillPanel(
+      "verification",
+      "Call Verification",
+      "Tap to inspect or change the selected ID verification status.",
+      `
+        <div class="owner-full-action-grid">
+          ${!verified && sessionCan("verification.direct_verify") ? '<button type="button" class="btn primary" data-full-direct-verify>Direct Verify</button>' : ""}
+          ${verified && sessionCan("verification.revoke") ? '<button type="button" class="btn secondary" data-full-revoke-verify>Remove Verified</button>' : ""}
+          ${!sessionCan("verification.direct_verify") && !sessionCan("verification.revoke") ? '<span class="muted">No verification control permission active.</span>' : ""}
+        </div>
+      `,
+      verified ? "Verified" : "Unverified",
+    );
+    const roomPanel = ownerDrillPanel(
+      "room",
+      "Owned / Current Room",
+      ownerFullDashboardRoomId ? "Tap to open room name, DP, background, ban and live-seat controls." : "No room linked to this ID.",
+      ownerFullDashboardRoomId ? `
+        <div class="rule-grid">
+          <div class="rule"><strong>Name</strong><span>${escapeHtml(roomName || "—")}</span></div>
+          <div class="rule"><strong>DP</strong><span>${roomDp ? "Set" : "Not set"}</span></div>
+          <div class="rule"><strong>Background</strong><span>${roomBackground ? "Set" : "Not set"}</span></div>
+          <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count || 0)}</span></div>
+        </div>
+        <div class="owner-full-action-grid">${roomButtons}</div>
+        <div id="ownerFullRoomLive" class="empty-state" style="margin-top:8px" hidden></div>
+        ${currentSession?.role === "owner" && detail.current_room?.room_id ? `
+          <div class="button-row" style="margin-top:8px">
+            <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(detail.current_room.room_id)}">Listen to Room — no mic</button>
+            <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
+          </div>` : ""}
+      ` : '<div class="empty-state">This ID does not currently own or occupy a room.</div>',
+      ownerFullDashboardRoomId ? "Room " + ownerFullDashboardRoomId : "No room",
+    );
+    const tagsPanel = ownerDrillPanel(
+      "identity",
+      "Tags / Identity",
+      "Tap any tag for full tag/wallet details; Host, Agency and BD open their role dashboards.",
+      `
+        <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, ownerFullDashboardUserId)}</div>
+        ${sessionCan("messaging.tags") ? `
+          <div class="button-row" style="margin-top:10px">
+            <button type="button" class="btn secondary" data-full-owner-add-tag>Add Custom Tag</button>
+          </div>` : ""}
+      `,
+      String(identityTags.length) + " tags",
+    );
+    const messagesPanel = ownerDrillPanel(
+      "messages",
+      "Inbox / Messages",
+      "Tap to inspect stored Tinni messages and send a Tinni Official reply to this ID.",
+      `
+        ${sessionCan("messaging.send") ? `
+          <div class="owner-full-message-box">
+            <textarea id="ownerFullMessageText" maxlength="2000" placeholder="Send as Tinni Official to this ID…"></textarea>
+            <button type="button" class="btn primary" data-full-owner-message-send>Send Tinni Official Message</button>
+          </div>` : ""}
+        <div class="owner-history-list" style="margin-top:10px">${ownerFullMessageRows(messages)}</div>
+      `,
+      String(messages.length),
+    );
+    const callsPanel = ownerDrillPanel(
+      "calls",
+      "Call History",
+      "Tap to inspect stored Tinni call history for this ID.",
+      `
+        <div class="owner-history-list">
+          ${calls.length ? calls.map((call) => `
+            <div class="owner-history-row">
+              <div class="owner-history-people">
+                <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(call.caller_id)}">${escapeHtml(call.caller_id)}</button>
+                <span>→</span>
+                <button type="button" class="owner-inline-user" data-owner-nested-user="${escapeHtml(call.receiver_id)}">${escapeHtml(call.receiver_id)}</button>
+              </div>
+              <span>${escapeHtml(call.media)} • ${escapeHtml(call.state)}</span>
+              <small>${escapeHtml(formatFullTimestamp(call.updated_at || call.created_at))}</small>
+            </div>
+          `).join("") : '<div class="empty-state">No stored Tinni call history.</div>'}
+        </div>
+      `,
+      String(calls.length),
+    );
+    const advancedButtons = [
+      sessionCan("games.investigate") ? '<button type="button" class="btn secondary" data-owner-user-game-investigate>Game Investigation</button>' : "",
+      fullDashboardActionButton("user-price-override-set", "Set User Price / Free Rule"),
+      fullDashboardActionButton("user-price-override-remove", "Remove User Price Override"),
+    ].filter(Boolean).join("");
+    const advancedPanel = ownerDrillPanel(
+      "advanced",
+      "User Activity / Advanced",
+      "Tap for per-ID game investigation and pricing/free-rule controls.",
+      `
+        <div class="owner-full-action-grid">${advancedButtons || '<span class="muted">No advanced per-ID permission active.</span>'}</div>
+        <div id="ownerFullGameInvestigation" class="empty-state" style="margin-top:10px" hidden></div>
+      `,
+    );
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        ${user.avatar_data_url
+          ? `<img src="${escapeHtml(user.avatar_data_url)}" alt="" class="owner-profile-avatar">`
+          : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(user.display_name || ownerFullDashboardUserId)}</h2>
+          <p>ID ${escapeHtml(ownerFullDashboardUserId)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
+          <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, ownerFullDashboardUserId)}</div>
+        </div>
+        <button type="button" class="btn secondary" data-owner-full-refresh>Refresh ID</button>
+      </div>
+
+      <div class="owner-full-dashboard-note">
+        Full View selected ID ka owner-control workspace hai. Sirf is ID se related controls yahan grouped hain.
+        Har server change audit log me record hota hai.
+      </div>
+
+      <div class="rule-grid owner-profile-grid">
+        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
+        <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
+        <div class="rule"><strong>Diamonds</strong><span>${fmt(wallet.diamonds || 0)}</span></div>
+        <div class="rule"><strong>VIP</strong><span>${Number(controls.vip_level || 0) || "None"}</span></div>
+        <div class="rule"><strong>ID</strong><span>${controls.banned ? "Banned" : "Active"}</span></div>
+        <div class="rule"><strong>Device</strong><span>${controls.device_banned ? "Blocked" : "Active"}</span></div>
+        <div class="rule"><strong>Verified</strong><span>${verified ? "Yes" : "No"}</span></div>
+        <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
+      </div>
+
+      <div class="owner-full-dashboard-grid">
+        ${profilePanel}
+        ${walletPanel}
+        ${hierarchyPanel}
+        ${verificationPanel}
+        ${roomPanel}
+        ${tagsPanel}
+        ${messagesPanel}
+        ${callsPanel}
+        ${advancedPanel}
+      </div>    `;
+  } catch (error) {
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to open Full ID Dashboard.")}</div>`;
   }
 }
 
@@ -1136,8 +1937,8 @@ function applySession(session) {
       button.hidden = false;
       return;
     }
-    const permission = permissionByView[view];
-    button.hidden = !permission || !hasGroupPermission(allowed, permission);
+    const permissions = permissionByView[view];
+    button.hidden = !permissions || !hasAnyPermission(allowed, permissions);
   });
 
   document.querySelectorAll(".module-card").forEach((button) => {
@@ -1145,8 +1946,8 @@ function applySession(session) {
       button.hidden = false;
       return;
     }
-    const permission = permissionByModule[button.dataset.module];
-    button.hidden = !permission || !hasGroupPermission(allowed, permission);
+    const permissions = permissionByModule[button.dataset.module];
+    button.hidden = !permissions || !hasAnyPermission(allowed, permissions);
   });
 
   document.querySelectorAll("[data-action]").forEach((button) => {
@@ -1155,11 +1956,7 @@ function applySession(session) {
       return;
     }
     const required = actionPermission[button.dataset.action];
-    if (required) button.hidden = !hasPermission(allowed, required);
-  });
-
-  document.querySelectorAll("[data-owner-section]").forEach((section) => {
-    section.hidden = !owner;
+    button.hidden = !required || !hasPermission(allowed, required);
   });
 
   document.querySelectorAll("[data-vip-edit]").forEach((button) => {
@@ -1182,6 +1979,17 @@ function applySession(session) {
   const quickAction = document.getElementById("quickActionBtn");
   if (quickAction) quickAction.hidden = !owner && !hasPermission(allowed, "users.search");
 
+  document.querySelectorAll("[data-requires-permission]").forEach((element) => {
+    if (owner) {
+      element.hidden = false;
+      return;
+    }
+    element.hidden = !hasPermission(
+      allowed,
+      String(element.dataset.requiresPermission || ""),
+    );
+  });
+
   const clearAuditButton = document.getElementById("clearAuditBtn");
   if (clearAuditButton) clearAuditButton.hidden = !owner;
 
@@ -1200,11 +2008,28 @@ function applySession(session) {
     return;
   }
 
+  // Staff receives only the server-filtered state for explicitly granted
+  // functions. This keeps selected modules usable without leaking unselected data.
+  loadOwnerState();
   if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
   if (hasPermission(allowed, "audit.view")) loadAuditLog();
 
-  const firstAllowed = Object.keys(permissionByView).find((view) => hasGroupPermission(allowed, permissionByView[view]));
-  if (firstAllowed) setView(firstAllowed);
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+  const firstAllowed = Object.keys(permissionByView).find(
+    (view) => hasAnyPermission(allowed, permissionByView[view]),
+  );
+  if (firstAllowed) {
+    setView(firstAllowed);
+  } else {
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      button.hidden = true;
+      button.classList.remove("active");
+    });
+    document.getElementById("pageTitle").textContent =
+      session.panelName || "Staff Panel";
+    document.getElementById("pageSubtitle").textContent =
+      "No functions are active. The Owner must enable functions individually.";
+  }
   document.body.classList.remove("auth-loading");
   document.body.classList.add("auth-ready");
 }
@@ -1219,7 +2044,7 @@ async function loadSession() {
 }
 
 async function loadOwnerState() {
-  if (currentSession?.role !== "owner") return;
+  if (!currentSession) return;
   try {
     const data = await api("/api/owner/state");
     const serverState = data.state || {};
@@ -1228,7 +2053,6 @@ async function loadOwnerState() {
     state.gameConfig = serverState.game_config || {};
     state.luckyGiftConfig = serverState.lucky_gift_config || {};
     state.treasury = Number(serverState.treasury?.balance || 0);
-    state.companyDollars = serverState.company_dollars || { usd_cents: 0, ledger: [] };
     state.catalog = Array.isArray(serverState.catalog) ? serverState.catalog : [];
     state.vips = state.catalog
       .filter((item) => item.kind === "vip")
@@ -1253,7 +2077,6 @@ async function loadOwnerState() {
     renderVips();
     renderPolicies();
     renderTreasury();
-    renderCompanyDollars();
     renderOwnerCatalogs();
   } catch (error) {
     toast(error.message || "Unable to load Owner state.");
@@ -1267,9 +2090,10 @@ function renderFeatures() {
   Object.entries(state.features).forEach(([key, value]) => {
     const row = document.createElement("div");
     row.className = "switch-row";
+    const canEdit = sessionCan("policies.edit");
     row.innerHTML = `
       <div class="switch-copy"><strong>${pretty(key)}</strong><small>Server master feature flag</small></div>
-      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${escapeHtml(key)}"><span class="slider"></span></label>
+      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${escapeHtml(key)}" ${canEdit ? "" : "disabled"}><span class="slider"></span></label>
     `;
     root.appendChild(row);
   });
@@ -1305,9 +2129,11 @@ function renderRoles() {
     ? items.map((item) => `
         <span class="chip">
           ${escapeHtml(item.name)}
-          <button type="button" data-catalog-edit="${escapeHtml(item.id)}" title="Edit">Edit</button>
-          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">Disable</button>
-          <button type="button" data-catalog-remove="${escapeHtml(item.id)}" title="Remove">Remove</button>
+          ${sessionCan("roles.manage") ? `
+            <button type="button" data-catalog-edit="${escapeHtml(item.id)}" title="Edit">Edit</button>
+            <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">Disable</button>
+            <button type="button" data-catalog-remove="${escapeHtml(item.id)}" title="Remove">Remove</button>
+          ` : ""}
         </span>
       `).join("")
     : '<span class="muted">No roles/posts yet.</span>';
@@ -1325,9 +2151,9 @@ function renderVips() {
       <td>${escapeHtml(v.frame)}</td>
       <td>${fmt(v.price)}</td>
       <td class="table-actions">
-        <button data-vip-edit="${escapeHtml(v.id)}">Edit</button>
-        <button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>
-        <button data-catalog-remove="${escapeHtml(v.id)}">Remove</button>
+        ${sessionCan("vip.edit") ? `<button data-vip-edit="${escapeHtml(v.id)}">Edit</button>` : ""}
+        ${sessionCan("vip.toggle") ? `<button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>` : ""}
+        ${sessionCan("vip.edit") ? `<button data-catalog-remove="${escapeHtml(v.id)}">Remove</button>` : ""}
       </td>
     </tr>
   `).join("");
@@ -1339,7 +2165,7 @@ function renderPolicies() {
   root.innerHTML = Object.entries(state.policies).map(([key, value]) => `
     <div class="policy-row">
       <div><strong>${escapeHtml(pretty(key))}</strong><small>Current value: ${escapeHtml(value)}</small></div>
-      <button data-policy-edit="${escapeHtml(key)}">Edit</button>
+      ${sessionCan("policies.edit") ? `<button data-policy-edit="${escapeHtml(key)}">Edit</button>` : ""}
     </div>
   `).join("");
 }
@@ -1350,40 +2176,6 @@ function renderTreasury() {
   const stat = document.getElementById("statTreasury");
   if (wallet) wallet.textContent = fmt(balance);
   if (stat) stat.textContent = fmt(balance);
-}
-
-function renderCompanyDollars() {
-  const company = state.companyDollars || {};
-  const balance = Math.max(0, Number(company.usd_cents || 0));
-  const balanceRoot = document.getElementById("companyDollarBalance");
-  if (balanceRoot) balanceRoot.textContent = "$" + (balance / 100).toFixed(2);
-
-  const ledgerRoot = document.getElementById("companyDollarLedger");
-  if (!ledgerRoot) return;
-  const ledger = Array.isArray(company.ledger) ? company.ledger : [];
-  if (!ledger.length) {
-    ledgerRoot.innerHTML = '<tr><td colspan="7" class="muted">No company dollar records.</td></tr>';
-    return;
-  }
-  ledgerRoot.innerHTML = ledger.map((row) => {
-    const amount = Number(row.usd_cents_delta || 0);
-    const sender = row.sender_user_id
-      ? escapeHtml((row.sender_name || row.sender_user_id) + " • ID " + row.sender_user_id)
-      : "Owner / Company";
-    const type = String(row.sender_wallet_type || row.kind || "")
-      .replaceAll("_", " ");
-    return `
-      <tr>
-        <td>${escapeHtml(formatFullTimestamp(row.created_at))}</td>
-        <td>${sender}</td>
-        <td>${escapeHtml(type)}</td>
-        <td>${amount >= 0 ? "+" : ""}$${(amount / 100).toFixed(2)}</td>
-        <td>$${(Number(row.balance_before || 0) / 100).toFixed(2)}</td>
-        <td>$${(Number(row.balance_after || 0) / 100).toFixed(2)}</td>
-        <td>${escapeHtml(row.reference_id || row.id || "—")}</td>
-      </tr>
-    `;
-  }).join("");
 }
 
 function renderCatalogList(rootId, kind, emptyText) {
@@ -1406,11 +2198,12 @@ function renderCatalogList(rootId, kind, emptyText) {
         <span class="badge ${item.enabled ? "gold" : ""}">${item.enabled ? "Active" : "Off"}</span>
       </div>
       <div class="button-row">
-        <button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>
-        <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
-          ${item.enabled ? "Disable" : "Enable"}
-        </button>
-        <button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>
+        ${sessionCan(catalogPermission(item, "edit")) ? `<button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>` : ""}
+        ${sessionCan(catalogPermission(item, "toggle")) ? `
+          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
+            ${item.enabled ? "Disable" : "Enable"}
+          </button>` : ""}
+        ${sessionCan(catalogPermission(item, "remove")) ? `<button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>` : ""}
       </div>
     </div>
   `).join("");
@@ -1489,15 +2282,13 @@ function openAction(action, preset = {}) {
       field("amount","Coin amount","number","2000000") +
       selectField("wallet_type","Receiver wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
-    "company-dollar-deduct": ["Deduct Company Dollars",
-      '<label><span>USD amount</span><input name="usd_amount" type="number" min="0.01" step="0.01" placeholder="300.00" required></label>' +
-      field("reason","Reason","text","Optional",false)
-    ],
     "wallet-security-unfreeze": ["Owner Security Unfreeze",
       field("user_id","User ID","text","10000001") +
       selectField("wallet_type","Wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
     "user-search": ["Search User", field("user_id","Current or old user ID","text","10000001")],
+    "user-name": ["Change User Name", field("user_id","User ID") + field("display_name","New display name")],
+    "user-dp": ["Change User DP", field("user_id","User ID") + field("asset_url","Approved HTTPS DP URL (blank = remove)","text","",false)],
     "user-ban": ["ID Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban"],["unban","Unban"]]) + field("reason","Reason")],
     "device-ban": ["Device Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban device"],["unban","Unban device"]])],
     "user-invisible": ["Invisible ID", field("user_id","User ID") + selectField("status","Status",[["on","Invisible ON"],["off","Invisible OFF"]])],
@@ -1517,7 +2308,7 @@ function openAction(action, preset = {}) {
       field("starts_at","Start date/time (blank = now)","datetime-local") +
       field("ends_at","End date/time","datetime-local")
     ],
-    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + selectField("asset","Balance",[["coins","Coins"],["diamonds","Diamonds"]]) + field("amount","Amount","number") + selectField("operation","Operation",[["credit","Add"],["debit","Remove"],["ban","Ban wallet (coins wallet)"],["unban","Unban wallet (coins wallet)"]])],
+    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["credit","Add coins"],["debit","Remove coins"],["ban","Ban wallet"],["unban","Unban wallet"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "bd-activate": ["BD Role", field("user_id","User ID") + selectField("operation","Operation",[["activate","Activate BD"],["remove","Remove BD"]])],
@@ -1711,7 +2502,9 @@ async function renderUserInvestigation(users) {
       </div>
       <div style="margin-top:8px">${userTagHtml(user.identity_tags || user.tags)}</div>
       <div class="button-row" style="margin-top:10px">
-        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>
+${sessionCan("users.full_dashboard")
+          ? `<button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>`
+          : ""}
       </div>
     </div>
   `).join("");
@@ -1930,14 +2723,6 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
-  if (action === "company-dollar-deduct") {
-    const amount = Number(data.usd_amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error("Enter a valid dollar amount.");
-    }
-    payload.usd_cents = Math.round(amount * 100);
-    delete payload.usd_amount;
-  }
   if (action === "lucky-gift-config") {
     payload.enabled = String(data.enabled || "") === "true";
     payload.banners_enabled = String(data.banners_enabled || "") === "true";
@@ -2205,102 +2990,399 @@ document.body.addEventListener("change", async (event) => {
 document.body.addEventListener("click", async e => {
   const profileClose = e.target.closest("[data-owner-profile-close]");
   if (profileClose) {
-    const profileDialog = document.getElementById("ownerProfileDialog");
-    profileDialog?.classList.remove("full-view");
-    profileDialog?.close();
+    document.getElementById("ownerProfileDialog")?.close();
     return;
   }
 
-  const fullViewButton = e.target.closest("[data-owner-profile-fullview]");
-  if (fullViewButton) {
-    const profileDialog = document.getElementById("ownerProfileDialog");
-    if (!profileDialog) return;
-    const enabled = profileDialog.classList.toggle("full-view");
-    fullViewButton.textContent = enabled ? "Compact View" : "Full View";
+  const fullClose = e.target.closest("[data-owner-full-close]");
+  if (fullClose) {
+    document.getElementById("ownerFullDashboardDialog")?.close();
     return;
   }
 
-  const walletButton = e.target.closest("[data-owner-wallet-change]");
-  if (walletButton) {
-    const userId = String(walletButton.dataset.userId || "");
-    const asset = String(walletButton.dataset.asset || "coins");
-    const operation = String(walletButton.dataset.operation || "");
-    const amountInput = document.querySelector(`[data-owner-wallet-amount="${asset}"]`);
-    const amount = Math.floor(Number(amountInput?.value || 0));
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      toast("Enter a valid " + asset + " amount.");
-      amountInput?.focus();
-      return;
-    }
-    if (operation === "debit" && !confirm("Remove " + fmt(amount) + " " + asset + " from ID " + userId + "?")) {
-      return;
-    }
-    walletButton.disabled = true;
-    try {
-      await runOwnerAction("wallet-normal", { user_id: userId, asset, operation, amount });
-      toast((operation === "credit" ? "Added " : "Removed ") + fmt(amount) + " " + asset + ".");
-      await openOwnerUserProfile(userId);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      walletButton.disabled = false;
+  const identityClose = e.target.closest("[data-owner-identity-close]");
+  if (identityClose) {
+    document.getElementById("ownerIdentityDialog")?.close();
+    if (ownerIdentityReturnUserId) {
+      const userId = ownerIdentityReturnUserId;
+      const mode = ownerIdentityReturnMode;
+      ownerIdentityReturnUserId = "";
+      ownerIdentityReturnMode = "";
+      if (mode === "full") await openOwnerFullDashboard(userId);
+      else await openOwnerUserProfile(userId);
     }
     return;
   }
 
-  const vipButton = e.target.closest("[data-owner-vip-change]");
-  if (vipButton) {
-    const userId = String(vipButton.dataset.userId || "");
-    const operation = String(vipButton.dataset.operation || "");
-    const vipInput = document.querySelector("[data-owner-vip-level]");
-    const vipLevel = Math.max(1, Math.floor(Number(vipInput?.value || 1)));
-    if (operation === "remove" && !confirm("Remove VIP from ID " + userId + "?")) return;
-    vipButton.disabled = true;
-    try {
-      await runOwnerAction("vip-grant", {
-        user_id: userId,
-        operation,
-        vip_level: operation === "remove" ? 0 : vipLevel,
-      });
-      toast(operation === "remove" ? "VIP removed." : "VIP " + vipLevel + " added.");
-      await openOwnerUserProfile(userId);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      vipButton.disabled = false;
+  const identityTagButton = e.target.closest("[data-owner-tag-open]");
+  if (identityTagButton) {
+    await openOwnerIdentityDetails(identityTagButton);
+    return;
+  }
+
+  const identityFullView = e.target.closest("[data-owner-identity-full-view]");
+  if (identityFullView) {
+    const userId = String(identityFullView.dataset.ownerIdentityFullView || "");
+    document.getElementById("ownerIdentityDialog")?.close();
+    ownerIdentityReturnUserId = "";
+    ownerIdentityReturnMode = "";
+    await openOwnerFullDashboard(userId);
+    return;
+  }
+
+  const identityWalletAction = e.target.closest("[data-owner-identity-wallet-action]");
+  if (identityWalletAction) {
+    const action = String(identityWalletAction.dataset.ownerIdentityWalletAction || "");
+    const userId = String(identityWalletAction.dataset.ownerIdentityUser || "");
+    if (action && userId) {
+      document.getElementById("ownerIdentityDialog")?.close();
+      ownerFullRefreshAfterAction = true;
+      ownerFullDashboardUserId = userId;
+      openAction(action, { user_id: userId });
     }
     return;
   }
 
-  const openInboxButton = e.target.closest("[data-owner-open-inbox]");
-  if (openInboxButton) {
-    await loadOwnerInbox(openInboxButton.dataset.ownerOpenInbox);
-    return;
-  }
-
-  const closeInboxButton = e.target.closest("[data-owner-close-inbox]");
-  if (closeInboxButton) {
-    const browser = document.getElementById("ownerInboxBrowser");
-    if (browser) {
-      browser.hidden = true;
-      browser.innerHTML = "";
+    const hierarchyClose = e.target.closest("[data-owner-hierarchy-close]");
+  if (hierarchyClose) {
+    document.getElementById("ownerHierarchyDialog")?.close();
+    if (ownerFullDashboardUserId && sessionCan("users.full_dashboard")) {
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
     }
     return;
   }
 
-  const backInboxButton = e.target.closest("[data-owner-back-inbox]");
-  if (backInboxButton) {
-    await loadOwnerInbox(backInboxButton.dataset.ownerBackInbox);
-    return;
-  }
-
-  const threadButton = e.target.closest("[data-owner-open-thread]");
-  if (threadButton) {
-    await loadOwnerConversation(
-      threadButton.dataset.ownerUserId,
-      threadButton.dataset.peerUserId,
-      threadButton.dataset.peerName || "",
+  const roleOpenButton = e.target.closest("[data-owner-role-open]");
+  if (roleOpenButton) {
+    await openOwnerHierarchyDashboard(
+      roleOpenButton.dataset.ownerRoleUser || ownerFullDashboardUserId,
+      roleOpenButton.dataset.ownerRoleOpen,
     );
+    return;
+  }
+
+  const roleRemoveButton = e.target.closest("[data-owner-role-remove]");
+  if (roleRemoveButton) {
+    await removeOwnerHierarchyRole(
+      roleRemoveButton.dataset.ownerRoleUser || ownerFullDashboardUserId,
+      roleRemoveButton.dataset.ownerRoleRemove,
+    );
+    return;
+  }
+
+  const tagRemoveButton = e.target.closest("[data-owner-tag-remove]");
+  if (tagRemoveButton) {
+    if (!sessionCan("messaging.tags")) {
+      toast("Tag remove permission is not active.");
+      return;
+    }
+    const userId = String(tagRemoveButton.dataset.ownerTagUser || ownerFullDashboardUserId);
+    const tagId = String(tagRemoveButton.dataset.ownerTagRemove || "");
+    if (!userId || !tagId) return;
+    if (!confirm("Remove this tag from ID " + userId + "?")) return;
+    try {
+      await api(
+        "/api/owner/tags/" + encodeURIComponent(userId) + "/" + encodeURIComponent(tagId),
+        { method: "DELETE" },
+      );
+      document.getElementById("ownerIdentityDialog")?.close();
+      ownerIdentityReturnUserId = "";
+      ownerIdentityReturnMode = "";
+      toast("Tag removed.");
+      if (ownerFullDashboardUserId === userId) await openOwnerFullDashboard(userId);
+      else await openOwnerUserProfile(userId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const hierarchyRangeButton = e.target.closest("[data-owner-hierarchy-range]");
+  if (hierarchyRangeButton) {
+    const nextRange = String(hierarchyRangeButton.dataset.ownerHierarchyRange || "15d");
+    if (nextRange !== "custom") {
+      ownerHierarchyRange = nextRange;
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, nextRange);
+    } else {
+      ownerHierarchyRange = "custom";
+      const fromInput = document.getElementById("ownerHierarchyFrom");
+      fromInput?.focus();
+      toast("Select From and To dates, then tap Apply Custom.");
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-owner-hierarchy-custom-apply]")) {
+    ownerHierarchyCustomFrom = String(document.getElementById("ownerHierarchyFrom")?.value || "");
+    ownerHierarchyCustomTo = String(document.getElementById("ownerHierarchyTo")?.value || "");
+    ownerHierarchyRange = "custom";
+    await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, "custom");
+    return;
+  }
+
+  const hierarchyUserButton = e.target.closest("[data-owner-hierarchy-user]");
+  if (hierarchyUserButton) {
+    const targetId = String(hierarchyUserButton.dataset.ownerHierarchyUser || "");
+    document.getElementById("ownerHierarchyDialog")?.close();
+    await openOwnerUserProfile(targetId);
+    return;
+  }
+
+  const removeHostButton = e.target.closest("[data-owner-hierarchy-remove-host]");
+  if (removeHostButton) {
+    if (!sessionCan("hierarchy.host_manage")) {
+      toast("Host management permission is not active.");
+      return;
+    }
+    const hostId = String(removeHostButton.dataset.ownerHierarchyRemoveHost || "");
+    if (!hostId || !confirm("Remove Host ID " + hostId + " from this Agency?")) return;
+    try {
+      await runOwnerAction("host-remove", {
+        host_user_id: hostId,
+        agency_owner_id: ownerHierarchyUserId,
+      });
+      toast("Host removed from Agency.");
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, ownerHierarchyRange);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const unlinkAgencyButton = e.target.closest("[data-owner-hierarchy-unlink-agency]");
+  if (unlinkAgencyButton) {
+    if (!sessionCan("hierarchy.agency_bd_link")) {
+      toast("Agency/BD link permission is not active.");
+      return;
+    }
+    const agencyId = String(unlinkAgencyButton.dataset.ownerHierarchyUnlinkAgency || "");
+    if (!agencyId || !confirm("Remove Agency ID " + agencyId + " from this BD?")) return;
+    try {
+      await runOwnerAction("agency-from-bd", {
+        agency_owner_id: agencyId,
+        bd_user_id: ownerHierarchyUserId,
+      });
+      toast("Agency removed from BD.");
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, ownerHierarchyRange);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const nestedUserButton = e.target.closest("[data-owner-nested-user]");
+  if (nestedUserButton) {
+    const targetId = String(nestedUserButton.dataset.ownerNestedUser || "").trim();
+    if (!targetId) return;
+    document.getElementById("ownerFullDashboardDialog")?.close();
+    document.getElementById("ownerHierarchyDialog")?.close();
+    document.getElementById("ownerIdentityDialog")?.close();
+    await openOwnerUserProfile(targetId);
+    return;
+  }
+
+  const fullViewButton = e.target.closest("[data-owner-full-view]");
+  if (fullViewButton) {
+    await openOwnerFullDashboard(fullViewButton.dataset.ownerFullView);
+    return;
+  }
+
+  if (e.target.closest("[data-owner-full-refresh]")) {
+    await openOwnerFullDashboard(ownerFullDashboardUserId);
+    return;
+  }
+
+  const fullActionButton = e.target.closest("[data-full-owner-action]");
+  if (fullActionButton) {
+    const action = String(fullActionButton.dataset.fullOwnerAction || "");
+    if (!action) return;
+
+    if (action === "room-live") {
+      if (!ownerFullDashboardRoomId) {
+        toast("No room linked to this ID.");
+        return;
+      }
+      try {
+        const result = await api(
+          "/api/owner/room-live?room_id=" +
+            encodeURIComponent(ownerFullDashboardRoomId),
+        );
+        const liveRoot = document.getElementById("ownerFullRoomLive");
+        const members = Array.isArray(result?.presence?.members)
+          ? result.presence.members
+          : [];
+        if (liveRoot) {
+          liveRoot.hidden = false;
+          liveRoot.className = "action-list";
+          liveRoot.innerHTML = members.length
+            ? members.map((member) => `
+                <div class="owner-history-row">
+                  <button type="button" class="owner-inline-user owner-inline-user-name" data-owner-nested-user="${escapeHtml(member.user_id)}">${escapeHtml(member.display_name || member.user_id)}</button>
+                  <span>ID ${escapeHtml(member.user_id)} • ${member.seat_index === null || member.seat_index === undefined ? "Audience" : "Seat " + (Number(member.seat_index) + 1)}</span>
+                </div>
+              `).join("")
+            : '<div class="empty-state">No live users in this room.</div>';
+        }
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+
+    const userIdActions = new Set([
+      "user-name", "user-dp", "user-ban", "device-ban", "user-invisible",
+      "locked-bypass", "id-change", "wallet-normal", "wallet-seller",
+      "wallet-merchant", "vip-grant", "bd-activate", "agency-activate",
+      "user-price-override-set", "user-price-override-remove",
+    ]);
+    const roomActions = new Set(["room-ban", "room-name", "room-dp", "room-bg"]);
+    const preset = {};
+    if (userIdActions.has(action)) preset.user_id = ownerFullDashboardUserId;
+    if (action === "host-add" || action === "host-remove") {
+      preset.host_user_id = ownerFullDashboardUserId;
+    }
+    if (roomActions.has(action)) {
+      if (!ownerFullDashboardRoomId) {
+        toast("No room linked to this ID.");
+        return;
+      }
+      preset.room_id = ownerFullDashboardRoomId;
+    }
+    ownerFullRefreshAfterAction = true;
+    openAction(action, preset);
+    return;
+  }
+
+  if (e.target.closest("[data-owner-user-game-investigate]")) {
+    if (!sessionCan("games.investigate")) {
+      toast("Game investigation permission is not active.");
+      return;
+    }
+    const root = document.getElementById("ownerFullGameInvestigation");
+    if (!root) return;
+    root.hidden = false;
+    root.className = "empty-state";
+    root.textContent = "Loading game activity…";
+    try {
+      const data = await api("/api/owner/game-stats?user_id=" + encodeURIComponent(ownerFullDashboardUserId));
+      const jackpot = data.jackpot?.player || {};
+      const party = data.party?.player || {};
+      root.className = "rule-grid";
+      root.innerHTML = `
+        <div class="rule"><strong>Jackpot bets</strong><span>${fmt(jackpot.total_bet || 0)}</span></div>
+        <div class="rule"><strong>Jackpot payout</strong><span>${fmt(jackpot.total_payout || 0)}</span></div>
+        <div class="rule"><strong>Jackpot net</strong><span>${fmt(jackpot.net_profit || 0)}</span></div>
+        <div class="rule"><strong>Party bets</strong><span>${fmt(party.total_bet || 0)}</span></div>
+        <div class="rule"><strong>Party payout</strong><span>${fmt(party.total_payout || 0)}</span></div>
+        <div class="rule"><strong>Party net</strong><span>${fmt(party.net_profit || 0)}</span></div>
+      `;
+    } catch (error) {
+      root.className = "empty-state";
+      root.textContent = error.message || "Unable to load game activity.";
+    }
+    return;
+  }
+  if (e.target.closest("[data-full-owner-message-send]")) {
+    if (!sessionCan("messaging.send")) {
+      toast("Official message permission is not active.");
+      return;
+    }
+    const textValue = String(
+      document.getElementById("ownerFullMessageText")?.value || "",
+    ).trim();
+    if (!textValue) {
+      toast("Write a message first.");
+      return;
+    }
+    try {
+      await api("/api/owner/official-message", {
+        method: "POST",
+        body: JSON.stringify({
+          target_user_id: ownerFullDashboardUserId,
+          message: textValue,
+          recipient_kind: "full_id_dashboard",
+        }),
+      });
+      toast("Tinni Official message sent.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-owner-add-tag]")) {
+    if (!sessionCan("messaging.tags")) {
+      toast("User tag permission is not active.");
+      return;
+    }
+    const name = prompt("Custom tag name", "");
+    if (name === null || !name.trim()) return;
+    const color = prompt("Tag color HEX", "#FFD54F");
+    if (color === null) return;
+    try {
+      await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          user_ids: [ownerFullDashboardUserId],
+          name: name.trim(),
+          color: color.trim() || "#FFD54F",
+        }),
+      });
+      toast("Tag added to selected ID.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-direct-verify]")) {
+    if (!sessionCan("verification.direct_verify")) return;
+    const note = prompt("Verification note (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" +
+          encodeURIComponent(ownerFullDashboardUserId) +
+          "/verify",
+        { method: "POST", body: JSON.stringify({ note }) },
+      );
+      toast("Selected ID verified.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-revoke-verify]")) {
+    if (!sessionCan("verification.revoke")) return;
+    if (!confirm("Remove Verified status from this ID?")) return;
+    const note = prompt("Reason (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" +
+          encodeURIComponent(ownerFullDashboardUserId) +
+          "/revoke",
+        { method: "POST", body: JSON.stringify({ note }) },
+      );
+      toast("Verified status removed.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const listenRoomButton = e.target.closest("[data-owner-listen-room]");
+  if (listenRoomButton) {
+    await startOwnerListen(listenRoomButton.dataset.ownerListenRoom);
+    return;
+  }
+
+  const stopListenButton = e.target.closest("[data-owner-stop-listen]");
+  if (stopListenButton) {
+    await stopOwnerListen();
     return;
   }
 
@@ -2688,6 +3770,12 @@ document.body.addEventListener("click", async e => {
   if (catalogToggle) {
     const id = String(catalogToggle.dataset.catalogToggle || "");
     const enabled = String(catalogToggle.dataset.nextEnabled) === "true";
+    const item = state.catalog.find((entry) => entry.id === id);
+    if (!item) { toast("Catalog item not found."); return; }
+    if (!sessionCan(catalogPermission(item, "toggle"))) {
+      toast("Assigned permission required.");
+      return;
+    }
     try {
       await api("/api/owner/catalog/" + encodeURIComponent(id), {
         method: "PATCH",
@@ -2922,6 +4010,17 @@ document.body.addEventListener("click", async e => {
   }
 });
 
+document.body.addEventListener("input", (event) => {
+  const input = event.target.closest("#ownerHierarchyMemberSearch");
+  if (!input) return;
+  const query = String(input.value || "").trim().toLowerCase();
+  document.querySelectorAll("#ownerHierarchyMemberList [data-hierarchy-search]")
+    .forEach((row) => {
+      const haystack = String(row.dataset.hierarchySearch || "").toLowerCase();
+      row.hidden = query && !haystack.includes(query);
+    });
+});
+
 document.getElementById("actionForm").addEventListener("submit", async e => {
   if (e.submitter?.value === "cancel") return;
   e.preventDefault();
@@ -2931,9 +4030,14 @@ document.getElementById("actionForm").addEventListener("submit", async e => {
   try {
     await handleAction(pendingAction, data);
     dialog.close();
+    if (ownerFullRefreshAfterAction && ownerFullDashboardUserId) {
+      ownerFullRefreshAfterAction = false;
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    }
   } catch (err) {
     toast(err.message);
   } finally {
+    if (!dialog.open) ownerFullRefreshAfterAction = false;
     dialogSubmit.disabled = false;
     dialogSubmit.textContent = "Confirm";
   }
@@ -2970,6 +4074,5 @@ renderRoles();
 renderVips();
 renderPolicies();
 renderTreasury();
-renderCompanyDollars();
 checkHealth();
 loadSession();
