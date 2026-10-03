@@ -1211,6 +1211,7 @@ async function openOwnerFullDashboard(userId) {
               <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count || 0)}</span></div>
             </div>
             <div class="owner-full-action-grid">${roomButtons}</div>
+            <div id="ownerFullRoomLive" class="empty-state" style="margin-top:8px" hidden></div>
             ${currentSession?.role === "owner" && detail.current_room?.room_id
               ? `<div class="button-row" style="margin-top:8px">
                   <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(detail.current_room.room_id)}">Listen to Room — no mic</button>
