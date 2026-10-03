@@ -58,6 +58,8 @@ class ActiveRoomSession extends ChangeNotifier {
   bool _roomSoundEnabled = true;
   bool _moderationForcedMicOff = false;
   final Set<String> _seenLuckyNumberEventIds = <String>{};
+  final Set<String> _seenRoomJoinKeys = <String>{};
+  bool _roomJoinSnapshotInitialized = false;
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -145,6 +147,8 @@ class ActiveRoomSession extends ChangeNotifier {
     _roomSoundEnabled = true;
     _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
+    _seenRoomJoinKeys.clear();
+    _roomJoinSnapshotInitialized = false;
     controller = RoomController(
       runtime: runtime,
       seatCountOverride: nextRoom.seatCount,
@@ -510,6 +514,8 @@ class ActiveRoomSession extends ChangeNotifier {
     connectionError = null;
     _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
+    _seenRoomJoinKeys.clear();
+    _roomJoinSnapshotInitialized = false;
 
     oldController?.removeListener(_onRoomChanged);
     oldController?.dispose();
@@ -674,6 +680,7 @@ class ActiveRoomSession extends ChangeNotifier {
   void _onPresenceChanged() {
     final roomController = controller;
     roomController?.setInviteMode(presence.micMode != 'free');
+    _syncRoomJoinMessages();
     _syncLuckyNumberMessages();
     if (roomController != null) {
       for (var index = 0; index < roomController.seats.length; index++) {
@@ -728,6 +735,44 @@ class ActiveRoomSession extends ChangeNotifier {
       seatIndex: seatIndex,
       micEnabled: micEnabled,
     );
+  }
+
+  void _syncRoomJoinMessages() {
+    final roomController = controller;
+    if (roomController == null) return;
+
+    final members = presence.members;
+    if (!_roomJoinSnapshotInitialized) {
+      _roomJoinSnapshotInitialized = true;
+      for (final member in members) {
+        final key =
+            member.userId + ':' + member.joinedAt.millisecondsSinceEpoch.toString();
+        _seenRoomJoinKeys.add(key);
+      }
+
+      final currentUserId = _activeUserId;
+      if (currentUserId != null) {
+        for (final member in members) {
+          if (member.userId != currentUserId) continue;
+          roomController.addRoomMessage(
+            member.displayName,
+            'entered the room',
+          );
+          break;
+        }
+      }
+      return;
+    }
+
+    for (final member in members) {
+      final key =
+          member.userId + ':' + member.joinedAt.millisecondsSinceEpoch.toString();
+      if (!_seenRoomJoinKeys.add(key)) continue;
+      roomController.addRoomMessage(
+        member.displayName,
+        'entered the room',
+      );
+    }
   }
 
   void _syncLuckyNumberMessages() {
