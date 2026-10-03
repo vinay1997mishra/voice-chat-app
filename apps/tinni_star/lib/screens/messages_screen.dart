@@ -40,6 +40,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       const <Map<String, dynamic>>[];
   List<RemoteNotification> activityNotifications =
       const <RemoteNotification>[];
+  Map<String, String> roleInviteStatuses = const <String, String>{};
+  final Set<String> respondingRoleInvites = <String>{};
 
   bool get _isInbox => widget.targetUserId == null;
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
@@ -96,6 +98,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           myUserId: _myUserId,
           peerUserId: _targetUserId,
         );
+        await _loadInviteStatuses();
         final tagData = await widget.state.backend.userTagsAndMedals(
           account.authToken,
           _targetUserId,
@@ -143,6 +146,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
+      if (!_isInbox) await _loadInviteStatuses();
       await _checkIncoming();
       if (mounted) {
         setState(() {
@@ -174,6 +178,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
+      if (!_isInbox) await _loadInviteStatuses();
       await _checkIncoming();
       if (mounted) setState(() {});
     } catch (_) {
@@ -188,6 +193,64 @@ class _MessagesScreenState extends State<MessagesScreen> {
     activityNotifications = notices
         .where((notice) => notice.type != 'message')
         .toList(growable: false);
+  }
+
+  Future<void> _loadInviteStatuses() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final invites =
+        await widget.state.backend.hierarchyInvites(account.authToken);
+    roleInviteStatuses = <String, String>{
+      for (final invite in invites)
+        if ((invite['id']?.toString() ?? '').isNotEmpty)
+          invite['id'].toString():
+              (invite['status']?.toString() ?? 'pending'),
+    };
+  }
+
+  Future<void> _respondRoleInvite(String inviteId, bool accept) async {
+    final account = widget.state.auth.current;
+    if (account == null || respondingRoleInvites.contains(inviteId)) return;
+    setState(() => respondingRoleInvites.add(inviteId));
+    try {
+      await widget.state.backend.respondHierarchyInvite(
+        account.authToken,
+        inviteId: inviteId,
+        accept: accept,
+      );
+      final wallet = await widget.state.backend.wallet(account.authToken);
+      widget.state.wallet.applyRemote(wallet);
+      await _loadInviteStatuses();
+      await widget.state.social.loadConversation(
+        authToken: account.authToken,
+        myUserId: _myUserId,
+        peerUserId: _targetUserId,
+      );
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Role invitation accepted.'
+                : 'Role invitation rejected.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Bad state: ', ''),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => respondingRoleInvites.remove(inviteId));
+      }
+    }
   }
 
   Future<void> _checkIncoming() async {
@@ -493,7 +556,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
             : isActivity
                 ? 'Rewards, events and account activity'
                 : 'Start a conversation')
-        : (mine ? 'You: ' : '') + last.text;
+        : (mine ? 'You: ' : '') +
+            last.text.replaceFirst(
+              RegExp(r'^\[ROLE_INVITE:[^\]]+\]\s*'),
+              '',
+            );
 
     return RoyalPanel(
       key: Key('message-thread-' + thread.userId),
@@ -861,11 +928,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         final verificationNotice = _isOfficial &&
                             !mine &&
                             message.text.startsWith('[CALL_VERIFY]');
+                        final roleInviteMatch = !mine
+                            ? RegExp(
+                                r'^\[ROLE_INVITE:([^:\]]+):(host|agency)\]\s*(.*)$',
+                              ).firstMatch(message.text)
+                            : null;
+                        final inviteId = roleInviteMatch?.group(1) ?? '';
+                        final inviteRole = roleInviteMatch?.group(2) ?? '';
+                        final inviteStatus =
+                            roleInviteStatuses[inviteId] ?? 'pending';
                         final displayText = verificationNotice
                             ? message.text
                                 .replaceFirst('[CALL_VERIFY]', '')
                                 .trim()
-                            : message.text;
+                            : roleInviteMatch != null
+                                ? (roleInviteMatch.group(3) ?? '').trim()
+                                : message.text;
                         return Align(
                           alignment: mine
                               ? Alignment.centerRight
@@ -922,6 +1000,60 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                     ),
                                     label: const Text('Verify Call ID'),
                                   ),
+                                ],
+                                if (roleInviteMatch != null &&
+                                    message.to == _myUserId) ...[
+                                  const SizedBox(height: 8),
+                                  if (inviteStatus == 'pending')
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        OutlinedButton(
+                                          key: Key(
+                                            'role-invite-reject-' + inviteId,
+                                          ),
+                                          onPressed: respondingRoleInvites
+                                                  .contains(inviteId)
+                                              ? null
+                                              : () => _respondRoleInvite(
+                                                    inviteId,
+                                                    false,
+                                                  ),
+                                          child: const Text('Reject'),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton(
+                                          key: Key(
+                                            'role-invite-accept-' + inviteId,
+                                          ),
+                                          onPressed: respondingRoleInvites
+                                                  .contains(inviteId)
+                                              ? null
+                                              : () => _respondRoleInvite(
+                                                    inviteId,
+                                                    true,
+                                                  ),
+                                          child: Text(
+                                            'Accept ' +
+                                                (inviteRole == 'host'
+                                                    ? 'Host'
+                                                    : 'Agency'),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Text(
+                                      inviteStatus == 'accepted'
+                                          ? 'Accepted'
+                                          : 'Rejected',
+                                      style: TextStyle(
+                                        color: inviteStatus == 'accepted'
+                                            ? FeaturePalette.social
+                                            : Colors.redAccent,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                                 ],
                                 const SizedBox(height: 3),
                                 Row(
