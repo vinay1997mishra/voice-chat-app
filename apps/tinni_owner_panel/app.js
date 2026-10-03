@@ -79,6 +79,8 @@ let ownerListenAudioElements = [];
 let ownerFullDashboardUserId = "";
 let ownerFullDashboardRoomId = "";
 let ownerFullRefreshAfterAction = false;
+let ownerIdentityReturnUserId = "";
+let ownerIdentityReturnMode = "";
 let ownerHierarchyUserId = "";
 let ownerHierarchyRole = "";
 let ownerHierarchyRange = "15d";
@@ -711,24 +713,134 @@ function ownerIdentityControlsHtml(tags, userIdValue) {
       ? String(tag.designation || tag.name || "").trim().toLowerCase()
       : "";
     const canOpenRole = autoRole && sessionCan("hierarchy.view_details");
+    const canOpenTag = !autoRole && sessionCan("users.full_dashboard");
     const canRemoveRole = autoRole && sessionCan(hierarchyManagePermission(autoRole));
     const canRemoveTag = !autoRole && tagId && sessionCan("messaging.tags");
     const badge = kind === "v_official"
       ? `<span class="owner-v-tag" style="--official-bg:${escapeHtml(tag.background_color || tag.color || "#69C9FF")}"><i>V</i><b>${escapeHtml(label)}</b></span>`
       : `<span class="badge" style="border-color:${escapeHtml(tag.color || "#FFD54F")};color:${escapeHtml(tag.color || "#FFD54F")}">${escapeHtml(label)}</span>`;
+    const openAttrs = canOpenRole
+      ? `data-owner-role-open="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}"`
+      : canOpenTag
+        ? `data-owner-tag-open="${escapeHtml(tagId || label)}"
+             data-owner-tag-user="${escapeHtml(userId)}"
+             data-owner-tag-label="${escapeHtml(label)}"
+             data-owner-tag-kind="${escapeHtml(kind || "custom")}"
+             data-owner-tag-color="${escapeHtml(tag.color || "")}"
+             data-owner-tag-background="${escapeHtml(tag.background_color || "")}"
+             data-owner-tag-created="${escapeHtml(tag.created_at || 0)}"`
+        : "";
     return `
       <div class="owner-tag-control">
-        <button type="button" class="owner-tag-main"
-          ${canOpenRole ? `data-owner-role-open="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}"` : ""}
-          ${!canOpenRole ? "disabled" : ""}>
+        <button type="button" class="owner-tag-main" ${openAttrs}
+          ${!canOpenRole && !canOpenTag ? "disabled" : ""}>
           ${badge}
         </button>
-        <span class="owner-tag-meta">${escapeHtml(kind || "tag")}</span>
+        <span class="owner-tag-meta">${escapeHtml(kind || (autoRole ? "role" : "tag"))}</span>
         ${canRemoveRole ? `<button type="button" class="btn danger compact" data-owner-role-remove="${escapeHtml(autoRole)}" data-owner-role-user="${escapeHtml(userId)}">Remove</button>` : ""}
         ${canRemoveTag ? `<button type="button" class="btn danger compact" data-owner-tag-remove="${escapeHtml(tagId)}" data-owner-tag-user="${escapeHtml(userId)}">Remove</button>` : ""}
       </div>
     `;
   }).join("");
+}
+
+async function openOwnerIdentityDetails(button) {
+  if (!sessionCan("users.full_dashboard")) {
+    toast("Full ID Dashboard permission is not active.");
+    return;
+  }
+  const userId = String(button?.dataset?.ownerTagUser || "").trim();
+  const tagId = String(button?.dataset?.ownerTagOpen || "").trim();
+  const label = String(button?.dataset?.ownerTagLabel || "Tag");
+  const kind = String(button?.dataset?.ownerTagKind || "custom");
+  if (!userId) return;
+
+  ownerIdentityReturnUserId = userId;
+  ownerIdentityReturnMode = document.getElementById("ownerFullDashboardDialog")?.open
+    ? "full"
+    : "profile";
+
+  document.getElementById("ownerProfileDialog")?.close();
+  document.getElementById("ownerFullDashboardDialog")?.close();
+
+  const dialog = document.getElementById("ownerIdentityDialog");
+  const root = document.getElementById("ownerIdentityContent");
+  const title = document.getElementById("ownerIdentityTitle");
+  if (!dialog || !root) return;
+  if (title) title.textContent = label + " Details";
+  root.innerHTML = '<div class="empty-state">Loading identity details…</div>';
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api(
+      "/api/owner/user-detail?user_id=" + encodeURIComponent(userId),
+    );
+    const detail = data.detail || {};
+    const wallet = detail.wallet || {};
+    const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const walletType = normalized === "coinseller"
+      ? "coin_seller"
+      : normalized === "merchant"
+        ? "merchant"
+        : "";
+    const roleWallet = walletType === "coin_seller"
+      ? wallet.coin_seller_wallet
+      : walletType === "merchant"
+        ? wallet.merchant_wallet
+        : null;
+    const walletPermission = walletType === "coin_seller"
+      ? "wallets.seller"
+      : walletType === "merchant"
+        ? "wallets.merchant"
+        : "";
+    const walletAction = walletType === "coin_seller"
+      ? "wallet-seller"
+      : walletType === "merchant"
+        ? "wallet-merchant"
+        : "";
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        <div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(label)}</h2>
+          <p>ID ${escapeHtml(userId)} • ${escapeHtml(kind || "custom tag")}</p>
+          <small>Assigned ${escapeHtml(formatFullTimestamp(Number(button.dataset.ownerTagCreated || 0)))}</small>
+        </div>
+        <button type="button" class="btn secondary" data-owner-identity-full-view="${escapeHtml(userId)}">Full ID View</button>
+      </div>
+      <div class="rule-grid owner-profile-grid">
+        <div class="rule"><strong>Tag ID</strong><span>${escapeHtml(tagId || "—")}</span></div>
+        <div class="rule"><strong>Type</strong><span>${escapeHtml(kind || "custom")}</span></div>
+        <div class="rule"><strong>Color</strong><span>${escapeHtml(button.dataset.ownerTagColor || "—")}</span></div>
+        <div class="rule"><strong>Background</strong><span>${escapeHtml(button.dataset.ownerTagBackground || "—")}</span></div>
+      </div>
+      ${walletType ? `
+        <section class="panel" style="margin-top:12px">
+          <div class="panel-head">
+            <div><h3>${walletType === "coin_seller" ? "Coin Seller Wallet" : "Merchant Wallet"}</h3>
+            <p>Wallet status linked to this selected identity.</p></div>
+            <span class="badge ${roleWallet?.active ? "gold" : ""}">${roleWallet?.active ? "Active" : "Not active"}</span>
+          </div>
+          <div class="rule-grid">
+            <div class="rule"><strong>Balance</strong><span>${fmt(roleWallet?.balance || 0)}</span></div>
+            <div class="rule"><strong>Banned</strong><span>${roleWallet?.banned ? "Yes" : "No"}</span></div>
+            <div class="rule"><strong>Security freeze</strong><span>${roleWallet?.security_frozen ? "Yes" : "No"}</span></div>
+            <div class="rule"><strong>Updated</strong><span>${escapeHtml(formatFullTimestamp(roleWallet?.updated_at))}</span></div>
+          </div>
+          ${walletPermission && sessionCan(walletPermission)
+            ? `<div class="button-row" style="margin-top:10px"><button type="button" class="btn primary" data-owner-identity-wallet-action="${walletAction}" data-owner-identity-user="${escapeHtml(userId)}">Manage Wallet</button></div>`
+            : ""}
+        </section>` : ""}
+      <div class="button-row" style="margin-top:12px">
+        ${tagId && sessionCan("messaging.tags")
+          ? `<button type="button" class="btn danger" data-owner-tag-remove="${escapeHtml(tagId)}" data-owner-tag-user="${escapeHtml(userId)}">Remove Tag</button>`
+          : ""}
+      </div>
+    `;
+  } catch (error) {
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load identity details.")}</div>`;
+  }
 }
 
 async function searchDirectVerifyUsers(query) {
@@ -2811,7 +2923,50 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
-  const hierarchyClose = e.target.closest("[data-owner-hierarchy-close]");
+  const identityClose = e.target.closest("[data-owner-identity-close]");
+  if (identityClose) {
+    document.getElementById("ownerIdentityDialog")?.close();
+    if (ownerIdentityReturnUserId) {
+      const userId = ownerIdentityReturnUserId;
+      const mode = ownerIdentityReturnMode;
+      ownerIdentityReturnUserId = "";
+      ownerIdentityReturnMode = "";
+      if (mode === "full") await openOwnerFullDashboard(userId);
+      else await openOwnerUserProfile(userId);
+    }
+    return;
+  }
+
+  const identityTagButton = e.target.closest("[data-owner-tag-open]");
+  if (identityTagButton) {
+    await openOwnerIdentityDetails(identityTagButton);
+    return;
+  }
+
+  const identityFullView = e.target.closest("[data-owner-identity-full-view]");
+  if (identityFullView) {
+    const userId = String(identityFullView.dataset.ownerIdentityFullView || "");
+    document.getElementById("ownerIdentityDialog")?.close();
+    ownerIdentityReturnUserId = "";
+    ownerIdentityReturnMode = "";
+    await openOwnerFullDashboard(userId);
+    return;
+  }
+
+  const identityWalletAction = e.target.closest("[data-owner-identity-wallet-action]");
+  if (identityWalletAction) {
+    const action = String(identityWalletAction.dataset.ownerIdentityWalletAction || "");
+    const userId = String(identityWalletAction.dataset.ownerIdentityUser || "");
+    if (action && userId) {
+      document.getElementById("ownerIdentityDialog")?.close();
+      ownerFullRefreshAfterAction = true;
+      ownerFullDashboardUserId = userId;
+      openAction(action, { user_id: userId });
+    }
+    return;
+  }
+
+    const hierarchyClose = e.target.closest("[data-owner-hierarchy-close]");
   if (hierarchyClose) {
     document.getElementById("ownerHierarchyDialog")?.close();
     if (ownerFullDashboardUserId && sessionCan("users.full_dashboard")) {
@@ -2853,6 +3008,9 @@ document.body.addEventListener("click", async e => {
         "/api/owner/tags/" + encodeURIComponent(userId) + "/" + encodeURIComponent(tagId),
         { method: "DELETE" },
       );
+      document.getElementById("ownerIdentityDialog")?.close();
+      ownerIdentityReturnUserId = "";
+      ownerIdentityReturnMode = "";
       toast("Tag removed.");
       if (ownerFullDashboardUserId === userId) await openOwnerFullDashboard(userId);
       else await openOwnerUserProfile(userId);
