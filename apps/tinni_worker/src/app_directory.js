@@ -4198,11 +4198,11 @@ export class AppDirectoryStore extends DurableObject {
     if (wordCount(signature) > 150) throw new Error("Signature can contain at most 150 words");
     if (!countryCode || !countryName || !flagEmoji) throw new Error("Country and flag are required");
     if (!VALID_GENDERS.has(gender)) throw new Error("Gender must be male or female");
-    if (avatarDataUrl && avatarDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
-      throw new Error("Profile photo is too large");
+    if (avatarDataUrl && avatarDataUrl.length > 2500) {
+      throw new Error("Profile photo URL is too large");
     }
-    if (avatarDataUrl && !avatarDataUrl.startsWith("data:image/")) {
-      throw new Error("Profile photo format is invalid");
+    if (avatarDataUrl && !/^https:\/\//i.test(avatarDataUrl)) {
+      throw new Error("Profile photo must use an approved HTTPS media URL");
     }
 
     this.ctx.storage.sql.exec(
@@ -9803,7 +9803,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!title) throw new Error("Room name is required");
     if (!Number.isInteger(seatCount) || ![8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42].includes(seatCount)) throw new Error("Room capacity must be 8-42 seats");
     if (!["public", "private", "invite"].includes(privacy)) throw new Error("privacy must be public, private or invite");
-    if (photoDataUrl && (photoDataUrl.length > MAX_AVATAR_DATA_LENGTH || !photoDataUrl.startsWith("data:image/"))) throw new Error("Room photo is invalid");
+    if (photoDataUrl && (photoDataUrl.length > 2500 || !/^https:\/\//i.test(photoDataUrl))) throw new Error("Room photo must use an approved HTTPS media URL");
     if (!["royal-gold", "neon-blue", "rose-glow"].includes(seatThemeId)) throw new Error("Mic theme is invalid");
     const now = Date.now();
     this.ctx.storage.sql.exec(
@@ -10471,11 +10471,11 @@ export class AppDirectoryStore extends DurableObject {
     if (!Number.isInteger(seatCount) || ![8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42].includes(seatCount)) {
       throw new Error("Room seat count must be 8-42");
     }
-    if (photoDataUrl && photoDataUrl.length > MAX_AVATAR_DATA_LENGTH) {
-      throw new Error("Room photo is too large");
+    if (photoDataUrl && photoDataUrl.length > 2500) {
+      throw new Error("Room photo URL is too large");
     }
-    if (photoDataUrl && !photoDataUrl.startsWith("data:image/")) {
-      throw new Error("Room photo format is invalid");
+    if (photoDataUrl && !/^https:\/\//i.test(photoDataUrl)) {
+      throw new Error("Room photo must use an approved HTTPS media URL");
     }
 
     const now = Date.now();
