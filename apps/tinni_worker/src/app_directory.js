@@ -6762,7 +6762,7 @@ export class AppDirectoryStore extends DurableObject {
       created_at: Number(item.created_at || 0),
     }));
 
-    const receivedDollars = this.ctx.storage.sql.exec(
+    const settlementReceived = this.ctx.storage.sql.exec(
       `SELECT s.id,s.sender_user_id,s.usd_cents,s.created_at,u.display_name AS sender_name
          FROM settlement_transfers s
          LEFT JOIN app_users u ON u.user_id=s.sender_user_id
@@ -6772,11 +6772,36 @@ export class AppDirectoryStore extends DurableObject {
       userId, walletType, limit,
     ).toArray().map((item) => ({
       id: String(item.id),
+      source: "settlement",
       sender_user_id: String(item.sender_user_id),
       sender_name: String(item.sender_name || item.sender_user_id),
       usd_cents: Number(item.usd_cents || 0),
       created_at: Number(item.created_at || 0),
     }));
+
+    const merchantReceived = walletType === "merchant"
+      ? this.ctx.storage.sql.exec(
+          `SELECT t.id,t.sender_user_id,t.usd_cents,t.created_at,u.display_name AS sender_name
+             FROM role_dollar_transfers t
+             LEFT JOIN app_users u ON u.user_id=t.sender_user_id
+            WHERE t.destination_type='merchant'
+              AND t.recipient_user_id=?
+            ORDER BY t.created_at DESC
+            LIMIT ?`,
+          userId, limit,
+        ).toArray().map((item) => ({
+          id: String(item.id),
+          source: "coin_seller",
+          sender_user_id: String(item.sender_user_id),
+          sender_name: String(item.sender_name || item.sender_user_id),
+          usd_cents: Number(item.usd_cents || 0),
+          created_at: Number(item.created_at || 0),
+        }))
+      : [];
+
+    const receivedDollars = [...settlementReceived, ...merchantReceived]
+      .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+      .slice(0, limit);
 
     const sentDollars = this.ctx.storage.sql.exec(
       `SELECT t.*, u.display_name AS recipient_name
