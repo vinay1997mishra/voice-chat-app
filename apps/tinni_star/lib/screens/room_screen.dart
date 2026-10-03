@@ -3313,10 +3313,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         effectKind: 'mp4',
       ),
       const GiftDefinition(
-        id: 'heart-ring',
-        name: 'Heart Ring',
-        price: 1800,
+        id: 'cp-heart',
+        name: 'My Heart',
+        price: 44444,
         effectKind: 'svga',
+        emoji: '💗',
+      ),
+      const GiftDefinition(
+        id: 'cp-invite',
+        name: 'CP Invite',
+        price: 2222222,
+        effectKind: 'svga',
+        emoji: '💌',
       ),
       ...GiftService.catalog,
       ...GiftService.luckyCatalog,
@@ -3342,7 +3350,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               .toList();
         case 'CP':
           return roomGifts
-              .where((gift) => gift.id == 'heart-ring')
+              .where(
+                (gift) =>
+                    gift.id == 'cp-heart' ||
+                    gift.id == 'cp-invite',
+              )
               .toList();
         case 'Backpack':
           return roomGifts
