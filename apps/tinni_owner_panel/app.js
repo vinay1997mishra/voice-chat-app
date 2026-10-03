@@ -1487,7 +1487,7 @@ async function openOwnerFullDashboard(userId) {
         <div style="min-width:0;flex:1">
           <h2>${escapeHtml(user.display_name || ownerFullDashboardUserId)}</h2>
           <p>ID ${escapeHtml(ownerFullDashboardUserId)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
-          <div class="chips">${userTagHtml(identityTags)}</div>
+          <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, ownerFullDashboardUserId)}</div>
         </div>
         <button type="button" class="btn secondary" data-owner-full-refresh>Refresh ID</button>
       </div>
@@ -1526,7 +1526,7 @@ async function openOwnerFullDashboard(userId) {
 
         <section class="panel">
           <div class="panel-head"><div><h3>BD / Agency / Host</h3><p>Current role relationships and direct role controls.</p></div></div>
-          <div class="chips">${ownerDetailRoleHtml(hierarchy)}</div>
+          <div class="owner-role-control-list">${ownerDetailRoleHtml(hierarchy, ownerFullDashboardUserId)}</div>
           <div class="owner-full-action-grid">${hierarchyButtons || '<span class="muted">No hierarchy permission active.</span>'}</div>
         </section>
 
@@ -1567,7 +1567,7 @@ async function openOwnerFullDashboard(userId) {
 
         <section class="panel">
           <div class="panel-head"><div><h3>Tags / Identity</h3><p>Current selected-ID tags.</p></div></div>
-          <div class="chips">${userTagHtml(identityTags)}</div>
+          <div class="owner-tag-control-list">${ownerIdentityControlsHtml(identityTags, ownerFullDashboardUserId)}</div>
           ${sessionCan("messaging.tags") ? `
             <div class="button-row" style="margin-top:10px">
               <button type="button" class="btn secondary" data-full-owner-add-tag>Add Custom Tag</button>
