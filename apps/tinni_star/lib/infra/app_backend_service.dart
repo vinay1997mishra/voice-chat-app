@@ -712,8 +712,16 @@ class AppBackendService {
     return _map(data['stats']);
   }
 
-  Future<List<Map<String, dynamic>>> settlementTransfers(String token) async {
-    final data = await _request('GET', '/wallet/settlement/transfers', token);
+  Future<List<Map<String, dynamic>>> settlementTransfers(
+    String token, {
+    required String senderRole,
+  }) async {
+    final data = await _request(
+      'GET',
+      '/wallet/settlement/transfers',
+      token,
+      queryParameters: <String, String>{'role': senderRole.toLowerCase()},
+    );
     final raw = data['transfers'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
@@ -973,6 +981,7 @@ class AppBackendService {
     String token, {
     required String recipientUserId,
     required int usdCents,
+    required String senderRole,
   }) async {
     final data = await _request(
       'POST',
@@ -981,6 +990,7 @@ class AppBackendService {
       body: {
         'recipient_user_id': recipientUserId,
         'usd_cents': usdCents,
+        'sender_role': senderRole.toLowerCase(),
       },
     );
     final row = _map(data['wallet']);
