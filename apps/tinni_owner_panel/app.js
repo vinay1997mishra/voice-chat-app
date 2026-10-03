@@ -1750,6 +1750,8 @@ function openAction(action, preset = {}) {
       selectField("wallet_type","Wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
     "user-search": ["Search User", field("user_id","Current or old user ID","text","10000001")],
+    "user-name": ["Change User Name", field("user_id","User ID") + field("display_name","New display name")],
+    "user-dp": ["Change User DP", field("user_id","User ID") + field("asset_url","Approved HTTPS DP URL (blank = remove)","text","",false)],
     "user-ban": ["ID Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban"],["unban","Unban"]]) + field("reason","Reason")],
     "device-ban": ["Device Ban / Unban", field("user_id","User ID") + selectField("status","Action",[["ban","Ban device"],["unban","Unban device"]])],
     "user-invisible": ["Invisible ID", field("user_id","User ID") + selectField("status","Status",[["on","Invisible ON"],["off","Invisible OFF"]])],
