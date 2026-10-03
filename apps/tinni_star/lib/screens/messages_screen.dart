@@ -72,8 +72,33 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   void _handleMessageEvent() {
     final event = widget.state.social.messageEvents.value;
-    if (event == null || event['type'] != 'message_received') return;
-    _refreshForIncomingMessage(event);
+    if (event == null) return;
+    final type = event['type']?.toString() ?? '';
+    if (type == 'message_received') {
+      _refreshForIncomingMessage(event);
+      return;
+    }
+    if (type == 'friend_status_changed') {
+      _refreshFriendStatus(event);
+    }
+  }
+
+  Future<void> _refreshFriendStatus(
+    Map<String, dynamic> event,
+  ) async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    final peerUserId = event['peer_user_id']?.toString() ?? '';
+    if (!_isInbox && peerUserId != _targetUserId) return;
+    try {
+      await widget.state.social.syncFriends(account.authToken);
+      if (_isInbox) {
+        await widget.state.social.syncInbox(account.authToken);
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Manual refresh or re-entry retries if the realtime refresh fails.
+    }
   }
 
   Future<void> _refreshForIncomingMessage(
