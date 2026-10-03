@@ -90,6 +90,14 @@ void main() {
     expect(room, isNot(contains('seat-owner-medal-')));
   });
 
+  test('removed room support banner and lucky live feed stay removed', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room, isNot(contains('Ask your followers to support the room.')));
+    expect(room, isNot(contains("Key('lucky-live-feed-overlay')")));
+    expect(room, isNot(contains('_buildLuckyFeedOverlay()')));
+    expect(room, isNot(contains('_refreshLuckyFeed()')));
+  });
+
   test('room game logo and Rocket stages stay on latest reference layout', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     expect(room, contains("Key('room-game-floating-button')"));
