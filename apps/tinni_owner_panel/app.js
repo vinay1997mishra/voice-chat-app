@@ -2,6 +2,7 @@ const API_BASE = window.location.origin;
 
 const state = {
   treasury: 0,
+  companyDollars: { usd_cents: 0, ledger: [] },
   features: {},
   policies: {},
   gameConfig: {},
@@ -374,6 +375,7 @@ const actionPermission = {
   "wallet-seller": "wallets.seller",
   "wallet-merchant": "wallets.merchant",
   "treasury-send": "wallets.treasury_send",
+  "company-dollar-deduct": "__owner_only__",
   "wallet-security-unfreeze": "__owner_only__",
   "bd-activate": "hierarchy.bd_manage",
   "agency-activate": "hierarchy.agency_manage",
@@ -1961,6 +1963,10 @@ function applySession(session) {
     button.hidden = !required || !hasPermission(allowed, required);
   });
 
+  document.querySelectorAll("[data-owner-section]").forEach((section) => {
+    section.hidden = !owner;
+  });
+
   document.querySelectorAll("[data-vip-edit]").forEach((button) => {
     if (!owner) button.hidden = !hasPermission(allowed, "vip.edit");
   });
@@ -2055,6 +2061,7 @@ async function loadOwnerState() {
     state.gameConfig = serverState.game_config || {};
     state.luckyGiftConfig = serverState.lucky_gift_config || {};
     state.treasury = Number(serverState.treasury?.balance || 0);
+    state.companyDollars = serverState.company_dollars || { usd_cents: 0, ledger: [] };
     state.catalog = Array.isArray(serverState.catalog) ? serverState.catalog : [];
     state.vips = state.catalog
       .filter((item) => item.kind === "vip")
@@ -2079,6 +2086,7 @@ async function loadOwnerState() {
     renderVips();
     renderPolicies();
     renderTreasury();
+    renderCompanyDollars();
     renderOwnerCatalogs();
   } catch (error) {
     toast(error.message || "Unable to load Owner state.");
@@ -2179,6 +2187,41 @@ function renderTreasury() {
   if (wallet) wallet.textContent = fmt(balance);
   if (stat) stat.textContent = fmt(balance);
 }
+
+function renderCompanyDollars() {
+  const company = state.companyDollars || {};
+  const balance = Math.max(0, Number(company.usd_cents || 0));
+  const balanceRoot = document.getElementById("companyDollarBalance");
+  if (balanceRoot) balanceRoot.textContent = "$" + (balance / 100).toFixed(2);
+
+  const ledgerRoot = document.getElementById("companyDollarLedger");
+  if (!ledgerRoot) return;
+  const ledger = Array.isArray(company.ledger) ? company.ledger : [];
+  if (!ledger.length) {
+    ledgerRoot.innerHTML = '<tr><td colspan="7" class="muted">No company dollar records.</td></tr>';
+    return;
+  }
+  ledgerRoot.innerHTML = ledger.map((row) => {
+    const amount = Number(row.usd_cents_delta || 0);
+    const sender = row.sender_user_id
+      ? escapeHtml((row.sender_name || row.sender_user_id) + " • ID " + row.sender_user_id)
+      : "Owner / Company";
+    const type = String(row.sender_wallet_type || row.kind || "")
+      .replaceAll("_", " ");
+    return `
+      <tr>
+        <td>${escapeHtml(formatFullTimestamp(row.created_at))}</td>
+        <td>${sender}</td>
+        <td>${escapeHtml(type)}</td>
+        <td>${amount >= 0 ? "+" : ""}${(amount / 100).toFixed(2)}</td>
+        <td>${(Number(row.balance_before || 0) / 100).toFixed(2)}</td>
+        <td>${(Number(row.balance_after || 0) / 100).toFixed(2)}</td>
+        <td>${escapeHtml(row.reference_id || row.id || "—")}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
 
 function renderCatalogList(rootId, kind, emptyText) {
   const root = document.getElementById(rootId);
@@ -2284,6 +2327,10 @@ function openAction(action, preset = {}) {
       field("amount","Coin amount","number","2000000") +
       selectField("wallet_type","Receiver wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
+    "company-dollar-deduct": ["Deduct Company Dollars",
+      '<label><span>USD amount</span><input name="usd_amount" type="number" min="0.01" step="0.01" placeholder="300.00" required></label>' +
+      field("reason","Reason","text","Optional",false)
+    ],
     "wallet-security-unfreeze": ["Owner Security Unfreeze",
       field("user_id","User ID","text","10000001") +
       selectField("wallet_type","Wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
@@ -2310,7 +2357,7 @@ function openAction(action, preset = {}) {
       field("starts_at","Start date/time (blank = now)","datetime-local") +
       field("ends_at","End date/time","datetime-local")
     ],
-    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["credit","Add coins"],["debit","Remove coins"],["ban","Ban wallet"],["unban","Unban wallet"]])],
+    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + selectField("asset","Balance",[["coins","Coins"],["diamonds","Diamonds"]]) + field("amount","Amount","number") + selectField("operation","Operation",[["credit","Add"],["debit","Remove"],["ban","Ban wallet (coins wallet)"],["unban","Unban wallet (coins wallet)"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "bd-activate": ["BD Role", field("user_id","User ID") + selectField("operation","Operation",[["activate","Activate BD"],["remove","Remove BD"]])],
@@ -2725,6 +2772,14 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
+  if (action === "company-dollar-deduct") {
+    const amount = Number(data.usd_amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Enter a valid dollar amount.");
+    }
+    payload.usd_cents = Math.round(amount * 100);
+    delete payload.usd_amount;
+  }
   if (action === "lucky-gift-config") {
     payload.enabled = String(data.enabled || "") === "true";
     payload.banners_enabled = String(data.banners_enabled || "") === "true";
@@ -4076,5 +4131,6 @@ renderRoles();
 renderVips();
 renderPolicies();
 renderTreasury();
+renderCompanyDollars();
 checkHealth();
 loadSession();
