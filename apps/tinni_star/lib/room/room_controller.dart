@@ -12,9 +12,7 @@ class RoomController extends ChangeNotifier {
   final FunctionPackRuntime runtime;
   int? seatCountOverride;
 
-  final List<RoomMessage> messages = [
-    const RoomMessage('System', 'Welcome to Tinni Star ✨'),
-  ];
+  final List<RoomMessage> messages = <RoomMessage>[];
 
   late List<RoomSeat> seats;
   int? mySeat;
