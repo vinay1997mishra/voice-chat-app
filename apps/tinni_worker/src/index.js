@@ -4248,7 +4248,6 @@ export default {
         equipped_profile_card_id: body.equipped_profile_card_id,
         owner_tags: Array.isArray(user.tags) ? user.tags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
-        mic_enabled: body.mic_enabled === true,
         seat_index:
           body.seat_index === null || body.seat_index === undefined
             ? null
