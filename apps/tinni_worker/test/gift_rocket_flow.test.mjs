@@ -163,8 +163,8 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /seatDiameter \* 6\.2 - arc/,
-  "Lucky gift flight must visibly travel from below the room toward each selected seat",
+  /final origin =\s*_giftFlightOriginOffset\(context\);[\s\S]{0,260}origin\.dx \* \(1 - value\),[\s\S]{0,120}origin\.dy \* \(1 - value\) - arc/,
+  "Lucky gift flight must visibly travel from the screen center toward each selected seat",
 );
 assert.match(
   roomScreen,
