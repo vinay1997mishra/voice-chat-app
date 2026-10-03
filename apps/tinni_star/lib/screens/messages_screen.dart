@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
 import '../calls/call_service.dart';
@@ -33,6 +34,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   final controller = TextEditingController();
   bool loading = true;
   bool sending = false;
+  bool sendingImage = false;
   bool checkingIncoming = false;
   String? errorText;
   CallSession? incomingCall;
@@ -461,6 +463,188 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
+  Future<void> _pickAndSendPhoto() async {
+    if (_isInbox || sendingImage || _isOfficial) return;
+    if (!_isFriend) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photos can only be sent to friends.'),
+        ),
+      );
+      return;
+    }
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  key: const Key('message-photo-gallery'),
+                  onPressed: () =>
+                      Navigator.pop(sheetContext, ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_rounded),
+                  label: const Text('Gallery'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('message-photo-camera'),
+                  onPressed: () =>
+                      Navigator.pop(sheetContext, ImageSource.camera),
+                  icon: const Icon(Icons.photo_camera_rounded),
+                  label: const Text('Camera'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1800,
+      maxHeight: 1800,
+      imageQuality: 88,
+    );
+    if (picked == null || !mounted) return;
+
+    final bytes = await picked.readAsBytes();
+    if (bytes.isEmpty || bytes.length > 4000000) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photo must be 4 MB or smaller.'),
+        ),
+      );
+      return;
+    }
+
+    final lowerPath = picked.path.toLowerCase();
+    final mimeType = picked.mimeType ??
+        (lowerPath.endsWith('.png')
+            ? 'image/png'
+            : lowerPath.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg');
+    if (!const {'image/jpeg', 'image/png', 'image/webp'}.contains(mimeType)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only JPEG, PNG or WebP photos are supported.'),
+        ),
+      );
+      return;
+    }
+
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    setState(() {
+      sendingImage = true;
+      errorText = null;
+    });
+    try {
+      await widget.state.social.sendDirectImageRemote(
+        authToken: account.authToken,
+        from: _myUserId,
+        to: _targetUserId,
+        dataUrl: 'data:' + mimeType + ';base64,' + base64Encode(bytes),
+      );
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Bad state: ', '');
+      setState(() => errorText = message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } finally {
+      if (mounted) setState(() => sendingImage = false);
+    }
+  }
+
+  Widget _messagePhoto(ChatMessage message) {
+    final account = widget.state.auth.current;
+    final mediaUrl = message.mediaUrl;
+    if (account == null || mediaUrl == null || mediaUrl.isEmpty) {
+      return const Text(
+        'Photo unavailable',
+        style: TextStyle(color: RoyalPalette.muted),
+      );
+    }
+    final headers = <String, String>{
+      'Authorization': 'Bearer ' + account.authToken,
+    };
+    final image = Image.network(
+      mediaUrl,
+      headers: headers,
+      width: 230,
+      height: 250,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return const SizedBox(
+          width: 230,
+          height: 160,
+          child: Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      },
+      errorBuilder: (_, _, _) => const SizedBox(
+        width: 230,
+        height: 120,
+        child: Center(
+          child: Text(
+            'Photo unavailable',
+            style: TextStyle(color: RoyalPalette.muted),
+          ),
+        ),
+      ),
+    );
+    return GestureDetector(
+      key: Key('message-photo-' + (message.id ?? mediaUrl)),
+      onTap: () {
+        showDialog<void>(
+          context: context,
+          barrierColor: Colors.black87,
+          builder: (dialogContext) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(12),
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4,
+              child: Image.network(
+                mediaUrl,
+                headers: headers,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Center(
+                  child: Text(
+                    'Photo unavailable',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: image,
+      ),
+    );
+  }
+
   ImageProvider? _avatarProvider(String? rawAvatar) {
     if (rawAvatar == null || !rawAvatar.startsWith('data:image/')) {
       return null;
@@ -557,10 +741,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ? 'Rewards, events and account activity'
                 : 'Start a conversation')
         : (mine ? 'You: ' : '') +
-            last.text.replaceFirst(
-              RegExp(r'^\[ROLE_INVITE:[^\]]+\]\s*'),
-              '',
-            );
+            (last.isImage
+                ? '📷 Photo'
+                : last.text.replaceFirst(
+                    RegExp(r'^\[ROLE_INVITE:[^\]]+\]\s*'),
+                    '',
+                  ));
 
     return RoyalPanel(
       key: Key('message-thread-' + thread.userId),
@@ -980,13 +1166,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                   ? CrossAxisAlignment.end
                                   : CrossAxisAlignment.start,
                               children: [
-                                SelectableText(
-                                  displayText,
-                                  key: Key(
-                                    'message-selectable-' +
-                                        (message.id ?? index.toString()),
+                                if (message.isImage)
+                                  _messagePhoto(message)
+                                else
+                                  SelectableText(
+                                    displayText,
+                                    key: Key(
+                                      'message-selectable-' +
+                                          (message.id ?? index.toString()),
+                                    ),
                                   ),
-                                ),
                                 if (verificationNotice) ...[
                                   const SizedBox(height: 8),
                                   FilledButton.icon(
@@ -1135,6 +1324,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     )
                   : Row(
                       children: [
+                        if (_isFriend)
+                          IconButton(
+                            key: const Key('message-photo-button'),
+                            tooltip: 'Send photo',
+                            onPressed: sendingImage ? null : _pickAndSendPhoto,
+                            icon: sendingImage
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const ShiningIcon(
+                                    icon: Icons.image_rounded,
+                                    color: FeaturePalette.social,
+                                    size: 20,
+                                    boxSize: 36,
+                                    glow: 0.30,
+                                  ),
+                          ),
                         Expanded(
                           child: TextField(
                             key: const Key('message-input'),
