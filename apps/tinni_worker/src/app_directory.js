@@ -782,6 +782,9 @@ export class AppDirectoryStore extends DurableObject {
         level INTEGER NOT NULL DEFAULT 1,
         ring_id TEXT,
         requested_by TEXT NOT NULL,
+        last_intimacy_at INTEGER,
+        decay_applied_days INTEGER NOT NULL DEFAULT 0,
+        cycle_started_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY(user_a, user_b)
@@ -1205,6 +1208,9 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_locks ADD COLUMN display_password TEXT",
+      "ALTER TABLE cp_relationships ADD COLUMN last_intimacy_at INTEGER",
+      "ALTER TABLE cp_relationships ADD COLUMN decay_applied_days INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE cp_relationships ADD COLUMN cycle_started_at INTEGER",
       "ALTER TABLE owner_user_tags ADD COLUMN kind TEXT NOT NULL DEFAULT 'custom'",
       "ALTER TABLE owner_user_tags ADD COLUMN designation TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE owner_user_tags ADD COLUMN background_color TEXT"
@@ -5133,6 +5139,15 @@ export class AppDirectoryStore extends DurableObject {
     }
 
     if (receivers.length < 1 || receivers.length > 30) throw new Error("Select at least one valid recipient");
+    const isCpInvite = giftId === "cp-invite" || giftData.cp_invite === true;
+    if (isCpInvite) {
+      if (receivers.length !== 1 || receivers[0] === senderId) {
+        throw new Error("CP Invite must be sent to one other user");
+      }
+      if (this.cpState(senderId) || this.cpState(receivers[0])) {
+        throw new Error("A CP flow is already active");
+      }
+    }
     const room = this._roomRow(roomId);
     if (!room || Number(room.closed || 0) === 1) throw new Error("Room is unavailable");
     for (const receiverId of receivers) {
@@ -5201,6 +5216,14 @@ export class AppDirectoryStore extends DurableObject {
         created_at: now,
       });
 
+      this._recordCpGiftIntimacy(
+        senderId,
+        receiverId,
+        receiverTotal,
+        isLucky,
+        now,
+      );
+
       if (receiverDiamonds > 0) {
         const hostCredit = receiverDiamonds;
         if (hostCredit > 0) {
@@ -5248,6 +5271,15 @@ export class AppDirectoryStore extends DurableObject {
           social_value_coins: socialValueCoins,
         });
       }
+    }
+
+    if (isCpInvite) {
+      const targetId = receivers[0];
+      const pair = [senderId, targetId].sort();
+      this.ctx.storage.sql.exec(
+        "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,decay_applied_days,cycle_started_at,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)",
+        pair[0], pair[1], senderId, now, now, now, now,
+      );
     }
 
     if (isLucky) {
@@ -5744,14 +5776,160 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  _cpLevelThresholds() {
+    const configured = this._ownerSetting("cp_level_thresholds", [200000]);
+    const values = Array.isArray(configured) ? configured : [200000];
+    return values
+      .map((value) => Math.max(1, Math.floor(Number(value || 0))))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+  }
+
+  _cpLevelForIntimacy(intimacyValue) {
+    const intimacy = Math.max(0, Math.floor(Number(intimacyValue || 0)));
+    let level = 1;
+    for (const threshold of this._cpLevelThresholds()) {
+      if (intimacy >= threshold) level += 1;
+      else break;
+    }
+    return level;
+  }
+
+  _cpGiftIntimacyPoints(senderIdValue, receiverIdValue, coinValue, isLucky, nowValue) {
+    const senderId = String(senderIdValue || "").trim();
+    const receiverId = String(receiverIdValue || "").trim();
+    const coins = Math.max(0, Math.floor(Number(coinValue || 0)));
+    if (!senderId || !receiverId || coins <= 0) return 0;
+    const cp = this.cpState(senderId);
+    if (!cp || cp.state !== "accepted") return 0;
+    const pairMatches =
+      (String(cp.user_a) === senderId && String(cp.user_b) === receiverId) ||
+      (String(cp.user_b) === senderId && String(cp.user_a) === receiverId);
+    if (!pairMatches) return 0;
+
+    // Reference economy: 45,000 source coins = USD 1; Tinni = 2,000,000.
+    // So regular gift intimacy is normalized back to reference-coin value.
+    let points = Math.floor(coins * 45000 / 2000000);
+    if (isLucky) points = Math.floor(points * 10 / 100);
+    if (points <= 0) return 0;
+
+    const now = Number(nowValue || Date.now());
+    const dayStart = Date.UTC(
+      new Date(now).getUTCFullYear(),
+      new Date(now).getUTCMonth(),
+      new Date(now).getUTCDate(),
+    );
+    const opposite = this.ctx.storage.sql.exec(
+      `SELECT id FROM gift_transactions
+        WHERE sender_id=? AND receiver_id=? AND created_at>=? AND created_at<=?
+        LIMIT 1`,
+      receiverId, senderId, dayStart, now,
+    ).toArray()[0];
+    if (opposite) {
+      points = Math.floor(points * 12 / 10);
+    }
+    return points;
+  }
+
+  _recordCpGiftIntimacy(senderIdValue, receiverIdValue, coinValue, isLucky, nowValue) {
+    const senderId = String(senderIdValue || "").trim();
+    const cp = this.cpState(senderId);
+    if (!cp || cp.state !== "accepted") return 0;
+    const points = this._cpGiftIntimacyPoints(
+      senderId,
+      receiverIdValue,
+      coinValue,
+      isLucky,
+      nowValue,
+    );
+    if (points <= 0) return 0;
+    const intimacy = Math.max(0, Number(cp.intimacy || 0)) + points;
+    const level = this._cpLevelForIntimacy(intimacy);
+    const now = Number(nowValue || Date.now());
+    this.ctx.storage.sql.exec(
+      `UPDATE cp_relationships
+          SET intimacy=?, level=?, last_intimacy_at=?,
+              decay_applied_days=0, updated_at=?
+        WHERE user_a=? AND user_b=?`,
+      intimacy, level, now, now, cp.user_a, cp.user_b,
+    );
+    return points;
+  }
+
   cpState(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
-    const row = this.ctx.storage.sql.exec(
-      "SELECT * FROM cp_relationships WHERE user_a = ? OR user_b = ? ORDER BY updated_at DESC LIMIT 1", userId, userId,
+    let row = this.ctx.storage.sql.exec(
+      "SELECT * FROM cp_relationships WHERE user_a = ? OR user_b = ? ORDER BY updated_at DESC LIMIT 1",
+      userId, userId,
     ).toArray()[0];
     if (!row) return null;
-    return { ...row, intimacy: Number(row.intimacy || 0), level: Number(row.level || 1), created_at: Number(row.created_at), updated_at: Number(row.updated_at) };
+
+    if (String(row.state) === "accepted") {
+      const now = Date.now();
+      const lastIntimacyAt = Number(
+        row.last_intimacy_at || row.cycle_started_at || row.created_at || now,
+      );
+      const idleDays = Math.max(
+        0,
+        Math.floor((now - lastIntimacyAt) / 86400000),
+      );
+      const eligibleDecayDays = Math.max(0, idleDays - 3);
+      const alreadyApplied = Math.max(
+        0,
+        Number(row.decay_applied_days || 0),
+      );
+      if (eligibleDecayDays > alreadyApplied) {
+        let intimacy = Math.max(0, Number(row.intimacy || 0));
+        for (let day = alreadyApplied; day < eligibleDecayDays; day += 1) {
+          intimacy = Math.floor(intimacy * 95 / 100);
+        }
+        const level = this._cpLevelForIntimacy(intimacy);
+        this.ctx.storage.sql.exec(
+          `UPDATE cp_relationships
+              SET intimacy=?, level=?, decay_applied_days=?, updated_at=?
+            WHERE user_a=? AND user_b=?`,
+          intimacy,
+          level,
+          eligibleDecayDays,
+          now,
+          row.user_a,
+          row.user_b,
+        );
+        row = this.ctx.storage.sql.exec(
+          "SELECT * FROM cp_relationships WHERE user_a=? AND user_b=? LIMIT 1",
+          row.user_a, row.user_b,
+        ).toArray()[0];
+      }
+    }
+
+    const intimacy = Number(row.intimacy || 0);
+    const thresholds = this._cpLevelThresholds();
+    const level = Number(row.level || this._cpLevelForIntimacy(intimacy));
+    const nextThreshold =
+      level - 1 < thresholds.length ? thresholds[level - 1] : null;
+    return {
+      ...row,
+      intimacy,
+      level,
+      created_at: Number(row.created_at),
+      updated_at: Number(row.updated_at),
+      cp_rules: {
+        reference_coins_per_usd: 45000,
+        tinni_coins_per_usd: 2000000,
+        invite_coins: 2222222,
+        heart_gift_coins: 44444,
+        regular_gift_intimacy_percent: 100,
+        lucky_gift_intimacy_percent: 10,
+        mutual_daily_multiplier: 1.2,
+        mic_task_minutes: 5,
+        mic_task_intimacy: 200,
+        level_cycle_days: 7,
+        idle_grace_days: 3,
+        daily_decay_percent: 5,
+        next_level_threshold: nextThreshold,
+      },
+    };
   }
 
   cpRequest(userIdValue, targetIdValue) {
@@ -5761,7 +5939,15 @@ export class AppDirectoryStore extends DurableObject {
     if (!this.getUserById(targetId)) throw new Error("User not found");
     if (this.cpState(userId) || this.cpState(targetId)) throw new Error("A CP flow is already active");
     const policies = this.ownerState().policies;
-    const price = this._effectivePrice(userId, "cp:connect", Math.max(0, Number(policies.cp_connect_coins || 0))).price;
+    const configuredInvite = Math.max(
+      0,
+      Number(policies.cp_connect_coins || 0),
+    );
+    const price = this._effectivePrice(
+      userId,
+      "cp:connect",
+      configuredInvite > 0 ? configuredInvite : 2222222,
+    ).price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
@@ -5770,14 +5956,22 @@ export class AppDirectoryStore extends DurableObject {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_connect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + targetId, "CP connect", now);
     }
-    this.ctx.storage.sql.exec("INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,?)", pair[0], pair[1], userId, now, now);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO cp_relationships (user_a,user_b,state,intimacy,level,ring_id,requested_by,last_intimacy_at,decay_applied_days,cycle_started_at,created_at,updated_at) VALUES (?,?, 'pending',0,1,NULL,?,?,0,?,?,?)",
+      pair[0], pair[1], userId, now, now, now, now,
+    );
     return this.cpState(userId);
   }
 
   cpRespond(userIdValue, acceptValue) {
     const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
     if (!row || row.state !== "pending" || row.requested_by === userId) throw new Error("No CP request is awaiting your response");
-    this.ctx.storage.sql.exec("UPDATE cp_relationships SET state = ?, updated_at = ? WHERE user_a = ? AND user_b = ?", acceptValue === true ? "accepted" : "refused", Date.now(), row.user_a, row.user_b);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE cp_relationships SET state=?, last_intimacy_at=?, decay_applied_days=0, cycle_started_at=?, updated_at=? WHERE user_a=? AND user_b=?",
+      acceptValue === true ? "accepted" : "refused",
+      now, now, now, row.user_a, row.user_b,
+    );
     return this.cpState(userId);
   }
 
@@ -5806,10 +6000,11 @@ export class AppDirectoryStore extends DurableObject {
     if (action === "intimacy") {
       const delta = Math.max(1, Math.min(10000, Number(input.delta || 0)));
       const intimacy = Number(row.intimacy || 0) + delta;
-      const level = Math.max(1, Math.floor(intimacy / 1000) + 1);
+      const level = this._cpLevelForIntimacy(intimacy);
+      const now = Date.now();
       this.ctx.storage.sql.exec(
-        "UPDATE cp_relationships SET intimacy = ?, level = ?, updated_at = ? WHERE user_a = ? AND user_b = ?",
-        intimacy, level, Date.now(), row.user_a, row.user_b,
+        "UPDATE cp_relationships SET intimacy=?, level=?, last_intimacy_at=?, decay_applied_days=0, updated_at=? WHERE user_a=? AND user_b=?",
+        intimacy, level, now, now, row.user_a, row.user_b,
       );
     } else if (action === "ring") {
       const ringId = cleanText(input.ring_id, 80);
