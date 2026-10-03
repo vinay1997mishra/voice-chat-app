@@ -5164,7 +5164,6 @@ export class AppDirectoryStore extends DurableObject {
     let totalRebate = 0;
     let highestMultiplier = 0;
     let totalPoolContribution = 0;
-    const hostRewardPercent = 10;
     const prizePoolPercent = Math.max(
       0,
       Math.min(100, Number(giftData.prize_pool_percent ?? luckyConfig.prize_pool_percent ?? 2)),
@@ -5227,7 +5226,7 @@ export class AppDirectoryStore extends DurableObject {
         totalRebate += rebateCoins;
         totalPoolContribution += poolContribution;
         highestMultiplier = Math.max(highestMultiplier, multiplier);
-        const socialValueCoins = Math.floor(receiverTotal * charmWealthPercent / 100);
+        // Lucky ranking/seat/rocket value is fixed at 10% above.
         const resultId = "lucky-" + crypto.randomUUID();
         this.ctx.storage.sql.exec(
           `INSERT INTO lucky_gift_results
