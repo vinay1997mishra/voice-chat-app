@@ -2,12 +2,12 @@ name: Tinni Star Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, tinnistart97]
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, tinnistart97]
     paths:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
