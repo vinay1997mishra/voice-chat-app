@@ -25,7 +25,7 @@ assert.match(
 );
 assert.match(
   index,
-  /image_moderation_configured:\s*Boolean\(env\.IMAGE_MODERATION_URL\)/,
+  /image_moderation_configured:\s*Boolean\(env\.AI \|\| env\.IMAGE_MODERATION_URL\)/,
   "App config must report image moderation availability",
 );
 assert.match(
@@ -47,6 +47,16 @@ assert.match(
   index,
   /Animated WebP images are not allowed/,
   "Animated WebP uploads must be rejected to avoid frame-based moderation bypass",
+);
+assert.match(
+  index,
+  /@cf\/cloudflare\/clef-flash/,
+  "User image moderation must use the bound Cloudflare vision decision model",
+);
+assert.match(
+  index,
+  /images:\s*\[imageDataUrl\]/,
+  "The moderation model must inspect the actual uploaded image bytes",
 );
 
 console.log("Production readiness guards passed");
