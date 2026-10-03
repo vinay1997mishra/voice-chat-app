@@ -80,6 +80,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Map<String, ImageProvider> _avatarProviderCache =
       <String, ImageProvider>{};
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
+  static const List<int> _rocketStageTargets = <int>[
+    8000000,
+    15000000,
+    30000000,
+    50000000,
+    90000000,
+    150000000,
+    200000000,
+    250000000,
+    350000000,
+    500000000,
+  ];
   final List<Map<String, dynamic>> _ribbonQueue = <Map<String, dynamic>>[];
   final Set<String> _seenRibbonIds = <String>{};
   final Set<String> _seenEntranceKeys = <String>{};
@@ -190,6 +202,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
     setState(() => _roomSendingSummaryFuture = next);
+  }
+
+  Offset _giftFlightOriginOffset(BuildContext context) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return Offset.zero;
+    }
+    final screen = MediaQuery.sizeOf(context);
+    final screenCenterGlobal = Offset(screen.width / 2, screen.height / 2);
+    final screenCenterLocal = renderObject.globalToLocal(screenCenterGlobal);
+    return screenCenterLocal - renderObject.size.center(Offset.zero);
+  }
+
+  Map<String, num> _rocketProgressState(int totalValue) {
+    var remaining = math.max(0, totalValue);
+    var completed = 0;
+    for (final target in _rocketStageTargets) {
+      if (remaining < target) break;
+      remaining -= target;
+      completed++;
+    }
+    final allComplete = completed >= _rocketStageTargets.length;
+    final currentIndex = allComplete
+        ? _rocketStageTargets.length - 1
+        : completed;
+    final currentTarget = _rocketStageTargets[currentIndex];
+    final currentProgress = allComplete ? currentTarget : remaining;
+    return <String, num>{
+      'completed': completed,
+      'current_index': currentIndex,
+      'current_target': currentTarget,
+      'current_progress': currentProgress,
+      'percent': allComplete
+          ? 1.0
+          : (currentProgress / currentTarget).clamp(0.0, 1.0),
+    };
   }
 
   String _compactRoomSending(int value) {
@@ -2519,6 +2567,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         luckySessionId: sessionId,
       );
       _applyGiftServerWallet(response);
+      _refreshRoomSendingSummary();
 
       final rawLucky = response['lucky'];
       final lucky = rawLucky is Map
@@ -2665,10 +2714,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               : ((1 - value) / 0.28).clamp(0.0, 1.0).toDouble();
           final scale = 0.38 + Curves.easeOutBack.transform(value) * 0.86;
           final rise = math.sin(math.pi * value) * seatDiameter * 0.42;
+          final origin = _giftFlightOriginOffset(context);
           return Transform.translate(
             offset: Offset(
-              (1 - value) * seatDiameter * 2.35,
-              (1 - value) * seatDiameter * 5.6 - rise,
+              origin.dx * (1 - value),
+              origin.dy * (1 - value) - rise,
             ),
             child: Transform.scale(
               scale: scale,
@@ -4618,6 +4668,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showRocketPanel() {
+    final rocketFuture = _loadRoomSendingSummary();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -4650,126 +4701,182 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.help_outline_rounded,
-                      color: RoyalPalette.cream,
-                      size: 18,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: rocketFuture,
+            builder: (context, snapshot) {
+              final total =
+                  (snapshot.data?['lifetime_total'] as num? ?? 0).toInt();
+              final rocket = _rocketProgressState(total);
+              final completed = rocket['completed']!.toInt();
+              final currentIndex = rocket['current_index']!.toInt();
+              final currentTarget = rocket['current_target']!.toInt();
+              final currentProgress = rocket['current_progress']!.toInt();
+              final percent = rocket['percent']!.toDouble();
+              final allComplete = completed >= _rocketStageTargets.length;
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.help_outline_rounded,
+                          color: RoyalPalette.cream,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Rocket ' +
+                              (allComplete ? 10 : currentIndex + 1).toString() +
+                              '/10',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD45A),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _compactRoomSending(total),
+                          key: const Key('room-rocket-social-total'),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('room-rocket-close'),
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: RoyalPalette.cream,
+                          ),
+                        ),
+                      ],
                     ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        'Record',
-                        style: TextStyle(color: RoyalPalette.cream),
+                  ),
+                  const Expanded(
+                    flex: 3,
+                    child: Center(
+                      child: _ReferenceRocketLogo(size: 110),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: GridView.builder(
+                      key: const Key('room-rocket-ten-stages'),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 5,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: 0.92,
+                      ),
+                      itemCount: _rocketStageTargets.length,
+                      itemBuilder: (context, index) {
+                        final done = index < completed;
+                        final current = !allComplete && index == currentIndex;
+                        final target = _rocketStageTargets[index];
+                        final color = done
+                            ? const Color(0xFFFFD45A)
+                            : current
+                                ? const Color(0xFF61D9FF)
+                                : const Color(0xFF56627E);
+                        return Container(
+                          key: Key(
+                            'room-rocket-stage-' + (index + 1).toString(),
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF071B4D),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: color.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                done
+                                    ? Icons.rocket_launch_rounded
+                                    : Icons.rocket_rounded,
+                                color: color,
+                                size: 26,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                (index + 1).toString(),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                _compactRoomSending(target),
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        key: const Key('room-rocket-progress'),
+                        value: percent,
+                        minHeight: 12,
+                        backgroundColor: const Color(0xFF241B2C),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFFFD45A),
+                        ),
                       ),
                     ),
-                    IconButton(
-                      key: const Key('room-rocket-close'),
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: RoyalPalette.cream,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    allComplete
+                        ? '10/10 rockets complete'
+                        : _compactRoomSending(currentProgress) +
+                            ' / ' +
+                            _compactRoomSending(currentTarget) +
+                            '  •  ' +
+                            (percent * 100).floor().toString() +
+                            '%',
+                    key: const Key('room-rocket-progress-label'),
+                    style: const TextStyle(
+                      color: Color(0xFFFFD45A),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(18, 0, 18, 14),
+                    child: Text(
+                      'Lucky gifts add 10% to Rocket. All other gifts add 100%.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFFB9C8F3),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const Expanded(
-                flex: 5,
-                child: Center(
-                  child: _ReferenceRocketLogo(size: 122),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: const <Widget>[
-                    Icon(Icons.rocket_launch_rounded,
-                        color: Color(0xFFB8894D), size: 24),
-                    Icon(Icons.rocket_launch_rounded,
-                        color: Color(0xFF61D9FF), size: 26),
-                    Icon(Icons.rocket_launch_rounded,
-                        color: Color(0xFF57E39B), size: 28),
-                    Icon(Icons.rocket_launch_rounded,
-                        color: Color(0xFFB979FF), size: 30),
-                    Icon(Icons.rocket_launch_rounded,
-                        color: Color(0xFFFFD45A), size: 32),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: const LinearProgressIndicator(
-                    value: 0,
-                    minHeight: 12,
-                    backgroundColor: Color(0xFF241B2C),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFFFFD45A),
-                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '0%',
-                style: TextStyle(
-                  color: Color(0xFFFFD45A),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF071B4D),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: const Color(0x99FFD45A),
-                      width: 1,
-                    ),
-                  ),
-                  child: GridView.count(
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    children: const <Widget>[
-                      _RocketReward(icon: Icons.rocket_launch_rounded),
-                      _RocketReward(icon: Icons.directions_car_filled_rounded),
-                      _RocketReward(icon: Icons.monetization_on_rounded),
-                      _RocketReward(icon: Icons.circle_outlined),
-                      _RocketReward(icon: Icons.workspace_premium_rounded),
-                      _RocketReward(icon: Icons.auto_awesome_rounded),
-                    ],
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Reset 14:27:49',
-                  style: TextStyle(
-                    color: Color(0xFFFFE05D),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -7649,10 +7756,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ..rotateX((1 - value) * -0.48)
                             ..rotateZ((1 - value) * 0.72)
                             ..scaleByDouble(scale, scale, 1.0, 1.0);
+                          final origin =
+                              _giftFlightOriginOffset(context);
                           return Transform.translate(
                             offset: Offset(
-                              (1 - value) * seatDiameter * 2.8,
-                              (1 - value) * seatDiameter * 6.2 - arc,
+                              origin.dx * (1 - value),
+                              origin.dy * (1 - value) - arc,
                             ),
                             child: Transform(
                               alignment: Alignment.center,
