@@ -2,7 +2,7 @@ name: Tinni Worker Check
 
 on:
   push:
-    branches: [main, fix/final-gift-rocket-flow]
+    branches: [main]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
