@@ -1490,7 +1490,7 @@ function openAction(action, preset = {}) {
       selectField("wallet_type","Receiver wallet",[["normal","Normal User Wallet"],["coin_seller","Coin Seller Wallet"],["merchant","Merchant Wallet"]])
     ],
     "company-dollar-deduct": ["Deduct Company Dollars",
-      field("usd_amount","USD amount","number","300") +
+      '<label><span>USD amount</span><input name="usd_amount" type="number" min="0.01" step="0.01" placeholder="300.00" required></label>' +
       field("reason","Reason","text","Optional",false)
     ],
     "wallet-security-unfreeze": ["Owner Security Unfreeze",
