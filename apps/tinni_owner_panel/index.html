@@ -317,6 +317,24 @@
             <article class="panel"><h2>Merchant Wallet</h2><p class="muted">Create wallet, add/remove coins, and ban/unban Merchant wallet.</p><button class="btn primary" data-action="wallet-merchant">Manage</button></article>
           </div>
           <article class="panel"><div class="panel-head"><h2>Owner Treasury Distribution</h2><span class="badge gold">2,000,000 coins = $1</span></div><p class="muted">Send Owner Treasury coins to a normal user wallet, Coin Seller wallet or Merchant wallet. Every movement is audit logged.</p><button class="btn primary" data-action="treasury-send">Send Coins</button></article>
+          <article class="panel" data-owner-section>
+            <div class="panel-head">
+              <div><h2>Company Dollars</h2><p>Coin Seller and Merchant transfers to Company.</p></div>
+              <span class="badge gold">Owner only</span>
+            </div>
+            <div class="wallet-balance"><strong id="companyDollarBalance">$0.00</strong><span>available</span></div>
+            <div class="button-row">
+              <button class="btn primary" data-action="company-dollar-deduct">Deduct Dollars</button>
+            </div>
+            <div class="table-wrap" style="margin-top:14px">
+              <table>
+                <thead>
+                  <tr><th>Date / Time</th><th>Sender</th><th>Type</th><th>Amount</th><th>Before</th><th>After</th><th>Transaction</th></tr>
+                </thead>
+                <tbody id="companyDollarLedger"><tr><td colspan="7" class="muted">No company dollar records.</td></tr></tbody>
+              </table>
+            </div>
+          </article>
           <article class="panel"><div class="panel-head"><h2>Wallet Security Freeze</h2><span class="badge gold">Owner only</span></div><p class="muted">Unexpected coin credits are quarantined and freeze the affected wallet. Only the Platform Owner can remove this security freeze.</p><button class="btn secondary" data-action="wallet-security-unfreeze">Unfreeze Wallet</button></article>
         </section>
 
