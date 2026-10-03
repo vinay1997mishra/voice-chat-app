@@ -69,10 +69,22 @@ void main() {
 
     expect(
       find.byKey(const Key('live-owner-tag-92000002-Official Host')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('live-owner-medal-92000002-Verified')),
+      findsNothing,
+    );
+
+    state.roomSession.controller!.addRoomMessage(
+      'Tagged Friend',
+      'Hello from tagged user',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('room-comment-tag-92000002-Official Host'),
+      ),
       findsOneWidget,
     );
 
@@ -89,11 +101,11 @@ void main() {
     );
     expect(
       find.byKey(const Key('room-owner-tag-92000002-Official Host')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('room-owner-medal-92000002-Verified')),
-      findsOneWidget,
+      findsNothing,
     );
 
     await tester.binding.handlePopRoute();
@@ -223,13 +235,8 @@ void main() {
     await tester.ensureVisible(lockSetting);
     await tester.tap(lockSetting);
     await tester.pumpAndSettle();
-    expect(find.text('Exactly 5 digits'), findsOneWidget);
-    final passwordField = tester.widget<TextField>(
-      find.byType(TextField).last,
-    );
-    expect(passwordField.maxLength, 5);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    expect(find.text('Exactly 5 digits'), findsNothing);
+    expect(find.textContaining('Create room password'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
