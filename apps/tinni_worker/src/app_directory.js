@@ -427,6 +427,8 @@ export class AppDirectoryStore extends DurableObject {
         from_user_id TEXT NOT NULL,
         to_user_id TEXT NOT NULL,
         text TEXT NOT NULL,
+        message_kind TEXT NOT NULL DEFAULT 'text',
+        media_url TEXT,
         created_at INTEGER NOT NULL,
         seen_at INTEGER
       );
@@ -1192,6 +1194,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN public_id TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
+      "ALTER TABLE direct_messages ADD COLUMN message_kind TEXT NOT NULL DEFAULT 'text'",
+      "ALTER TABLE direct_messages ADD COLUMN media_url TEXT",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_users ADD COLUMN call_verification_status TEXT NOT NULL DEFAULT 'unverified'",
       "ALTER TABLE app_users ADD COLUMN call_verified_at INTEGER",
