@@ -9,11 +9,18 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const STAFF_PERMISSIONS = new Set([
-  // Legacy whole-module permissions are kept for existing staff panels.
-  "users", "rooms", "wallets", "hierarchy", "roles", "vip",
-  "gifts", "assets", "banners", "games", "policies", "audit",
-
+  // Strict allowlist: only individually selected functions are valid.
+  // Whole-module permissions are intentionally not accepted.
   "users.search",
+  "users.full_dashboard",
+  "verification.view",
+  "verification.review",
+  "verification.direct_verify",
+  "verification.revoke",
+  "messaging.search",
+  "messaging.send",
+  "messaging.tags",
+  "messaging.officials",
   "users.ban_id",
   "users.ban_device",
   "users.invisible",
@@ -711,9 +718,10 @@ function ownerOnly(session) {
 function sessionHasPermission(session, permission) {
   if (ownerOnly(session)) return true;
   if (session?.role !== "staff") return false;
-  const permissions = new Set(Array.isArray(session.permissions) ? session.permissions : []);
-  const group = String(permission || "").split(".")[0];
-  return permissions.has(group) || permissions.has(permission);
+  const permissions = new Set(
+    normalizePermissions(session.permissions),
+  );
+  return permissions.has(String(permission || ""));
 }
 
 function normalizePermissions(value) {
@@ -814,7 +822,6 @@ export class StaffAuthStore extends DurableObject {
     if (!name) throw new Error("Panel name is required");
     if (!email || !email.includes("@")) throw new Error("Valid staff email is required");
     if (password.length < 10) throw new Error("Staff password must be at least 10 characters");
-    if (permissions.length === 0) throw new Error("Select at least one staff permission");
 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const hash = await derivePassword(password, salt);
@@ -881,7 +888,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: true,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -904,7 +911,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: Number(row.enabled) === 1,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -921,7 +928,7 @@ export class StaffAuthStore extends DurableObject {
       name: String(row.name),
       assigned_user_id: row.assigned_user_id ? String(row.assigned_user_id) : "",
       email: String(row.email),
-      permissions: JSON.parse(String(row.permissions_json || "[]")),
+      permissions: normalizePermissions(JSON.parse(String(row.permissions_json || "[]"))),
       enabled: Number(row.enabled) === 1,
       auth_version: Number(row.auth_version || 1),
       created_at: Number(row.created_at),
@@ -949,10 +956,6 @@ export class StaffAuthStore extends DurableObject {
     const enabled = input?.enabled === undefined
       ? Number(current.enabled) === 1
       : Boolean(input.enabled);
-
-    if (enabled && permissions.length === 0) {
-      throw new Error("Active staff panel must have at least one permission");
-    }
 
     const nextEmail = input?.staff_email === undefined
       ? String(current.email)
