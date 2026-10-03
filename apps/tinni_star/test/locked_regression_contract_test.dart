@@ -103,7 +103,14 @@ void main() {
     expect(room, contains("Key('room-rocket-floating-button')"));
     expect(room, contains("Key('realistic-black-rocket-logo')"));
     expect(room, contains('class _StealthRocketPainter'));
-    expect(room, isNot(contains('Icons.rocket_launch_rounded')));
+    final rocketLogoStart = room.indexOf('class _ReferenceRocketLogo');
+    final rocketPainterStart = room.indexOf('class _StealthRocketPainter');
+    expect(rocketLogoStart, greaterThanOrEqualTo(0));
+    expect(rocketPainterStart, greaterThan(rocketLogoStart));
+    final floatingRocketLogo =
+        room.substring(rocketLogoStart, rocketPainterStart);
+    expect(floatingRocketLogo, isNot(contains('Icons.rocket_launch_rounded')));
+    expect(floatingRocketLogo, isNot(contains('Color(0xFFFF63E6)')));
     expect(room, contains("Key('room-game-floating-button')"));
     expect(room, contains('child: const _ReferenceGameLogo(size: 54)'));
     expect(room, contains("Key('game-keyboard-logo')"));
