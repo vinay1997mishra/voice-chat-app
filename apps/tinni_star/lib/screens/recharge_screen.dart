@@ -801,6 +801,19 @@ class _RechargeScreenState extends State<RechargeScreen> {
   }) {
     final configured = _passwordConfigured[walletType] == true;
     return RoyalPanel(
+      onTap: frozen
+          ? null
+          : () {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => RoleWalletDetailScreen(
+                    state: widget.state,
+                    walletType: walletType,
+                  ),
+                ),
+              ).then((_) => _load());
+            },
       gradient: FeaturePalette.glow(FeaturePalette.wallet),
       accentColor: FeaturePalette.wallet,
       child: Column(
@@ -818,7 +831,9 @@ class _RechargeScreenState extends State<RechargeScreen> {
             ),
             title: Text('${_roleTitle(walletType)} Wallet'),
             subtitle: Text(
-              frozen ? 'Security frozen' : 'Balance: $balance',
+              frozen
+                  ? 'Security frozen'
+                  : 'Balance: \${balance == 0 ? \'00\' : _formatCoins(balance)}',
             ),
             trailing: FilledButton(
               onPressed: frozen
