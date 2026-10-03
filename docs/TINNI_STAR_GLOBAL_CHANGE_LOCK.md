@@ -14,3 +14,5 @@
 - Final language lock: English is default; Create ID and Settings share one registry including Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese Simplified/Traditional and Korean in addition to English/Hindi/Urdu.
 
 - Rocket/Game visual lock: keep the approved realistic stealth-black Rocket and compact black-and-white six-white-key Game keyboard logo. Do not restore cartoon/simple rocket or controller/gamepad icons.
+
+- Owner wallet/backend lock: Company Dollars balance + permanent ledger + owner-only manual dollar deduction stay connected to Worker storage; normal user Owner controls must support both coins and diamonds; Coin Seller/Merchant permanent ledgers keep company credits, owner debits, coin sends, settlement receipts, dollar sends and received-dollar history; Wallet detail pages must remain connected to these backend APIs.
