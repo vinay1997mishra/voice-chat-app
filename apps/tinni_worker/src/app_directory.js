@@ -2977,7 +2977,12 @@ export class AppDirectoryStore extends DurableObject {
     const text = "[ROLE_INVITE:" + id + ":" + role + "] " +
       String(actor.display_name || fromUserId) + " (ID " + fromUserId +
       ") invited you to become " + roleLabel + " under this " + actorLabel + ".";
-    this.sendDirectMessage(fromUserId, toUserId, text);
+    this.sendDirectMessage(
+      fromUserId,
+      toUserId,
+      text,
+      { system_action: true },
+    );
     this._notifyUser(
       toUserId,
       "hierarchy_invite",
@@ -3019,6 +3024,7 @@ export class AppDirectoryStore extends DurableObject {
         userId,
         String(row.from_user_id),
         roleLabel + " invitation " + statusText + ".",
+        { system_action: true },
       );
     } catch {}
     this._notifyUser(
@@ -4701,6 +4707,7 @@ export class AppDirectoryStore extends DurableObject {
       ok: true,
       target_user_id: targetId,
       following: Boolean(followingValue),
+      friend: this.areFriends(userId, targetId),
     };
   }
 
@@ -9091,12 +9098,16 @@ export class AppDirectoryStore extends DurableObject {
     const fromUserId = String(fromUserIdValue || "").trim();
     const toUserId = String(toUserIdValue || "").trim();
     const options = optionsValue && typeof optionsValue === "object" ? optionsValue : {};
+    const systemAction = options.system_action === true;
     const messageKind = String(options.message_kind || "text").trim().toLowerCase() === "image"
       ? "image"
       : "text";
     const mediaUrl = messageKind === "image" ? String(options.media_url || "").trim() : "";
     const text = cleanText(textValue, messageKind === "image" ? 200 : 1000);
     if (!fromUserId || !toUserId) throw new Error("user IDs are required");
+    if (!systemAction && !this.areFriends(fromUserId, toUserId)) {
+      throw new Error("Messages are limited to mutual friends");
+    }
     if (messageKind === "image") {
       if (!this.areFriends(fromUserId, toUserId)) {
         throw new Error("Photos can only be sent to mutual friends");
