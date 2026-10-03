@@ -188,8 +188,18 @@ assert.doesNotMatch(
 );
 assert.match(
   roomScreen,
-  /color: Colors\.black,[\s\S]{0,250}Icons\.sports_esports_rounded,[\s\S]{0,120}color: Colors\.white/,
-  "Floating Game button must stay black with a white game remote",
+  /Key\('game-keyboard-logo'\)/,
+  "Floating Game button must keep the approved keyboard logo",
+);
+assert.match(
+  roomScreen,
+  /whiteKeyWidth = constraints\.maxWidth \/ 6/,
+  "Game keyboard logo must keep six white keys",
+);
+assert.doesNotMatch(
+  roomScreen,
+  /class _ReferenceGameLogo[\s\S]{0,1800}Icons\.sports_esports_rounded/,
+  "Old controller/gamepad logo must not return",
 );
 assert.match(
   roomScreen,
