@@ -2784,6 +2784,29 @@ export class AppDirectoryStore extends DurableObject {
     const to = Math.max(from + 1, Number(toValue || Date.now()));
     const wallet = this.getWallet(userId);
     const settlement = this._ensureSettlementBalance(userId);
+    const hierarchyPolicies = this.ownerState().policies || {};
+    const hostTargetCoins = Math.max(
+      1,
+      Number(hierarchyPolicies.host_first_target_received_coins || 4000000),
+    );
+    const hostTargetUsd = Math.max(
+      0,
+      Number(hierarchyPolicies.host_first_target_usd || 1.7),
+    );
+    const targetFields = (receivedValue) => {
+      const received = Math.max(0, Number(receivedValue || 0));
+      return {
+        target_coins: hostTargetCoins,
+        target_usd: hostTargetUsd,
+        target_received_coins: received,
+        target_remaining_coins: Math.max(0, hostTargetCoins - received),
+        target_progress_percent: Math.min(
+          100,
+          Math.max(0, (received / hostTargetCoins) * 100),
+        ),
+        target_met: received >= hostTargetCoins,
+      };
+    };
     const result = {
       role,
       profile: {
@@ -2809,11 +2832,28 @@ export class AppDirectoryStore extends DurableObject {
       stats: {},
       members: [],
       parent: null,
+      targets: {
+        host_target_coins: hostTargetCoins,
+        host_target_usd: hostTargetUsd,
+        agency_commission_percent: Number(
+          hierarchyPolicies.agency_commission_percent || 0,
+        ),
+        bd_target_1_usd: Number(hierarchyPolicies.bd_target_1_usd || 0),
+        bd_target_1_percent: Number(
+          hierarchyPolicies.bd_target_1_percent || 0,
+        ),
+        bd_target_2_usd: Number(hierarchyPolicies.bd_target_2_usd || 0),
+        bd_target_2_percent: Number(
+          hierarchyPolicies.bd_target_2_percent || 0,
+        ),
+      },
     };
 
     if (role === "host") {
+      const hostGiftStats = this._hierarchyGiftStats([userId], from, to);
       result.stats = {
-        ...this._hierarchyGiftStats([userId], from, to),
+        ...hostGiftStats,
+        ...targetFields(hostGiftStats.received_coins),
         online_minutes: 0,
         valid_mic_minutes: 0,
         valid_days: 0,
@@ -2870,11 +2910,37 @@ export class AppDirectoryStore extends DurableObject {
           avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
           joined_at: Number(row.updated_at || 0),
           ...stats,
+          ...targetFields(stats.received_coins),
         };
       });
+      const agencyGiftStats = this._hierarchyGiftStats(
+        hosts.map((row) => String(row.user_id)),
+        from,
+        to,
+      );
+      const agencyCombinedTarget = hostTargetCoins * hosts.length;
       result.stats = {
-        ...this._hierarchyGiftStats(hosts.map((row) => String(row.user_id)), from, to),
+        ...agencyGiftStats,
         host_count: hosts.length,
+        host_target_coins: hostTargetCoins,
+        combined_target_coins: agencyCombinedTarget,
+        combined_target_remaining_coins: Math.max(
+          0,
+          agencyCombinedTarget - Number(agencyGiftStats.received_coins || 0),
+        ),
+        combined_target_progress_percent: agencyCombinedTarget > 0
+          ? Math.min(
+              100,
+              Math.max(
+                0,
+                Number(agencyGiftStats.received_coins || 0) /
+                  agencyCombinedTarget * 100,
+              ),
+            )
+          : 0,
+        commission_percent: Number(
+          hierarchyPolicies.agency_commission_percent || 0,
+        ),
       };
       const bdId = hierarchy.parent_user_id;
       if (bdId) {
@@ -2924,12 +2990,35 @@ export class AppDirectoryStore extends DurableObject {
           joined_at: Number(row.updated_at || 0),
           host_count: hostIds.length,
           ...stats,
+          combined_target_coins: hostTargetCoins * hostIds.length,
+          combined_target_progress_percent: hostIds.length > 0
+            ? Math.min(
+                100,
+                Math.max(
+                  0,
+                  Number(stats.received_coins || 0) /
+                    (hostTargetCoins * hostIds.length) * 100,
+                ),
+              )
+            : 0,
         };
       });
+      const bdGiftStats = this._hierarchyGiftStats(allHosts, from, to);
       result.stats = {
-        ...this._hierarchyGiftStats(allHosts, from, to),
+        ...bdGiftStats,
         agency_count: agencies.length,
         host_count: allHosts.length,
+        combined_target_coins: hostTargetCoins * allHosts.length,
+        combined_target_progress_percent: allHosts.length > 0
+          ? Math.min(
+              100,
+              Math.max(
+                0,
+                Number(bdGiftStats.received_coins || 0) /
+                  (hostTargetCoins * allHosts.length) * 100,
+              ),
+            )
+          : 0,
       };
     }
 
