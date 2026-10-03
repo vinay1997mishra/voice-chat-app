@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -43,6 +44,32 @@ class RoomLuckyNumberEvent {
   final String userId;
   final String displayName;
   final int number;
+  final DateTime createdAt;
+}
+
+class RoomGiftVisualEvent {
+  const RoomGiftVisualEvent({
+    required this.id,
+    required this.senderId,
+    required this.giftId,
+    required this.giftName,
+    required this.receiverIds,
+    required this.quantity,
+    required this.lucky,
+    required this.multiplier,
+    required this.rebateCoins,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String senderId;
+  final String giftId;
+  final String giftName;
+  final List<String> receiverIds;
+  final int quantity;
+  final bool lucky;
+  final int multiplier;
+  final int rebateCoins;
   final DateTime createdAt;
 }
 
@@ -129,6 +156,7 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomSeatRequest> seatRequests = <RoomSeatRequest>[];
   final List<RoomLuckyNumberEvent> luckyNumberEvents =
       <RoomLuckyNumberEvent>[];
+  RoomGiftVisualEvent? latestGiftVisualEvent;
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
@@ -218,6 +246,44 @@ class RoomPresenceService extends ChangeNotifier {
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
+      if (data['type']?.toString() == 'gift_sent') {
+        final rawGift = data['gift'];
+        if (rawGift is Map) {
+          final gift = rawGift.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+          final rawReceivers = gift['receiver_ids'];
+          final receiverIds = rawReceivers is List
+              ? rawReceivers
+                  .map((value) => value?.toString().trim() ?? '')
+                  .where((value) => value.isNotEmpty)
+                  .toSet()
+                  .toList(growable: false)
+              : const <String>[];
+          final id = gift['id']?.toString().trim() ?? '';
+          if (id.isNotEmpty && receiverIds.isNotEmpty) {
+            final createdAtMs = _asInt(gift['created_at']);
+            latestGiftVisualEvent = RoomGiftVisualEvent(
+              id: id,
+              senderId: gift['sender_id']?.toString() ?? '',
+              giftId: gift['gift_id']?.toString() ?? '',
+              giftName: gift['gift_name']?.toString() ?? 'Gift',
+              receiverIds: receiverIds,
+              quantity: math.max(1, _asInt(gift['quantity'])),
+              lucky: gift['lucky'] == true,
+              multiplier: math.max(0, _asInt(gift['multiplier'])),
+              rebateCoins: math.max(0, _asInt(gift['rebate_coins'])),
+              createdAt: DateTime.fromMillisecondsSinceEpoch(
+                createdAtMs > 0
+                    ? createdAtMs
+                    : DateTime.now().millisecondsSinceEpoch,
+              ),
+            );
+            notifyListeners();
+          }
+        }
+        return;
+      }
       if (!data.containsKey('members')) return;
       final before = _visibleStateSignature();
       _apply(Map<String, dynamic>.from(data));
@@ -334,6 +400,7 @@ class RoomPresenceService extends ChangeNotifier {
       selfSeatForced = false;
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
+      latestGiftVisualEvent = null;
       seatRequests.clear();
       lockedSeats.clear();
       mutedSeats.clear();
