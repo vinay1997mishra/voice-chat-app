@@ -2686,9 +2686,20 @@ export class AppDirectoryStore extends DurableObject {
     );
 
     if (role === "agency" && !active) {
+      // A Host cannot remain active under an inactive Agency. Removing the
+      // Agency therefore deactivates every Host relationship under it,
+      // including the Agency Owner's automatic self-Host role.
       this.ctx.storage.sql.exec(
-        "UPDATE owner_hierarchy SET active = 0, updated_at = ? WHERE user_id = ? AND role = 'host' AND parent_user_id = ?",
-        Date.now(), userId, userId,
+        "UPDATE owner_hierarchy SET active = 0, updated_at = ? WHERE role = 'host' AND parent_user_id = ? AND active = 1",
+        Date.now(), userId,
+      );
+    }
+    if (role === "bd" && !active) {
+      // Agencies remain valid Agencies when a BD is removed, but they must
+      // no longer point at an inactive BD.
+      this.ctx.storage.sql.exec(
+        "UPDATE owner_hierarchy SET parent_user_id = NULL, updated_at = ? WHERE role = 'agency' AND parent_user_id = ?",
+        Date.now(), userId,
       );
     }
     return { user_id: userId, role, parent_user_id: parent, active };
