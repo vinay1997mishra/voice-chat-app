@@ -7,6 +7,7 @@ import '../app/tinni_state.dart';
 import '../economy/economy.dart';
 import '../ui/royal_theme.dart';
 import 'messages_screen.dart';
+import 'wallet_detail_screens.dart';
 
 class RechargeScreen extends StatefulWidget {
   const RechargeScreen({super.key, required this.state});
@@ -871,31 +872,116 @@ class _RechargeScreenState extends State<RechargeScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(14),
                 children: [
-                  RoyalPanel(
-                    gradient: FeaturePalette.glow(FeaturePalette.wallet),
-                    accentColor: FeaturePalette.wallet,
-                    child: Row(
-                      children: [
-                        const ShiningIcon(
-                          icon: Icons.account_balance_wallet_rounded,
-                          color: FeaturePalette.wallet,
-                          size: 26,
-                          boxSize: 52,
-                          glow: 0.38,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Coins ${widget.state.wallet.coins}\nDiamonds ${widget.state.wallet.diamonds}',
-                            style: const TextStyle(
-                              color: RoyalPalette.cream,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RoyalPanel(
+                          onTap: () {
+                            Navigator.push<void>(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => CoinsHistoryScreen(
+                                  state: widget.state,
+                                ),
+                              ),
+                            ).then((_) => _load());
+                          },
+                          gradient: FeaturePalette.glow(FeaturePalette.wallet),
+                          accentColor: FeaturePalette.wallet,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.monetization_on_rounded,
+                                    color: FeaturePalette.wallet,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Coins',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 7),
+                              Text(
+                                'Total Coins',
+                                style: const TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                _formatCoins(widget.state.wallet.coins),
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: RoyalPanel(
+                          onTap: () {
+                            Navigator.push<void>(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => DiamondsWalletScreen(
+                                  state: widget.state,
+                                ),
+                              ),
+                            ).then((_) => _load());
+                          },
+                          gradient: FeaturePalette.glow(FeaturePalette.gift),
+                          accentColor: FeaturePalette.gift,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.diamond_rounded,
+                                    color: FeaturePalette.gift,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Diamonds',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 7),
+                              const Text(
+                                'Total Diamonds',
+                                style: TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                _formatCoins(widget.state.wallet.diamonds),
+                                style: const TextStyle(
+                                  color: RoyalPalette.cream,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   if (noCoins) ...[
                     const SizedBox(height: 10),
