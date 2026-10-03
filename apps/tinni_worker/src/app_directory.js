@@ -451,11 +451,21 @@ export class AppDirectoryStore extends DurableObject {
         from_user_id TEXT NOT NULL,
         to_user_id TEXT NOT NULL,
         text TEXT NOT NULL,
+        message_kind TEXT NOT NULL DEFAULT 'text',
+        media_url TEXT,
         created_at INTEGER NOT NULL,
         seen_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
         ON direct_messages(from_user_id, to_user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS owner_panel_message_log (
+        message_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_panel_message_user_time
+        ON owner_panel_message_log(user_id, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS user_notifications (
         id TEXT PRIMARY KEY,
@@ -1052,6 +1062,21 @@ export class AppDirectoryStore extends DurableObject {
         PRIMARY KEY(user_id, role)
       );
 
+      CREATE TABLE IF NOT EXISTS hierarchy_invites (
+        id TEXT PRIMARY KEY,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        parent_user_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        responded_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_hierarchy_invites_to_status
+        ON hierarchy_invites(to_user_id, status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_hierarchy_invites_from_time
+        ON hierarchy_invites(from_user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS hierarchy_period_earnings (
         period_key TEXT NOT NULL,
         user_id TEXT NOT NULL,
@@ -1271,6 +1296,8 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE app_rooms ADD COLUMN public_id TEXT",
       "ALTER TABLE app_users ADD COLUMN auth_subject TEXT",
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
+      "ALTER TABLE direct_messages ADD COLUMN message_kind TEXT NOT NULL DEFAULT 'text'",
+      "ALTER TABLE direct_messages ADD COLUMN media_url TEXT",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_users ADD COLUMN call_verification_status TEXT NOT NULL DEFAULT 'unverified'",
       "ALTER TABLE app_users ADD COLUMN call_verified_at INTEGER",
@@ -10926,5 +10953,429 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       ownerId,
     ).toArray().map(rowToRoom)[0];
+  }
+
+
+  _hierarchyRoleRow(userIdValue, roleValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!userId || !["host", "agency", "bd"].includes(role)) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT user_id,role,parent_user_id,active,data_json,updated_at FROM owner_hierarchy WHERE user_id=? AND role=? LIMIT 1",
+      userId, role,
+    ).toArray()[0];
+    if (!row) return null;
+    let data = {};
+    try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
+    return {
+      user_id: String(row.user_id),
+      role: String(row.role),
+      parent_user_id: row.parent_user_id ? String(row.parent_user_id) : null,
+      active: Number(row.active || 0) === 1,
+      data,
+      activated_at: Number(row.updated_at || 0),
+    };
+  }
+
+  _hierarchyGiftStats(userIdsValue, fromValue, toValue) {
+    const userIds = [...new Set(
+      (Array.isArray(userIdsValue) ? userIdsValue : [userIdsValue])
+        .map((value) => this._resolveOwnerUserId(value))
+        .filter(Boolean),
+    )];
+    const from = Math.max(0, Number(fromValue || 0));
+    const to = Math.max(from + 1, Number(toValue || Date.now()));
+    let receivedCoins = 0;
+    let senderCount = 0;
+    const senders = new Set();
+    for (const userId of userIds) {
+      const row = this.ctx.storage.sql.exec(
+        `SELECT COALESCE(SUM(COALESCE(l.social_value_coins,g.total_cost)),0) AS received
+           FROM gift_transactions g
+           LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+          WHERE g.receiver_id=? AND g.created_at>=? AND g.created_at<?`,
+        userId, from, to,
+      ).toArray()[0];
+      receivedCoins += Math.max(0, Number(row?.received || 0));
+      const senderRows = this.ctx.storage.sql.exec(
+        `SELECT DISTINCT g.sender_id
+           FROM gift_transactions g
+          WHERE g.receiver_id=? AND g.created_at>=? AND g.created_at<?`,
+        userId, from, to,
+      ).toArray();
+      for (const sender of senderRows) senders.add(String(sender.sender_id || ""));
+    }
+    senderCount = [...senders].filter(Boolean).length;
+    return {
+      received_coins: receivedCoins,
+      diamond_earned: receivedCoins,
+      gift_senders: senderCount,
+    };
+  }
+
+  updateHierarchyContact(userIdValue, roleValue, contactValue) {
+    const row = this._hierarchyRoleRow(userIdValue, roleValue);
+    if (!row || row.active !== true) throw new Error("Active role is required");
+    const contact = cleanText(contactValue, 100);
+    const data = { ...(row.data || {}), contact };
+    this.ctx.storage.sql.exec(
+      "UPDATE owner_hierarchy SET data_json=?,updated_at=? WHERE user_id=? AND role=?",
+      JSON.stringify(data), Date.now(), row.user_id, row.role,
+    );
+    return { ok: true, role: row.role, contact };
+  }
+
+  listHierarchyInvites(userIdValue, limitValue = 100) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT i.*,fu.display_name AS from_name,tu.display_name AS to_name
+         FROM hierarchy_invites i
+         LEFT JOIN app_users fu ON fu.user_id=i.from_user_id
+         LEFT JOIN app_users tu ON tu.user_id=i.to_user_id
+        WHERE i.from_user_id=? OR i.to_user_id=?
+        ORDER BY i.created_at DESC
+        LIMIT ?`,
+      userId, userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from_user_id: String(row.from_user_id),
+      from_name: String(row.from_name || row.from_user_id),
+      to_user_id: String(row.to_user_id),
+      to_name: String(row.to_name || row.to_user_id),
+      role: String(row.role),
+      parent_user_id: String(row.parent_user_id),
+      status: String(row.status || "pending"),
+      created_at: Number(row.created_at || 0),
+      responded_at: row.responded_at == null ? null : Number(row.responded_at),
+    }));
+  }
+
+  createHierarchyInvite(fromUserIdValue, toUserIdValue, roleValue) {
+    const fromUserId = this._resolveOwnerUserId(fromUserIdValue);
+    const toUserId = this._resolveOwnerUserId(toUserIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!fromUserId || !toUserId || fromUserId === toUserId) {
+      throw new Error("Choose another valid user ID");
+    }
+    if (!["host", "agency"].includes(role)) throw new Error("Unsupported invitation role");
+
+    const actorRole = role === "host" ? "agency" : "bd";
+    const actorHierarchy = this._hierarchyRoleRow(fromUserId, actorRole);
+    if (!actorHierarchy || actorHierarchy.active !== true) {
+      throw new Error("Active " + actorRole.toUpperCase() + " role is required");
+    }
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,country_code FROM app_users WHERE user_id=? LIMIT 1",
+      toUserId,
+    ).toArray()[0];
+    const actor = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,country_code FROM app_users WHERE user_id=? LIMIT 1",
+      fromUserId,
+    ).toArray()[0];
+    if (!target || !actor) throw new Error("User not found");
+    if (role === "host" &&
+        String(target.country_code || "").toUpperCase() !== String(actor.country_code || "").toUpperCase()) {
+      throw new Error("Host and Agency must be from the same country");
+    }
+
+    const already = this._hierarchyRoleRow(toUserId, role);
+    if (already?.active === true &&
+        String(already.parent_user_id || "") === fromUserId) {
+      throw new Error("This user is already linked to your " + actorRole);
+    }
+    const pending = this.ctx.storage.sql.exec(
+      "SELECT id FROM hierarchy_invites WHERE from_user_id=? AND to_user_id=? AND role=? AND status='pending' LIMIT 1",
+      fromUserId, toUserId, role,
+    ).toArray()[0];
+    if (pending) throw new Error("An invitation is already pending");
+
+    const id = "hier-" + Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO hierarchy_invites(id,from_user_id,to_user_id,role,parent_user_id,status,created_at,responded_at) VALUES (?,?,?,?,?,'pending',?,NULL)",
+      id, fromUserId, toUserId, role, fromUserId, now,
+    );
+    const roleLabel = role === "host" ? "Host" : "Agency";
+    const actorLabel = actorRole === "agency" ? "Agency" : "BD";
+    const text = "[ROLE_INVITE:" + id + ":" + role + "] " +
+      String(actor.display_name || fromUserId) + " (ID " + fromUserId +
+      ") invited you to become " + roleLabel + " under this " + actorLabel + ".";
+    this.sendDirectMessage(
+      fromUserId,
+      toUserId,
+      text,
+      { system_action: true },
+    );
+    this._notifyUser(
+      toUserId,
+      "hierarchy_invite",
+      roleLabel + " invitation",
+      String(actor.display_name || fromUserId) + " invited you to become " + roleLabel + ".",
+      { source_user_id: fromUserId, metadata: { invite_id: id, role, parent_user_id: fromUserId } },
+    );
+    return this.listHierarchyInvites(toUserId, 200).find((item) => item.id === id);
+  }
+
+  respondHierarchyInvite(userIdValue, inviteIdValue, acceptValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const inviteId = String(inviteIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM hierarchy_invites WHERE id=? AND to_user_id=? LIMIT 1",
+      inviteId, userId,
+    ).toArray()[0];
+    if (!row) throw new Error("Invitation not found");
+    const currentStatus = String(row.status || "pending");
+    if (currentStatus !== "pending") {
+      return this.listHierarchyInvites(userId, 200).find((item) => item.id === inviteId);
+    }
+    const accepted = acceptValue === true;
+    const now = Date.now();
+    if (accepted) {
+      this._setHierarchy(userId, String(row.role), String(row.parent_user_id), true, {
+        invited_by: String(row.from_user_id),
+        invite_id: inviteId,
+      });
+    }
+    this.ctx.storage.sql.exec(
+      "UPDATE hierarchy_invites SET status=?,responded_at=? WHERE id=?",
+      accepted ? "accepted" : "rejected", now, inviteId,
+    );
+    const roleLabel = String(row.role) === "host" ? "Host" : "Agency";
+    const statusText = accepted ? "accepted" : "rejected";
+    try {
+      this.sendDirectMessage(
+        userId,
+        String(row.from_user_id),
+        roleLabel + " invitation " + statusText + ".",
+        { system_action: true },
+      );
+    } catch {}
+    this._notifyUser(
+      String(row.from_user_id),
+      "hierarchy_invite_response",
+      roleLabel + " invitation " + statusText,
+      "ID " + userId + " " + statusText + " your " + roleLabel + " invitation.",
+      { source_user_id: userId, metadata: { invite_id: inviteId, role: String(row.role), accepted } },
+    );
+    this.sendOfficialMessage(
+      userId,
+      accepted
+        ? "Your " + roleLabel + " role is active. Open Mine → " + roleLabel + " Panel to view your portal."
+        : "You rejected the " + roleLabel + " invitation.",
+      { action: "hierarchy_invite_response", invite_id: inviteId, role: String(row.role), accepted },
+    );
+    return this.listHierarchyInvites(userId, 200).find((item) => item.id === inviteId);
+  }
+
+  _luckyMultiplierTable(configValue = null) {
+    const config = configValue || this._luckyGiftConfig();
+    const maxMultiplier = Math.max(
+      1,
+      Math.min(1000, Number(config.max_multiplier || 1000)),
+    );
+    const weights =
+      config.multiplier_weights &&
+      typeof config.multiplier_weights === "object"
+        ? config.multiplier_weights
+        : {};
+    const entries = Object.entries(weights)
+      .map(([multiplier, weight]) => ({
+        multiplier: Math.max(
+          0,
+          Math.min(maxMultiplier, Math.floor(Number(multiplier) || 0)),
+        ),
+        weight: Math.max(0, Math.floor(Number(weight) || 0)),
+      }))
+      .filter((entry) => entry.weight > 0);
+    const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
+    return {
+      entries,
+      totalWeight:
+        Number.isSafeInteger(totalWeight) && totalWeight > 0
+          ? totalWeight
+          : 0,
+    };
+  }
+
+  _pickLuckyMultiplier(rawValue, table) {
+    if (!table || table.totalWeight <= 0) return 0;
+    const randomValue = Number(rawValue >>> 0) % table.totalWeight;
+    let cursor = 0;
+    for (const entry of table.entries) {
+      cursor += entry.weight;
+      if (randomValue < cursor) return entry.multiplier;
+    }
+    return 0;
+  }
+
+  _rollLuckyBatch(quantityValue, configValue = null) {
+    const quantity = Math.max(
+      0,
+      Math.min(7999, Math.floor(Number(quantityValue) || 0)),
+    );
+    const table = this._luckyMultiplierTable(configValue);
+    if (quantity <= 0 || table.totalWeight <= 0) {
+      return {
+        multiplier_sum: 0,
+        highest_multiplier: 0,
+        recent_multipliers: [],
+      };
+    }
+
+    // 7,999 Uint32 values are only 31,996 bytes, safely below the Web Crypto
+    // getRandomValues() 65,536-byte limit. One batch avoids thousands of
+    // separate crypto calls when the user chooses 599/899/2999/7999.
+    const randomValues = new Uint32Array(quantity);
+    crypto.getRandomValues(randomValues);
+    let multiplierSum = 0;
+    let highestMultiplier = 0;
+    const recentMultipliers = [];
+    for (let index = 0; index < randomValues.length; index += 1) {
+      const multiplier = this._pickLuckyMultiplier(
+        randomValues[index],
+        table,
+      );
+      multiplierSum += multiplier;
+      highestMultiplier = Math.max(highestMultiplier, multiplier);
+      if (recentMultipliers.length < 32) {
+        recentMultipliers.push(multiplier);
+      }
+    }
+    return {
+      multiplier_sum: multiplierSum,
+      highest_multiplier: highestMultiplier,
+      recent_multipliers: recentMultipliers,
+    };
+  }
+
+  ownerInboxThreads(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("user ID is required");
+
+    const cutoff = Date.now() - (48 * 60 * 60 * 1000);
+    const peerRows = this.ctx.storage.sql.exec(
+      `SELECT DISTINCT
+          CASE WHEN d.from_user_id=? THEN d.to_user_id ELSE d.from_user_id END AS peer_id
+         FROM direct_messages d
+         LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+        WHERE (d.from_user_id=? OR d.to_user_id=?)
+          AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+      userId, userId, userId, cutoff,
+    ).toArray();
+
+    const threads = [];
+    for (const peerRow of peerRows) {
+      const peerId = String(peerRow.peer_id || "").trim();
+      if (!peerId) continue;
+
+      const last = this.ctx.storage.sql.exec(
+        `SELECT d.id,d.from_user_id,d.to_user_id,d.text,d.message_kind,
+                d.media_url,d.created_at,d.seen_at
+           FROM direct_messages d
+           LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+          WHERE ((d.from_user_id=? AND d.to_user_id=?)
+              OR (d.from_user_id=? AND d.to_user_id=?))
+            AND (opm.message_id IS NULL OR opm.created_at>=?)
+          ORDER BY d.created_at DESC
+          LIMIT 1`,
+        userId, peerId, peerId, userId, cutoff,
+      ).toArray()[0];
+      if (!last) continue;
+
+      const count = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM direct_messages d
+           LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+          WHERE ((d.from_user_id=? AND d.to_user_id=?)
+              OR (d.from_user_id=? AND d.to_user_id=?))
+            AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+        userId, peerId, peerId, userId, cutoff,
+      ).toArray()[0];
+
+      let displayName = peerId;
+      let avatarDataUrl = null;
+      if (peerId === "tinni-official") {
+        displayName = "Tinni Official";
+      } else {
+        const peer = this.ctx.storage.sql.exec(
+          "SELECT display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          peerId,
+        ).toArray()[0];
+        if (peer) {
+          displayName = String(peer.display_name || peerId);
+          avatarDataUrl = peer.avatar_data_url
+            ? String(peer.avatar_data_url)
+            : null;
+        }
+      }
+
+      threads.push({
+        peer_user_id: peerId,
+        display_name: displayName,
+        avatar_data_url: avatarDataUrl,
+        message_count: Number(count?.count || 0),
+        last_message: {
+          id: String(last.id),
+          from_user_id: String(last.from_user_id),
+          to_user_id: String(last.to_user_id),
+          text: String(last.text || ""),
+          message_kind: String(last.message_kind || "text"),
+          media_url: last.media_url ? String(last.media_url) : null,
+          created_at: Number(last.created_at || 0),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        },
+      });
+    }
+
+    threads.sort((a, b) =>
+      Number(b.last_message?.created_at || 0) -
+      Number(a.last_message?.created_at || 0)
+    );
+    return threads.slice(0, 500);
+  }
+
+  ownerInboxConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const peerUserId = String(peerUserIdValue || "").trim();
+    const limit = Math.max(1, Math.min(1000, Number(limitValue || 500)));
+    if (!userId || !peerUserId) throw new Error("user IDs are required");
+
+    const cutoff = Date.now() - (48 * 60 * 60 * 1000);
+    return this.ctx.storage.sql.exec(
+      `SELECT d.id,d.from_user_id,d.to_user_id,d.text,d.message_kind,
+              d.media_url,d.created_at,d.seen_at
+         FROM direct_messages d
+         LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
+        WHERE ((d.from_user_id=? AND d.to_user_id=?)
+            OR (d.from_user_id=? AND d.to_user_id=?))
+          AND (opm.message_id IS NULL OR opm.created_at>=?)
+        ORDER BY d.created_at ASC
+        LIMIT ?`,
+      userId, peerUserId, peerUserId, userId, cutoff, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from_user_id: String(row.from_user_id),
+      to_user_id: String(row.to_user_id),
+      text: String(row.text || ""),
+      message_kind: String(row.message_kind || "text"),
+      media_url: row.media_url ? String(row.media_url) : null,
+      created_at: Number(row.created_at || 0),
+      seen_at: row.seen_at == null ? null : Number(row.seen_at),
+    }));
+  }
+
+  canAccessDirectMessageMedia(userIdValue, messageIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const messageId = String(messageIdValue || "").trim();
+    if (!userId || !messageId) return false;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT from_user_id,to_user_id,message_kind
+         FROM direct_messages
+        WHERE id=? LIMIT 1`,
+      messageId,
+    ).toArray()[0];
+    if (!row || String(row.message_kind || "text") !== "image") return false;
+    return String(row.from_user_id) === userId || String(row.to_user_id) === userId;
   }
 }
