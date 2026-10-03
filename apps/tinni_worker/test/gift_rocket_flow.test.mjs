@@ -138,7 +138,7 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /giftSendInFlight[\s\S]{0,500}onPressed: selectedGift == null \|\|[\s\S]{0,180}_selectedGiftRecipients\.isEmpty \|\|[\s\S]{0,120}giftSendInFlight/,
+  /Key\('room-gift-send-button'\)[\s\S]{0,260}onPressed: selectedGift == null \|\|\s*_selectedGiftRecipients\.isEmpty \|\|\s*giftSendInFlight/,
   "Send must become ready from local gift+recipient selection without waiting on server state",
 );
 assert.match(
