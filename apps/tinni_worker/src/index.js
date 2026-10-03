@@ -732,6 +732,66 @@ function sessionHasAnyPermission(session, permissions) {
     .some((permission) => sessionHasPermission(session, permission));
 }
 
+function sessionHasPermissionPrefix(session, prefix) {
+  if (ownerOnly(session)) return true;
+  if (session?.role !== "staff") return false;
+  const cleanPrefix = String(prefix || "");
+  return normalizePermissions(session.permissions)
+    .some((permission) => permission.startsWith(cleanPrefix));
+}
+
+function filterOwnerStateForSession(session, fullState, dashboard) {
+  if (ownerOnly(session)) return { state: fullState, dashboard };
+  const catalog = Array.isArray(fullState?.catalog) ? fullState.catalog : [];
+  const canPolicies = sessionHasPermissionPrefix(session, "policies.") ||
+    sessionHasPermission(session, "hierarchy.targets");
+  const canGames = sessionHasPermissionPrefix(session, "games.");
+  const canGifts = sessionHasPermissionPrefix(session, "gifts.");
+  const canTreasury = sessionHasPermission(session, "wallets.treasury_send");
+  const canFeatures = sessionHasAnyPermission(session, [
+    "policies.view", "policies.edit",
+  ]);
+
+  const allowedCatalog = catalog.filter((item) => {
+    const kind = String(item?.kind || "");
+    if (kind === "role" || kind === "post") {
+      return sessionHasAnyPermission(session, ["roles.view", "roles.manage"]);
+    }
+    if (kind === "vip") return sessionHasPermissionPrefix(session, "vip.");
+    if (kind === "gift") return sessionHasPermissionPrefix(session, "gifts.");
+    if (kind === "entry" || kind === "vehicle") {
+      return sessionHasPermission(session, "assets.entries");
+    }
+    if (kind === "frame" || kind === "profile_card") {
+      return sessionHasPermission(session, "assets.frames");
+    }
+    if (kind === "banner") return sessionHasPermissionPrefix(session, "banners.");
+    return false;
+  });
+
+  const filteredState = {
+    features: canFeatures ? (fullState?.features || {}) : {},
+    policies: canPolicies ? (fullState?.policies || {}) : {},
+    game_config: canGames ? (fullState?.game_config || {}) : {},
+    lucky_gift_config: canGifts ? (fullState?.lucky_gift_config || {}) : {},
+    treasury: canTreasury ? (fullState?.treasury || { balance: 0 }) : { balance: 0 },
+    catalog: allowedCatalog,
+  };
+  const filteredDashboard = {
+    users: sessionHasAnyPermission(session, [
+      "users.search", "users.full_dashboard", "messaging.search",
+      "verification.view", "verification.direct_verify",
+    ]) ? Number(dashboard?.users || 0) : 0,
+    active_rooms: sessionHasPermissionPrefix(session, "rooms.")
+      ? Number(dashboard?.active_rooms || 0) : 0,
+    sending_today: sessionHasAnyPermission(session, [
+      "games.investigate", "wallets.normal", "wallets.seller", "wallets.merchant",
+    ]) ? Number(dashboard?.sending_today || 0) : 0,
+    treasury: canTreasury ? Number(dashboard?.treasury || 0) : 0,
+  };
+  return { state: filteredState, dashboard: filteredDashboard };
+}
+
 function normalizePermissions(value) {
   const list = Array.isArray(value) ? value : [];
   return [...new Set(list.map(String).filter((item) => STAFF_PERMISSIONS.has(item)))];
@@ -5377,14 +5437,13 @@ export default {
     }
 
     if (url.pathname === "/api/owner/state" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
-      }
-      return json({
-        ok: true,
-        state: await getAppDirectoryStore(env).ownerState(),
-        dashboard: await getAppDirectoryStore(env).ownerDashboard(),
-      });
+      const directory = getAppDirectoryStore(env);
+      const filtered = filterOwnerStateForSession(
+        session,
+        await directory.ownerState(),
+        await directory.ownerDashboard(),
+      );
+      return json({ ok: true, ...filtered });
     }
 
     if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
@@ -5632,8 +5691,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/game-stats" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "games.investigate")) {
+        return json({ ok: false, error: "Game investigation permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       const jackpot = await getFruitGameStore(env).ownerStats(userId);
@@ -5719,13 +5778,38 @@ export default {
 
     const ownerCatalogMatch = url.pathname.match(/^\/api\/owner\/catalog\/([^/]+)$/);
     if (ownerCatalogMatch && request.method === "PATCH") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
-      }
+      const catalogId = decodeURIComponent(ownerCatalogMatch[1]);
       const body = await request.json().catch(() => ({}));
+      const currentItem = (await getAppDirectoryStore(env).ownerCatalog())
+        .find((entry) => String(entry.id) === String(catalogId));
+      if (!currentItem) return json({ ok: false, error: "Catalog item not found" }, 404);
+
+      if (!ownerOnly(session)) {
+        const kind = String(currentItem.kind || "");
+        const toggleOnly = body.enabled !== undefined &&
+          body.name === undefined && body.data === undefined;
+        let requiredPermission = "";
+        if (kind === "vip") {
+          requiredPermission = toggleOnly ? "vip.toggle" : "vip.edit";
+        } else if (kind === "gift") {
+          requiredPermission = "gifts.edit";
+        } else if (kind === "entry" || kind === "vehicle") {
+          requiredPermission = "assets.entries";
+        } else if (kind === "frame" || kind === "profile_card") {
+          requiredPermission = "assets.frames";
+        } else if (kind === "banner") {
+          requiredPermission = "banners.create";
+        } else if (kind === "role" || kind === "post") {
+          requiredPermission = "roles.manage";
+        }
+        if (!requiredPermission || !sessionHasPermission(session, requiredPermission)) {
+          return json({ ok: false, error: "Assigned catalog permission required" }, 403);
+        }
+      }
+
       try {
         const item = await getAppDirectoryStore(env).ownerCatalogPatch(
-          decodeURIComponent(ownerCatalogMatch[1]),
+          catalogId,
           body,
         );
         await writeAudit(env, session, "owner.catalog.update", "catalog", item.id, body);
