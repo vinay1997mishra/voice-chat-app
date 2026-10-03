@@ -592,7 +592,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   label,
             ),
             margin: const EdgeInsets.only(right: 5),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(8),
@@ -602,7 +602,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 10.5,
+                fontSize: 11.5,
                 height: 1.0,
                 fontWeight: FontWeight.w900,
               ),
