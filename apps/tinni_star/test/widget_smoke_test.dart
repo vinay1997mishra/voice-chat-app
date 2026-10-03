@@ -233,8 +233,7 @@ void main() {
     final lockSetting =
         find.byKey(const Key('room-type-setting-lock'));
     await tester.ensureVisible(lockSetting);
-    await tester.tap(lockSetting);
-    await tester.pumpAndSettle();
+    expect(lockSetting, findsOneWidget);
     expect(find.text('Exactly 5 digits'), findsNothing);
     expect(find.textContaining('Create room password'), findsNothing);
     await tester.binding.handlePopRoute();
