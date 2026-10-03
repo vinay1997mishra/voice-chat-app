@@ -409,7 +409,7 @@ const actionPermission = {
 function catalogPermission(item, operation) {
   const kind = String(item?.kind || "");
   if (kind === "vip") return operation === "toggle" ? "vip.toggle" : "vip.edit";
-  if (kind === "gift") return operation === "remove" ? "gifts.remove" : (operation === "edit" ? "gifts.edit" : "gifts.remove");
+  if (kind === "gift") return operation === "remove" ? "gifts.remove" : "gifts.edit";
   if (kind === "entry" || kind === "vehicle" || kind === "frame" || kind === "profile_card") return (kind === "entry" || kind === "vehicle") ? "assets.entries" : "assets.frames";
   if (kind === "banner") return operation === "remove" ? "banners.remove" : "banners.create";
   return "roles.manage";
