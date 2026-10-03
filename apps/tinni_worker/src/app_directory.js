@@ -10229,6 +10229,16 @@ export class AppDirectoryStore extends DurableObject {
 
     const now = Date.now();
     const reference = source.wallet_type + "-transfer:" + crypto.randomUUID();
+    this._recordPrivilegedWalletTransaction({
+      userId: senderId,
+      walletType: source.wallet_type,
+      kind: "coins_sent",
+      coinsDelta: -amount,
+      counterpartyUserId: recipientId,
+      referenceId: reference,
+      note: "Coins sent to ID " + recipientId,
+      createdAt: now,
+    });
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?, ?,0,?,?,?)",
       "wallet-" + crypto.randomUUID(),
