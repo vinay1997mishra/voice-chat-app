@@ -13,6 +13,7 @@ const STAFF_PERMISSIONS = new Set([
   // Whole-module permissions are intentionally not accepted.
   "users.search",
   "users.full_dashboard",
+  "users.edit_profile",
   "verification.view",
   "verification.review",
   "verification.direct_verify",
@@ -722,6 +723,12 @@ function sessionHasPermission(session, permission) {
     normalizePermissions(session.permissions),
   );
   return permissions.has(String(permission || ""));
+}
+
+function sessionHasAnyPermission(session, permissions) {
+  if (ownerOnly(session)) return true;
+  return (Array.isArray(permissions) ? permissions : [permissions])
+    .some((permission) => sessionHasPermission(session, permission));
 }
 
 function normalizePermissions(value) {
@@ -5124,8 +5131,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/official-message" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.send")) {
+        return json({ ok: false, error: "Official message permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       const targetUserId = String(body.target_user_id || "").trim();
@@ -5219,8 +5226,8 @@ export default {
       url.pathname === "/api/call-verifications" &&
       request.method === "GET"
     ) {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.view")) {
+        return json({ ok: false, error: "Verification view permission required" }, 403);
       }
       return json({
         ok: true,
@@ -5233,8 +5240,8 @@ export default {
       /^\/api\/call-verifications\/([^/]+)\/review$/,
     );
     if (callVerificationReviewMatch && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.review")) {
+        return json({ ok: false, error: "Verification review permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -5373,8 +5380,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasAnyPermission(session, ["users.search", "messaging.search", "messaging.tags"])) {
+        return json({ ok: false, error: "User search permission required" }, 403);
       }
       const query = String(url.searchParams.get("q") || "");
       const users = await getAppDirectoryStore(env).ownerSearchUsers(
@@ -5385,8 +5392,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/officials" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.officials")) {
+        return json({ ok: false, error: "V Official permission required" }, 403);
       }
       return json({
         ok: true,
@@ -5395,8 +5402,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/user-detail" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "users.full_dashboard")) {
+        return json({ ok: false, error: "Full ID Dashboard permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
       if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
@@ -5481,8 +5488,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "verification.view")) {
+        return json({ ok: false, error: "Verification view permission required" }, 403);
       }
       return json({
         ok: true,
@@ -5493,8 +5500,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/messages" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.send")) {
+        return json({ ok: false, error: "Official message permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -5518,8 +5525,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/tags" && request.method === "POST") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.tags")) {
+        return json({ ok: false, error: "User tag permission required" }, 403);
       }
       const body = await request.json().catch(() => ({}));
       try {
@@ -5558,8 +5565,8 @@ export default {
       /^\/api\/owner\/tags\/([^/]+)\/([^/]+)$/,
     );
     if (ownerTagDeleteMatch && request.method === "DELETE") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "messaging.tags")) {
+        return json({ ok: false, error: "User tag permission required" }, 403);
       }
       const userId = decodeURIComponent(ownerTagDeleteMatch[1]);
       const tagId = decodeURIComponent(ownerTagDeleteMatch[2]);
@@ -5569,8 +5576,8 @@ export default {
     }
 
     if (url.pathname === "/api/owner/room-live" && request.method === "GET") {
-      if (!ownerOnly(session)) {
-        return json({ ok: false, error: "Owner access required" }, 403);
+      if (!sessionHasPermission(session, "rooms.live_seats")) {
+        return json({ ok: false, error: "Room live-seat permission required" }, 403);
       }
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
@@ -5622,7 +5629,7 @@ export default {
         }, 403);
       }
       const actionPermissions = {
-        "user-search":"users.search","user-ban":"users.ban_id","device-ban":"users.ban_device",
+        "user-search":"users.search","user-name":"users.edit_profile","user-dp":"users.edit_profile","user-ban":"users.ban_id","device-ban":"users.ban_device",
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
         "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
         "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
