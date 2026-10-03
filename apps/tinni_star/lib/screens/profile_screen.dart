@@ -321,6 +321,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Color _tagColor(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
   Widget _mineIdentityTag(OwnerTag tag) {
     final designation = tag.designation.trim().isNotEmpty
         ? tag.designation.trim()
