@@ -11665,7 +11665,7 @@ export class AppDirectoryStore extends DurableObject {
          FROM direct_messages d
          LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
         WHERE (d.from_user_id=? OR d.to_user_id=?)
-          AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+          AND (opm.message_id IS NULL OR opm.created_at >= ?)`,
       userId, userId, userId, cutoff,
     ).toArray();
 
@@ -11681,7 +11681,7 @@ export class AppDirectoryStore extends DurableObject {
            LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
           WHERE ((d.from_user_id=? AND d.to_user_id=?)
               OR (d.from_user_id=? AND d.to_user_id=?))
-            AND (opm.message_id IS NULL OR opm.created_at>=?)
+            AND (opm.message_id IS NULL OR opm.created_at >= ?)
           ORDER BY d.created_at DESC
           LIMIT 1`,
         userId, peerId, peerId, userId, cutoff,
@@ -11694,7 +11694,7 @@ export class AppDirectoryStore extends DurableObject {
            LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
           WHERE ((d.from_user_id=? AND d.to_user_id=?)
               OR (d.from_user_id=? AND d.to_user_id=?))
-            AND (opm.message_id IS NULL OR opm.created_at>=?)`,
+            AND (opm.message_id IS NULL OR opm.created_at >= ?)`,
         userId, peerId, peerId, userId, cutoff,
       ).toArray()[0];
 
@@ -11754,7 +11754,7 @@ export class AppDirectoryStore extends DurableObject {
          LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
         WHERE ((d.from_user_id=? AND d.to_user_id=?)
             OR (d.from_user_id=? AND d.to_user_id=?))
-          AND (opm.message_id IS NULL OR opm.created_at>=?)
+          AND (opm.message_id IS NULL OR opm.created_at >= ?)
         ORDER BY d.created_at ASC
         LIMIT ?`,
       userId, peerUserId, peerUserId, userId, cutoff, limit,
