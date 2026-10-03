@@ -58,6 +58,31 @@ assert.match(
   /images:\s*\[imageDataUrl\]/,
   "The moderation model must inspect the actual uploaded image bytes",
 );
+assert.match(
+  index,
+  /await enforceSignupAvatarSafety\(env, profile\)/,
+  "Signup avatars must pass image safety before account creation",
+);
+assert.match(
+  index,
+  /Profile photo must be uploaded and safety-approved first/,
+  "Direct profile avatar URL bypasses must be blocked",
+);
+assert.match(
+  index,
+  /Room photo must be uploaded and safety-approved first/,
+  "Direct room DP URL bypasses must be blocked",
+);
+assert.match(
+  index,
+  /Custom room background must be uploaded and safety-approved first/,
+  "User custom room backgrounds must use a moderated Tinni media asset",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/room-theme-media"/,
+  "User custom room backgrounds must have a dedicated moderated upload route",
+);
 
 console.log("Production readiness guards passed");
 
