@@ -2934,6 +2934,80 @@ export default {
       }
     }
 
+    if (url.pathname === "/wallet/coins/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).coinsHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/diamonds/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).diamondHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/diamonds/convert" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).convertDiamonds(
+          appSession.user.user_id,
+          body.diamonds,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to convert diamonds") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-detail" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          wallet: await getAppDirectoryStore(env).roleWalletDetail(
+            appSession.user.user_id,
+            url.searchParams.get("wallet_type") || "",
+            url.searchParams.get("limit") || 200,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role wallet") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-dollars/transfer" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).transferRoleDollars(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.destination_type,
+          body.recipient_user_id,
+          body.usd_cents,
+          body.password,
+          body.request_id,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet/transactions" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -5790,7 +5864,8 @@ export default {
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
         "room-ban":"rooms.ban","room-name":"rooms.rename","room-dp":"rooms.dp","room-bg":"rooms.background",
         "wallet-normal":"wallets.normal","wallet-seller":"wallets.seller","wallet-merchant":"wallets.merchant",
-        "treasury-send":"wallets.treasury_send","bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
+        "treasury-send":"wallets.treasury_send","company-dollar-deduct":"__owner_only__",
+        "bd-activate":"hierarchy.bd_manage","agency-activate":"hierarchy.agency_manage",
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
@@ -5822,7 +5897,9 @@ export default {
           session,
           "owner.action." + String(body.action || "unknown"),
           "owner_action",
-          String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
+          actionName === "company-dollar-deduct"
+            ? "company"
+            : String(body.data?.user_id || body.data?.room_id || body.data?.target_id || ""),
           { data: body.data || {}, result },
         );
         return json({ ok: true, result, state: await getAppDirectoryStore(env).ownerState() });
