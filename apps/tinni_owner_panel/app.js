@@ -941,7 +941,13 @@ async function openOwnerUserProfile(userId) {
 
       <div class="grid two owner-detail-sections">
         <section class="panel">
-          <div class="panel-head"><h3>Inbox / Messages</h3><span class="badge">${messages.length}</span></div>
+          <div class="panel-head">
+            <div>
+              <h3>Inbox / Messages</h3>
+              <p>Owner-panel sent messages stay visible here for 48 hours only. They remain in the user's app inbox.</p>
+            </div>
+            <span class="badge">${messages.length}</span>
+          </div>
           <div class="owner-history-list">
             ${messages.length ? messages.map((message) => `
               <div class="owner-history-row">
