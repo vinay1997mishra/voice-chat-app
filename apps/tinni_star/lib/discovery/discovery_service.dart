@@ -547,6 +547,11 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
+    final storedAsset = await _storeRoomThemePhotoIfNeeded(
+      authToken,
+      asset,
+    );
+
     final request = await _httpClient.postUrl(
       apiBase.replace(path: '/room-themes'),
     );
@@ -559,7 +564,7 @@ class DiscoveryService {
       jsonEncode(<String, dynamic>{
         'room_id': roomId,
         'name': name.trim(),
-        'asset': asset,
+        'asset': storedAsset,
         'policy_confirmed': policyConfirmed,
         'duration_days': durationDays,
         'permanent': permanent,
@@ -579,6 +584,42 @@ class DiscoveryService {
       throw StateError('Server returned invalid room theme');
     }
     return theme;
+  }
+
+  Future<String> _storeRoomThemePhotoIfNeeded(
+    String authToken,
+    String value,
+  ) async {
+    final source = value.trim();
+    if (source.isEmpty) {
+      throw StateError('Room background image is required');
+    }
+    if (!source.startsWith('data:image/')) {
+      return source;
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/room-theme-media'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(jsonEncode(<String, dynamic>{'data_url': source}));
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ??
+            'Room background failed safety checks',
+      );
+    }
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) {
+      throw StateError('Server did not return approved room background URL');
+    }
+    return url;
   }
 
   Future<String?> _storeRoomPhotoIfNeeded(
