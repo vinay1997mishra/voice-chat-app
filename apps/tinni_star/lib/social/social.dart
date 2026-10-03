@@ -26,6 +26,8 @@ class ChatMessage {
     this.id,
     this.createdAt,
     this.seenAt,
+    this.kind = 'text',
+    this.mediaUrl,
   });
 
   final String from;
@@ -34,6 +36,10 @@ class ChatMessage {
   final String? id;
   final DateTime? createdAt;
   final DateTime? seenAt;
+  final String kind;
+  final String? mediaUrl;
+
+  bool get isImage => kind == 'image' && (mediaUrl?.isNotEmpty ?? false);
 }
 
 class MessageThread {
@@ -410,7 +416,12 @@ class SocialService {
           final from = rawMessage['from']?.toString() ?? '';
           final to = rawMessage['to']?.toString() ?? '';
           final text = rawMessage['text']?.toString() ?? '';
-          if (from.isNotEmpty && to.isNotEmpty && text.isNotEmpty) {
+          final kind = rawMessage['message_kind']?.toString() ?? 'text';
+          final mediaUrl = rawMessage['media_url']?.toString();
+          if (from.isNotEmpty &&
+              to.isNotEmpty &&
+              (text.isNotEmpty ||
+                  (kind == 'image' && (mediaUrl?.isNotEmpty ?? false)))) {
             final createdAtMs = _asInt(rawMessage['created_at']);
             final seenAtMs = _asInt(rawMessage['seen_at']);
             lastMessage = ChatMessage(
@@ -418,6 +429,8 @@ class SocialService {
               from: from,
               to: to,
               text: text,
+              kind: kind,
+              mediaUrl: mediaUrl,
               createdAt: createdAtMs > 0
                   ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
                   : null,
@@ -504,7 +517,11 @@ class SocialService {
         final from = item['from']?.toString() ?? '';
         final to = item['to']?.toString() ?? '';
         final text = item['text']?.toString() ?? '';
-        if (from.isEmpty || to.isEmpty || text.isEmpty) continue;
+        final kind = item['message_kind']?.toString() ?? 'text';
+        final mediaUrl = item['media_url']?.toString();
+        if (from.isEmpty || to.isEmpty) continue;
+        if (kind != 'image' && text.isEmpty) continue;
+        if (kind == 'image' && !(mediaUrl?.isNotEmpty ?? false)) continue;
         final createdAtMs = _asInt(item['created_at']);
         final seenAtMs = _asInt(item['seen_at']);
         values.add(
@@ -513,6 +530,8 @@ class SocialService {
             from: from,
             to: to,
             text: text,
+            kind: kind,
+            mediaUrl: mediaUrl,
             createdAt: createdAtMs > 0
                 ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
                 : null,
@@ -574,6 +593,8 @@ class SocialService {
       from: raw['from']?.toString() ?? from,
       to: raw['to']?.toString() ?? to,
       text: raw['text']?.toString() ?? value,
+      kind: raw['message_kind']?.toString() ?? 'text',
+      mediaUrl: raw['media_url']?.toString(),
       createdAt: createdAtMs > 0
           ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
           : DateTime.now(),
@@ -581,6 +602,67 @@ class SocialService {
           ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
           : null,
     );
+    directMessages.add(message);
+    return message;
+  }
+
+  Future<ChatMessage> sendDirectImageRemote({
+    required String authToken,
+    required String from,
+    required String to,
+    required String dataUrl,
+  }) async {
+    if (!friends.contains(to)) {
+      throw StateError('Photos can only be sent to friends');
+    }
+    if (blocked.contains(to)) throw StateError('User is blocked');
+    if (!dataUrl.startsWith('data:image/')) {
+      throw StateError('Invalid image');
+    }
+
+    final request = await _httpClient.postUrl(
+      apiBase.replace(path: '/message-media'),
+    );
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.write(
+      jsonEncode(<String, Object>{
+        'to_user_id': to,
+        'data_url': dataUrl,
+      }),
+    );
+    final response = await request.close();
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        data['error']?.toString() ?? 'Unable to send photo',
+      );
+    }
+
+    final raw = data['message'];
+    if (raw is! Map) throw StateError('Server returned invalid photo message');
+    final createdAtMs = _asInt(raw['created_at']);
+    final seenAtMs = _asInt(raw['seen_at']);
+    final message = ChatMessage(
+      id: raw['id']?.toString(),
+      from: raw['from']?.toString() ?? from,
+      to: raw['to']?.toString() ?? to,
+      text: raw['text']?.toString() ?? 'Photo',
+      kind: raw['message_kind']?.toString() ?? 'image',
+      mediaUrl: raw['media_url']?.toString(),
+      createdAt: createdAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
+          : DateTime.now(),
+      seenAt: seenAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
+          : null,
+    );
+    if (!message.isImage) {
+      throw StateError('Server returned invalid photo message');
+    }
     directMessages.add(message);
     return message;
   }
