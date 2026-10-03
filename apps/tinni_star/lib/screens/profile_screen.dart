@@ -121,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             } catch (error) {
               if (!dialogContext.mounted) return;
               setDialogState(() {
-                errorText = error.toString().replaceFirst('Bad state: ', '');
+                errorText = widget.state.backend.userSafeError(error);
               });
             } finally {
               if (dialogContext.mounted) {
@@ -156,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (!dialogContext.mounted) return;
                 setDialogState(() {
                   sending = false;
-                  errorText = 'Available balance is only \
+                  errorText = 'Available balance is only 
               widget.state.wallet.applyRemote(remote);
               if (!dialogContext.mounted) return;
               Navigator.of(dialogContext).pop();
@@ -176,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             } catch (error) {
               if (!dialogContext.mounted) return;
               setDialogState(() {
-                errorText = error.toString().replaceFirst('Bad state: ', '');
+                errorText = widget.state.backend.userSafeError(error);
                 sending = false;
               });
             }
@@ -1222,7 +1222,7 @@ class _MineGoldenStarsPainter extends CustomPainter {
             } catch (error) {
               if (!dialogContext.mounted) return;
               setDialogState(() {
-                errorText = error.toString().replaceFirst('Bad state: ', '');
+                errorText = widget.state.backend.userSafeError(error);
                 sending = false;
               });
             }
