@@ -135,6 +135,11 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Verify Tinni backend syntax
+        run: |
+          node --check apps/tinni_worker/src/index.js
+          node --check apps/tinni_worker/src/app_directory.js
+
       - name: Analyze
         working-directory: apps/tinni_star
         run: flutter analyze
