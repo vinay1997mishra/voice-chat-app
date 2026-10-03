@@ -31,6 +31,7 @@ import '../infra/realtime.dart';
 import '../infra/app_backend_service.dart';
 import '../infra/livekit_rtc.dart';
 import '../infra/platform_services.dart';
+import '../i18n/tinni_localization.dart';
 import '../media/ktv_features.dart';
 import '../media/ktv_service.dart';
 import '../moderation/moderation_service.dart';
@@ -201,9 +202,7 @@ class TinniState {
   void setLanguagePreference(String value) {
     final normalized = value.trim();
     languagePreference.value =
-        const {'English', 'Hindi', 'Urdu'}.contains(normalized)
-            ? normalized
-            : 'English';
+        tinniIsSupportedLanguage(normalized) ? normalized : 'English';
   }
 
   Future<void> refreshAccountPreferences() async {
