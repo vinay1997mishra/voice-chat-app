@@ -8812,41 +8812,71 @@ class _ReferenceGameLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
+      key: const Key('game-keyboard-logo'),
       width: size,
-      height: size,
+      height: size * 0.66,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
+        decoration: BoxDecoration(
+          color: const Color(0xFF050505),
+          borderRadius: BorderRadius.circular(size * 0.16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.88),
+            width: 1.2,
+          ),
+          boxShadow: const <BoxShadow>[
             BoxShadow(
-              color: Color(0x665D3BFF),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color(0x55FF4FD8),
-              blurRadius: 11,
-              spreadRadius: 1,
+              color: Color(0x55FFFFFF),
+              blurRadius: 8,
+              spreadRadius: 0.5,
             ),
           ],
         ),
-        child: Center(
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFFFF7CF2),
-                Color(0xFFB56CFF),
-                Color(0xFF6F7BFF),
-              ],
-            ).createShader(bounds),
-            child: Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.78,
-              color: Colors.white,
-            ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.13),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final whiteKeyWidth = constraints.maxWidth / 6;
+              return Stack(
+                children: <Widget>[
+                  Row(
+                    children: List<Widget>.generate(
+                      6,
+                      (index) => Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F5F3),
+                            border: Border(
+                              right: index == 5
+                                  ? BorderSide.none
+                                  : const BorderSide(
+                                      color: Color(0xFF161616),
+                                      width: 1,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  for (final index in <int>[0, 1, 3, 4])
+                    Positioned(
+                      left: whiteKeyWidth * (index + 1) -
+                          whiteKeyWidth * 0.19,
+                      top: 0,
+                      width: whiteKeyWidth * 0.38,
+                      height: constraints.maxHeight * 0.60,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF080808),
+                          borderRadius: BorderRadius.vertical(
+                            bottom: Radius.circular(3),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
