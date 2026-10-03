@@ -88,8 +88,32 @@ class _CpScreenState extends State<CpScreen> {
   Future<void> _requestCp(String friendId) async {
     final account = widget.state.auth.current;
     if (account == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('CP Invite'),
+        content: const Text(
+          'Send a confession invitation to become CP? '
+          'CP Invite costs 2,222,222 Tinni coins.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Invite'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     try {
-      final remote = await widget.state.backend.cpRequest(account.authToken, friendId);
+      final remote =
+          await widget.state.backend.cpRequest(account.authToken, friendId);
       widget.state.cp.applyRemote(remote, currentUserId: account.userId);
       if (mounted) setState(() {});
     } catch (error) {
@@ -189,26 +213,6 @@ class _CpScreenState extends State<CpScreen> {
         value.year.toString();
   }
 
-  Future<void> _addIntimacy() async {
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    try {
-      final remote = await widget.state.backend.cpUpdate(
-        account.authToken,
-        'intimacy',
-        <String, dynamic>{'delta': 100},
-      );
-      widget.state.cp.applyRemote(remote, currentUserId: account.userId);
-      if (mounted) setState(() {});
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
-      );
-    }
-  }
 
   Future<void> _showRingCabinet() async {
     final account = widget.state.auth.current;
@@ -422,47 +426,68 @@ class _CpScreenState extends State<CpScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF100812),
       builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
-          children: [
-            const Text(
-              'CP Tasks & Rules',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: FeaturePalette.cpSoft,
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
+        child: FractionallySizedBox(
+          heightFactor: 0.82,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
+            children: const [
+              Text(
+                'CP Rules',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: FeaturePalette.cpSoft,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            _CpRuleTile(
-              icon: Icons.favorite_rounded,
-              title: 'Build Intimacy',
-              subtitle:
-                  'Use eligible CP actions to grow intimacy and CP level.',
-            ),
-            _CpRuleTile(
-              icon: Icons.photo_album_rounded,
-              title: 'Keep Memories',
-              subtitle:
-                  'Both CP partners share the same relationship memory history.',
-            ),
-            _CpRuleTile(
-              icon: Icons.diamond_rounded,
-              title: 'Ring Cabinet',
-              subtitle:
-                  'Only rings owned by this account can be selected for the CP.',
-            ),
-            _CpRuleTile(
-              icon: Icons.verified_user_rounded,
-              title: 'Relationship Rule',
-              subtitle:
-                  'CP actions require an active accepted relationship. Disconnect ends the active CP link.',
-            ),
-          ],
+              SizedBox(height: 12),
+              _CpRuleTile(
+                icon: Icons.favorite_rounded,
+                title: 'How to become CP',
+                subtitle:
+                    'Invite a friend from CP Planet/Profile, or send the CP Invite confession gift in a room. CP Invite costs 2,222,222 Tinni coins.',
+              ),
+              _CpRuleTile(
+                icon: Icons.card_giftcard_rounded,
+                title: 'Gift intimacy',
+                subtitle:
+                    'Regular gifts count at 100% of normalized intimacy. Lucky gifts count only 10%. If both CP partners exchange gifts on the same day, eligible gift intimacy gets a 1.2× daily exchange multiplier.',
+              ),
+              _CpRuleTile(
+                icon: Icons.mic_rounded,
+                title: 'Sweet mic task',
+                subtitle:
+                    'Being on mic together: every completed 5 minutes = 200 intimacy points.',
+              ),
+              _CpRuleTile(
+                icon: Icons.workspace_premium_rounded,
+                title: 'CP level cycle',
+                subtitle:
+                    'When intimacy reaches the next level threshold, the level updates and a new 7-day cycle begins. Lv.1 → Lv.2 starts at 200K intimacy.',
+              ),
+              _CpRuleTile(
+                icon: Icons.timelapse_rounded,
+                title: 'Maintain / decay',
+                subtitle:
+                    'If no intimacy is gained for 3 consecutive days, from day 4 intimacy decreases by 5% per day until activity resumes.',
+              ),
+              _CpRuleTile(
+                icon: Icons.visibility_rounded,
+                title: 'CP card display',
+                subtitle:
+                    'The active connected CP relationship is shown on the ID/Profile CP card. Other/non-active CP records stay inside the CP list.',
+              ),
+              _CpRuleTile(
+                icon: Icons.currency_exchange_rounded,
+                title: 'Tinni CP conversion',
+                subtitle:
+                    'Reference app: 45,000 coins = USD 1. Tinni: 2,000,000 coins = USD 1. CP Heart is scaled to 44,444 coins and CP Invite to 2,222,222 coins.',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -503,8 +528,9 @@ class _CpScreenState extends State<CpScreen> {
                   );
                   final myAvatar = _avatarProvider(account?.avatarDataUrl);
                   final days = _loveDays(cp.startedAt);
-                  final progress =
-                      ((cp.intimacy % 1000) / 1000).clamp(0.0, 1.0);
+                  final progress = cp.level <= 1
+                      ? (cp.intimacy / 200000).clamp(0.0, 1.0)
+                      : 1.0;
 
                   return Column(
                     children: [
@@ -636,6 +662,17 @@ class _CpScreenState extends State<CpScreen> {
                               ),
                             ),
                             const SizedBox(height: 7),
+                            if (cp.level <= 1)
+                              Text(
+                                (200000 - cp.intimacy).clamp(0, 200000).toString() +
+                                    ' intimacy needed for Lv.2',
+                                style: const TextStyle(
+                                  color: FeaturePalette.cpSoft,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            const SizedBox(height: 4),
                             Text(
                               'Together since ' + _dateText(cp.startedAt),
                               style: const TextStyle(
@@ -684,8 +721,8 @@ class _CpScreenState extends State<CpScreen> {
                           _CpNestAction(
                             icon: Icons.favorite_rounded,
                             label: 'Intimacy',
-                            subtitle: '+100',
-                            onTap: _addIntimacy,
+                            subtitle: 'Gift / Mic',
+                            onTap: _showTasksAndRules,
                           ),
                           _CpNestAction(
                             icon: Icons.diamond_rounded,
@@ -871,7 +908,7 @@ class _CpScreenState extends State<CpScreen> {
                           ),
                           FilledButton(
                             onPressed: () => _requestCp(friend.id),
-                            child: const Text('Request'),
+                            child: const Text('Invite'),
                           ),
                         ],
                       ),
