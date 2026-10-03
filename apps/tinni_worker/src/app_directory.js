@@ -1103,6 +1103,74 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_settlement_transfers_sender
         ON settlement_transfers(sender_user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS diamond_conversions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        diamonds INTEGER NOT NULL,
+        coins INTEGER NOT NULL,
+        rate_coins_per_diamond INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_diamond_conversions_user_time
+        ON diamond_conversions(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS privileged_wallet_transactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        coins_delta INTEGER NOT NULL DEFAULT 0,
+        usd_cents INTEGER NOT NULL DEFAULT 0,
+        counterparty_user_id TEXT,
+        reference_id TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_privileged_wallet_transactions_user_time
+        ON privileged_wallet_transactions(user_id, wallet_type, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS role_dollar_transfers (
+        id TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        sender_user_id TEXT NOT NULL,
+        sender_wallet_type TEXT NOT NULL,
+        destination_type TEXT NOT NULL,
+        recipient_user_id TEXT,
+        usd_cents INTEGER NOT NULL,
+        coins_debited INTEGER NOT NULL,
+        sender_balance_before INTEGER NOT NULL,
+        sender_balance_after INTEGER NOT NULL,
+        recipient_balance_before INTEGER,
+        recipient_balance_after INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_role_dollar_transfers_sender_time
+        ON role_dollar_transfers(sender_user_id, sender_wallet_type, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_role_dollar_transfers_recipient_time
+        ON role_dollar_transfers(recipient_user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS company_dollar_balance (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        usd_cents INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS company_dollar_ledger (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        sender_user_id TEXT,
+        sender_wallet_type TEXT,
+        usd_cents_delta INTEGER NOT NULL,
+        balance_before INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        actor TEXT NOT NULL DEFAULT 'system',
+        reason TEXT NOT NULL DEFAULT '',
+        reference_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_company_dollar_ledger_time
+        ON company_dollar_ledger(created_at DESC);
+
       CREATE TABLE IF NOT EXISTS owner_room_controls (
         room_id TEXT PRIMARY KEY,
         banned INTEGER NOT NULL DEFAULT 0,
@@ -1298,6 +1366,10 @@ export class AppDirectoryStore extends DurableObject {
     );
     this.ctx.storage.sql.exec(
       "INSERT OR IGNORE INTO owner_treasury (singleton_id, balance, updated_at) VALUES (1, 0, ?)",
+      Date.now(),
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO company_dollar_balance (singleton_id, usd_cents, updated_at) VALUES (1, 0, ?)",
       Date.now(),
     );
     this.ctx.storage.sql.exec(
@@ -2052,6 +2124,7 @@ export class AppDirectoryStore extends DurableObject {
         balance: Number(treasury.balance || 0),
         updated_at: Number(treasury.updated_at || 0),
       },
+      company_dollars: this._companyDollarState(500),
       catalog: this.ownerCatalog(),
     };
   }
@@ -2477,6 +2550,97 @@ export class AppDirectoryStore extends DurableObject {
     return this._privilegedWalletGuard(guard.user_id, guard.wallet_type);
   }
 
+  _recordPrivilegedWalletTransaction({
+    userId,
+    walletType,
+    kind,
+    coinsDelta = 0,
+    usdCents = 0,
+    counterpartyUserId = null,
+    referenceId = null,
+    note = "",
+    createdAt = Date.now(),
+  }) {
+    const id = "priv-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_transactions
+        (id,user_id,wallet_type,kind,coins_delta,usd_cents,counterparty_user_id,reference_id,note,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      id,
+      String(userId),
+      String(walletType),
+      String(kind),
+      Math.trunc(Number(coinsDelta || 0)),
+      Math.trunc(Number(usdCents || 0)),
+      counterpartyUserId == null ? null : String(counterpartyUserId),
+      referenceId == null ? null : String(referenceId),
+      String(note || ""),
+      Number(createdAt || Date.now()),
+    );
+    return id;
+  }
+
+  _companyDollarState(limitValue = 200) {
+    const limit = Math.max(1, Math.min(1000, Number(limitValue) || 200));
+    const row = this.ctx.storage.sql.exec(
+      "SELECT usd_cents,updated_at FROM company_dollar_balance WHERE singleton_id=1 LIMIT 1",
+    ).toArray()[0] || { usd_cents: 0, updated_at: 0 };
+    const ledger = this.ctx.storage.sql.exec(
+      `SELECT l.*, u.display_name
+         FROM company_dollar_ledger l
+         LEFT JOIN app_users u ON u.user_id=l.sender_user_id
+        ORDER BY l.created_at DESC
+        LIMIT ?`,
+      limit,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      kind: String(item.kind),
+      sender_user_id: item.sender_user_id ? String(item.sender_user_id) : null,
+      sender_name: item.display_name ? String(item.display_name) : null,
+      sender_wallet_type: item.sender_wallet_type ? String(item.sender_wallet_type) : null,
+      usd_cents_delta: Number(item.usd_cents_delta || 0),
+      balance_before: Number(item.balance_before || 0),
+      balance_after: Number(item.balance_after || 0),
+      actor: String(item.actor || "system"),
+      reason: String(item.reason || ""),
+      reference_id: item.reference_id ? String(item.reference_id) : null,
+      created_at: Number(item.created_at || 0),
+    }));
+    return {
+      usd_cents: Math.max(0, Number(row.usd_cents || 0)),
+      updated_at: Number(row.updated_at || 0),
+      ledger,
+    };
+  }
+
+  ownerDeductCompanyDollars(usdCentsValue, reasonValue = "") {
+    const usdCents = Math.floor(Number(usdCentsValue || 0));
+    if (!Number.isSafeInteger(usdCents) || usdCents <= 0) {
+      throw new Error("Enter a valid dollar amount");
+    }
+    const reason = cleanText(reasonValue, 240);
+    const current = this._companyDollarState(1);
+    if (current.usd_cents < usdCents) {
+      throw new Error("Company dollar balance is too low");
+    }
+    const before = current.usd_cents;
+    const after = before - usdCents;
+    const now = Date.now();
+    const id = "company-dollar-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "UPDATE company_dollar_balance SET usd_cents=?,updated_at=? WHERE singleton_id=1",
+      after, now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO company_dollar_ledger
+        (id,kind,sender_user_id,sender_wallet_type,usd_cents_delta,balance_before,balance_after,actor,reason,reference_id,created_at)
+       VALUES (?,'owner_deduct',NULL,NULL,?,?,?,?,?,?,?)`,
+      id, -usdCents, before, after, "owner", reason, id, now,
+    );
+    return { ok: true, usd_cents: after, deducted_usd_cents: usdCents, transaction_id: id };
+  }
+
+
   _ownerUnfreezeWalletSecurity(userIdValue, walletTypeValue = "normal") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
@@ -2509,15 +2673,68 @@ export class AppDirectoryStore extends DurableObject {
     return this._privilegedWalletGuard(userId, walletType);
   }
 
-  _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue) {
+  _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue, assetValue = "coins") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
     const operation = String(operationValue || "").trim().toLowerCase();
+    const asset = String(assetValue || "coins").trim().toLowerCase();
     const amount = Math.max(0, Math.floor(Number(amountValue || 0)));
     const user = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
     ).toArray()[0];
     if (!user) throw new Error("User not found");
+
+    if (walletType === "normal" && asset === "diamonds") {
+      if (!["credit", "debit"].includes(operation)) {
+        throw new Error("Diamond wallet supports only add or remove");
+      }
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        throw new Error("Enter a valid diamond amount");
+      }
+      // Ensure the normal wallet exists before the Owner adjustment.
+      this.getWallet(userId);
+      const row = this.ctx.storage.sql.exec(
+        "SELECT diamonds FROM app_wallets WHERE user_id = ? LIMIT 1",
+        userId,
+      ).toArray()[0];
+      const before = Math.max(0, Number(row?.diamonds || 0));
+      if (operation === "debit" && before < amount) {
+        throw new Error("Diamond balance is too low");
+      }
+      const delta = operation === "credit" ? amount : -amount;
+      const now = Date.now();
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET diamonds = MAX(0, diamonds + ?), updated_at = ? WHERE user_id = ?",
+        delta, now, userId,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,0,?,?,?,?)",
+        crypto.randomUUID(),
+        userId,
+        operation === "credit" ? "owner_diamond_credit" : "owner_diamond_debit",
+        delta,
+        "owner-diamond:" + crypto.randomUUID(),
+        operation === "credit" ? "Diamonds added from Owner Panel" : "Diamonds removed from Owner Panel",
+        now,
+      );
+      const updated = this.ctx.storage.sql.exec(
+        "SELECT diamonds FROM app_wallets WHERE user_id = ? LIMIT 1",
+        userId,
+      ).toArray()[0];
+      return {
+        wallet_type: "normal",
+        asset: "diamonds",
+        operation,
+        amount,
+        diamonds_before: before,
+        diamonds_after: Math.max(0, Number(updated?.diamonds || 0)),
+        ...this.getWallet(userId),
+      };
+    }
+
+    if (asset !== "coins") {
+      throw new Error("Unsupported wallet asset");
+    }
 
     if (walletType === "normal") {
       const guard = this._normalWalletGuard(userId);
@@ -2581,8 +2798,26 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     if (operation === "credit") {
       this._creditPrivilegedWalletAuthorized(userId, walletType, amount);
+      this._recordPrivilegedWalletTransaction({
+        userId,
+        walletType,
+        kind: "company_credit",
+        coinsDelta: amount,
+        referenceId: "owner-wallet:" + crypto.randomUUID(),
+        note: "Company / Owner credit",
+        createdAt: now,
+      });
     } else if (operation === "debit") {
       this._debitPrivilegedWalletAuthorized(userId, walletType, amount);
+      this._recordPrivilegedWalletTransaction({
+        userId,
+        walletType,
+        kind: "owner_debit",
+        coinsDelta: -amount,
+        referenceId: "owner-wallet:" + crypto.randomUUID(),
+        note: "Owner debit",
+        createdAt: now,
+      });
     } else if (operation === "ban" || operation === "unban") {
       this.ctx.storage.sql.exec(
         "UPDATE owner_wallets SET banned=?,updated_at=? WHERE user_id=? AND wallet_type=?",
@@ -3525,6 +3760,7 @@ export class AppDirectoryStore extends DurableObject {
     switch (action) {
       case "treasury-add": return this._ownerTreasuryAdd(data.amount);
       case "treasury-send": return this._ownerTreasurySend(data.user_id, data.wallet_type, data.amount);
+      case "company-dollar-deduct": return this.ownerDeductCompanyDollars(data.usd_cents, data.reason);
       case "wallet-security-unfreeze": return this._ownerUnfreezeWalletSecurity(data.user_id, data.wallet_type);
       case "user-search": return { users: this.ownerSearchUsers(data.user_id || data.query, 50) };
       case "user-name": {
@@ -7200,6 +7436,437 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  coinsHistory(userIdValue, limitValue = 200) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
+    const wallet = this.getWallet(userId);
+    const gifts = this.ctx.storage.sql.exec(
+      `SELECT g.id,g.receiver_id,g.gift_id,g.gift_name,g.quantity,g.unit_price,g.total_cost,g.created_at,
+              u.display_name AS receiver_name
+         FROM gift_transactions g
+         LEFT JOIN app_users u ON u.user_id=g.receiver_id
+        WHERE g.sender_id=?
+        ORDER BY g.created_at DESC
+        LIMIT ?`,
+      userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      receiver_user_id: String(row.receiver_id),
+      receiver_name: String(row.receiver_name || row.receiver_id),
+      gift_id: String(row.gift_id),
+      gift_name: String(row.gift_name),
+      quantity: Number(row.quantity || 0),
+      unit_price: Number(row.unit_price || 0),
+      coins: Number(row.total_cost || 0),
+      created_at: Number(row.created_at || 0),
+    }));
+
+    const sellerReceived = this.ctx.storage.sql.exec(
+      `SELECT p.id,p.user_id AS seller_user_id,p.wallet_type,p.coins_delta,p.created_at,
+              u.display_name AS seller_name
+         FROM privileged_wallet_transactions p
+         LEFT JOIN app_users u ON u.user_id=p.user_id
+        WHERE p.kind='coins_sent'
+          AND p.counterparty_user_id=?
+        ORDER BY p.created_at DESC
+        LIMIT ?`,
+      userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      seller_user_id: String(row.seller_user_id),
+      seller_name: String(row.seller_name || row.seller_user_id),
+      wallet_type: String(row.wallet_type),
+      coins: Math.abs(Number(row.coins_delta || 0)),
+      created_at: Number(row.created_at || 0),
+    }));
+
+    return {
+      current_coins: Number(wallet.coins || 0),
+      gifts,
+      seller_received: sellerReceived,
+    };
+  }
+
+  diamondHistory(userIdValue, limitValue = 200) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
+    const wallet = this.getWallet(userId);
+    const conversions = this.ctx.storage.sql.exec(
+      `SELECT id,diamonds,coins,rate_coins_per_diamond,created_at
+         FROM diamond_conversions
+        WHERE user_id=?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+      userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      diamonds: Number(row.diamonds || 0),
+      coins: Number(row.coins || 0),
+      rate_coins_per_diamond: Number(row.rate_coins_per_diamond || 1),
+      created_at: Number(row.created_at || 0),
+    }));
+    return {
+      current_diamonds: Number(wallet.diamonds || 0),
+      rate_coins_per_diamond: 1,
+      conversions,
+    };
+  }
+
+  convertDiamonds(userIdValue, diamondsValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const diamonds = Math.floor(Number(diamondsValue || 0));
+    if (!Number.isSafeInteger(diamonds) || diamonds <= 0) {
+      throw new Error("Enter a valid diamond amount");
+    }
+    if (!this._isActiveHost(userId)) {
+      throw new Error("Diamond conversion is available to active Hosts");
+    }
+    const row = this.ctx.storage.sql.exec(
+      "SELECT diamonds FROM app_wallets WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    const current = Math.max(0, Number(row?.diamonds || 0));
+    if (current < diamonds) throw new Error("Diamond balance is too low");
+
+    const rate = 1;
+    const coins = diamonds * rate;
+    const now = Date.now();
+    const id = "diamond-convert-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "UPDATE app_wallets SET diamonds=diamonds-?,updated_at=? WHERE user_id=?",
+      diamonds, now, userId,
+    );
+    this._creditNormalWalletAuthorized(userId, coins, "diamond_conversion");
+    this.ctx.storage.sql.exec(
+      `INSERT INTO diamond_conversions
+        (id,user_id,diamonds,coins,rate_coins_per_diamond,created_at)
+       VALUES (?,?,?,?,?,?)`,
+      id, userId, diamonds, coins, rate, now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO wallet_transactions
+        (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      "wallet-" + crypto.randomUUID(),
+      userId,
+      "diamond_conversion",
+      coins,
+      -diamonds,
+      id,
+      "Diamond conversion",
+      now,
+    );
+    return {
+      ok: true,
+      transaction_id: id,
+      diamonds,
+      coins,
+      wallet: this.getWallet(userId),
+      history: this.diamondHistory(userId),
+    };
+  }
+
+  roleWalletDetail(userIdValue, walletTypeValue, limitValue = 200) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const walletType = String(walletTypeValue || "").trim().toLowerCase();
+    if (!["coin_seller","merchant"].includes(walletType)) {
+      throw new Error("Unsupported wallet type");
+    }
+    const row = this.ctx.storage.sql.exec(
+      "SELECT banned FROM owner_wallets WHERE user_id=? AND wallet_type=? LIMIT 1",
+      userId, walletType,
+    ).toArray()[0];
+    if (!row || Number(row.banned || 0) === 1) {
+      throw new Error("Active role wallet is required");
+    }
+    const guard = this._privilegedWalletGuard(userId, walletType);
+    const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
+    const totalUsdCents = Math.floor(Math.max(0, guard.balance) * 100 / COINS_PER_USD);
+
+    const transactions = this.ctx.storage.sql.exec(
+      `SELECT p.*, u.display_name AS counterparty_name
+         FROM privileged_wallet_transactions p
+         LEFT JOIN app_users u ON u.user_id=p.counterparty_user_id
+        WHERE p.user_id=? AND p.wallet_type=?
+        ORDER BY p.created_at DESC
+        LIMIT ?`,
+      userId, walletType, limit,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      kind: String(item.kind),
+      coins_delta: Number(item.coins_delta || 0),
+      usd_cents: Number(item.usd_cents || 0),
+      counterparty_user_id: item.counterparty_user_id ? String(item.counterparty_user_id) : null,
+      counterparty_name: item.counterparty_name ? String(item.counterparty_name) : null,
+      reference_id: item.reference_id ? String(item.reference_id) : null,
+      note: String(item.note || ""),
+      created_at: Number(item.created_at || 0),
+    }));
+
+    const settlementReceived = this.ctx.storage.sql.exec(
+      `SELECT s.id,s.sender_user_id,s.usd_cents,s.created_at,u.display_name AS sender_name
+         FROM settlement_transfers s
+         LEFT JOIN app_users u ON u.user_id=s.sender_user_id
+        WHERE s.recipient_user_id=? AND s.recipient_role=?
+        ORDER BY s.created_at DESC
+        LIMIT ?`,
+      userId, walletType, limit,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      source: "settlement",
+      sender_user_id: String(item.sender_user_id),
+      sender_name: String(item.sender_name || item.sender_user_id),
+      usd_cents: Number(item.usd_cents || 0),
+      created_at: Number(item.created_at || 0),
+    }));
+
+    const merchantReceived = walletType === "merchant"
+      ? this.ctx.storage.sql.exec(
+          `SELECT t.id,t.sender_user_id,t.usd_cents,t.created_at,u.display_name AS sender_name
+             FROM role_dollar_transfers t
+             LEFT JOIN app_users u ON u.user_id=t.sender_user_id
+            WHERE t.destination_type='merchant'
+              AND t.recipient_user_id=?
+            ORDER BY t.created_at DESC
+            LIMIT ?`,
+          userId, limit,
+        ).toArray().map((item) => ({
+          id: String(item.id),
+          source: "coin_seller",
+          sender_user_id: String(item.sender_user_id),
+          sender_name: String(item.sender_name || item.sender_user_id),
+          usd_cents: Number(item.usd_cents || 0),
+          created_at: Number(item.created_at || 0),
+        }))
+      : [];
+
+    const receivedDollars = [...settlementReceived, ...merchantReceived]
+      .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+      .slice(0, limit);
+
+    const sentDollars = this.ctx.storage.sql.exec(
+      `SELECT t.*, u.display_name AS recipient_name
+         FROM role_dollar_transfers t
+         LEFT JOIN app_users u ON u.user_id=t.recipient_user_id
+        WHERE t.sender_user_id=? AND t.sender_wallet_type=?
+        ORDER BY t.created_at DESC
+        LIMIT ?`,
+      userId, walletType, limit,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      destination_type: String(item.destination_type),
+      recipient_user_id: item.recipient_user_id ? String(item.recipient_user_id) : null,
+      recipient_name: item.recipient_name ? String(item.recipient_name) : null,
+      usd_cents: Number(item.usd_cents || 0),
+      coins_debited: Number(item.coins_debited || 0),
+      sender_balance_before: Number(item.sender_balance_before || 0),
+      sender_balance_after: Number(item.sender_balance_after || 0),
+      created_at: Number(item.created_at || 0),
+    }));
+
+    const settlementTotalRow = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(usd_cents),0) AS total FROM settlement_transfers WHERE recipient_user_id=? AND recipient_role=?",
+      userId, walletType,
+    ).toArray()[0];
+    const merchantTotalRow = walletType === "merchant"
+      ? this.ctx.storage.sql.exec(
+          "SELECT COALESCE(SUM(usd_cents),0) AS total FROM role_dollar_transfers WHERE destination_type='merchant' AND recipient_user_id=?",
+          userId,
+        ).toArray()[0]
+      : { total: 0 };
+    const receivedTotal =
+      Math.max(0, Number(settlementTotalRow?.total || 0)) +
+      Math.max(0, Number(merchantTotalRow?.total || 0));
+    return {
+      user_id: userId,
+      wallet_type: walletType,
+      balance_coins: guard.security_frozen ? 0 : Math.max(0, Number(guard.balance || 0)),
+      total_usd_cents: guard.security_frozen ? 0 : totalUsdCents,
+      received_dollars_total_cents: receivedTotal,
+      minimum_transfer_usd_cents: walletType === "coin_seller" ? 30000 : 100000,
+      security_frozen: guard.security_frozen,
+      transactions,
+      received_dollars: receivedDollars,
+      sent_dollars: sentDollars,
+    };
+  }
+
+  async transferRoleDollars(
+    senderUserIdValue,
+    walletTypeValue,
+    destinationTypeValue,
+    recipientUserIdValue,
+    usdCentsValue,
+    passwordValue,
+    requestIdValue,
+  ) {
+    const senderId = this._resolveOwnerUserId(senderUserIdValue);
+    const walletType = String(walletTypeValue || "").trim().toLowerCase();
+    const destinationType = String(destinationTypeValue || "").trim().toLowerCase();
+    const requestId = cleanText(requestIdValue, 120);
+    const usdCents = Math.floor(Number(usdCentsValue || 0));
+    if (!["coin_seller","merchant"].includes(walletType)) {
+      throw new Error("Unsupported wallet type");
+    }
+    if (!requestId) throw new Error("Transfer request ID is required");
+    const previous = this.ctx.storage.sql.exec(
+      "SELECT id FROM role_dollar_transfers WHERE request_id=? LIMIT 1",
+      requestId,
+    ).toArray()[0];
+    if (previous) {
+      return {
+        ok: true,
+        duplicate: true,
+        transfer_id: String(previous.id),
+        wallet: this.roleWalletDetail(senderId, walletType),
+      };
+    }
+
+    const minimum = walletType === "coin_seller" ? 30000 : 100000;
+    if (!Number.isSafeInteger(usdCents) || usdCents < minimum) {
+      throw new Error(
+        walletType === "coin_seller"
+          ? "Minimum dollar transfer is $300"
+          : "Minimum dollar transfer is $1000",
+      );
+    }
+    if (walletType === "coin_seller" && !["merchant","company"].includes(destinationType)) {
+      throw new Error("Choose Merchant or Company");
+    }
+    if (walletType === "merchant" && destinationType !== "company") {
+      throw new Error("Merchant dollars can be sent to Company");
+    }
+
+    const passwordValid = await this.verifyRoleWalletPassword(
+      senderId, walletType, passwordValue,
+    );
+    if (!passwordValid) throw new Error("Incorrect wallet password");
+
+    const source = this._privilegedWalletGuard(senderId, walletType);
+    if (source.security_frozen) throw new Error("Wallet is security-frozen");
+    const coinsToDebit = Math.floor((usdCents * COINS_PER_USD) / 100);
+    if (source.balance < coinsToDebit) {
+      throw new Error("Dollar balance is too low");
+    }
+
+    let recipientId = null;
+    let recipientBefore = null;
+    let recipientAfter = null;
+    let merchantGuard = null;
+    if (destinationType === "merchant") {
+      recipientId = this._resolveOwnerUserId(recipientUserIdValue);
+      if (!recipientId) throw new Error("Merchant ID is required");
+      const merchantRow = this.ctx.storage.sql.exec(
+        "SELECT banned FROM owner_wallets WHERE user_id=? AND wallet_type='merchant' LIMIT 1",
+        recipientId,
+      ).toArray()[0];
+      if (!merchantRow || Number(merchantRow.banned || 0) === 1) {
+        throw new Error("Active Merchant ID is required");
+      }
+      merchantGuard = this._privilegedWalletGuard(recipientId, "merchant");
+      if (merchantGuard.security_frozen) {
+        throw new Error("Merchant wallet is security-frozen");
+      }
+      recipientBefore = Math.max(0, Number(merchantGuard.balance || 0));
+    }
+
+    const senderBefore = Math.max(0, Number(source.balance || 0));
+    const senderAfter = senderBefore - coinsToDebit;
+    const now = Date.now();
+    const transferId = "role-dollar-" + crypto.randomUUID();
+
+    this._debitPrivilegedWalletAuthorized(senderId, walletType, coinsToDebit);
+    this._recordPrivilegedWalletTransaction({
+      userId: senderId,
+      walletType,
+      kind: destinationType === "company" ? "dollars_to_company" : "dollars_to_merchant",
+      coinsDelta: -coinsToDebit,
+      usdCents: -usdCents,
+      counterpartyUserId: recipientId,
+      referenceId: transferId,
+      note: destinationType === "company"
+        ? "Dollar transfer to Company"
+        : "Dollar transfer to Merchant ID " + recipientId,
+      createdAt: now,
+    });
+
+    if (destinationType === "merchant") {
+      this._creditPrivilegedWalletAuthorized(recipientId, "merchant", coinsToDebit);
+      recipientAfter = recipientBefore + coinsToDebit;
+      this._recordPrivilegedWalletTransaction({
+        userId: recipientId,
+        walletType: "merchant",
+        kind: "dollars_received",
+        coinsDelta: coinsToDebit,
+        usdCents,
+        counterpartyUserId: senderId,
+        referenceId: transferId,
+        note: "Dollars received from Coin Seller ID " + senderId,
+        createdAt: now,
+      });
+    } else {
+      const company = this._companyDollarState(1);
+      const before = company.usd_cents;
+      const after = before + usdCents;
+      this.ctx.storage.sql.exec(
+        "UPDATE company_dollar_balance SET usd_cents=?,updated_at=? WHERE singleton_id=1",
+        after, now,
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO company_dollar_ledger
+          (id,kind,sender_user_id,sender_wallet_type,usd_cents_delta,balance_before,balance_after,actor,reason,reference_id,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        "company-dollar-" + crypto.randomUUID(),
+        walletType === "coin_seller" ? "coin_seller_transfer" : "merchant_transfer",
+        senderId,
+        walletType,
+        usdCents,
+        before,
+        after,
+        "user",
+        "Dollar transfer to Company",
+        transferId,
+        now,
+      );
+    }
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO role_dollar_transfers
+        (id,request_id,sender_user_id,sender_wallet_type,destination_type,recipient_user_id,
+         usd_cents,coins_debited,sender_balance_before,sender_balance_after,
+         recipient_balance_before,recipient_balance_after,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      transferId,
+      requestId,
+      senderId,
+      walletType,
+      destinationType,
+      recipientId,
+      usdCents,
+      coinsToDebit,
+      senderBefore,
+      senderAfter,
+      recipientBefore,
+      recipientAfter,
+      now,
+    );
+
+    return {
+      ok: true,
+      duplicate: false,
+      transfer_id: transferId,
+      usd_cents: usdCents,
+      coins_debited: coinsToDebit,
+      destination_type: destinationType,
+      recipient_user_id: recipientId,
+      wallet: this.roleWalletDetail(senderId, walletType),
+    };
+  }
+
+  ownerCompanyDollarState(limitValue = 500) {
+    return this._companyDollarState(limitValue);
+  }
+
   frameCatalog(countryCodeValue = "") {
     const country = String(countryCodeValue || "").trim().toUpperCase();
     return this.ownerCatalog("frame")
@@ -7766,6 +8433,17 @@ export class AppDirectoryStore extends DurableObject {
         usdCents, now, recipient.user_id,
       );
     }
+    this._recordPrivilegedWalletTransaction({
+      userId: recipient.user_id,
+      walletType: recipient.role,
+      kind: "settlement_received",
+      coinsDelta: creditedCoins,
+      usdCents,
+      counterpartyUserId: senderId,
+      referenceId: id,
+      note: "Settlement received from ID " + senderId,
+      createdAt: now,
+    });
     this.ctx.storage.sql.exec(
       "INSERT INTO settlement_transfers(id,sender_user_id,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?)",
       id, senderId, recipient.user_id, recipient.role, usdCents, diamondsDebited, now,
