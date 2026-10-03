@@ -435,6 +435,14 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_direct_messages_pair
         ON direct_messages(from_user_id, to_user_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS owner_panel_message_log (
+        message_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_owner_panel_message_user_time
+        ON owner_panel_message_log(user_id, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS user_notifications (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -1638,13 +1646,18 @@ export class AppDirectoryStore extends DurableObject {
       };
     });
 
+    const ownerPanelMessageCutoff = Date.now() - (48 * 60 * 60 * 1000);
     const messages = this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at
-         FROM direct_messages
-        WHERE from_user_id = ? OR to_user_id = ?
-        ORDER BY created_at DESC
+      `SELECT d.id, d.from_user_id, d.to_user_id, d.text,
+              d.message_kind, d.media_url, d.created_at, d.seen_at
+         FROM direct_messages d
+         LEFT JOIN owner_panel_message_log opm
+           ON opm.message_id = d.id
+        WHERE (d.from_user_id = ? OR d.to_user_id = ?)
+          AND (opm.message_id IS NULL OR opm.created_at >= ?)
+        ORDER BY d.created_at DESC
         LIMIT 100`,
-      userId, userId,
+      userId, userId, ownerPanelMessageCutoff,
     ).toArray().map((item) => ({
       id: String(item.id),
       from_user_id: String(item.from_user_id),
@@ -2041,7 +2054,18 @@ export class AppDirectoryStore extends DurableObject {
         "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
       ).toArray()[0];
       if (!exists) continue;
-      this.sendOfficialMessage(userId, text, { action: "owner_message" });
+      const message = this.sendOfficialMessage(
+        userId,
+        text,
+        { action: "owner_message" },
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO owner_panel_message_log(message_id,user_id,created_at)
+         VALUES (?,?,?)`,
+        String(message.id),
+        userId,
+        Number(message.created_at || Date.now()),
+      );
       sent += 1;
     }
     return { ok: true, sent, requested: targets.length };
