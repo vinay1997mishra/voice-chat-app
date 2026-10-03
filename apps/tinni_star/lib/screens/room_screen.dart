@@ -3886,7 +3886,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    widget.state.wallet.coins.toString(),
+                                    'Total Coins  ' +
+                                        widget.state.wallet.coins.toString(),
                                     key: const Key('room-gift-wallet-coins'),
                                     style: const TextStyle(
                                       color: Color(0xFFFFD45A),
