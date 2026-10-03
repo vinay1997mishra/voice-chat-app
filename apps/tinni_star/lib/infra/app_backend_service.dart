@@ -220,7 +220,7 @@ class AppBackendService {
       'DELETE',
       '/profile-media',
       token,
-      body: {'slot': slot},
+      body: {'slot': slot, 'confirm_remove': true},
     );
   }
 
