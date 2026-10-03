@@ -89,6 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget.state.wallet.applyRemote(liveWallet);
       if (mounted) setState(() {});
     } catch (_) {}
+    if (!mounted) return;
 
     final recipientController = TextEditingController();
     final amountController = TextEditingController(
