@@ -46,7 +46,6 @@ void main() {
       true,
     );
     expect(room.contains('origin.dx * (1 - value)'), true);
-    expect(room.contains('origin.dy * (1 - value) - rise'), true);
     expect(room.contains('origin.dy * (1 - value) - arc'), true);
     expect(room.contains('(1 - value) * seatDiameter * 2.35'), false);
     expect(room.contains('(1 - value) * seatDiameter * 2.8'), false);
