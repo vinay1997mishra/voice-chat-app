@@ -7,6 +7,9 @@ const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
 const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
 const COINS_PER_USD = 2000000;
+const COIN_SELLER_RECEIVED_USD_COINS = 2220000;
+const HOST_SETTLEMENT_MIN_USD_CENTS = 200;
+const AGENCY_BD_SETTLEMENT_MIN_USD_CENTS = 1000;
 const RECHARGE_PROVIDER_MIN_USD = 5;
 const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
@@ -140,7 +143,8 @@ function roomSeatLayout(seatCountValue) {
   else if (seatCount >= 11 && seatCount <= 15) rowCount = 3;
   else if (seatCount >= 16 && seatCount <= 24) rowCount = 4;
   else if (seatCount >= 25 && seatCount <= 30) rowCount = 5;
-  else if (seatCount >= 31 && seatCount <= 42) rowCount = 6;
+  else if (seatCount >= 31 && seatCount <= 36) rowCount = 6;
+  else if (seatCount >= 37 && seatCount <= 42) rowCount = 7;
   else return { row_count: 0, row_sizes: [] };
 
   if (rowCount <= 2) {
@@ -1098,6 +1102,7 @@ export class AppDirectoryStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS settlement_transfers (
         id TEXT PRIMARY KEY,
         sender_user_id TEXT NOT NULL,
+        sender_role TEXT NOT NULL DEFAULT 'host',
         recipient_user_id TEXT NOT NULL,
         recipient_role TEXT NOT NULL,
         usd_cents INTEGER NOT NULL,
@@ -1298,6 +1303,7 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
       "ALTER TABLE direct_messages ADD COLUMN message_kind TEXT NOT NULL DEFAULT 'text'",
       "ALTER TABLE direct_messages ADD COLUMN media_url TEXT",
+      "ALTER TABLE settlement_transfers ADD COLUMN sender_role TEXT NOT NULL DEFAULT 'host'",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_users ADD COLUMN call_verification_status TEXT NOT NULL DEFAULT 'unverified'",
       "ALTER TABLE app_users ADD COLUMN call_verified_at INTEGER",
@@ -7587,8 +7593,14 @@ export class AppDirectoryStore extends DurableObject {
       diamond_usd_cents: diamondUsdCents,
       commission_usd_cents: commissionUsdCents,
       withdrawable_usd_cents: withdrawableUsdCents,
+      minimum_settlement_transfer_usd_cents: isHost
+        ? HOST_SETTLEMENT_MIN_USD_CENTS
+        : (isAgency || isBd ? AGENCY_BD_SETTLEMENT_MIN_USD_CENTS : 0),
       can_transfer_settlement: !coinGuard.security_frozen &&
-        (isHost || isAgency || isBd) && withdrawableUsdCents >= 200,
+        (isHost || isAgency || isBd) &&
+        withdrawableUsdCents >= (isHost
+          ? HOST_SETTLEMENT_MIN_USD_CENTS
+          : AGENCY_BD_SETTLEMENT_MIN_USD_CENTS),
       usd_rate: { reference_diamonds: 4000000, reference_usd_cents: 170 },
       roles,
       banned: Number(row?.banned || 0) === 1,
@@ -11097,6 +11109,279 @@ export class AppDirectoryStore extends DurableObject {
       diamond_earned: receivedCoins,
       gift_senders: senderCount,
     };
+  }
+
+  hierarchyPortal(userIdValue, roleValue, fromValue = 0, toValue = Date.now()) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (!["host", "agency", "bd"].includes(role)) throw new Error("Unsupported hierarchy role");
+    const hierarchy = this._hierarchyRoleRow(userId, role);
+    if (!hierarchy || hierarchy.active !== true) throw new Error(role.toUpperCase() + " role is not active");
+
+    const user = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,email,country_code,country_name,flag_emoji,avatar_data_url,created_at FROM app_users WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!user) throw new Error("User not found");
+
+    const from = Math.max(0, Number(fromValue || 0));
+    const to = Math.max(from + 1, Number(toValue || Date.now()));
+    const wallet = this.getWallet(userId);
+    const settlement = this._ensureSettlementBalance(userId);
+    const hierarchyPolicies = this.ownerState().policies || {};
+    const hostTargetCoins = Math.max(
+      1,
+      Number(hierarchyPolicies.host_first_target_received_coins || 4000000),
+    );
+    const hostTargetUsd = Math.max(
+      0,
+      Number(hierarchyPolicies.host_first_target_usd || 1.7),
+    );
+    const targetFields = (receivedValue) => {
+      const received = Math.max(0, Number(receivedValue || 0));
+      return {
+        target_coins: hostTargetCoins,
+        target_usd: hostTargetUsd,
+        target_received_coins: received,
+        target_remaining_coins: Math.max(0, hostTargetCoins - received),
+        target_progress_percent: Math.min(
+          100,
+          Math.max(0, (received / hostTargetCoins) * 100),
+        ),
+        target_met: received >= hostTargetCoins,
+      };
+    };
+    const result = {
+      role,
+      profile: {
+        user_id: String(user.user_id),
+        display_name: String(user.display_name || user.user_id),
+        email: String(user.email || ""),
+        country_code: String(user.country_code || ""),
+        country_name: String(user.country_name || ""),
+        flag_emoji: String(user.flag_emoji || ""),
+        avatar_data_url: user.avatar_data_url ? String(user.avatar_data_url) : null,
+      },
+      hierarchy,
+      contact: String(hierarchy.data?.contact || ""),
+      range: { from, to },
+      wallet: {
+        // Role panels are isolated: Host sees only Host diamond-dollar value;
+        // Agency/BD see only their own dollar commission balance.
+        diamonds: role === "host" ? Number(wallet.diamonds || 0) : 0,
+        diamond_usd_cents: role === "host"
+          ? Number(wallet.diamond_usd_cents || 0)
+          : 0,
+        commission_usd_cents: role === "agency" || role === "bd"
+          ? Number(settlement?.usd_cents || 0)
+          : 0,
+        settlement_usd_cents: role === "agency" || role === "bd"
+          ? Number(settlement?.usd_cents || 0)
+          : 0,
+        withdrawable_usd_cents: role === "host"
+          ? Number(wallet.diamond_usd_cents || 0)
+          : Number(settlement?.usd_cents || 0),
+        minimum_transfer_usd_cents: role === "host"
+          ? HOST_SETTLEMENT_MIN_USD_CENTS
+          : AGENCY_BD_SETTLEMENT_MIN_USD_CENTS,
+        can_transfer_settlement: role === "host"
+          ? Number(wallet.diamond_usd_cents || 0) >= HOST_SETTLEMENT_MIN_USD_CENTS
+          : Number(settlement?.usd_cents || 0) >= AGENCY_BD_SETTLEMENT_MIN_USD_CENTS,
+      },
+      stats: {},
+      members: [],
+      parent: null,
+      targets: {
+        host_target_coins: hostTargetCoins,
+        host_target_usd: hostTargetUsd,
+        agency_commission_percent: Number(
+          hierarchyPolicies.agency_commission_percent || 0,
+        ),
+        bd_target_1_usd: Number(hierarchyPolicies.bd_target_1_usd || 0),
+        bd_target_1_percent: Number(
+          hierarchyPolicies.bd_target_1_percent || 0,
+        ),
+        bd_target_2_usd: Number(hierarchyPolicies.bd_target_2_usd || 0),
+        bd_target_2_percent: Number(
+          hierarchyPolicies.bd_target_2_percent || 0,
+        ),
+      },
+    };
+
+    if (role === "host") {
+      const hostGiftStats = this._hierarchyGiftStats([userId], from, to);
+      result.stats = {
+        ...hostGiftStats,
+        ...targetFields(hostGiftStats.received_coins),
+        online_minutes: 0,
+        valid_mic_minutes: 0,
+        valid_days: 0,
+        private_chats: Number(this.ctx.storage.sql.exec(
+          `SELECT COUNT(DISTINCT CASE WHEN from_user_id=? THEN to_user_id ELSE from_user_id END) AS count
+             FROM direct_messages
+            WHERE (from_user_id=? OR to_user_id=?)
+              AND created_at>=? AND created_at<?`,
+          userId, userId, userId, from, to,
+        ).toArray()[0]?.count || 0),
+        followers: Number(this.ctx.storage.sql.exec(
+          "SELECT COUNT(*) AS count FROM app_follows WHERE target_id=?",
+          userId,
+        ).toArray()[0]?.count || 0),
+      };
+      const agencyId = hierarchy.parent_user_id;
+      if (agencyId) {
+        const agency = this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,country_code,country_name,flag_emoji,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          agencyId,
+        ).toArray()[0];
+        if (agency) {
+          result.parent = {
+            role: "agency",
+            user_id: String(agency.user_id),
+            display_name: String(agency.display_name || agency.user_id),
+            country_code: String(agency.country_code || ""),
+            country_name: String(agency.country_name || ""),
+            flag_emoji: String(agency.flag_emoji || ""),
+            avatar_data_url: agency.avatar_data_url ? String(agency.avatar_data_url) : null,
+          };
+        }
+      }
+    }
+
+    if (role === "agency") {
+      const hosts = this.ctx.storage.sql.exec(
+        `SELECT h.user_id,h.updated_at,u.display_name,u.country_code,u.country_name,u.flag_emoji,u.avatar_data_url
+           FROM owner_hierarchy h
+           JOIN app_users u ON u.user_id=h.user_id
+          WHERE h.role='host' AND h.active=1 AND h.parent_user_id=?
+          ORDER BY h.updated_at ASC`,
+        userId,
+      ).toArray();
+      result.members = hosts.map((row) => {
+        const stats = this._hierarchyGiftStats([String(row.user_id)], from, to);
+        return {
+          role: "host",
+          user_id: String(row.user_id),
+          display_name: String(row.display_name || row.user_id),
+          country_code: String(row.country_code || ""),
+          country_name: String(row.country_name || ""),
+          flag_emoji: String(row.flag_emoji || ""),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          joined_at: Number(row.updated_at || 0),
+          ...stats,
+          ...targetFields(stats.received_coins),
+        };
+      });
+      const agencyGiftStats = this._hierarchyGiftStats(
+        hosts.map((row) => String(row.user_id)),
+        from,
+        to,
+      );
+      const agencyCombinedTarget = hostTargetCoins * hosts.length;
+      result.stats = {
+        ...agencyGiftStats,
+        host_count: hosts.length,
+        host_target_coins: hostTargetCoins,
+        combined_target_coins: agencyCombinedTarget,
+        combined_target_remaining_coins: Math.max(
+          0,
+          agencyCombinedTarget - Number(agencyGiftStats.received_coins || 0),
+        ),
+        combined_target_progress_percent: agencyCombinedTarget > 0
+          ? Math.min(
+              100,
+              Math.max(
+                0,
+                Number(agencyGiftStats.received_coins || 0) /
+                  agencyCombinedTarget * 100,
+              ),
+            )
+          : 0,
+        commission_percent: Number(
+          hierarchyPolicies.agency_commission_percent || 0,
+        ),
+      };
+      const bdId = hierarchy.parent_user_id;
+      if (bdId) {
+        const bd = this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,country_code,country_name,flag_emoji,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          bdId,
+        ).toArray()[0];
+        if (bd) result.parent = {
+          role: "bd",
+          user_id: String(bd.user_id),
+          display_name: String(bd.display_name || bd.user_id),
+          country_code: String(bd.country_code || ""),
+          country_name: String(bd.country_name || ""),
+          flag_emoji: String(bd.flag_emoji || ""),
+          avatar_data_url: bd.avatar_data_url ? String(bd.avatar_data_url) : null,
+        };
+      }
+    }
+
+    if (role === "bd") {
+      const agencies = this.ctx.storage.sql.exec(
+        `SELECT h.user_id,h.updated_at,u.display_name,u.country_code,u.country_name,u.flag_emoji,u.avatar_data_url
+           FROM owner_hierarchy h
+           JOIN app_users u ON u.user_id=h.user_id
+          WHERE h.role='agency' AND h.active=1 AND h.parent_user_id=?
+          ORDER BY h.updated_at ASC`,
+        userId,
+      ).toArray();
+      const allHosts = [];
+      result.members = agencies.map((row) => {
+        const agencyId = String(row.user_id);
+        const hostRows = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM owner_hierarchy WHERE role='host' AND active=1 AND parent_user_id=?",
+          agencyId,
+        ).toArray();
+        const hostIds = hostRows.map((host) => String(host.user_id));
+        allHosts.push(...hostIds);
+        const stats = this._hierarchyGiftStats(hostIds, from, to);
+        return {
+          role: "agency",
+          user_id: agencyId,
+          display_name: String(row.display_name || agencyId),
+          country_code: String(row.country_code || ""),
+          country_name: String(row.country_name || ""),
+          flag_emoji: String(row.flag_emoji || ""),
+          avatar_data_url: row.avatar_data_url ? String(row.avatar_data_url) : null,
+          joined_at: Number(row.updated_at || 0),
+          host_count: hostIds.length,
+          ...stats,
+          combined_target_coins: hostTargetCoins * hostIds.length,
+          combined_target_progress_percent: hostIds.length > 0
+            ? Math.min(
+                100,
+                Math.max(
+                  0,
+                  Number(stats.received_coins || 0) /
+                    (hostTargetCoins * hostIds.length) * 100,
+                ),
+              )
+            : 0,
+        };
+      });
+      const bdGiftStats = this._hierarchyGiftStats(allHosts, from, to);
+      result.stats = {
+        ...bdGiftStats,
+        agency_count: agencies.length,
+        host_count: allHosts.length,
+        combined_target_coins: hostTargetCoins * allHosts.length,
+        combined_target_progress_percent: allHosts.length > 0
+          ? Math.min(
+              100,
+              Math.max(
+                0,
+                Number(bdGiftStats.received_coins || 0) /
+                  (hostTargetCoins * allHosts.length) * 100,
+              ),
+            )
+          : 0,
+      };
+    }
+
+    return result;
   }
 
   updateHierarchyContact(userIdValue, roleValue, contactValue) {
