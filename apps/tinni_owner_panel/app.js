@@ -2008,6 +2008,9 @@ function applySession(session) {
     return;
   }
 
+  // Staff receives only the server-filtered state for explicitly granted
+  // functions. This keeps selected modules usable without leaking unselected data.
+  loadOwnerState();
   if (hasPermission(allowed, "rooms.theme_view")) loadRoomThemes();
   if (hasPermission(allowed, "audit.view")) loadAuditLog();
 
@@ -2041,7 +2044,7 @@ async function loadSession() {
 }
 
 async function loadOwnerState() {
-  if (currentSession?.role !== "owner") return;
+  if (!currentSession) return;
   try {
     const data = await api("/api/owner/state");
     const serverState = data.state || {};
@@ -2087,9 +2090,10 @@ function renderFeatures() {
   Object.entries(state.features).forEach(([key, value]) => {
     const row = document.createElement("div");
     row.className = "switch-row";
+    const canEdit = sessionCan("policies.edit");
     row.innerHTML = `
       <div class="switch-copy"><strong>${pretty(key)}</strong><small>Server master feature flag</small></div>
-      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${escapeHtml(key)}"><span class="slider"></span></label>
+      <label class="switch"><input type="checkbox" ${value ? "checked" : ""} data-feature="${escapeHtml(key)}" ${canEdit ? "" : "disabled"}><span class="slider"></span></label>
     `;
     root.appendChild(row);
   });
@@ -2125,9 +2129,11 @@ function renderRoles() {
     ? items.map((item) => `
         <span class="chip">
           ${escapeHtml(item.name)}
-          <button type="button" data-catalog-edit="${escapeHtml(item.id)}" title="Edit">Edit</button>
-          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">Disable</button>
-          <button type="button" data-catalog-remove="${escapeHtml(item.id)}" title="Remove">Remove</button>
+          ${sessionCan("roles.manage") ? `
+            <button type="button" data-catalog-edit="${escapeHtml(item.id)}" title="Edit">Edit</button>
+            <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="false" title="Disable">Disable</button>
+            <button type="button" data-catalog-remove="${escapeHtml(item.id)}" title="Remove">Remove</button>
+          ` : ""}
         </span>
       `).join("")
     : '<span class="muted">No roles/posts yet.</span>';
@@ -2145,9 +2151,9 @@ function renderVips() {
       <td>${escapeHtml(v.frame)}</td>
       <td>${fmt(v.price)}</td>
       <td class="table-actions">
-        <button data-vip-edit="${escapeHtml(v.id)}">Edit</button>
-        <button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>
-        <button data-catalog-remove="${escapeHtml(v.id)}">Remove</button>
+        ${sessionCan("vip.edit") ? `<button data-vip-edit="${escapeHtml(v.id)}">Edit</button>` : ""}
+        ${sessionCan("vip.toggle") ? `<button data-vip-toggle="${escapeHtml(v.id)}">${v.enabled ? "Disable" : "Enable"}</button>` : ""}
+        ${sessionCan("vip.edit") ? `<button data-catalog-remove="${escapeHtml(v.id)}">Remove</button>` : ""}
       </td>
     </tr>
   `).join("");
@@ -2159,7 +2165,7 @@ function renderPolicies() {
   root.innerHTML = Object.entries(state.policies).map(([key, value]) => `
     <div class="policy-row">
       <div><strong>${escapeHtml(pretty(key))}</strong><small>Current value: ${escapeHtml(value)}</small></div>
-      <button data-policy-edit="${escapeHtml(key)}">Edit</button>
+      ${sessionCan("policies.edit") ? `<button data-policy-edit="${escapeHtml(key)}">Edit</button>` : ""}
     </div>
   `).join("");
 }
@@ -2192,11 +2198,12 @@ function renderCatalogList(rootId, kind, emptyText) {
         <span class="badge ${item.enabled ? "gold" : ""}">${item.enabled ? "Active" : "Off"}</span>
       </div>
       <div class="button-row">
-        <button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>
-        <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
-          ${item.enabled ? "Disable" : "Enable"}
-        </button>
-        <button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>
+        ${sessionCan(catalogPermission(item, "edit")) ? `<button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>` : ""}
+        ${sessionCan(catalogPermission(item, "toggle")) ? `
+          <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
+            ${item.enabled ? "Disable" : "Enable"}
+          </button>` : ""}
+        ${sessionCan(catalogPermission(item, "remove")) ? `<button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>` : ""}
       </div>
     </div>
   `).join("");
@@ -3763,6 +3770,12 @@ document.body.addEventListener("click", async e => {
   if (catalogToggle) {
     const id = String(catalogToggle.dataset.catalogToggle || "");
     const enabled = String(catalogToggle.dataset.nextEnabled) === "true";
+    const item = state.catalog.find((entry) => entry.id === id);
+    if (!item) { toast("Catalog item not found."); return; }
+    if (!sessionCan(catalogPermission(item, "toggle"))) {
+      toast("Assigned permission required.");
+      return;
+    }
     try {
       await api("/api/owner/catalog/" + encodeURIComponent(id), {
         method: "PATCH",
