@@ -100,6 +100,10 @@ void main() {
 
   test('room game logo and Rocket stages stay on latest reference layout', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room, contains("Key('room-rocket-floating-button')"));
+    expect(room, contains("Key('realistic-black-rocket-logo')"));
+    expect(room, contains('class _StealthRocketPainter'));
+    expect(room, isNot(contains('Icons.rocket_launch_rounded')));
     expect(room, contains("Key('room-game-floating-button')"));
     expect(room, contains('child: const _ReferenceGameLogo(size: 54)'));
     expect(room, contains("Key('game-keyboard-logo')"));
