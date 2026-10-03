@@ -177,12 +177,14 @@ class RoomAccessResult {
     required this.blocked,
     required this.attemptsRemaining,
     this.error,
+    this.roomPassword,
   });
 
   final bool allowed;
   final bool blocked;
   final int attemptsRemaining;
   final String? error;
+  final String? roomPassword;
 }
 
 class DiscoveryService {
@@ -195,6 +197,7 @@ class DiscoveryService {
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  String? lastGeneratedRoomPassword;
 
   final List<RoomSummary> rooms = <RoomSummary>[];
   final List<String> searchHistory = <String>[];
@@ -406,12 +409,14 @@ class DiscoveryService {
       jsonEncode(<String, dynamic>{
         'room_id': roomId,
         'locked': locked,
-        'password': locked ? password : null,
       }),
     );
 
     final response = await request.close();
     final data = await _readJson(response);
+    lastGeneratedRoomPassword = locked
+        ? data['room_password']?.toString()
+        : null;
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to change room lock',
@@ -641,6 +646,7 @@ class DiscoveryService {
       blocked: data['blocked'] == true,
       attemptsRemaining: _asInt(data['attempts_remaining']),
       error: data['error']?.toString(),
+      roomPassword: data['room_password']?.toString(),
     );
   }
 
