@@ -69,20 +69,20 @@ void main() {
     expect(profile.contains("Key('profile-identity-tags')"), true);
   });
 
-  test('backend keeps V tag metadata and automatic Host Agency identity', () {
+  test('backend keeps V tag metadata and automatic Host Agency BD identity', () {
     final directory =
         File('../tinni_worker/src/app_directory.js').readAsStringSync();
     expect(directory.contains("kind TEXT NOT NULL DEFAULT 'custom'"), true);
     expect(directory.contains('designation TEXT NOT NULL'), true);
     expect(directory.contains('background_color TEXT'), true);
     expect(directory.contains('listUserIdentityTags'), true);
-    expect(directory.contains("role IN ('host','agency')"), true);
+    expect(directory.contains("role IN ('host','agency','bd')"), true);
     expect(
-      directory.contains('name: role === "agency" ? "Agency" : "Host"'),
+      directory.contains('name: role === "agency" ? "Agency" : role === "bd" ? "BD" : "Host"'),
       true,
     );
     expect(
-      directory.contains('designation: role === "agency" ? "Agency" : "Host"'),
+      directory.contains('designation: role === "agency" ? "Agency" : role === "bd" ? "BD" : "Host"'),
       true,
     );
     expect(directory.contains('color: "#69C9FF"'), true);
