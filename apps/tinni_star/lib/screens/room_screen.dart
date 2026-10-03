@@ -56,8 +56,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _luckyComboSending = false;
   String? _luckySessionId;
   int _luckySessionHighest = 0;
-  final List<Map<String, dynamic>> _luckyFeed = <Map<String, dynamic>>[];
-  bool _luckyFeedLoading = false;
   Timer? _luckyBubbleTimer;
   Timer? _luckyComboExpiryTimer;
   Timer? _emoteExpiryTimer;
@@ -142,7 +140,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.addListener(_refresh);
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
     _primeRoomSendingSummary();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLuckyFeed());
     widget.state.social.unreadMessages.addListener(_refresh);
     final account = widget.state.auth.current;
     if (account != null) {
@@ -2446,34 +2443,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _refreshLuckyFeed() async {
-    if (_luckyFeedLoading) return;
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    _luckyFeedLoading = true;
-    try {
-      final rows = await widget.state.roomSession.roomGiftFeed(
-        roomId: widget.room.id,
-        authToken: account.authToken,
-      );
-      final luckyRows = rows
-          .where((row) => row['multiplier'] != null)
-          .take(8)
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
-      if (!mounted) return;
-      setState(() {
-        _luckyFeed
-          ..clear()
-          ..addAll(luckyRows);
-      });
-    } catch (_) {
-      // Supplemental Lucky feed retries on the next timer tick.
-    } finally {
-      _luckyFeedLoading = false;
-    }
-  }
-
   Future<void> _openRechargeDirect() async {
     if (!mounted) return;
     await Navigator.push<void>(
@@ -2573,7 +2542,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       });
 
-      await _refreshLuckyFeed();
       if (multiplier >= 500) {
         await _refreshCountryRibbons();
       }
@@ -2908,103 +2876,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLuckyFeedOverlay() {
-    if (_luckyFeed.isEmpty) return const SizedBox.shrink();
-    final rows = _luckyFeed.take(3).toList(growable: false);
-    return Positioned(
-      key: const Key('lucky-live-feed-overlay'),
-      left: 8,
-      bottom: 220,
-      width: 220,
-      child: IgnorePointer(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final row in rows)
-              Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xDD120D18),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _giftInt(row['multiplier']) >= 200
-                        ? const Color(0xFFFFD45A)
-                        : const Color(0x665C4A72),
-                  ),
-                  boxShadow: _giftInt(row['multiplier']) >= 200
-                      ? const [
-                          BoxShadow(
-                            color: Color(0x66FFB52E),
-                            blurRadius: 9,
-                          ),
-                        ]
-                      : const [],
-                ),
-                child: Row(
-                  children: [
-                    Builder(
-                      builder: (context) {
-                        final avatar = _luckyAvatarProvider(
-                          row['sender_avatar_data_url'],
-                        );
-                        final name = row['sender_name']?.toString() ?? 'User';
-                        return CircleAvatar(
-                          radius: 12,
-                          backgroundColor: const Color(0xFF2E2140),
-                          backgroundImage: avatar,
-                          child: avatar == null
-                              ? Text(
-                                  name.isNotEmpty ? name.characters.first : '?',
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFD45A),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                )
-                              : null,
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            (row['sender_name']?.toString() ?? 'User') +
-                                ' • ' +
-                                (row['gift_name']?.toString() ?? 'Lucky Gift'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'Won ${_giftInt(row['rebate_coins'])} coins • ${_giftInt(row['multiplier'])}×',
-                            style: TextStyle(
-                              color: _giftInt(row['multiplier']) >= 200
-                                  ? const Color(0xFFFFD45A)
-                                  : const Color(0xFFD8C9E9),
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
         ),
       ),
     );
@@ -8600,43 +8471,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               ),
             ),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: RoyalPalette.panel.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: FeaturePalette.discover.withValues(alpha: 0.52),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: FeaturePalette.discover.withValues(alpha: 0.12),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const ShiningIcon(
-                    icon: Icons.info_outline_rounded,
-                    color: FeaturePalette.discover,
-                    size: 14,
-                    boxSize: 27,
-                    glow: 0.24,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      widget.state.roomControls.settings.topic.isEmpty
-                          ? 'Ask your followers to support the room.'
-                          : widget.state.roomControls.settings.topic,
-                      style: const TextStyle(color: RoyalPalette.muted, fontSize: 10),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: ListView.builder(
                 key: const Key('room-message-list'),
@@ -8892,10 +8726,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 !_fruitJackpotOpen &&
                 !_fruitPartyOpen)
               _buildLuckyComboOverlay(),
-            if (_luckyFeed.isNotEmpty &&
-                !_fruitJackpotOpen &&
-                !_fruitPartyOpen)
-              _buildLuckyFeedOverlay(),
             if (!_fruitJackpotOpen && !_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),
