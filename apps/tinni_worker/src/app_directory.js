@@ -6900,7 +6900,17 @@ export class AppDirectoryStore extends DurableObject {
     const recipient = this.settlementRecipient(recipientUserIdValue);
     const usdCents = Math.floor(Number(usdCentsValue || 0));
     if (usdCents < 200) throw new Error("Minimum transfer is $2");
-    if (senderId === recipient.user_id) throw new Error("Cannot transfer to your own account");
+
+    // Self transfer is valid when the same ID also owns an active Coin Seller
+    // or Merchant wallet. Settlement money moves from Host/Agency/BD earnings
+    // into that role wallet, so sender ID and recipient ID may be identical.
+    const recipientWallet = this._privilegedWalletGuard(
+      recipient.user_id,
+      recipient.role,
+    );
+    if (recipientWallet.security_frozen) {
+      throw new Error("Recipient Coin Seller or Merchant wallet is security-frozen");
+    }
 
     const wallet = this.getWallet(senderId);
     if (!(wallet.is_host || wallet.is_agency || wallet.is_bd)) {
@@ -6932,11 +6942,15 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
 
-    this._ensureSettlementBalance(recipient.user_id);
-    this.ctx.storage.sql.exec(
-      "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
-      usdCents, Date.now(), recipient.user_id,
+    // Coin Seller / Merchant wallets are coin-denominated. Their displayed
+    // USD value is derived from the fixed 2,000,000 coins = $1 rate.
+    const creditedCoins = Math.floor((usdCents * COINS_PER_USD) / 100);
+    this._creditPrivilegedWalletAuthorized(
+      recipient.user_id,
+      recipient.role,
+      creditedCoins,
     );
+
     const id = "settle-" + crypto.randomUUID();
     const now = Date.now();
     this.ctx.storage.sql.exec(
@@ -6946,9 +6960,17 @@ export class AppDirectoryStore extends DurableObject {
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'settlement_transfer',0,?,?,?,?,?)",
       "wallet-" + crypto.randomUUID(), senderId, -diamondsDebited, id,
-      "Transferred $" + (usdCents / 100).toFixed(2) + " to " + recipient.user_id, now,
+      "Transferred $" + (usdCents / 100).toFixed(2) + " to " + recipient.role.replaceAll("_", " ") + " ID " + recipient.user_id, now,
     );
-    return { ok: true, transfer_id: id, recipient, usd_cents: usdCents, diamonds_debited: diamondsDebited, wallet: this.getWallet(senderId) };
+    return {
+      ok: true,
+      transfer_id: id,
+      recipient,
+      usd_cents: usdCents,
+      credited_coins: creditedCoins,
+      diamonds_debited: diamondsDebited,
+      wallet: this.getWallet(senderId),
+    };
   }
 
   settlementTransfers(userIdValue) {
