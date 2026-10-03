@@ -1838,7 +1838,11 @@ class _HostDataScreenState extends State<HostDataScreen> {
     try {
       final results = await Future.wait<dynamic>([
         widget.state.backend.wallet(account.authToken),
-        widget.state.backend.settlementTransfers(account.authToken),
+        _role == 'host'
+            ? widget.state.backend.settlementTransfers(account.authToken)
+            : Future<List<Map<String, dynamic>>>.value(
+                const <Map<String, dynamic>>[],
+              ),
         widget.state.backend.hierarchyPortal(
           account.authToken,
           role: _role,
@@ -2337,7 +2341,7 @@ class _HostDataScreenState extends State<HostDataScreen> {
                   label: Text(
                     _role == 'host'
                         ? 'Exchange / Transfer'
-                        : 'Transfer settlement',
+                        : 'Transfer commission ($10 minimum)',
                   ),
                 ),
               ),
@@ -2544,59 +2548,61 @@ class _HostDataScreenState extends State<HostDataScreen> {
                       _walletCard(),
                     ] else
                       _memberList(),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Settlement transfer history',
-                      style: TextStyle(
-                        color: _mineText,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
+                    if (_role == 'host') ...[
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Host sent / withdrawn dollars',
+                        style: TextStyle(
+                          color: _mineText,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (transfers.isEmpty)
-                      Card(
-                        color: _minePanel,
-                        child: const Padding(
-                          padding: EdgeInsets.all(18),
-                          child: Center(
-                            child: Text(
-                              'No settlement transfers yet',
-                              style: TextStyle(color: _mineMuted),
+                      const SizedBox(height: 8),
+                      if (transfers.isEmpty)
+                        Card(
+                          color: _minePanel,
+                          child: const Padding(
+                            padding: EdgeInsets.all(18),
+                            child: Center(
+                              child: Text(
+                                'No Host dollar transfers yet',
+                                style: TextStyle(color: _mineMuted),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    for (final row in transfers)
-                      Card(
-                        color: _minePanel,
-                        shape: RoundedRectangleBorder(
-                          side: const BorderSide(color: _mineBorder),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: ListTile(
-                          iconColor: _mineText,
-                          textColor: _mineText,
-                          leading: const Icon(Icons.payments_rounded),
-                          title: Text(
-                            _usd(_int(row['usd_cents'])),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w800),
+                      for (final row in transfers)
+                        Card(
+                          color: _minePanel,
+                          shape: RoundedRectangleBorder(
+                            side: const BorderSide(color: _mineBorder),
+                            borderRadius: BorderRadius.circular(18),
                           ),
-                          subtitle: Text(
-                            'To ID ' +
-                                (row['recipient_user_id']?.toString() ?? '') +
-                                ' • ' +
-                                (row['recipient_role']
-                                        ?.toString()
-                                        .replaceAll('_', ' ') ??
-                                    '') +
-                                '\n' +
-                                _dateText(row['created_at']),
+                          child: ListTile(
+                            iconColor: _mineText,
+                            textColor: _mineText,
+                            leading: const Icon(Icons.payments_rounded),
+                            title: Text(
+                              _usd(_int(row['usd_cents'])),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            subtitle: Text(
+                              'To ID ' +
+                                  (row['recipient_user_id']?.toString() ?? '') +
+                                  ' • ' +
+                                  (row['recipient_role']
+                                          ?.toString()
+                                          .replaceAll('_', ' ') ??
+                                      '') +
+                                  '\n' +
+                                  _dateText(row['created_at']),
+                            ),
+                            isThreeLine: true,
                           ),
-                          isThreeLine: true,
                         ),
-                      ),
+                    ],
                   ],
                 ),
         ),
