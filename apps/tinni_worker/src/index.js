@@ -13,12 +13,14 @@ const STAFF_PERMISSIONS = new Set([
   // Whole-module permissions are intentionally not accepted.
   "users.search",
   "users.full_dashboard",
+  "users.view_call_history",
   "users.edit_profile",
   "verification.view",
   "verification.review",
   "verification.direct_verify",
   "verification.revoke",
   "messaging.search",
+  "messaging.view_inbox",
   "messaging.send",
   "messaging.tags",
   "messaging.officials",
@@ -779,7 +781,8 @@ function filterOwnerStateForSession(session, fullState, dashboard) {
   };
   const filteredDashboard = {
     users: sessionHasAnyPermission(session, [
-      "users.search", "users.full_dashboard", "messaging.search",
+      "users.search", "users.full_dashboard", "users.view_call_history",
+      "messaging.search", "messaging.view_inbox",
       "verification.view", "verification.direct_verify",
     ]) ? Number(dashboard?.users || 0) : 0,
     active_rooms: sessionHasPermissionPrefix(session, "rooms.")
@@ -5484,6 +5487,13 @@ export default {
       const detail = await directory.ownerUserDetail(userId);
       if (!detail) return json({ ok: false, error: "User not found" }, 404);
 
+      if (!sessionHasPermission(session, "messaging.view_inbox")) {
+        detail.messages = [];
+      }
+      if (!sessionHasPermission(session, "users.view_call_history")) {
+        detail.calls = [];
+      }
+
       let current_room = null;
       const roomId = String(detail.presence?.room_id || "").trim();
       if (roomId && detail.presence?.room_socket_connected === true) {
@@ -5504,6 +5514,51 @@ export default {
       }
 
       return json({ ok: true, detail: { ...detail, current_room } });
+    }
+
+    if (url.pathname === "/api/owner/inbox-threads" && request.method === "GET") {
+      if (
+        !sessionHasPermission(session, "users.full_dashboard") ||
+        !sessionHasPermission(session, "messaging.view_inbox")
+      ) {
+        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
+      try {
+        return json({
+          ok: true,
+          threads: await getAppDirectoryStore(env).ownerInboxThreads(userId),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/inbox-conversation" && request.method === "GET") {
+      if (
+        !sessionHasPermission(session, "users.full_dashboard") ||
+        !sessionHasPermission(session, "messaging.view_inbox")
+      ) {
+        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
+      if (!userId || !peerUserId) {
+        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
+      }
+      try {
+        return json({
+          ok: true,
+          messages: await getAppDirectoryStore(env).ownerInboxConversation(
+            userId,
+            peerUserId,
+            url.searchParams.get("limit") || 500,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
+      }
     }
 
     if (url.pathname === "/api/owner/hierarchy-detail" && request.method === "GET") {
