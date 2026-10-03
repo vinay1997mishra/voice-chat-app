@@ -128,6 +128,21 @@ assert.match(
 );
 assert.match(
   directory,
+  /!systemAction && !this\.areFriends\(fromUserId, toUserId\)/,
+  "Normal text and image direct messages must require mutual friendship",
+);
+assert.match(
+  directory,
+  /type: "friend_status_changed"[\s\S]{0,180}peer_user_id:/,
+  "Follow/unfollow must push realtime friend-status changes to message clients",
+);
+assert.match(
+  directory,
+  /JOIN app_follows b[\s\S]{0,220}b\.follower_id = a\.target_id[\s\S]{0,180}b\.target_id = a\.follower_id/,
+  "Friend status must be derived from both users following each other",
+);
+assert.match(
+  directory,
   /canAccessDirectMessageMedia\(userIdValue, messageIdValue\)/,
   "Stored message photos must only be readable by conversation participants",
 );
