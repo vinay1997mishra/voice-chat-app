@@ -2723,22 +2723,55 @@ export default {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const coins = Number(tx?.total_cost || 0);
-            if (!receiverId || !Number.isSafeInteger(coins) || coins <= 0) {
+            const socialValue = Number(
+              tx?.ranking_value ??
+              tx?.social_value_coins ??
+              tx?.receiver_diamonds ??
+              tx?.total_cost ??
+              0,
+            );
+            if (!receiverId ||
+                !Number.isSafeInteger(socialValue) ||
+                socialValue <= 0) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + coins,
+              Number(receiverTotals.get(receiverId) || 0) + socialValue,
             );
           }
-          if (receiverTotals.size > 0) {
-            await getRoomPresenceStore(env, roomId).recordGift({
-              receivers: [...receiverTotals.entries()].map(
-                ([user_id, coins]) => ({ user_id, coins }),
+          const visualReceiverIds = [...new Set(
+            transactions
+              .map((tx) => String(tx?.receiver_id || "").trim())
+              .filter(Boolean),
+          )];
+          await getRoomPresenceStore(env, roomId).recordGift({
+            receivers: [...receiverTotals.entries()].map(
+              ([user_id, socialValue]) => ({ user_id, coins: socialValue }),
+            ),
+            event: {
+              id: String(transactions[0]?.id || crypto.randomUUID()),
+              sender_id: String(appSession.user.user_id),
+              gift_id: String(transactions[0]?.gift_id || body.gift_id || ""),
+              gift_name: String(
+                transactions[0]?.gift_name || body.gift_name || "Gift",
               ),
-            });
-          }
+              receiver_ids: visualReceiverIds,
+              quantity: Math.max(1, Number(body.quantity || 1)),
+              lucky: Boolean(result?.lucky),
+              multiplier: Math.max(
+                0,
+                Number(result?.lucky?.multiplier || 0),
+              ),
+              rebate_coins: Math.max(
+                0,
+                Number(result?.lucky?.rebate_coins || 0),
+              ),
+              created_at: Number(
+                transactions[0]?.created_at || Date.now(),
+              ),
+            },
+          });
         }
         return json(result, 201);
       } catch (error) {
