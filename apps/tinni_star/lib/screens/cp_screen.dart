@@ -457,12 +457,6 @@ class _CpScreenState extends State<CpScreen> {
                     'Regular gifts count at 100% of normalized intimacy. Lucky gifts count only 10%. If both CP partners exchange gifts on the same day, eligible gift intimacy gets a 1.2× daily exchange multiplier.',
               ),
               _CpRuleTile(
-                icon: Icons.mic_rounded,
-                title: 'Sweet mic task',
-                subtitle:
-                    'Being on mic together: every completed 5 minutes = 200 intimacy points.',
-              ),
-              _CpRuleTile(
                 icon: Icons.workspace_premium_rounded,
                 title: 'CP level cycle',
                 subtitle:
