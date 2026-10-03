@@ -4703,11 +4703,23 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
 
+    const friend = this.areFriends(userId, targetId);
+    this._notifyMessageSocket(userId, {
+      type: "friend_status_changed",
+      peer_user_id: targetId,
+      friend,
+    });
+    this._notifyMessageSocket(targetId, {
+      type: "friend_status_changed",
+      peer_user_id: userId,
+      friend,
+    });
+
     return {
       ok: true,
       target_user_id: targetId,
       following: Boolean(followingValue),
-      friend: this.areFriends(userId, targetId),
+      friend,
     };
   }
 
