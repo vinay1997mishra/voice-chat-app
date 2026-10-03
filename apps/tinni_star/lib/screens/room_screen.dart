@@ -41,6 +41,9 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
+  final ScrollController _roomMessageScrollController = ScrollController();
+  int _lastRoomMessageCount = 0;
+  String? _roomLockPassword;
   final Set<String> _selectedGiftRecipients = <String>{};
   GiftDefinition? _luckyComboGift;
   List<String> _luckyComboRecipients = <String>[];
@@ -324,6 +327,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       authToken: account.authToken,
     );
 
+    await _refreshOwnerRoomLockPassword();
+
     // The room-presence backend is authoritative for Free mic / Request mode.
     // Do not overwrite the freshly loaded server value with the local default
     // when the room is reopened. Keep the local room settings mirror in sync
@@ -463,59 +468,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<String?> _promptNewRoomPassword() async {
-    var passwordValue = '';
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Lock Room'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Set a password. Users will need it to enter this room.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              autofocus: true,
-              obscureText: true,
-              maxLength: 5,
-              inputFormatters: <TextInputFormatter>[
-                FilteringTextInputFormatter.digitsOnly,
-              ],
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.done,
-              onChanged: (value) => passwordValue = value,
-              decoration: const InputDecoration(
-                labelText: 'Room password',
-                helperText: 'Exactly 5 digits',
-              ),
-              onSubmitted: (value) {
-                if (RegExp(r'^\d{5}$').hasMatch(value)) {
-                  Navigator.pop(dialogContext, value);
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (!RegExp(r'^\d{5}$').hasMatch(passwordValue)) return;
-              Navigator.pop(dialogContext, passwordValue);
-            },
-            child: const Text('Lock'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _toggleRoomLock() async {
     if (!_isRoomOwner) {
       _snack('Only the room owner can change room lock.');
@@ -528,42 +480,158 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final currentlyLocked =
         controls.settings.visibility == RoomVisibility.privateRoom;
 
-    if (currentlyLocked) {
-      try {
-        await widget.state.discovery.setRoomLock(
-          authToken: account.authToken,
-          roomId: widget.room.id,
-          locked: false,
-        );
-        controls.settings = controls.settings.copyWith(
-          visibility: RoomVisibility.publicRoom,
-        );
-        if (mounted) setState(() {});
-        _snack('Room opened. Password attempts have been reset.');
-      } catch (error) {
-        _snack(error.toString().replaceFirst('Bad state: ', ''));
-      }
-      return;
-    }
-
-    final password = await _promptNewRoomPassword();
-    if (password == null) return;
-
     try {
       await widget.state.discovery.setRoomLock(
         authToken: account.authToken,
         roomId: widget.room.id,
-        locked: true,
-        password: password,
+        locked: !currentlyLocked,
       );
       controls.settings = controls.settings.copyWith(
-        visibility: RoomVisibility.privateRoom,
+        visibility: currentlyLocked
+            ? RoomVisibility.publicRoom
+            : RoomVisibility.privateRoom,
       );
-      if (mounted) setState(() {});
-      _snack('Room locked with password.');
+      final generated = currentlyLocked
+          ? null
+          : widget.state.discovery.lastGeneratedRoomPassword;
+      if (mounted) {
+        setState(() => _roomLockPassword = generated);
+      }
+      if (currentlyLocked) {
+        _snack('Room unlocked. Owner password is not required.');
+      } else {
+        _snack(
+          generated == null || generated.isEmpty
+              ? 'Room locked.'
+              : 'Room locked • Password ' + generated,
+        );
+      }
     } catch (error) {
       _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
+  }
+
+  Future<void> _refreshOwnerRoomLockPassword() async {
+    if (!_isRoomOwner) {
+      if (mounted && _roomLockPassword != null) {
+        setState(() => _roomLockPassword = null);
+      }
+      return;
+    }
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      final status = await widget.state.discovery.getRoomAccessStatus(
+        authToken: account.authToken,
+        roomId: widget.room.id,
+      );
+      if (!mounted) return;
+      setState(() => _roomLockPassword = status.roomPassword);
+    } catch (_) {
+      // Lock controls remain usable even if the owner code refresh retries.
+    }
+  }
+
+  void _scrollRoomCommentsToNewest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_roomMessageScrollController.hasClients) return;
+      final position = _roomMessageScrollController.position;
+      _roomMessageScrollController.animateTo(
+        position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  RoomPresenceMember? _roomCommentMember(RoomMessage message) {
+    final account = widget.state.auth.current;
+    final currentUserId = account?.userId;
+    for (final member in widget.state.roomSession.liveMembers) {
+      if (message.author == 'You' && member.userId == currentUserId) {
+        return member;
+      }
+      if (message.author != 'You' && member.displayName == message.author) {
+        return member;
+      }
+    }
+    return null;
+  }
+
+  String _roomCommentTagLabel(OwnerTag tag) {
+    if (tag.kind == 'v_official' && tag.designation.trim().isNotEmpty) {
+      return tag.designation.trim();
+    }
+    return tag.name.trim();
+  }
+
+  Widget _buildRoomComment(RoomMessage message) {
+    final member = _roomCommentMember(message);
+    final tags = member?.ownerTags ?? const <OwnerTag>[];
+    final children = <InlineSpan>[];
+
+    for (final tag in tags) {
+      final label = _roomCommentTagLabel(tag);
+      if (label.isEmpty) continue;
+      final color = _ownerTagColor(tag.colorHex);
+      children.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            key: Key(
+              'room-comment-tag-' +
+                  (member?.userId ?? 'unknown') +
+                  '-' +
+                  label,
+            ),
+            margin: const EdgeInsets.only(right: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color, width: 0.9),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10.5,
+                height: 1.0,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    children.add(
+      TextSpan(
+        text: message.author + ': ',
+        style: const TextStyle(
+          color: FeaturePalette.message,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
+      ),
+    );
+    children.add(
+      TextSpan(
+        text: message.text,
+        style: const TextStyle(
+          color: RoyalPalette.cream,
+          fontSize: 12,
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Text.rich(
+        TextSpan(children: children),
+        style: const TextStyle(fontSize: 12, height: 1.25),
+      ),
+    );
   }
 
   Color get _seatThemeAccent {
@@ -677,6 +745,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
+    _roomMessageScrollController.dispose();
     super.dispose();
   }
 
@@ -2026,89 +2095,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             }
           }
 
-          Widget tagPill(
-            String name,
-            String colorHex, {
-            bool medal = false,
-            String? keyPrefix,
-          }) {
-            final color = _ownerTagColor(colorHex);
-            return Container(
-              key: Key(
-                (keyPrefix ?? (medal ? 'room-owner-medal-' : 'room-owner-tag-')) +
-                    currentMember.userId +
-                    '-' +
-                    name,
-              ),
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: color),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (medal) ...[
-                    Icon(
-                      Icons.workspace_premium_rounded,
-                      size: 13,
-                      color: color,
-                    ),
-                    const SizedBox(width: 3),
-                  ],
-                  Text(
-                    name,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          Widget badgeRow({
-            required String label,
-            required List<Widget> children,
-          }) {
-            return SizedBox(
-              height: 31,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: RoyalPalette.muted,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: children.isEmpty
-                        ? const Text(
-                            '—',
-                            style: TextStyle(
-                              color: RoyalPalette.muted,
-                              fontSize: 10,
-                            ),
-                          )
-                        : ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: children,
-                          ),
-                  ),
-                ],
-              ),
-            );
-          }
-
           return Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -2180,25 +2166,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           color: RoyalPalette.muted,
                           fontSize: 10,
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      badgeRow(
-                        label: 'Tags',
-                        children: [
-                          for (final tag in currentMember.ownerTags)
-                            tagPill(tag.name, tag.colorHex),
-                        ],
-                      ),
-                      badgeRow(
-                        label: 'Medals',
-                        children: [
-                          for (final medal in currentMember.ownerMedals)
-                            tagPill(
-                              medal.name,
-                              medal.colorHex,
-                              medal: true,
-                            ),
-                        ],
                       ),
                       const Spacer(),
                       SizedBox(
@@ -5468,8 +5435,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 subtitle: Text(
                                   controls.settings.visibility ==
                                           RoomVisibility.privateRoom
-                                      ? 'Locked • password required to enter'
-                                      : 'Public • no room password',
+                                      ? (_roomLockPassword == null ||
+                                              _roomLockPassword!.isEmpty
+                                          ? 'Locked • loading password…'
+                                          : 'Locked • Password ' +
+                                              _roomLockPassword!)
+                                      : 'Public • tap to generate room password',
                                 ),
                                 value: controls.settings.visibility ==
                                     RoomVisibility.privateRoom,
@@ -8642,99 +8613,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            Builder(
-              builder: (context) {
-                final tagged = widget.state.roomSession.liveMembers.where(
-                  (member) =>
-                      member.ownerTags.isNotEmpty ||
-                      member.ownerMedals.isNotEmpty,
-                ).toList(growable: false);
-                if (tagged.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return SizedBox(
-                  key: const Key('room-live-owner-badges'),
-                  height: 18,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    children: [
-                      for (final member in tagged) ...[
-                        for (final tag in member.ownerTags)
-                          Container(
-                            key: Key(
-                              'live-owner-tag-' +
-                                  member.userId +
-                                  '-' +
-                                  tag.name,
-                            ),
-                            margin: const EdgeInsets.only(right: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(7),
-                              border: Border.all(
-                                color: _ownerTagColor(tag.colorHex),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              tag.name,
-                              style: TextStyle(
-                                color: _ownerTagColor(tag.colorHex),
-                                fontSize: 7,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        for (final medal in member.ownerMedals)
-                          Container(
-                            key: Key(
-                              'live-owner-medal-' +
-                                  member.userId +
-                                  '-' +
-                                  medal.name,
-                            ),
-                            margin: const EdgeInsets.only(right: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(7),
-                              border: Border.all(
-                                color: _ownerTagColor(medal.colorHex),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.workspace_premium_rounded,
-                                  size: 7,
-                                  color: _ownerTagColor(medal.colorHex),
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  medal.name,
-                                  style: TextStyle(
-                                    color: _ownerTagColor(medal.colorHex),
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
             const SizedBox(height: 2),
             SizedBox(
               key: const Key('tinni-seat-grid'),
@@ -8795,29 +8673,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             Expanded(
               child: ListView.builder(
                 key: const Key('room-message-list'),
+                controller: _roomMessageScrollController,
                 padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
                 itemCount: controller.messages.length,
-                itemBuilder: (_, index) {
-                  final message = controller.messages[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: message.author + ': ',
-                            style: const TextStyle(
-                              color: FeaturePalette.message,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          TextSpan(text: message.text, style: const TextStyle(color: RoyalPalette.cream)),
-                        ],
-                      ),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  );
-                },
+                itemBuilder: (_, index) =>
+                    _buildRoomComment(controller.messages[index]),
               ),
             ),
             SafeArea(
@@ -9353,45 +9213,6 @@ class _RoomMemberProfilePage extends StatelessWidget {
     }
   }
 
-  Widget _pill(OwnerTag item, {required bool medal}) {
-    final color = _color(item.colorHex);
-    return Container(
-      key: Key(
-        (medal ? 'full-profile-medal-' : 'full-profile-tag-') +
-            member.userId +
-            '-' +
-            item.name,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (medal) ...[
-            Icon(
-              Icons.workspace_premium_rounded,
-              size: 14,
-              color: color,
-            ),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            item.name,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final avatar = _avatar;
@@ -9449,48 +9270,6 @@ class _RoomMemberProfilePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          const Text(
-            'Tags',
-            style: TextStyle(
-              color: RoyalPalette.cream,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (member.ownerTags.isEmpty)
-            const Text('No tags', style: TextStyle(color: RoyalPalette.muted))
-          else
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [
-                for (final tag in member.ownerTags)
-                  _pill(tag, medal: false),
-              ],
-            ),
-          const SizedBox(height: 20),
-          const Text(
-            'Medals',
-            style: TextStyle(
-              color: RoyalPalette.cream,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (member.ownerMedals.isEmpty)
-            const Text('No medals', style: TextStyle(color: RoyalPalette.muted))
-          else
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [
-                for (final medal in member.ownerMedals)
-                  _pill(medal, medal: true),
-              ],
-            ),
-          const SizedBox(height: 20),
           RoyalPanel(
             accentColor: FeaturePalette.social,
             child: Column(
