@@ -1739,10 +1739,12 @@ class HostDataScreen extends StatefulWidget {
   const HostDataScreen({
     super.key,
     required this.state,
+    this.roleLabel = 'Host',
     this.onTransfer,
   });
 
   final TinniState state;
+  final String roleLabel;
   final Future<void> Function()? onTransfer;
 
   @override
@@ -1789,22 +1791,16 @@ class _HostDataScreenState extends State<HostDataScreen> {
   @override
   Widget build(BuildContext context) {
     final wallet = widget.state.wallet;
-    final roleText = wallet.isHost
-        ? 'Host'
-        : wallet.isAgency
-            ? 'Agency'
-            : wallet.isBd
-                ? 'BD'
-                : 'Not enrolled';
+    final roleText = widget.roleLabel;
 
     return Scaffold(
-      key: const Key('host-data-screen'),
+      key: Key('role-data-screen-' + widget.roleLabel.toLowerCase()),
       backgroundColor: _mineBg,
       appBar: AppBar(
         backgroundColor: _mineBg,
         foregroundColor: _mineText,
         elevation: 0,
-        title: const Text('Host data'),
+        title: Text(widget.roleLabel + ' Panel'),
       ),
       body: _MineSubpageBackground(
         child: RefreshIndicator(
@@ -1840,7 +1836,11 @@ class _HostDataScreenState extends State<HostDataScreen> {
                         ),
                         const Divider(height: 1),
                         ListTile(
-                          title: const Text('Host diamonds'),
+                          title: Text(
+                            widget.roleLabel == 'Host'
+                                ? 'Host diamonds'
+                                : widget.roleLabel + ' balance',
+                          ),
                           trailing: Text(wallet.diamonds.toString()),
                         ),
                         ListTile(
