@@ -39,6 +39,7 @@ This file defines features that must survive future updates. A feature may be ch
 - Lucky Gift social/counting value is fixed at 10% for seat received value, Host diamonds, room ranking/room experience, Rocket progress and CP intimacy. Non-Lucky gifts count 100%.
 - A non-Host recipient receives no diamonds; activating Host eligibility is required before gift diamonds can be credited.
 - Rocket keeps 10 stages: 8M, 15M, 30M, 50M, 90M, 150M, 200M, 250M, 350M and 500M.
+- The floating Rocket visual is locked to the approved **realistic stealth-black design**: matte/graphite metallic body, sharp glossy black nose, dark fins with red accents, cyan/blue glass window, steel nozzle, and white-hot/yellow/orange exhaust flame. The old pink/purple cartoon rocket icon must not return.
 - User-created room names and comments are stored/displayed as entered, without automatic translation.
 - Room public ID remains the owner User ID.
 - The room must not show the old **“Ask your followers to support the room.”** topic/support banner.
