@@ -4783,6 +4783,48 @@ export default {
       return json({ ok: true, detail: { ...detail, current_room } });
     }
 
+    if (url.pathname === "/api/owner/user-inbox" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
+      try {
+        const result = await getAppDirectoryStore(env).ownerMessageThreads(userId);
+        await writeAudit(env, session, "user.inbox.view", "user", userId, {
+          thread_count: Array.isArray(result?.threads) ? result.threads.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/user-conversation" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
+      if (!userId || !peerUserId) {
+        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
+      }
+      try {
+        const result = await getAppDirectoryStore(env).ownerConversation(
+          userId,
+          peerUserId,
+          url.searchParams.get("limit") || 500,
+        );
+        await writeAudit(env, session, "user.inbox.thread.view", "user", userId, {
+          peer_user_id: peerUserId,
+          message_count: Array.isArray(result?.messages) ? result.messages.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
+      }
+    }
+
     if (url.pathname === "/api/owner/verified-users" && request.method === "GET") {
       if (!ownerOnly(session)) {
         return json({ ok: false, error: "Owner access required" }, 403);

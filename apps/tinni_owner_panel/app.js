@@ -783,24 +783,28 @@ async function openOwnerUserProfile(userId) {
   const dialog = document.getElementById("ownerProfileDialog");
   const root = document.getElementById("ownerProfileContent");
   if (!dialog || !root) return;
+  const requestedUserId = String(userId || "").trim();
   root.innerHTML = '<div class="empty-state">Loading full ID…</div>';
+  root.dataset.ownerProfileUserId = requestedUserId;
   if (!dialog.open) dialog.showModal();
 
   try {
-    const data = await api("/api/owner/user-detail?user_id=" + encodeURIComponent(String(userId || "")));
+    const data = await api("/api/owner/user-detail?user_id=" + encodeURIComponent(requestedUserId));
     const detail = data.detail || {};
     const user = detail.user || {};
     const room = detail.current_room;
     const messages = Array.isArray(detail.messages) ? detail.messages : [];
     const calls = Array.isArray(detail.calls) ? detail.calls : [];
     const identityTags = Array.isArray(detail.identity_tags) ? detail.identity_tags : [];
+    const currentVip = Number(detail.controls?.vip_level || 0);
 
+    root.dataset.ownerProfileUserId = String(user.user_id || requestedUserId);
     root.innerHTML = `
       <div class="owner-profile-hero">
         ${user.avatar_data_url
           ? `<img src="${escapeHtml(user.avatar_data_url)}" alt="" class="owner-profile-avatar">`
           : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
-        <div>
+        <div class="owner-profile-main-copy">
           <h2>${escapeHtml(user.display_name || user.user_id || "User")}</h2>
           <p>ID ${escapeHtml(user.user_id || "")} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
           <div class="chips">${userTagHtml(identityTags)}</div>
@@ -809,24 +813,52 @@ async function openOwnerUserProfile(userId) {
 
       <div class="rule-grid owner-profile-grid">
         <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
-        <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
-        <div class="rule"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
-        <div class="rule"><strong>VIP</strong><span>${Number(detail.controls?.vip_level || 0) || "None"}</span></div>
+        <div class="rule owner-control-rule">
+          <div class="owner-control-head"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
+          <div class="owner-inline-control">
+            <input type="number" min="1" step="1" inputmode="numeric" placeholder="Amount" data-owner-wallet-amount="coins">
+            <button type="button" class="btn primary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="coins" data-operation="credit">+ Add</button>
+            <button type="button" class="btn secondary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="coins" data-operation="debit">− Remove</button>
+          </div>
+        </div>
+        <div class="rule owner-control-rule">
+          <div class="owner-control-head"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
+          <div class="owner-inline-control">
+            <input type="number" min="1" step="1" inputmode="numeric" placeholder="Amount" data-owner-wallet-amount="diamonds">
+            <button type="button" class="btn primary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="diamonds" data-operation="credit">+ Add</button>
+            <button type="button" class="btn secondary" data-owner-wallet-change data-user-id="${escapeHtml(user.user_id)}" data-asset="diamonds" data-operation="debit">− Remove</button>
+          </div>
+        </div>
+        <div class="rule owner-control-rule">
+          <div class="owner-control-head"><strong>VIP</strong><span>${currentVip || "None"}</span></div>
+          <div class="owner-inline-control owner-vip-control">
+            <input type="number" min="1" step="1" inputmode="numeric" placeholder="VIP level" data-owner-vip-level value="${currentVip || ""}">
+            <button type="button" class="btn primary" data-owner-vip-change data-user-id="${escapeHtml(user.user_id)}" data-operation="grant">Add / Change</button>
+            <button type="button" class="btn secondary" data-owner-vip-change data-user-id="${escapeHtml(user.user_id)}" data-operation="remove">Remove</button>
+          </div>
+        </div>
         <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy)}</span></div>
         <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
         <div class="rule"><strong>Current room</strong><span>${room ? escapeHtml(room.room_name + " • " + room.room_id) : "Not in a live room"}</span></div>
         <div class="rule"><strong>Seat</strong><span>${room ? (room.seat_index === null || room.seat_index === undefined ? "Audience" : "Seat " + (Number(room.seat_index) + 1)) : "—"}</span></div>
       </div>
 
-      <div class="button-row" style="margin-top:12px">
-        ${room ? `<button type="button" class="btn primary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>` : ""}
+      <div class="button-row owner-profile-actions" style="margin-top:12px">
+        <button type="button" class="btn primary" data-owner-profile-fullview>Full View</button>
+        ${room ? `<button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>` : ""}
       </div>
 
       <div class="grid two owner-detail-sections">
-        <section class="panel">
-          <div class="panel-head"><h3>Inbox / Messages</h3><span class="badge">${messages.length}</span></div>
+        <section class="panel owner-inbox-card">
+          <div class="panel-head">
+            <div><h3>Inbox / Messages</h3><p>Open every conversation for this ID.</p></div>
+            <div class="button-row">
+              <span class="badge">${messages.length}</span>
+              <button type="button" class="btn primary" data-owner-open-inbox="${escapeHtml(user.user_id)}">Open all inbox</button>
+            </div>
+          </div>
           <div class="owner-history-list">
-            ${messages.length ? messages.map((message) => `
+            ${messages.length ? messages.slice(0, 8).map((message) => `
               <div class="owner-history-row">
                 <strong>${escapeHtml(message.from_user_id)} → ${escapeHtml(message.to_user_id)}</strong>
                 <span>${escapeHtml(message.text)}</span>
@@ -848,9 +880,108 @@ async function openOwnerUserProfile(userId) {
           </div>
         </section>
       </div>
+
+      <section id="ownerInboxBrowser" class="panel owner-inbox-browser" hidden></section>
     `;
   } catch (error) {
     root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to open ID.")}</div>`;
+  }
+}
+
+async function loadOwnerInbox(userId) {
+  const browser = document.getElementById("ownerInboxBrowser");
+  if (!browser) return;
+  browser.hidden = false;
+  browser.innerHTML = '<div class="empty-state">Loading complete inbox…</div>';
+  browser.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  try {
+    const data = await api("/api/owner/user-inbox?user_id=" + encodeURIComponent(String(userId || "")));
+    const threads = Array.isArray(data.threads) ? data.threads : [];
+    const target = data.user || {};
+    browser.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h3>${escapeHtml(target.display_name || target.user_id || "User")} — All Inbox</h3>
+          <p>ID ${escapeHtml(target.user_id || userId)} • ${threads.length} conversations</p>
+        </div>
+        <button type="button" class="btn secondary" data-owner-close-inbox>Close Inbox</button>
+      </div>
+      <div class="owner-thread-list">
+        ${threads.length ? threads.map((thread) => `
+          <button type="button" class="owner-thread-row"
+            data-owner-open-thread
+            data-owner-user-id="${escapeHtml(target.user_id || userId)}"
+            data-peer-user-id="${escapeHtml(thread.user_id)}"
+            data-peer-name="${escapeHtml(thread.display_name || thread.user_id)}">
+            <div class="owner-thread-avatar">
+              ${thread.avatar_data_url
+                ? `<img src="${escapeHtml(thread.avatar_data_url)}" alt="">`
+                : '<span>◎</span>'}
+            </div>
+            <div class="owner-thread-copy">
+              <strong>${escapeHtml(thread.display_name || thread.user_id)}</strong>
+              <small>ID ${escapeHtml(thread.user_id)}${thread.is_friend ? " • Friend" : ""}</small>
+              <span>${escapeHtml(thread.last_message?.text || "No messages yet")}</span>
+            </div>
+            <div class="owner-thread-meta">
+              <b>${fmt(thread.message_count || 0)}</b>
+              <small>${thread.last_message?.created_at ? escapeHtml(formatFullTimestamp(thread.last_message.created_at)) : ""}</small>
+            </div>
+          </button>
+        `).join("") : '<div class="empty-state">No friend or message conversations found.</div>'}
+      </div>
+    `;
+  } catch (error) {
+    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load inbox.")}</div>`;
+  }
+}
+
+async function loadOwnerConversation(userId, peerUserId, peerName = "") {
+  const browser = document.getElementById("ownerInboxBrowser");
+  if (!browser) return;
+  browser.hidden = false;
+  browser.innerHTML = '<div class="empty-state">Loading conversation…</div>';
+
+  try {
+    const data = await api(
+      "/api/owner/user-conversation?user_id=" + encodeURIComponent(String(userId || "")) +
+      "&peer_user_id=" + encodeURIComponent(String(peerUserId || "")) +
+      "&limit=1000"
+    );
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const target = data.user || {};
+    const peer = data.peer || {};
+    const targetId = String(target.user_id || userId);
+    browser.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h3>${escapeHtml(target.display_name || targetId)} ↔ ${escapeHtml(peer.display_name || peerName || peerUserId)}</h3>
+          <p>ID ${escapeHtml(targetId)} ↔ ID ${escapeHtml(peer.user_id || peerUserId)} • ${messages.length} messages</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary" data-owner-back-inbox="${escapeHtml(targetId)}">Back to Inbox</button>
+          <button type="button" class="btn secondary" data-owner-close-inbox>Close</button>
+        </div>
+      </div>
+      <div class="owner-conversation-list">
+        ${messages.length ? messages.map((message) => {
+          const fromTarget = String(message.from) === targetId;
+          const senderName = fromTarget
+            ? (target.display_name || targetId)
+            : (peer.display_name || peer.user_id || peerUserId);
+          return `
+            <div class="owner-message-row ${fromTarget ? "from-target" : "from-peer"}">
+              <strong>${escapeHtml(senderName)} <small>ID ${escapeHtml(message.from)}</small></strong>
+              <span>${escapeHtml(message.text)}</span>
+              <small>${escapeHtml(formatFullTimestamp(message.created_at))}${message.seen_at ? " • Seen" : ""}</small>
+            </div>
+          `;
+        }).join("") : '<div class="empty-state">No messages in this conversation.</div>'}
+      </div>
+    `;
+  } catch (error) {
+    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load conversation.")}</div>`;
   }
 }
 
@@ -1340,7 +1471,7 @@ function openAction(action, preset = {}) {
       field("starts_at","Start date/time (blank = now)","datetime-local") +
       field("ends_at","End date/time","datetime-local")
     ],
-    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["credit","Add coins"],["debit","Remove coins"],["ban","Ban wallet"],["unban","Unban wallet"]])],
+    "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + selectField("asset","Balance",[["coins","Coins"],["diamonds","Diamonds"]]) + field("amount","Amount","number") + selectField("operation","Operation",[["credit","Add"],["debit","Remove"],["ban","Ban wallet (coins wallet)"],["unban","Unban wallet (coins wallet)"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "bd-activate": ["BD Role", field("user_id","User ID") + selectField("operation","Operation",[["activate","Activate BD"],["remove","Remove BD"]])],
@@ -2020,7 +2151,102 @@ document.body.addEventListener("change", async (event) => {
 document.body.addEventListener("click", async e => {
   const profileClose = e.target.closest("[data-owner-profile-close]");
   if (profileClose) {
-    document.getElementById("ownerProfileDialog")?.close();
+    const profileDialog = document.getElementById("ownerProfileDialog");
+    profileDialog?.classList.remove("full-view");
+    profileDialog?.close();
+    return;
+  }
+
+  const fullViewButton = e.target.closest("[data-owner-profile-fullview]");
+  if (fullViewButton) {
+    const profileDialog = document.getElementById("ownerProfileDialog");
+    if (!profileDialog) return;
+    const enabled = profileDialog.classList.toggle("full-view");
+    fullViewButton.textContent = enabled ? "Compact View" : "Full View";
+    return;
+  }
+
+  const walletButton = e.target.closest("[data-owner-wallet-change]");
+  if (walletButton) {
+    const userId = String(walletButton.dataset.userId || "");
+    const asset = String(walletButton.dataset.asset || "coins");
+    const operation = String(walletButton.dataset.operation || "");
+    const amountInput = document.querySelector(`[data-owner-wallet-amount="${asset}"]`);
+    const amount = Math.floor(Number(amountInput?.value || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      toast("Enter a valid " + asset + " amount.");
+      amountInput?.focus();
+      return;
+    }
+    if (operation === "debit" && !confirm("Remove " + fmt(amount) + " " + asset + " from ID " + userId + "?")) {
+      return;
+    }
+    walletButton.disabled = true;
+    try {
+      await runOwnerAction("wallet-normal", { user_id: userId, asset, operation, amount });
+      toast((operation === "credit" ? "Added " : "Removed ") + fmt(amount) + " " + asset + ".");
+      await openOwnerUserProfile(userId);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      walletButton.disabled = false;
+    }
+    return;
+  }
+
+  const vipButton = e.target.closest("[data-owner-vip-change]");
+  if (vipButton) {
+    const userId = String(vipButton.dataset.userId || "");
+    const operation = String(vipButton.dataset.operation || "");
+    const vipInput = document.querySelector("[data-owner-vip-level]");
+    const vipLevel = Math.max(1, Math.floor(Number(vipInput?.value || 1)));
+    if (operation === "remove" && !confirm("Remove VIP from ID " + userId + "?")) return;
+    vipButton.disabled = true;
+    try {
+      await runOwnerAction("vip-grant", {
+        user_id: userId,
+        operation,
+        vip_level: operation === "remove" ? 0 : vipLevel,
+      });
+      toast(operation === "remove" ? "VIP removed." : "VIP " + vipLevel + " added.");
+      await openOwnerUserProfile(userId);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      vipButton.disabled = false;
+    }
+    return;
+  }
+
+  const openInboxButton = e.target.closest("[data-owner-open-inbox]");
+  if (openInboxButton) {
+    await loadOwnerInbox(openInboxButton.dataset.ownerOpenInbox);
+    return;
+  }
+
+  const closeInboxButton = e.target.closest("[data-owner-close-inbox]");
+  if (closeInboxButton) {
+    const browser = document.getElementById("ownerInboxBrowser");
+    if (browser) {
+      browser.hidden = true;
+      browser.innerHTML = "";
+    }
+    return;
+  }
+
+  const backInboxButton = e.target.closest("[data-owner-back-inbox]");
+  if (backInboxButton) {
+    await loadOwnerInbox(backInboxButton.dataset.ownerBackInbox);
+    return;
+  }
+
+  const threadButton = e.target.closest("[data-owner-open-thread]");
+  if (threadButton) {
+    await loadOwnerConversation(
+      threadButton.dataset.ownerUserId,
+      threadButton.dataset.peerUserId,
+      threadButton.dataset.peerName || "",
+    );
     return;
   }
 

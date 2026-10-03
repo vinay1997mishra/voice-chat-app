@@ -2406,15 +2406,68 @@ export class AppDirectoryStore extends DurableObject {
     return this._privilegedWalletGuard(userId, walletType);
   }
 
-  _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue) {
+  _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue, assetValue = "coins") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
     const operation = String(operationValue || "").trim().toLowerCase();
+    const asset = String(assetValue || "coins").trim().toLowerCase();
     const amount = Math.max(0, Math.floor(Number(amountValue || 0)));
     const user = this.ctx.storage.sql.exec(
       "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
     ).toArray()[0];
     if (!user) throw new Error("User not found");
+
+    if (walletType === "normal" && asset === "diamonds") {
+      if (!["credit", "debit"].includes(operation)) {
+        throw new Error("Diamond wallet supports only add or remove");
+      }
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        throw new Error("Enter a valid diamond amount");
+      }
+      // Ensure the normal wallet exists before the Owner adjustment.
+      this.getWallet(userId);
+      const row = this.ctx.storage.sql.exec(
+        "SELECT diamonds FROM app_wallets WHERE user_id = ? LIMIT 1",
+        userId,
+      ).toArray()[0];
+      const before = Math.max(0, Number(row?.diamonds || 0));
+      if (operation === "debit" && before < amount) {
+        throw new Error("Diamond balance is too low");
+      }
+      const delta = operation === "credit" ? amount : -amount;
+      const now = Date.now();
+      this.ctx.storage.sql.exec(
+        "UPDATE app_wallets SET diamonds = MAX(0, diamonds + ?), updated_at = ? WHERE user_id = ?",
+        delta, now, userId,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,0,?,?,?,?)",
+        crypto.randomUUID(),
+        userId,
+        operation === "credit" ? "owner_diamond_credit" : "owner_diamond_debit",
+        delta,
+        "owner-diamond:" + crypto.randomUUID(),
+        operation === "credit" ? "Diamonds added from Owner Panel" : "Diamonds removed from Owner Panel",
+        now,
+      );
+      const updated = this.ctx.storage.sql.exec(
+        "SELECT diamonds FROM app_wallets WHERE user_id = ? LIMIT 1",
+        userId,
+      ).toArray()[0];
+      return {
+        wallet_type: "normal",
+        asset: "diamonds",
+        operation,
+        amount,
+        diamonds_before: before,
+        diamonds_after: Math.max(0, Number(updated?.diamonds || 0)),
+        ...this.getWallet(userId),
+      };
+    }
+
+    if (asset !== "coins") {
+      throw new Error("Unsupported wallet asset");
+    }
 
     if (walletType === "normal") {
       const guard = this._normalWalletGuard(userId);
@@ -2979,7 +3032,7 @@ export class AppDirectoryStore extends DurableObject {
         if (!row) throw new Error("Room not found");
         return { room: rowToRoom(row) };
       }
-      case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount);
+      case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount, data.asset || "coins");
       case "wallet-seller": return this._manageWallet(data.user_id, "coin_seller", data.operation, data.amount);
       case "wallet-merchant": return this._manageWallet(data.user_id, "merchant", data.operation, data.amount);
       case "bd-activate": return this._setHierarchy(data.user_id, "bd", null, String(data.operation) !== "remove");
@@ -7972,6 +8025,160 @@ export class AppDirectoryStore extends DurableObject {
       return String(a.display_name).localeCompare(String(b.display_name));
     });
     return threads;
+  }
+
+  ownerMessageThreads(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("user ID is required");
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    const friends = this.listFriends(userId);
+    const friendIds = new Set(friends.map((item) => String(item.user_id)));
+    const byPeer = new Map();
+
+    const peers = this.ctx.storage.sql.exec(
+      `SELECT
+          CASE WHEN from_user_id = ? THEN to_user_id ELSE from_user_id END AS peer_user_id,
+          MAX(created_at) AS last_created_at
+        FROM direct_messages
+        WHERE from_user_id = ? OR to_user_id = ?
+        GROUP BY CASE WHEN from_user_id = ? THEN to_user_id ELSE from_user_id END
+        ORDER BY last_created_at DESC
+        LIMIT 500`,
+      userId, userId, userId, userId,
+    ).toArray();
+
+    for (const row of peers) {
+      const peerId = String(row.peer_user_id || "").trim();
+      if (!peerId) continue;
+      const peer = peerId === "tinni-official"
+        ? null
+        : this.ctx.storage.sql.exec(
+            "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id = ? LIMIT 1",
+            peerId,
+          ).toArray()[0];
+      const last = this.ctx.storage.sql.exec(
+        `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
+           FROM direct_messages
+          WHERE (from_user_id = ? AND to_user_id = ?)
+             OR (from_user_id = ? AND to_user_id = ?)
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        userId, peerId, peerId, userId,
+      ).toArray()[0];
+      const count = this.ctx.storage.sql.exec(
+        `SELECT COUNT(*) AS count
+           FROM direct_messages
+          WHERE (from_user_id = ? AND to_user_id = ?)
+             OR (from_user_id = ? AND to_user_id = ?)`,
+        userId, peerId, peerId, userId,
+      ).toArray()[0];
+      byPeer.set(peerId, {
+        user_id: peerId,
+        display_name: peerId === "tinni-official"
+          ? "Tinni Official"
+          : String(peer?.display_name || peerId),
+        avatar_data_url: peer?.avatar_data_url ? String(peer.avatar_data_url) : null,
+        is_friend: friendIds.has(peerId),
+        message_count: Number(count?.count || 0),
+        last_message: last ? {
+          id: String(last.id),
+          from: String(last.from_user_id),
+          to: String(last.to_user_id),
+          text: String(last.text || ""),
+          created_at: Number(last.created_at || 0),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        } : null,
+      });
+    }
+
+    for (const friend of friends) {
+      const friendId = String(friend.user_id || "").trim();
+      if (!friendId || byPeer.has(friendId)) continue;
+      byPeer.set(friendId, {
+        user_id: friendId,
+        display_name: String(friend.display_name || friendId),
+        avatar_data_url: friend.avatar_data_url ? String(friend.avatar_data_url) : null,
+        is_friend: true,
+        message_count: 0,
+        last_message: null,
+      });
+    }
+
+    const threads = [...byPeer.values()];
+    threads.sort((a, b) => {
+      const aTime = Number(a.last_message?.created_at || 0);
+      const bTime = Number(b.last_message?.created_at || 0);
+      if (aTime !== bTime) return bTime - aTime;
+      return String(a.display_name).localeCompare(String(b.display_name));
+    });
+    return {
+      user: {
+        user_id: String(target.user_id),
+        display_name: String(target.display_name || target.user_id),
+        avatar_data_url: target.avatar_data_url ? String(target.avatar_data_url) : null,
+      },
+      threads,
+    };
+  }
+
+  ownerConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const rawPeerId = String(peerUserIdValue || "").trim();
+    const peerId = rawPeerId === "tinni-official"
+      ? rawPeerId
+      : this._resolveOwnerUserId(rawPeerId);
+    const limit = Math.max(1, Math.min(1000, Number(limitValue) || 500));
+    if (!userId || !peerId) throw new Error("user IDs are required");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id = ? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+    const peer = peerId === "tinni-official"
+      ? null
+      : this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id = ? LIMIT 1",
+          peerId,
+        ).toArray()[0];
+
+    const messages = this.ctx.storage.sql.exec(
+      `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
+         FROM direct_messages
+        WHERE (from_user_id = ? AND to_user_id = ?)
+           OR (from_user_id = ? AND to_user_id = ?)
+        ORDER BY created_at ASC
+        LIMIT ?`,
+      userId, peerId, peerId, userId, limit,
+    ).toArray().map((row) => ({
+      id: String(row.id),
+      from: String(row.from_user_id),
+      to: String(row.to_user_id),
+      text: String(row.text || ""),
+      created_at: Number(row.created_at || 0),
+      seen_at: row.seen_at == null ? null : Number(row.seen_at),
+    }));
+
+    return {
+      user: {
+        user_id: String(target.user_id),
+        display_name: String(target.display_name || target.user_id),
+        avatar_data_url: target.avatar_data_url ? String(target.avatar_data_url) : null,
+      },
+      peer: {
+        user_id: peerId,
+        display_name: peerId === "tinni-official"
+          ? "Tinni Official"
+          : String(peer?.display_name || peerId),
+        avatar_data_url: peer?.avatar_data_url ? String(peer.avatar_data_url) : null,
+      },
+      messages,
+    };
   }
 
   _notifyUser(userIdValue, typeValue, titleValue, messageValue, options = {}) {
