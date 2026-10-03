@@ -437,6 +437,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final account = widget.state.auth.current;
     final value = controller.text.trim();
     if (account == null || value.isEmpty) return;
+    if (!_isOfficial && !_isFriend) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Both users must follow each other before messaging.',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() => sending = true);
     try {
@@ -1322,10 +1333,32 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         ),
                       ],
                     )
-                  : Row(
+                  : !_isFriend
+                      ? const Row(
+                          key: Key('message-mutual-follow-lock'),
+                          children: [
+                            ShiningIcon(
+                              icon: Icons.lock_outline_rounded,
+                              color: FeaturePalette.social,
+                              size: 18,
+                              boxSize: 34,
+                              glow: 0.28,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Dono users ek-dusre ko follow karenge tab Friend banenge. Uske baad message aur photo unlock honge.',
+                                style: TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
                       children: [
-                        if (_isFriend)
-                          IconButton(
+                        IconButton(
                             key: const Key('message-photo-button'),
                             tooltip: 'Send photo',
                             onPressed: sendingImage ? null : _pickAndSendPhoto,
