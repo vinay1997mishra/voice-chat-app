@@ -1568,17 +1568,17 @@ export class AppDirectoryStore extends DurableObject {
     }));
     const roles = this.ctx.storage.sql.exec(
       `SELECT role FROM owner_hierarchy
-        WHERE user_id = ? AND active = 1 AND role IN ('host','agency')
+        WHERE user_id = ? AND active = 1 AND role IN ('host','agency','bd')
         ORDER BY updated_at DESC`,
       userId,
     ).toArray().map((row) => {
       const role = String(row.role || "").toLowerCase();
       return {
         id: "auto-role-" + role,
-        name: role === "agency" ? "Agency" : "Host",
+        name: role === "agency" ? "Agency" : role === "bd" ? "BD" : "Host",
         color: "#69C9FF",
         kind: "auto_role",
-        designation: role === "agency" ? "Agency" : "Host",
+        designation: role === "agency" ? "Agency" : role === "bd" ? "BD" : "Host",
         background_color: "#69C9FF",
         source: "automatic",
         created_at: 0,
