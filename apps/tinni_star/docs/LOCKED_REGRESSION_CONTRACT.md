@@ -31,6 +31,9 @@ This file defines features that must survive future updates. A feature may be ch
 ## Gift and room contracts
 - Gift category bar keeps Normal, Lucky, CP, Country and Luxury.
 - Lucky quantity selector keeps + and preset quantities 9/21/51/99/199/599/899/2999/7999.
+- Popular and New must show only rooms with at least one currently live room member. A stale saved room count must never keep an empty room in these public feeds.
+- Room comments keep identity/official tags inside the comment line; the old separate live-tag strip and member-profile tag sections stay removed.
+- Room comments automatically follow the newest message, and the latest readable comment-tag sizing stays preserved.
 - User-created room names and comments are stored/displayed as entered, without automatic translation.
 - Room public ID remains the owner User ID.
 

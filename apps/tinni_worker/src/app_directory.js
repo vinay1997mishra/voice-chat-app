@@ -9570,19 +9570,30 @@ export class AppDirectoryStore extends DurableObject {
 
     async listRooms() {
     this._pruneRoomThemes();
+    const liveCutoff = Date.now() - 90000;
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
-              COALESCE(pc.member_count, 0) AS member_count,
-              COALESCE(pc.member_count, 0) * 500 AS active_user_exp,
+              COALESCE(live.member_count, 0) AS member_count,
+              COALESCE(live.member_count, 0) * 500 AS active_user_exp,
               COALESCE(gx.gift_coins, 0) AS sending_exp,
               COALESCE(gx.gift_coins, 0) AS receiving_exp,
-              (COALESCE(pc.member_count, 0) * 500)
+              (COALESCE(live.member_count, 0) * 500)
                 + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
-         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+         LEFT JOIN (
+           SELECT room_id, COUNT(*) AS member_count
+             FROM app_user_presence
+            WHERE room_id IS NOT NULL
+              AND room_id <> ''
+              AND (
+                COALESCE(room_socket_connected, 0) = 1
+                OR last_seen >= ?
+              )
+            GROUP BY room_id
+         ) live ON live.room_id = r.id
          LEFT JOIN (
            SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
              FROM gift_transactions
@@ -9591,9 +9602,10 @@ export class AppDirectoryStore extends DurableObject {
         WHERE COALESCE(r.closed, 0) = 0
           AND COALESCE(r.locked, 0) = 0
         ORDER BY room_experience DESC,
-                 COALESCE(pc.member_count, 0) DESC,
+                 COALESCE(live.member_count, 0) DESC,
                  r.created_at DESC
         LIMIT 500`,
+      liveCutoff,
     ).toArray().map(rowToRoom);
   }
 

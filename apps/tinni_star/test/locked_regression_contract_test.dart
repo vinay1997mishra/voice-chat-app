@@ -68,6 +68,26 @@ void main() {
     expect(details, contains("'Company'"));
   });
 
+  test('Popular and New stay limited to online rooms', () {
+    final discovery =
+        File('lib/discovery/discovery_service.dart').readAsStringSync();
+    expect(discovery, contains('room.online > 0'));
+    expect(discovery, contains('Empty rooms stay available'));
+  });
+
+  test('latest room comment layout stays locked and old tag UI stays removed', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room, contains("Key(\n              'room-comment-tag-'"));
+    expect(room, contains('controller: _roomMessageScrollController'));
+    expect(room, contains('_scrollRoomCommentsToNewest();'));
+    expect(room, contains('horizontal: 8, vertical: 3'));
+    expect(room, contains('fontSize: 11.5'));
+    expect(room, isNot(contains('room-live-owner-badges')));
+    expect(room, isNot(contains('live-owner-tag-')));
+    expect(room, isNot(contains('full-profile-tag-')));
+    expect(room, isNot(contains('room-owner-tag-')));
+  });
+
   test('gift panel locked categories and Lucky presets stay present', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     for (final category in <String>['Normal', 'Lucky', 'CP', 'Country', 'Luxury']) {
