@@ -7,10 +7,30 @@ const VERIFIED_DIRECT_CALL_COST_COINS_PER_MINUTE = 400000;
 const RANDOM_CALL_COST_COINS_PER_MINUTE = 500000;
 const VERIFIED_RECEIVER_REWARD_PERCENT = 80;
 const COINS_PER_USD = 2000000;
+const COIN_SELLER_SETTLEMENT_COINS_PER_USD = 2220000;
+const HOST_TARGET_RECEIVED_COINS = 4000000;
+const HOST_TARGET_USD_CENTS = 160;
+const HOST_SETTLEMENT_MIN_USD_CENTS = 200;
+const AGENCY_BD_SETTLEMENT_MIN_USD_CENTS = 1000;
 const RECHARGE_PROVIDER_MIN_USD = 5;
 const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
+const SUPPORTED_LANGUAGES = new Set([
+  "English",
+  "Hindi",
+  "Urdu",
+  "Arabic",
+  "Bengali",
+  "Malayalam",
+  "Filipino (Tagalog)",
+  "Persian (Farsi)",
+  "Kurdish",
+  "Baluchi",
+  "Chinese (Simplified)",
+  "Chinese (Traditional)",
+  "Korean",
+]);
 const encoder = new TextEncoder();
 
 function toBase64Url(bytes) {
@@ -1993,12 +2013,14 @@ export class AppDirectoryStore extends DurableObject {
       vehicle_entries: true, frames: true,
     };
     const defaultPolicies = {
-      coins_per_usd: 2000000, diamonds_per_coin: 1, diamond_usd_reference_diamonds: 4000000, diamond_usd_reference_cents: 170,
+      coins_per_usd: 2000000, diamonds_per_coin: 1, diamond_usd_reference_diamonds: HOST_TARGET_RECEIVED_COINS, diamond_usd_reference_cents: HOST_TARGET_USD_CENTS,
+      coin_seller_settlement_coins_per_usd: COIN_SELLER_SETTLEMENT_COINS_PER_USD,
       room_online_exp_per_minute: 50, room_online_daily_minutes_cap: 480,
-      host_first_target_received_coins: 4000000, host_first_target_usd: 1.7,
-      agency_commission_percent: 10, bd_target_1_usd: 500,
+      host_first_target_received_coins: HOST_TARGET_RECEIVED_COINS, host_first_target_usd: HOST_TARGET_USD_CENTS / 100,
+      agency_commission_percent: 20, bd_target_1_usd: 500,
       bd_target_1_percent: 7, bd_target_2_usd: 1000,
-      bd_target_2_percent: 10, minimum_transfer_usd: 2,
+      bd_target_2_percent: 10, minimum_transfer_usd: HOST_SETTLEMENT_MIN_USD_CENTS / 100,
+      agency_bd_minimum_transfer_usd: AGENCY_BD_SETTLEMENT_MIN_USD_CENTS / 100,
       direct_call_coins: 400000, random_call_coins: 500000, receiver_percent: 80,
       room_theme_coins: 10000000, cp_connect_coins: 0, cp_disconnect_coins: 0, frame_default_coins: 0, vip_default_coins: 0,
       unique_id_purchase_coins: 0, free_user_ids: [],
@@ -2798,11 +2820,11 @@ export class AppDirectoryStore extends DurableObject {
     const hierarchyPolicies = this.ownerState().policies || {};
     const hostTargetCoins = Math.max(
       1,
-      Number(hierarchyPolicies.host_first_target_received_coins || 4000000),
+      Number(hierarchyPolicies.host_first_target_received_coins || HOST_TARGET_RECEIVED_COINS),
     );
     const hostTargetUsd = Math.max(
       0,
-      Number(hierarchyPolicies.host_first_target_usd || 1.7),
+      Number(hierarchyPolicies.host_first_target_usd || (HOST_TARGET_USD_CENTS / 100)),
     );
     const targetFields = (receivedValue) => {
       const received = Math.max(0, Number(receivedValue || 0));
@@ -3252,9 +3274,54 @@ export class AppDirectoryStore extends DurableObject {
       "SELECT eligible_coins,credited_usd_cents FROM hierarchy_period_earnings WHERE period_key=? AND user_id=? AND role='agency' LIMIT 1",
       period, agencyId,
     ).toArray()[0];
-    const agencyGrossCents = Math.floor(Number(agencyRow?.eligible_coins || 0) * 170 / 4000000);
-    const agencyCommissionCents = Math.floor(agencyGrossCents * 10 / 100);
-    const agencyDelta = Math.max(0, agencyCommissionCents - Number(agencyRow?.credited_usd_cents || 0));
+    const hierarchyPolicies = this.ownerState().policies || {};
+    const hostTargetCoins = Math.max(
+      1,
+      Number(
+        hierarchyPolicies.host_first_target_received_coins ||
+          HOST_TARGET_RECEIVED_COINS,
+      ),
+    );
+    const hostTargetUsdCents = Math.max(
+      0,
+      Math.round(
+        Number(
+          hierarchyPolicies.host_first_target_usd ||
+            (HOST_TARGET_USD_CENTS / 100),
+        ) * 100,
+      ),
+    );
+    const agencyCommissionPercent = Math.max(
+      0,
+      Number(hierarchyPolicies.agency_commission_percent || 20),
+    );
+    const qualifyingAgencyHosts = this.ctx.storage.sql.exec(
+      `SELECT e.eligible_coins
+         FROM hierarchy_period_earnings e
+         JOIN owner_hierarchy h
+           ON h.user_id=e.user_id
+          AND h.role='host'
+          AND h.active=1
+        WHERE e.period_key=?
+          AND e.role='host'
+          AND h.parent_user_id=?`,
+      period,
+      agencyId,
+    ).toArray();
+    const agencyGrossCents = qualifyingAgencyHosts.reduce(
+      (total, row) =>
+        total +
+        Math.floor(Math.max(0, Number(row.eligible_coins || 0)) / hostTargetCoins) *
+          hostTargetUsdCents,
+      0,
+    );
+    const agencyCommissionCents = Math.floor(
+      agencyGrossCents * agencyCommissionPercent / 100,
+    );
+    const agencyDelta = Math.max(
+      0,
+      agencyCommissionCents - Number(agencyRow?.credited_usd_cents || 0),
+    );
     if (agencyDelta > 0) {
       this._creditSettlement(agencyId, agencyDelta);
       this.ctx.storage.sql.exec(
@@ -3277,7 +3344,30 @@ export class AppDirectoryStore extends DurableObject {
       "SELECT eligible_coins,credited_usd_cents FROM hierarchy_period_earnings WHERE period_key=? AND user_id=? AND role='bd' LIMIT 1",
       period, bdId,
     ).toArray()[0];
-    const bdGrossCents = Math.floor(Number(bdRow?.eligible_coins || 0) * 170 / 4000000);
+    const qualifyingBdHosts = this.ctx.storage.sql.exec(
+      `SELECT e.eligible_coins
+         FROM hierarchy_period_earnings e
+         JOIN owner_hierarchy host_h
+           ON host_h.user_id=e.user_id
+          AND host_h.role='host'
+          AND host_h.active=1
+         JOIN owner_hierarchy agency_h
+           ON agency_h.user_id=host_h.parent_user_id
+          AND agency_h.role='agency'
+          AND agency_h.active=1
+        WHERE e.period_key=?
+          AND e.role='host'
+          AND agency_h.parent_user_id=?`,
+      period,
+      bdId,
+    ).toArray();
+    const bdGrossCents = qualifyingBdHosts.reduce(
+      (total, row) =>
+        total +
+        Math.floor(Math.max(0, Number(row.eligible_coins || 0)) / hostTargetCoins) *
+          hostTargetUsdCents,
+      0,
+    );
     const bdPercent = bdGrossCents >= 100000 ? 10 : (bdGrossCents >= 50000 ? 7 : 0);
     const bdCommissionCents = Math.floor(bdGrossCents * bdPercent / 100);
     const bdDelta = Math.max(0, bdCommissionCents - Number(bdRow?.credited_usd_cents || 0));
@@ -3951,6 +4041,10 @@ export class AppDirectoryStore extends DurableObject {
     const countryName = cleanText(input?.country_name, 80);
     const flagEmoji = cleanText(input?.flag_emoji, 16);
     const gender = cleanText(input?.gender, 12).toLowerCase();
+    const requestedLanguage = cleanText(input?.language || "English", 40);
+    const language = SUPPORTED_LANGUAGES.has(requestedLanguage)
+      ? requestedLanguage
+      : "English";
     const avatarDataUrl = input?.avatar_data_url
       ? String(input.avatar_data_url)
       : null;
@@ -4024,6 +4118,17 @@ export class AppDirectoryStore extends DurableObject {
         (user_id, coins, diamonds, updated_at)
        VALUES (?, 0, 0, ?)`,
       userId,
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO user_preferences
+        (user_id,message_voice,message_vibration,room_floating_only,language,updated_at)
+       VALUES (?,1,1,0,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         language=excluded.language,
+         updated_at=excluded.updated_at`,
+      userId,
+      language,
       now,
     );
     return this.getUserById(userId);
@@ -4167,6 +4272,7 @@ export class AppDirectoryStore extends DurableObject {
         country_name: profile.country_name,
         flag_emoji: profile.flag_emoji,
         gender: profile.gender,
+        language: profile.language,
         avatar_data_url: profile.avatar_data_url,
       });
     } else {
@@ -7491,7 +7597,9 @@ export class AppDirectoryStore extends DurableObject {
     const isBd = roles.some((item) => item.role === "bd");
     const storedDiamonds = Number(row?.diamonds || 0);
     const visibleDiamonds = storedDiamonds;
-    const diamondUsdCents = isHost ? Math.floor(visibleDiamonds * 170 / 4000000) : 0;
+    const diamondUsdCents = isHost
+      ? Math.floor(visibleDiamonds * HOST_TARGET_USD_CENTS / HOST_TARGET_RECEIVED_COINS)
+      : 0;
     const settlement = this._ensureSettlementBalance(userId);
     const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
@@ -7525,8 +7633,14 @@ export class AppDirectoryStore extends DurableObject {
       commission_usd_cents: commissionUsdCents,
       withdrawable_usd_cents: withdrawableUsdCents,
       can_transfer_settlement: !coinGuard.security_frozen &&
-        (isHost || isAgency || isBd) && withdrawableUsdCents >= 200,
-      usd_rate: { reference_diamonds: 4000000, reference_usd_cents: 170 },
+        (isHost || isAgency || isBd) &&
+        withdrawableUsdCents >= ((isAgency || isBd)
+          ? AGENCY_BD_SETTLEMENT_MIN_USD_CENTS
+          : HOST_SETTLEMENT_MIN_USD_CENTS),
+      usd_rate: {
+        reference_diamonds: HOST_TARGET_RECEIVED_COINS,
+        reference_usd_cents: HOST_TARGET_USD_CENTS,
+      },
       roles,
       banned: Number(row?.banned || 0) === 1,
       security_frozen: coinGuard.security_frozen,
@@ -7563,13 +7677,22 @@ export class AppDirectoryStore extends DurableObject {
     this._enforceActionRate(senderId, "settlement_transfer", 5, 60000, 300000);
     const recipient = this.settlementRecipient(recipientUserIdValue);
     const usdCents = Math.floor(Number(usdCentsValue || 0));
-    if (usdCents < 200) throw new Error("Minimum transfer is $2");
-    if (senderId === recipient.user_id) throw new Error("Cannot transfer to your own account");
 
     const wallet = this.getWallet(senderId);
     if (!(wallet.is_host || wallet.is_agency || wallet.is_bd)) {
       throw new Error("Only Host, Agency or BD settlement can be transferred");
     }
+    const minimumUsdCents = (wallet.is_agency || wallet.is_bd)
+      ? AGENCY_BD_SETTLEMENT_MIN_USD_CENTS
+      : HOST_SETTLEMENT_MIN_USD_CENTS;
+    if (usdCents < minimumUsdCents) {
+      throw new Error(
+        (wallet.is_agency || wallet.is_bd)
+          ? "Minimum Agency/BD transfer is $10"
+          : "Minimum Host transfer is $2",
+      );
+    }
+    if (senderId === recipient.user_id) throw new Error("Cannot transfer to your own account");
     if (wallet.withdrawable_usd_cents < usdCents) {
       throw new Error("Settlement balance is not enough");
     }
@@ -7588,7 +7711,9 @@ export class AppDirectoryStore extends DurableObject {
     }
     if (remaining > 0) {
       if (!wallet.is_host) throw new Error("Settlement balance is not enough");
-      diamondsDebited = Math.ceil(remaining * 4000000 / 170);
+      diamondsDebited = Math.ceil(
+        remaining * HOST_TARGET_RECEIVED_COINS / HOST_TARGET_USD_CENTS,
+      );
       if (diamondsDebited > wallet.diamonds) throw new Error("Diamond balance is not enough");
       this.ctx.storage.sql.exec(
         "UPDATE app_wallets SET diamonds=diamonds-?,updated_at=? WHERE user_id=?",
@@ -7596,13 +7721,32 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
 
-    this._ensureSettlementBalance(recipient.user_id);
-    this.ctx.storage.sql.exec(
-      "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
-      usdCents, Date.now(), recipient.user_id,
-    );
     const id = "settle-" + crypto.randomUUID();
     const now = Date.now();
+    let creditedCoins = 0;
+    if (recipient.role === "coin_seller") {
+      creditedCoins = Math.floor(
+        usdCents * COIN_SELLER_SETTLEMENT_COINS_PER_USD / 100,
+      );
+      const sellerWallet = this._privilegedWalletGuard(
+        recipient.user_id,
+        "coin_seller",
+      );
+      if (sellerWallet.security_frozen) {
+        throw new Error("Recipient Coin Seller wallet is security-frozen");
+      }
+      this._creditPrivilegedWalletAuthorized(
+        recipient.user_id,
+        "coin_seller",
+        creditedCoins,
+      );
+    } else {
+      this._ensureSettlementBalance(recipient.user_id);
+      this.ctx.storage.sql.exec(
+        "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
+        usdCents, now, recipient.user_id,
+      );
+    }
     this.ctx.storage.sql.exec(
       "INSERT INTO settlement_transfers(id,sender_user_id,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?)",
       id, senderId, recipient.user_id, recipient.role, usdCents, diamondsDebited, now,
@@ -7612,7 +7756,18 @@ export class AppDirectoryStore extends DurableObject {
       "wallet-" + crypto.randomUUID(), senderId, -diamondsDebited, id,
       "Transferred $" + (usdCents / 100).toFixed(2) + " to " + recipient.user_id, now,
     );
-    return { ok: true, transfer_id: id, recipient, usd_cents: usdCents, diamonds_debited: diamondsDebited, wallet: this.getWallet(senderId) };
+    return {
+      ok: true,
+      transfer_id: id,
+      recipient,
+      usd_cents: usdCents,
+      credited_coins: creditedCoins,
+      seller_conversion_rate: recipient.role === "coin_seller"
+        ? COIN_SELLER_SETTLEMENT_COINS_PER_USD
+        : null,
+      diamonds_debited: diamondsDebited,
+      wallet: this.getWallet(senderId),
+    };
   }
 
   settlementTransfers(userIdValue) {
