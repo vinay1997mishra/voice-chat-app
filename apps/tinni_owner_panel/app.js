@@ -996,8 +996,9 @@ async function openOwnerUserProfile(userId) {
       </div>
 
       <div class="button-row" style="margin-top:12px">
-        ${room ? `
-          <button type="button" class="btn primary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>
+        <button type="button" class="btn primary" data-owner-full-view="${escapeHtml(user.user_id || userId)}">Full View</button>
+        ${room && currentSession?.role === "owner" ? `
+          <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>
           <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
           <span id="ownerListenStatus" class="owner-listen-status">Listen-only idle</span>
         ` : ""}
