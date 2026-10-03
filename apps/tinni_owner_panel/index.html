@@ -127,7 +127,7 @@
         </section>
 
         <section class="view" id="view-users">
-          <article class="panel">
+          <article class="panel" data-requires-permission="users.search">
             <div class="panel-head"><div><h2>User Search & Investigation</h2><p>Current ID + old ID lookup with live account data.</p></div><button class="btn primary" data-action="user-search">Search</button></div>
             <div class="form-grid two">
               <label><span>User / old ID / name / email</span><input id="userSearchId" placeholder="e.g. 10000001" /></label>
@@ -170,7 +170,7 @@
             </div>
           </article>
 
-          <div id="verification-page-verified" class="verification-page">
+          <div id="verification-page-verified" class="verification-page" data-requires-permission="verification.view">
             <article class="panel">
               <div class="panel-head">
                 <div><h2>Verified IDs</h2><p>All IDs currently carrying the Verified call tag.</p></div>
@@ -180,7 +180,7 @@
             </article>
           </div>
 
-          <div id="verification-page-requests" class="verification-page" hidden>
+          <div id="verification-page-requests" class="verification-page" data-requires-permission="verification.review" hidden>
             <article class="panel">
               <div class="panel-head">
                 <div><h2>Verification Requests</h2><p>3 live photos + system result. Owner makes the final decision.</p></div>
@@ -189,7 +189,7 @@
             </article>
           </div>
 
-          <div id="verification-page-direct" class="verification-page" hidden>
+          <div id="verification-page-direct" class="verification-page" data-requires-permission="verification.direct_verify" hidden>
             <article class="panel">
               <div class="panel-head">
                 <div>
@@ -210,7 +210,7 @@
         </section>
 
         <section class="view" id="view-messaging">
-          <article class="panel">
+          <article class="panel" data-requires-permission="messaging.search">
             <div class="panel-head">
               <div>
                 <h2>Messages & Tags</h2>
@@ -231,7 +231,7 @@
           </article>
 
           <div class="grid two">
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.send">
               <div class="panel-head"><div><h2>Send Official Message</h2><p>The message appears from Tinni Official in Inbox.</p></div></div>
               <label><span>Message</span><textarea id="ownerBulkMessage" rows="6" maxlength="2000" placeholder="Write message…"></textarea></label>
               <div class="button-row">
@@ -239,7 +239,7 @@
                 <button class="btn secondary" data-owner-message-all>Send to All Users</button>
               </div>
             </article>
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.tags">
               <div class="panel-head"><div><h2>Custom User Tag</h2><p>Whatever name you type becomes the tag. Choose its color and apply it to selected IDs.</p></div></div>
               <label><span>Tag name</span><input id="ownerTagName" maxlength="40" placeholder="e.g. Official Host" /></label>
               <label><span>Tag color</span><input id="ownerTagColor" type="color" value="#FFD54F" /></label>
@@ -247,7 +247,7 @@
                 <button class="btn primary" data-owner-tag-selected>Apply Tag to Selected</button>
               </div>
             </article>
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.officials">
               <div class="panel-head"><div><h2>V Official Tag</h2><p>Premium circular official badge. Gold ring, silver V, and a gold position label.</p></div><div class="v-official-preview"><span>V</span></div></div>
               <label><span>Position / Designation</span><input id="ownerVDesignation" maxlength="40" placeholder="e.g. Official Manager" /></label>
               <label><span>V badge background</span>
@@ -274,7 +274,7 @@
             </article>
           </div>
 
-          <article class="panel" id="officialsPanel">
+          <article class="panel" id="officialsPanel" data-requires-permission="messaging.officials">
             <div class="panel-head">
               <div>
                 <h2>Officials</h2>
@@ -317,24 +317,6 @@
             <article class="panel"><h2>Merchant Wallet</h2><p class="muted">Create wallet, add/remove coins, and ban/unban Merchant wallet.</p><button class="btn primary" data-action="wallet-merchant">Manage</button></article>
           </div>
           <article class="panel"><div class="panel-head"><h2>Owner Treasury Distribution</h2><span class="badge gold">2,000,000 coins = $1</span></div><p class="muted">Send Owner Treasury coins to a normal user wallet, Coin Seller wallet or Merchant wallet. Every movement is audit logged.</p><button class="btn primary" data-action="treasury-send">Send Coins</button></article>
-          <article class="panel" data-owner-section>
-            <div class="panel-head">
-              <div><h2>Company Dollars</h2><p>Coin Seller and Merchant transfers to Company.</p></div>
-              <span class="badge gold">Owner only</span>
-            </div>
-            <div class="wallet-balance"><strong id="companyDollarBalance">$0.00</strong><span>available</span></div>
-            <div class="button-row">
-              <button class="btn primary" data-action="company-dollar-deduct">Deduct Dollars</button>
-            </div>
-            <div class="table-wrap" style="margin-top:14px">
-              <table>
-                <thead>
-                  <tr><th>Date / Time</th><th>Sender</th><th>Type</th><th>Amount</th><th>Before</th><th>After</th><th>Transaction</th></tr>
-                </thead>
-                <tbody id="companyDollarLedger"><tr><td colspan="7" class="muted">No company dollar records.</td></tr></tbody>
-              </table>
-            </div>
-          </article>
           <article class="panel"><div class="panel-head"><h2>Wallet Security Freeze</h2><span class="badge gold">Owner only</span></div><p class="muted">Unexpected coin credits are quarantined and freeze the affected wallet. Only the Platform Owner can remove this security freeze.</p><button class="btn secondary" data-action="wallet-security-unfreeze">Unfreeze Wallet</button></article>
         </section>
 
@@ -451,6 +433,39 @@
       <button class="icon-btn" type="button" data-owner-profile-close>✕</button>
     </div>
     <div id="ownerProfileContent" class="owner-profile-content">Loading…</div>
+  </dialog>
+
+  <dialog id="ownerFullDashboardDialog" class="owner-profile-dialog owner-full-dashboard-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3>Full ID Dashboard</h3>
+        <p>Selected ID ka A-to-Z control dashboard. Every change is server-side and audit logged.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-full-close>✕</button>
+    </div>
+    <div id="ownerFullDashboardContent" class="owner-profile-content">Loading full dashboard…</div>
+  </dialog>
+
+  <dialog id="ownerHierarchyDialog" class="owner-profile-dialog owner-hierarchy-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="ownerHierarchyTitle">Hierarchy Details</h3>
+        <p>Role details, targets, members and date-range investigation.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-hierarchy-close>✕</button>
+    </div>
+    <div id="ownerHierarchyContent" class="owner-profile-content">Loading role details…</div>
+  </dialog>
+
+  <dialog id="ownerIdentityDialog" class="owner-profile-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="ownerIdentityTitle">Identity / Tag Details</h3>
+        <p>Selected identity details and allowed controls for this ID.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-identity-close>✕</button>
+    </div>
+    <div id="ownerIdentityContent" class="owner-profile-content">Loading identity details…</div>
   </dialog>
 
   <dialog id="actionDialog">
