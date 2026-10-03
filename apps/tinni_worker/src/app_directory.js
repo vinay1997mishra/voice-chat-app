@@ -1639,7 +1639,7 @@ export class AppDirectoryStore extends DurableObject {
     });
 
     const messages = this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at
          FROM direct_messages
         WHERE from_user_id = ? OR to_user_id = ?
         ORDER BY created_at DESC
@@ -1650,6 +1650,8 @@ export class AppDirectoryStore extends DurableObject {
       from_user_id: String(item.from_user_id),
       to_user_id: String(item.to_user_id),
       text: String(item.text || ""),
+      message_kind: String(item.message_kind || "text"),
+      media_url: item.media_url ? String(item.media_url) : null,
       created_at: Number(item.created_at || 0),
       seen_at: item.seen_at == null ? null : Number(item.seen_at),
     }));
@@ -8382,7 +8384,7 @@ export class AppDirectoryStore extends DurableObject {
     this.markConversationSeen(userId, peerUserId);
 
     return this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at
          FROM direct_messages
         WHERE (from_user_id = ? AND to_user_id = ?)
            OR (from_user_id = ? AND to_user_id = ?)
@@ -8398,6 +8400,8 @@ export class AppDirectoryStore extends DurableObject {
       from: String(row.from_user_id),
       to: String(row.to_user_id),
       text: String(row.text),
+      message_kind: String(row.message_kind || "text"),
+      media_url: row.media_url ? String(row.media_url) : null,
       created_at: Number(row.created_at),
       seen_at: row.seen_at == null ? null : Number(row.seen_at),
     }));
@@ -8433,7 +8437,7 @@ export class AppDirectoryStore extends DurableObject {
       ).toArray()[0];
       if (!peer && !friend) continue;
       const last = this.ctx.storage.sql.exec(
-        `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
+        `SELECT id,from_user_id,to_user_id,text,message_kind,media_url,created_at,seen_at
            FROM direct_messages
           WHERE (from_user_id=? AND to_user_id=?)
              OR (from_user_id=? AND to_user_id=?)
@@ -8457,6 +8461,8 @@ export class AppDirectoryStore extends DurableObject {
           from: String(last.from_user_id),
           to: String(last.to_user_id),
           text: String(last.text),
+          message_kind: String(last.message_kind || "text"),
+          media_url: last.media_url ? String(last.media_url) : null,
           created_at: Number(last.created_at),
           seen_at: last.seen_at == null ? null : Number(last.seen_at),
         } : null,
@@ -8465,7 +8471,7 @@ export class AppDirectoryStore extends DurableObject {
     }
 
     const official = this.ctx.storage.sql.exec(
-      `SELECT id,from_user_id,to_user_id,text,created_at,seen_at
+      `SELECT id,from_user_id,to_user_id,text,message_kind,media_url,created_at,seen_at
          FROM direct_messages
         WHERE (from_user_id='tinni-official' AND to_user_id=?)
            OR (from_user_id=? AND to_user_id='tinni-official')
@@ -8488,6 +8494,8 @@ export class AppDirectoryStore extends DurableObject {
           from: String(official.from_user_id),
           to: String(official.to_user_id),
           text: String(official.text),
+          message_kind: String(official.message_kind || "text"),
+          media_url: official.media_url ? String(official.media_url) : null,
           created_at: Number(official.created_at),
           seen_at: official.seen_at == null ? null : Number(official.seen_at),
         },
