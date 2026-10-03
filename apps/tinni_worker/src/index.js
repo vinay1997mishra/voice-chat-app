@@ -44,6 +44,7 @@ const STAFF_PERMISSIONS = new Set([
   "wallets.merchant",
   "wallets.treasury_send",
 
+  "hierarchy.view_details",
   "hierarchy.bd_manage",
   "hierarchy.agency_manage",
   "hierarchy.agency_bd_link",
@@ -5444,6 +5445,35 @@ export default {
       }
 
       return json({ ok: true, detail: { ...detail, current_room } });
+    }
+
+    if (url.pathname === "/api/owner/hierarchy-detail" && request.method === "GET") {
+      if (!sessionHasPermission(session, "users.full_dashboard") ||
+          !sessionHasPermission(session, "hierarchy.view_details")) {
+        return json({
+          ok: false,
+          error: "Full ID Dashboard and hierarchy-detail permissions are required",
+        }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const role = String(url.searchParams.get("role") || "").trim().toLowerCase();
+      if (!userId || !["host", "agency", "bd"].includes(role)) {
+        return json({ ok: false, error: "Valid user_id and hierarchy role are required" }, 400);
+      }
+      try {
+        const portal = await getAppDirectoryStore(env).hierarchyPortal(
+          userId,
+          role,
+          url.searchParams.get("from") || 0,
+          url.searchParams.get("to") || Date.now(),
+        );
+        return json({ ok: true, portal });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to load hierarchy details"),
+        }, 400);
+      }
     }
 
     if (url.pathname === "/api/owner/listen-token" && request.method === "POST") {
