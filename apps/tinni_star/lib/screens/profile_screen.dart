@@ -69,6 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final wallet = await widget.state.backend.wallet(account.authToken);
       final vip = await widget.state.backend.vipMe(account.authToken);
       widget.state.wallet.applyRemote(wallet);
+      await _loadOwnerTags();
       widget.state.identity.setVipLevel(
         vip == null ? 0 : int.tryParse(vip['vip_level']?.toString() ?? '') ?? 0,
       );
