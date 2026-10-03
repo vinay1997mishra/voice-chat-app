@@ -8983,18 +8983,6 @@ class _RoomMemberProfilePage extends StatelessWidget {
                       ? member.flagEmoji
                       : member.flagEmoji + ' ' + member.countryCode,
                 ),
-                _ProfileDetailRow(
-                  label: 'Family',
-                  value: member.familyTag ?? '—',
-                ),
-                _ProfileDetailRow(
-                  label: 'Host',
-                  value: member.hostTag ?? '—',
-                ),
-                _ProfileDetailRow(
-                  label: 'Agency',
-                  value: member.agencyName ?? '—',
-                ),
               ],
             ),
           ),
