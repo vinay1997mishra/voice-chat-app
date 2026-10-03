@@ -158,7 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               setDialogState(
                 () => errorText = 'Minimum ' +
                     senderRole.toUpperCase() +
-                    ' transfer is \\$' +
+                    ' transfer is \$' +
                     (minimumCents / 100).toStringAsFixed(2) +
                     '.',
               );
@@ -179,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   sending = false;
                   errorText = 'Available ' +
                       senderRole.toUpperCase() +
-                      ' balance is only \\$' +
+                      ' balance is only \$' +
                       (availableCents / 100).toStringAsFixed(2) +
                       '.';
                 });
@@ -200,7 +200,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SnackBar(
                     content: Text(
                       senderRole.toUpperCase() +
-                          ' transferred \\$' +
+                          ' transferred \$' +
                           (cents / 100).toStringAsFixed(2) +
                           ' to ID ' +
                           selected.userId,
@@ -227,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     'Available ' +
                         senderRole.toUpperCase() +
-                        ': \\$' +
+                        ': \$' +
                         (availableCents / 100).toStringAsFixed(2),
                   ),
                   const SizedBox(height: 12),
@@ -263,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
-                      labelText: 'USD amount (minimum \\$' +
+                      labelText: 'USD amount (minimum \$' +
                           (minimumCents / 100).toStringAsFixed(0) +
                           ')',
                     ),
