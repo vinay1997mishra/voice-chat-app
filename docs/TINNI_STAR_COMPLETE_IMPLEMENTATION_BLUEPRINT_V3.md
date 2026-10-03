@@ -252,6 +252,11 @@ Gift panel:
 
 ## 16. Storage / infrastructure
 
+- **User image safety is fail-closed and server-authoritative.** Any user-supplied image that can become public or visible to other users (including profile avatar, profile cover/life/travel media and room DP, plus future user-upload image surfaces) must pass the configured server-side image moderation check before it is written/published. If the moderation service is unavailable, errors, times out or returns an invalid verdict, the upload is rejected and the previous approved image remains unchanged.
+- User image upload accepts only validated JPEG/PNG/static WebP with matching file signatures and current size limits. Animated WebP is rejected to reduce frame-based moderation bypass risk. Client-side checks alone are never sufficient.
+- Moderation must reject content prohibited by Tinni Star safety rules or applicable law, including child sexual exploitation material, non-consensual sexual imagery, explicit sexual content where prohibited, terrorist/extremist propaganda where prohibited, graphic illegal abuse content and other configured illegal/prohibited image categories. A moderation result is a safety control, not a legal determination; uncertain cases may be held/rejected rather than auto-published.
+- Rejected image bytes must not be published as user media. Logs/audit should retain only necessary event metadata/verdict references, not duplicate the rejected image unless a specifically required lawful evidence-retention process is implemented.
+- Direct clients must not bypass moderation by supplying arbitrary external image URLs in place of an approved uploaded media object. Future user-image surfaces must reuse the same moderation gate.
 - Heavy permanent assets such as frames/profile cards/entry effects/backgrounds remain intended for R2 rather than D1 storage.
 - Existing backend/realtime/RTC adapter boundaries remain.
 - Server-authoritative economy, moderation, gifting, settlement and permission checks remain server-authoritative.
