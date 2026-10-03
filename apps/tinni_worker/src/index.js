@@ -89,6 +89,113 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
+function bytesToBase64(bytes) {
+  let out = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(bytes.length, i + chunkSize));
+    out += String.fromCharCode(...chunk);
+  }
+  return btoa(out);
+}
+
+function validateImageMagic(bytes, mimeType) {
+  const mime = String(mimeType || "").toLowerCase();
+  if (mime === "image/jpeg") {
+    return bytes.length >= 3 &&
+      bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mime === "image/png") {
+    return bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e &&
+      bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a &&
+      bytes[6] === 0x1a && bytes[7] === 0x0a;
+  }
+  if (mime === "image/webp") {
+    return bytes.length >= 12 &&
+      String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
+  }
+  return false;
+}
+
+function isAnimatedWebp(bytes) {
+  if (bytes.length < 16) return false;
+  const text = new TextDecoder("latin1").decode(bytes);
+  return text.includes("ANIM") || text.includes("ANMF");
+}
+
+async function enforceImageSafety(env, {
+  bytes,
+  mimeType,
+  surface,
+}) {
+  if (!validateImageMagic(bytes, mimeType)) {
+    throw new Error("Image file signature does not match its declared type");
+  }
+  if (String(mimeType).toLowerCase() === "image/webp" && isAnimatedWebp(bytes)) {
+    throw new Error("Animated WebP images are not allowed");
+  }
+
+  const moderationUrl = String(env.IMAGE_MODERATION_URL || "").trim();
+  if (!moderationUrl) {
+    throw new Error(
+      "Image safety check is temporarily unavailable. Upload blocked.",
+    );
+  }
+
+  const headers = { "content-type": "application/json" };
+  if (env.IMAGE_MODERATION_TOKEN) {
+    headers.authorization = "Bearer " + String(env.IMAGE_MODERATION_TOKEN);
+  }
+
+  let response;
+  try {
+    response = await fetch(moderationUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        mime_type: String(mimeType),
+        image_base64: bytesToBase64(bytes),
+        surface: String(surface || "user_image"),
+        policy: "tinni-star-user-image-safety-v1",
+      }),
+    });
+  } catch (_) {
+    throw new Error(
+      "Image safety check failed. Upload blocked.",
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      "Image safety check failed. Upload blocked.",
+    );
+  }
+
+  let verdict;
+  try {
+    verdict = await response.json();
+  } catch (_) {
+    throw new Error(
+      "Image safety check returned an invalid response. Upload blocked.",
+    );
+  }
+
+  const allowed = verdict?.allowed === true && verdict?.flagged !== true;
+  if (!allowed) {
+    throw new Error(
+      "This image cannot be used because it failed Tinni Star safety checks.",
+    );
+  }
+
+  return {
+    allowed: true,
+    provider: String(verdict?.provider || "configured-moderation-service"),
+    request_id: verdict?.request_id ? String(verdict.request_id) : null,
+  };
+}
+
 function getCookie(request, name) {
   const cookie = request.headers.get("cookie") || "";
   for (const part of cookie.split(";")) {
@@ -1089,6 +1196,7 @@ export default {
           env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
         ),
         effect_media_configured: Boolean(env.EFFECT_MEDIA),
+        image_moderation_configured: Boolean(env.IMAGE_MODERATION_URL),
         remote_config: {
           room_recommendation_enabled: true,
           gift_effects_enabled: true,
@@ -1129,6 +1237,18 @@ export default {
       }
       if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
         return json({ ok: false, error: "Room photo must be 650 KB or smaller" }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "room_dp",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Room image failed safety checks"),
+        }, 400);
       }
       const userId = String(appSession.user.user_id || "").trim();
       const key = "rooms/" + userId + "/dp";
@@ -1199,6 +1319,18 @@ export default {
       }
       if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
         return json({ ok: false, error: "Profile photo must be 650 KB or smaller" }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "profile_" + slot,
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Profile image failed safety checks"),
+        }, 400);
       }
       const userId = String(appSession.user.user_id || "").trim();
       const key = "profiles/" + userId + "/" + slot;
