@@ -225,7 +225,8 @@ Row-count rule:
 - 11–15 seats → 3 rows.
 - 16–24 seats → 4 rows.
 - 25–30 seats → 5 rows.
-- 31–42 seats → 6 rows.
+- 31–36 seats → 6 rows.
+- 37–42 seats → 7 rows.
 
 Distribution:
 - For layouts with 3 or more rows, every row above the final two rows must contain the same number of seats.
@@ -242,8 +243,8 @@ Distribution:
   - 31 = 6+6+6+6+4+3
   - 32 = 6+6+6+6+4+4
   - 33 = 6+6+6+6+5+4
-  - 37 = 7+7+7+7+5+4
-  - 42 = 7+7+7+7+7+7
+  - 37 = 6+6+6+6+6+4+3
+  - 42 = 6+6+6+6+6+6+6
 
 Visual rule:
 - All rows use the same left and right working edges.
