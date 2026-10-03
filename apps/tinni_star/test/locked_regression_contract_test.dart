@@ -32,6 +32,13 @@ void main() {
     expect(login, contains('items: tinniSupportedLanguages'));
   });
 
+  test('retired Mine entries stay removed', () {
+    final profile = File('lib/screens/profile_screen.dart').readAsStringSync();
+    expect(profile, isNot(contains("Key('mine-personal-information')")));
+    expect(profile, isNot(contains("label: 'Personal information'")));
+    expect(profile, isNot(contains("Key('mine-props')")));
+  });
+
   test('locked wallet entry points cannot disappear', () {
     final recharge = File('lib/screens/recharge_screen.dart').readAsStringSync();
     final details = File('lib/screens/wallet_detail_screens.dart').readAsStringSync();

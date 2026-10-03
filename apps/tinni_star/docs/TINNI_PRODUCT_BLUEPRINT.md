@@ -246,14 +246,13 @@ The Mine menu order is locked to:
 1. **Medal of Honor**
 2. **Custom Center**
 3. **Shop**
-4. **Props**
-5. **Reward Records**
-6. **Task**
-7. **Host data**
-8. **Family**
-9. **CP Nest**
-10. **Feedback**
-11. **Setting**
+4. **Reward Records**
+5. **Task**
+6. **Host data**
+7. **Family**
+8. **CP Nest**
+9. **Feedback**
+10. **Setting**
 
 Do not silently remove, rename, duplicate or reorder these entries.
 
@@ -284,15 +283,7 @@ Do not silently remove, rename, duplicate or reorder these entries.
   - Purchase/Send behavior where that catalog type supports it.
 - Cosmetic/content catalog may include vehicle/entry effects, profile/card items, frames/rings, bubbles and future Owner Panel-configured catalog types.
 
-### 8.8 Props
-
-- Opens the user's owned Props/Inventory surface, not the Shop placeholder.
-- Loads actual owned entitlements/inventory.
-- Shows item name/type and owned state.
-- Equippable props such as frames support **Use / Using** state through backend inventory/equip authority.
-- Future prop types must use the same entitlement model rather than creating duplicate local-only inventories.
-
-### 8.9 Reward Records
+### 8.8 Reward Records
 
 - Opens real reward/wallet history.
 - Reads server wallet/reward transactions.
@@ -300,7 +291,7 @@ Do not silently remove, rename, duplicate or reorder these entries.
 - Positive and negative records are visually distinguishable.
 - No fabricated local history may be shown.
 
-### 8.10 Task
+### 8.9 Task
 
 - Opens the real Task page.
 - Task completion is derived from server-visible account activity.
@@ -315,7 +306,7 @@ Do not silently remove, rename, duplicate or reorder these entries.
 - A claimed task cannot be claimed again.
 - Task definitions/rewards should remain extensible and Owner Panel-configurable as the production task system expands.
 
-### 8.11 Host data
+### 8.10 Host data
 
 **Host data** must be a real role/settlement page, not an information placeholder.
 
@@ -332,14 +323,14 @@ It shows applicable real account data:
 
 Host/Agency/BD eligibility, balances, conversion rules and settlement authority stay server-side.
 
-### 8.12 Family
+### 8.11 Family
 
 - Opens the existing Family surface.
 - If the user belongs to a Family, open the Family home.
 - If the user has no Family, open the Family discovery/ranking/join path.
 - Family tag/level on Mine must stay synchronized with the same Family account state.
 
-### 8.13 CP Nest
+### 8.12 CP Nest
 
 - **CP Nest stays in Mine** as its own personal CP entry.
 - It opens the real CP panel/screen.
@@ -347,7 +338,7 @@ Host/Agency/BD eligibility, balances, conversion rules and settlement authority 
 - Public CP Ranking/Events may still appear in Party/Home where defined.
 - Games do **not** move into Mine.
 
-### 8.14 Feedback
+### 8.13 Feedback
 
 - Opens a real Feedback page.
 - User can select a category and submit a text report/request.
@@ -356,7 +347,7 @@ Host/Agency/BD eligibility, balances, conversion rules and settlement authority 
 - The user can view their own feedback history.
 - Privacy/contact requests may use this Feedback route until an official Tinni Star legal/support contact is configured.
 
-### 8.15 Setting — exact order
+### 8.14 Setting — exact order
 
 **Setting** opens a dedicated page with this exact order:
 

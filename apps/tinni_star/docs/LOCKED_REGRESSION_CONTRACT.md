@@ -36,6 +36,7 @@ This file defines features that must survive future updates. A feature may be ch
 
 ## Mine / profile
 - Existing locked Mine menu/order and reference-video rules in TINNI_PRODUCT_BLUEPRINT.md remain authoritative.
+- **Personal information** and **Props** are retired from the Mine menu and must not be re-added unless the Platform Owner explicitly requests them again.
 - Owner web controls remain separate from the normal Android user app.
 
 ## Future additions

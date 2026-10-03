@@ -956,14 +956,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 10),
               _mineMenuGroup([
                 _mineMenuRow(
-                  key: const Key('mine-personal-information'),
-                  icon: Icons.account_box_rounded,
-                  label: 'Personal information',
-                  onTap: () => _openMineScreen(
-                    PersonalProfileScreen(state: widget.state),
-                  ),
-                ),
-                _mineMenuRow(
                   key: const Key('mine-my-guardian'),
                   icon: Icons.shield_rounded,
                   label: 'My Guardian',
@@ -993,14 +985,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: tinniText(language, 'shop'),
                   onTap: () => _openMineScreen(
                     StoreScreen(state: widget.state),
-                  ),
-                ),
-                _mineMenuRow(
-                  key: const Key('mine-props'),
-                  icon: Icons.auto_awesome_rounded,
-                  label: tinniText(language, 'props'),
-                  onTap: () => _openMineScreen(
-                    PropsScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
