@@ -3013,6 +3013,12 @@ export class AppDirectoryStore extends DurableObject {
       ["owner_hierarchy","user_id"], ["owner_hierarchy","parent_user_id"],
       ["hierarchy_period_earnings","user_id"], ["settlement_balances","user_id"],
       ["settlement_transfers","sender_user_id"], ["settlement_transfers","recipient_user_id"],
+      ["diamond_conversions","user_id"],
+      ["privileged_wallet_transactions","user_id"],
+      ["privileged_wallet_transactions","counterparty_user_id"],
+      ["role_dollar_transfers","sender_user_id"],
+      ["role_dollar_transfers","recipient_user_id"],
+      ["company_dollar_ledger","sender_user_id"],
       ["room_lock_attempts","user_id"], ["room_access_grants","user_id"],
       ["room_themes","creator_user_id"], ["app_follows","follower_id"],
       ["app_follows","target_id"], ["app_blocks","blocker_id"],
@@ -6532,11 +6538,18 @@ export class AppDirectoryStore extends DurableObject {
   updateUserPreferences(userIdValue, input = {}) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const current = this.userPreferences(userId);
+    const requestedLanguage = cleanText(
+      input.language === undefined ? current.language : input.language,
+      40,
+    );
+    const language = ["English", "Hindi", "Urdu"].includes(requestedLanguage)
+      ? requestedLanguage
+      : "English";
     const next = {
       message_voice: input.message_voice === undefined ? current.message_voice : input.message_voice === true,
       message_vibration: input.message_vibration === undefined ? current.message_vibration : input.message_vibration === true,
       room_floating_only: input.room_floating_only === undefined ? current.room_floating_only : input.room_floating_only === true,
-      language: cleanText(input.language === undefined ? current.language : input.language, 40) || "English",
+      language,
     };
     const now = Date.now();
     this.ctx.storage.sql.exec(
