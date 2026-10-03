@@ -321,3 +321,16 @@ For every future intentional feature/layout change:
 - **Unselected Staff functions are hidden and server-blocked.** A function with no selected permission must not appear in the Staff navigation, dashboard, buttons or drill-down controls, and its protected API/action must reject access.
 - **New future Owner functions never auto-inherit into existing or new Staff Panels.** Every new function requires its own explicit Staff permission before it can appear or work.
 - **Hierarchy full-detail access is separately permissioned.** `users.full_dashboard` alone does not grant Host/Agency/BD drill-down to staff; `hierarchy.view_details` is also required, while mutation permissions such as Host removal remain separate.
+
+
+## Owner Master Panel A-to-Z Full-ID drill-down — LOCKED
+
+- Full User ID/Profile is not a static summary. Every active Host, Agency and BD role is a tappable identity control with a visible Remove action when the signed-in panel has the matching hierarchy permission.
+- Host / Agency / BD role tap opens the server-authoritative role dashboard. Date investigation supports last 7 days, last 15 days, this month, last month and a custom inclusive date range.
+- Agency drill-down shows its active Hosts with received coins, target, progress and joined time; Host ID/name opens that Host's Full ID/Profile and Host can be removed from the Agency from the same drill-down.
+- BD drill-down shows linked Agencies and their Host totals/progress; linked Agency IDs remain drillable and may be unlinked only with the explicit Agency/BD-link permission.
+- Custom/V Official/Coin Seller/Merchant and other stored identity tags are tappable. Their detail layer shows tag metadata; wallet-linked identities expose their privileged-wallet status and management action when permitted. Every removable stored tag has a visible Remove action.
+- BD, Agency and Host automatic identities must all be returned from backend hierarchy state; the UI must not depend on a manually duplicated custom tag.
+- Full ID Dashboard sections are themselves drill-down controls: profile/ID, wallet/VIP, hierarchy, verification, room, identity/tags, messages, calls and advanced per-ID investigation.
+- Any user ID exposed inside a nested Full-ID record (message participants, call participants, live room users, hierarchy members) must be tappable and open that referenced user's Full User ID/Profile. The operator can continue drilling deeper instead of reaching a dead-end summary.
+- Staff sub-panels receive none of these controls by default. Full-ID and hierarchy-detail access require explicit permissions, and every mutation remains server-authoritative and audit logged.
