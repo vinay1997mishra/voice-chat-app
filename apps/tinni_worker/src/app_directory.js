@@ -5401,13 +5401,34 @@ export class AppDirectoryStore extends DurableObject {
       unitPrice = Number(giftData.coin_price ?? giftData.price ?? 0);
     } else {
       const builtIn = {
-        rose: { name: "Rose", price: 100 },
-        crystal: { name: "Crystal", price: 500 },
-        crown: { name: "Crown", price: 1000 },
+        rose: { name: "Rose", price: 100, category: "normal" },
+        crystal: { name: "Crystal", price: 500, category: "normal" },
+        crown: { name: "Crown", price: 1000, category: "luxury" },
+        "gold-dragon": { name: "Golden Dragon", price: 5000, category: "luxury" },
+        "royal-crown": { name: "Royal Crown", price: 2500, category: "luxury" },
+        "star-castle": { name: "Star Castle", price: 12000, category: "luxury" },
+        "cp-heart": { name: "My Heart", price: 44444, category: "cp" },
+        "cp-invite": { name: "CP Invite", price: 2222222, category: "cp", cp_invite: true },
+        "country-pride": { name: "Country Pride", price: 100, category: "country" },
+        "lucky-colorful-rose": { name: "Colorful Rose", price: 20, category: "lucky", lucky: true },
+        "lucky-rainbow-heart": { name: "Rainbow Heart", price: 50, category: "lucky", lucky: true },
+        "lucky-magic-balloon": { name: "Magic Balloon", price: 100, category: "lucky", lucky: true },
+        "lucky-candy-star": { name: "Candy Star", price: 200, category: "lucky", lucky: true },
+        "lucky-neon-butterfly": { name: "Neon Butterfly", price: 500, category: "lucky", lucky: true },
+        "lucky-sparkle-crown": { name: "Sparkle Crown", price: 1000, category: "lucky", lucky: true },
+        "lucky-dream-cake": { name: "Dream Cake", price: 2000, category: "lucky", lucky: true },
+        "lucky-galaxy-ring": { name: "Galaxy Ring", price: 5000, category: "lucky", lucky: true },
+        "lucky-shining-unicorn": { name: "Shining Unicorn", price: 10000, category: "lucky", lucky: true },
+        "lucky-royal-treasure": { name: "Royal Treasure Box", price: 20000, category: "lucky", lucky: true },
       }[giftId];
       if (builtIn) {
         giftName = builtIn.name;
         unitPrice = builtIn.price;
+        giftData = {
+          category: builtIn.category,
+          lucky: builtIn.lucky === true,
+          rebate: builtIn.lucky === true,
+        };
       }
     }
     if (!giftName || !Number.isInteger(unitPrice) || unitPrice < 0) {
