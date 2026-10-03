@@ -1066,6 +1066,76 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_settlement_transfers_sender
         ON settlement_transfers(sender_user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_settlement_transfers_recipient
+        ON settlement_transfers(recipient_user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS diamond_conversions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        diamonds INTEGER NOT NULL,
+        coins INTEGER NOT NULL,
+        rate_coins_per_diamond INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_diamond_conversions_user_time
+        ON diamond_conversions(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS privileged_wallet_transactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        wallet_type TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        coins_delta INTEGER NOT NULL DEFAULT 0,
+        usd_cents INTEGER NOT NULL DEFAULT 0,
+        counterparty_user_id TEXT,
+        reference_id TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_privileged_wallet_transactions_user_time
+        ON privileged_wallet_transactions(user_id, wallet_type, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS role_dollar_transfers (
+        id TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        sender_user_id TEXT NOT NULL,
+        sender_wallet_type TEXT NOT NULL,
+        destination_type TEXT NOT NULL,
+        recipient_user_id TEXT,
+        usd_cents INTEGER NOT NULL,
+        coins_debited INTEGER NOT NULL,
+        sender_balance_before INTEGER NOT NULL,
+        sender_balance_after INTEGER NOT NULL,
+        recipient_balance_before INTEGER,
+        recipient_balance_after INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_role_dollar_transfers_sender_time
+        ON role_dollar_transfers(sender_user_id, sender_wallet_type, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_role_dollar_transfers_recipient_time
+        ON role_dollar_transfers(recipient_user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS company_dollar_balance (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        usd_cents INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS company_dollar_ledger (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        sender_user_id TEXT,
+        sender_wallet_type TEXT,
+        usd_cents_delta INTEGER NOT NULL,
+        balance_before INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        actor TEXT NOT NULL DEFAULT 'system',
+        reason TEXT NOT NULL DEFAULT '',
+        reference_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_company_dollar_ledger_time
+        ON company_dollar_ledger(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS owner_room_controls (
         room_id TEXT PRIMARY KEY,
@@ -1260,6 +1330,10 @@ export class AppDirectoryStore extends DurableObject {
     );
     this.ctx.storage.sql.exec(
       "INSERT OR IGNORE INTO owner_treasury (singleton_id, balance, updated_at) VALUES (1, 0, ?)",
+      Date.now(),
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO company_dollar_balance (singleton_id, usd_cents, updated_at) VALUES (1, 0, ?)",
       Date.now(),
     );
     this.ctx.storage.sql.exec(
