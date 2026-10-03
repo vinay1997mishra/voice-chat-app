@@ -146,6 +146,26 @@ assert.match(
   /canAccessDirectMessageMedia\(userIdValue, messageIdValue\)/,
   "Stored message photos must only be readable by conversation participants",
 );
+assert.match(
+  directory,
+  /CREATE TABLE IF NOT EXISTS owner_panel_message_log/,
+  "Owner-panel messages need a separate retention marker without deleting the user inbox record",
+);
+assert.match(
+  directory,
+  /Date\.now\(\) - \(48 \* 60 \* 60 \* 1000\)/,
+  "Owner-panel message history must use a strict 48-hour visibility window",
+);
+assert.match(
+  directory,
+  /LEFT JOIN owner_panel_message_log opm[\s\S]{0,260}opm\.message_id IS NULL OR opm\.created_at >= \?/,
+  "Only owner-panel-origin messages older than 48 hours may disappear from the panel view",
+);
+assert.match(
+  directory,
+  /INSERT OR REPLACE INTO owner_panel_message_log\(message_id,user_id,created_at\)/,
+  "Sending from the Owner Panel must mark the message for panel-only 48-hour retention",
+);
 
 console.log("Production readiness guards passed");
 
