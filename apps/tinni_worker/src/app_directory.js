@@ -2131,6 +2131,25 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  markOwnerPanelMessage(messageIdValue, userIdValue, createdAtValue = Date.now()) {
+    const messageId = String(messageIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const createdAt = Math.max(0, Number(createdAtValue || Date.now()));
+    if (!messageId || !userId) throw new Error("Owner panel message details are required");
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO owner_panel_message_log(message_id,user_id,created_at) VALUES (?,?,?)",
+      messageId,
+      userId,
+      createdAt,
+    );
+    return {
+      ok: true,
+      message_id: messageId,
+      user_id: userId,
+      created_at: createdAt,
+    };
+  }
+
   sendOwnerMessages(textValue, userIdsValue = [], allUsersValue = false) {
     const text = cleanText(textValue, 2000);
     if (!text) throw new Error("Message cannot be empty");
@@ -2152,7 +2171,16 @@ export class AppDirectoryStore extends DurableObject {
         "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1", userId,
       ).toArray()[0];
       if (!exists) continue;
-      this.sendOfficialMessage(userId, text, { action: "owner_message" });
+      const officialMessage = this.sendOfficialMessage(
+        userId,
+        text,
+        { action: "owner_message" },
+      );
+      this.markOwnerPanelMessage(
+        officialMessage.id,
+        userId,
+        officialMessage.created_at,
+      );
       sent += 1;
     }
     return { ok: true, sent, requested: targets.length };
