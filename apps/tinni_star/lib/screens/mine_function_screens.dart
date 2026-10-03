@@ -1754,7 +1754,75 @@ class HostDataScreen extends StatefulWidget {
 class _HostDataScreenState extends State<HostDataScreen> {
   bool loading = true;
   String? error;
+  Map<String, dynamic> portal = const <String, dynamic>{};
   List<Map<String, dynamic>> transfers = const <Map<String, dynamic>>[];
+  String rangeKey = 'This month';
+  DateTimeRange? customRange;
+  bool memberView = false;
+
+  String get _role => widget.roleLabel.toLowerCase();
+
+  Map<String, dynamic> _map(dynamic value) {
+    if (value is! Map) return const <String, dynamic>{};
+    return value.map(
+      (key, item) => MapEntry(key.toString(), item),
+    );
+  }
+
+  int _int(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _compact(dynamic value) {
+    final number = _int(value);
+    if (number >= 1000000000) {
+      return (number / 1000000000).toStringAsFixed(1) + 'B';
+    }
+    if (number >= 1000000) {
+      return (number / 1000000).toStringAsFixed(1) + 'M';
+    }
+    if (number >= 1000) {
+      return (number / 1000).toStringAsFixed(1) + 'K';
+    }
+    return number.toString();
+  }
+
+  DateTimeRange _bounds() {
+    final now = DateTime.now();
+    DateTime startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
+    final today = startOfDay(now);
+    switch (rangeKey) {
+      case 'Today':
+        return DateTimeRange(start: today, end: now);
+      case 'Yesterday':
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 1)),
+          end: today,
+        );
+      case 'Last 7 days':
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 6)),
+          end: now,
+        );
+      case 'Last 30 days':
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 29)),
+          end: now,
+        );
+      case 'Custom':
+        return customRange ??
+            DateTimeRange(
+              start: today.subtract(const Duration(days: 6)),
+              end: now,
+            );
+      default:
+        return DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: now,
+        );
+    }
+  }
 
   @override
   void initState() {
@@ -1765,15 +1833,23 @@ class _HostDataScreenState extends State<HostDataScreen> {
   Future<void> _load() async {
     final account = widget.state.auth.current;
     if (account == null) return;
+    final range = _bounds();
     try {
       final results = await Future.wait<dynamic>([
         widget.state.backend.wallet(account.authToken),
         widget.state.backend.settlementTransfers(account.authToken),
+        widget.state.backend.hierarchyPortal(
+          account.authToken,
+          role: _role,
+          fromMs: range.start.millisecondsSinceEpoch,
+          toMs: range.end.millisecondsSinceEpoch,
+        ),
       ]);
       widget.state.wallet.applyRemote(results[0]);
       if (!mounted) return;
       setState(() {
         transfers = List<Map<String, dynamic>>.from(results[1] as List);
+        portal = Map<String, dynamic>.from(results[2] as Map);
         loading = false;
         error = null;
       });
@@ -1786,153 +1862,742 @@ class _HostDataScreenState extends State<HostDataScreen> {
     }
   }
 
+  Future<void> _selectRange(String next) async {
+    if (next == 'Custom') {
+      final now = DateTime.now();
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(now.year - 2),
+        lastDate: DateTime(now.year + 1),
+        initialDateRange: customRange ??
+            DateTimeRange(
+              start: now.subtract(const Duration(days: 6)),
+              end: now,
+            ),
+      );
+      if (picked == null) return;
+      customRange = DateTimeRange(
+        start: DateTime(
+          picked.start.year,
+          picked.start.month,
+          picked.start.day,
+        ),
+        end: DateTime(
+          picked.end.year,
+          picked.end.month,
+          picked.end.day,
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
+    }
+    setState(() {
+      rangeKey = next;
+      loading = true;
+    });
+    await _load();
+  }
+
+  Future<void> _editContact() async {
+    final controller = TextEditingController(
+      text: portal['contact']?.toString() ?? '',
+    );
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Contact / WhatsApp'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 100,
+          decoration: const InputDecoration(
+            hintText: 'Phone, WhatsApp or contact ID',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.updateHierarchyContact(
+        account.authToken,
+        role: _role,
+        contact: value,
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
+
+  Future<void> _inviteRole() async {
+    final inviteRole = _role == 'bd'
+        ? 'agency'
+        : _role == 'agency'
+            ? 'host'
+            : '';
+    if (inviteRole.isEmpty) return;
+    final controller = TextEditingController();
+    final target = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Invite ' + (inviteRole == 'host' ? 'Host' : 'Agency')),
+        content: TextField(
+          key: const Key('hierarchy-invite-user-id'),
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.text,
+          decoration: const InputDecoration(
+            labelText: 'User ID',
+            hintText: 'Enter Tinni user ID',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Send invitation'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (target == null || target.isEmpty) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.createHierarchyInvite(
+        account.authToken,
+        targetUserId: target,
+        role: inviteRole,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (inviteRole == 'host' ? 'Host' : 'Agency') +
+                ' invitation sent to ID ' +
+                target +
+                '.',
+          ),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
+
   String _usd(int cents) => '\$' + (cents / 100).toStringAsFixed(2);
+
+  Widget _metric(String title, dynamic value, {String? suffix}) {
+    return Expanded(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 82),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _minePanel,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _mineBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: _mineMuted,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              _compact(value) + (suffix ?? ''),
+              style: const TextStyle(
+                color: _mineText,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _identityCard() {
+    final profile = _map(portal['profile']);
+    final hierarchy = _map(portal['hierarchy']);
+    final parent = _map(portal['parent']);
+    final name = profile['display_name']?.toString() ??
+        profile['user_id']?.toString() ??
+        '';
+    final flag = profile['flag_emoji']?.toString() ?? '';
+    final contact = portal['contact']?.toString() ?? '';
+    final joinedAt = _int(hierarchy['activated_at']);
+
+    return Card(
+      color: _minePanel,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: _mineBorder),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: _mineBg,
+                  child: Text(
+                    name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                    style: const TextStyle(
+                      color: _mineText,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        flag + (flag.isEmpty ? '' : ' ') + name,
+                        style: const TextStyle(
+                          color: _mineText,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        'ID ' + (profile['user_id']?.toString() ?? ''),
+                        style: const TextStyle(color: _mineMuted),
+                      ),
+                      if (joinedAt > 0)
+                        Text(
+                          'Joined ' + _dateText(joinedAt),
+                          style: const TextStyle(
+                            color: _mineMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _mineBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _mineBorder),
+                  ),
+                  child: Text(
+                    widget.roleLabel,
+                    style: const TextStyle(
+                      color: _mineText,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (parent.isNotEmpty) ...[
+              const Divider(height: 22),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_tree_rounded,
+                    color: _mineMuted,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (parent['role']?.toString() ?? '').toUpperCase() +
+                          ': ' +
+                          (parent['display_name']?.toString() ?? '') +
+                          ' • ID ' +
+                          (parent['user_id']?.toString() ?? ''),
+                      style: const TextStyle(color: _mineMuted),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const Divider(height: 22),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.chat_rounded, color: _mineText),
+              title: const Text(
+                'Contact / WhatsApp',
+                style: TextStyle(color: _mineText),
+              ),
+              subtitle: Text(
+                contact.isEmpty ? 'Not added' : contact,
+                style: const TextStyle(color: _mineMuted),
+              ),
+              trailing: IconButton(
+                key: const Key('hierarchy-contact-edit'),
+                onPressed: _editContact,
+                icon: const Icon(Icons.edit_rounded, color: _mineText),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _rangePicker() {
+    const options = <String>[
+      'Today',
+      'Yesterday',
+      'Last 7 days',
+      'Last 30 days',
+      'This month',
+      'Custom',
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final option in options)
+            Padding(
+              padding: const EdgeInsets.only(right: 7),
+              child: ChoiceChip(
+                label: Text(option),
+                selected: rangeKey == option,
+                onSelected: (_) => _selectRange(option),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statsCard() {
+    final stats = _map(portal['stats']);
+    final wallet = _map(portal['wallet']);
+    final isHost = _role == 'host';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _metric('Received coins', stats['received_coins']),
+            const SizedBox(width: 8),
+            _metric(
+              isHost ? 'Diamonds earned' : 'Gift senders',
+              isHost ? stats['diamond_earned'] : stats['gift_senders'],
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _metric(
+              isHost
+                  ? 'Gift senders'
+                  : _role == 'agency'
+                      ? 'Hosts'
+                      : 'Agencies',
+              isHost
+                  ? stats['gift_senders']
+                  : _role == 'agency'
+                      ? stats['host_count']
+                      : stats['agency_count'],
+            ),
+            const SizedBox(width: 8),
+            _metric(
+              isHost
+                  ? 'Followers'
+                  : _role == 'bd'
+                      ? 'Hosts'
+                      : 'Commission',
+              isHost
+                  ? stats['followers']
+                  : _role == 'bd'
+                      ? stats['host_count']
+                      : wallet['commission_usd_cents'],
+              suffix: _role == 'agency' ? '¢' : null,
+            ),
+          ],
+        ),
+        if (isHost) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _metric('Online minutes', stats['online_minutes']),
+              const SizedBox(width: 8),
+              _metric('Valid mic minutes', stats['valid_mic_minutes']),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _metric('Valid days', stats['valid_days']),
+              const SizedBox(width: 8),
+              _metric('Private chats', stats['private_chats']),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _walletCard() {
+    final wallet = _map(portal['wallet']);
+    return Card(
+      color: _minePanel,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: _mineBorder),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.diamond_rounded, color: _mineText),
+            title: Text(
+              _role == 'host' ? 'Diamond points' : 'Settlement balance',
+              style: const TextStyle(color: _mineText),
+            ),
+            trailing: Text(
+              _role == 'host'
+                  ? _compact(wallet['diamonds'])
+                  : _usd(_int(wallet['settlement_usd_cents'])),
+              style: const TextStyle(
+                color: _mineText,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            title: const Text(
+              'Withdrawable / transferable',
+              style: TextStyle(color: _mineText),
+            ),
+            trailing: Text(
+              _usd(_int(wallet['withdrawable_usd_cents'])),
+              style: const TextStyle(
+                color: _mineText,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          if (widget.state.wallet.canTransferSettlement &&
+              widget.onTransfer != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  key: const Key('host-data-transfer'),
+                  onPressed: () async {
+                    await widget.onTransfer!();
+                    await _load();
+                  },
+                  icon: const Icon(Icons.currency_exchange_rounded),
+                  label: Text(
+                    _role == 'host'
+                        ? 'Exchange / Transfer'
+                        : 'Transfer settlement',
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberList() {
+    final raw = portal['members'];
+    final members = raw is List
+        ? raw.whereType<Map>().map(_map).toList(growable: false)
+        : const <Map<String, dynamic>>[];
+    final noun = _role == 'bd' ? 'Agency' : 'Host';
+    if (members.isEmpty) {
+      return Card(
+        color: _minePanel,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Center(
+            child: Text(
+              'No linked ' + noun.toLowerCase() + ' yet.',
+              style: const TextStyle(color: _mineMuted),
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final member in members)
+          Card(
+            color: _minePanel,
+            shape: RoundedRectangleBorder(
+              side: const BorderSide(color: _mineBorder),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: _mineBg,
+                child: Text(
+                  (member['display_name']?.toString() ?? '?')
+                      .characters
+                      .first
+                      .toUpperCase(),
+                ),
+              ),
+              title: Text(
+                (member['flag_emoji']?.toString() ?? '') +
+                    ' ' +
+                    (member['display_name']?.toString() ?? ''),
+                style: const TextStyle(
+                  color: _mineText,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: Text(
+                'ID ' +
+                    (member['user_id']?.toString() ?? '') +
+                    ' • ' +
+                    _compact(member['received_coins']) +
+                    ' received' +
+                    (_role == 'bd'
+                        ? ' • ' +
+                            _int(member['host_count']).toString() +
+                            ' hosts'
+                        : ''),
+                style: const TextStyle(color: _mineMuted),
+              ),
+              trailing: Text(
+                noun,
+                style: const TextStyle(
+                  color: _mineText,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _dataTabs() {
+    if (_role == 'host') return const SizedBox.shrink();
+    final memberLabel = _role == 'bd' ? 'Agency Data' : 'Host Data';
+    return Row(
+      children: [
+        Expanded(
+          child: memberView
+              ? OutlinedButton(
+                  onPressed: () => setState(() => memberView = false),
+                  child: Text(widget.roleLabel + ' Data'),
+                )
+              : FilledButton(
+                  onPressed: () => setState(() => memberView = false),
+                  child: Text(widget.roleLabel + ' Data'),
+                ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: memberView
+              ? FilledButton(
+                  onPressed: () => setState(() => memberView = true),
+                  child: Text(memberLabel),
+                )
+              : OutlinedButton(
+                  onPressed: () => setState(() => memberView = true),
+                  child: Text(memberLabel),
+                ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final wallet = widget.state.wallet;
-    final roleText = widget.roleLabel;
+    final roleTitle = widget.roleLabel + ' Center';
+    final inviteLabel = _role == 'bd'
+        ? 'Invite Agency'
+        : _role == 'agency'
+            ? 'Invite Host'
+            : '';
 
     return Scaffold(
-      key: Key('role-data-screen-' + widget.roleLabel.toLowerCase()),
+      key: Key('role-data-screen-' + _role),
       backgroundColor: _mineBg,
       appBar: AppBar(
         backgroundColor: _mineBg,
         foregroundColor: _mineText,
         elevation: 0,
-        title: Text(widget.roleLabel + ' Panel'),
+        title: Text(roleTitle),
       ),
       body: _MineSubpageBackground(
         child: RefreshIndicator(
-        onRefresh: _load,
-        child: loading
-            ? const Center(child: CircularProgressIndicator(color: _mineText))
-            : ListView(
-                padding: const EdgeInsets.all(14),
-                children: [
-                  if (error != null)
-                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
-                  Card(
-                    color: _minePanel,
-                    shape: RoundedRectangleBorder(
-                      side: const BorderSide(color: _mineBorder),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: ListTileTheme(
-                      data: const ListTileThemeData(
-                        textColor: _mineText,
-                        iconColor: _mineText,
-                        subtitleTextStyle: TextStyle(color: _mineMuted),
+          onRefresh: _load,
+          child: loading
+              ? const Center(
+                  child: CircularProgressIndicator(color: _mineText),
+                )
+              : ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(14),
+                  children: [
+                    if (error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          error!,
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
                       ),
-                      child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.badge_rounded),
-                          title: const Text('Role'),
-                          trailing: Text(
-                            roleText,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          title: Text(
-                            widget.roleLabel == 'Host'
-                                ? 'Host diamonds'
-                                : widget.roleLabel + ' balance',
-                          ),
-                          trailing: Text(wallet.diamonds.toString()),
-                        ),
-                        ListTile(
-                          title: const Text('Diamond value'),
-                          trailing: Text(_usd(wallet.diamondUsdCents)),
-                        ),
-                        ListTile(
-                          title: const Text('Commission balance'),
-                          trailing: Text(_usd(wallet.commissionUsdCents)),
-                        ),
-                        ListTile(
-                          title: const Text('Withdrawable / transferable'),
-                          trailing: Text(
-                            _usd(wallet.withdrawableUsdCents),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
-                    ),
-                  ),
-                  if (wallet.canTransferSettlement && widget.onTransfer != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: FilledButton.icon(
-                        key: const Key('host-data-transfer'),
-                        onPressed: () async {
-                          await widget.onTransfer!();
-                          await _load();
-                        },
-                        icon: const Icon(Icons.send_rounded),
-                        label: const Text('Transfer settlement'),
-                      ),
-                    ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Settlement transfer history',
-                    style: TextStyle(
-                      color: _mineText,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (transfers.isEmpty)
+                    _identityCard(),
+                    const SizedBox(height: 10),
                     Card(
-                      color: _minePanel,
-                      shape: RoundedRectangleBorder(
-                        side: const BorderSide(color: _mineBorder),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(
-                          child: Text(
-                            'No settlement transfers yet',
-                            style: TextStyle(color: _mineMuted),
-                          ),
-                        ),
-                      ),
-                    ),
-                  for (final row in transfers)
-                    Card(
+                      key: const Key('role-panel-weekly-rewards'),
                       color: _minePanel,
                       shape: RoundedRectangleBorder(
                         side: const BorderSide(color: _mineBorder),
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: ListTile(
-                        iconColor: _mineText,
-                        textColor: _mineText,
-                        leading: const Icon(Icons.payments_rounded),
+                        leading: const Icon(
+                          Icons.workspace_premium_rounded,
+                          color: _mineText,
+                        ),
                         title: Text(
-                          _usd((row['usd_cents'] as num?)?.toInt() ?? 0),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          'Weekly ' + widget.roleLabel + ' Rewards',
+                          style: const TextStyle(
+                            color: _mineText,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                        subtitle: Text(
-                          'To ID ' +
-                              (row['recipient_user_id']?.toString() ?? '') +
-                              ' • ' +
-                              (row['recipient_role']
-                                      ?.toString()
-                                      .replaceAll('_', ' ') ??
-                                  '') +
-                              '\n' +
-                              _dateText(row['created_at']),
+                        subtitle: const Text(
+                          'Rewards and settlement follow Tinni Star policy.',
+                          style: TextStyle(color: _mineMuted),
                         ),
-                        isThreeLine: true,
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: _mineMuted,
+                        ),
                       ),
                     ),
-                ],
-              ),
+                    const SizedBox(height: 10),
+                    if (inviteLabel.isNotEmpty)
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('hierarchy-invite-button'),
+                          onPressed: _inviteRole,
+                          icon: const Icon(Icons.person_add_alt_1_rounded),
+                          label: Text(inviteLabel),
+                        ),
+                      ),
+                    if (inviteLabel.isNotEmpty) const SizedBox(height: 12),
+                    _dataTabs(),
+                    if (_role != 'host') const SizedBox(height: 12),
+                    _rangePicker(),
+                    const SizedBox(height: 12),
+                    if (!memberView) ...[
+                      _statsCard(),
+                      const SizedBox(height: 12),
+                      _walletCard(),
+                    ] else
+                      _memberList(),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Settlement transfer history',
+                      style: TextStyle(
+                        color: _mineText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (transfers.isEmpty)
+                      Card(
+                        color: _minePanel,
+                        child: const Padding(
+                          padding: EdgeInsets.all(18),
+                          child: Center(
+                            child: Text(
+                              'No settlement transfers yet',
+                              style: TextStyle(color: _mineMuted),
+                            ),
+                          ),
+                        ),
+                      ),
+                    for (final row in transfers)
+                      Card(
+                        color: _minePanel,
+                        shape: RoundedRectangleBorder(
+                          side: const BorderSide(color: _mineBorder),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: ListTile(
+                          iconColor: _mineText,
+                          textColor: _mineText,
+                          leading: const Icon(Icons.payments_rounded),
+                          title: Text(
+                            _usd(_int(row['usd_cents'])),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            'To ID ' +
+                                (row['recipient_user_id']?.toString() ?? '') +
+                                ' • ' +
+                                (row['recipient_role']
+                                        ?.toString()
+                                        .replaceAll('_', ' ') ??
+                                    '') +
+                                '\n' +
+                                _dateText(row['created_at']),
+                          ),
+                          isThreeLine: true,
+                        ),
+                      ),
+                  ],
+                ),
         ),
       ),
     );
