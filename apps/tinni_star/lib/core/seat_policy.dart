@@ -14,7 +14,8 @@ int rowsForSeatCount(int seatCount) {
   if (normalized <= 15) return 3;
   if (normalized <= 24) return 4;
   if (normalized <= 30) return 5;
-  return 6;
+  if (normalized <= 36) return 6;
+  return 7;
 }
 
 int normalizeSeatCount(int seatCount) {
