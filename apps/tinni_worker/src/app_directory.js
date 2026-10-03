@@ -2056,6 +2056,7 @@ export class AppDirectoryStore extends DurableObject {
         balance: Number(treasury.balance || 0),
         updated_at: Number(treasury.updated_at || 0),
       },
+      company_dollars: this._companyDollarState(500),
       catalog: this.ownerCatalog(),
     };
   }
@@ -3095,6 +3096,7 @@ export class AppDirectoryStore extends DurableObject {
     switch (action) {
       case "treasury-add": return this._ownerTreasuryAdd(data.amount);
       case "treasury-send": return this._ownerTreasurySend(data.user_id, data.wallet_type, data.amount);
+      case "company-dollar-deduct": return this.ownerDeductCompanyDollars(data.usd_cents, data.reason);
       case "wallet-security-unfreeze": return this._ownerUnfreezeWalletSecurity(data.user_id, data.wallet_type);
       case "user-search": return { users: this.ownerSearchUsers(data.user_id || data.query, 50) };
       case "user-ban": return this._setUserControl(data.user_id, { banned: String(data.status) === "ban" });
