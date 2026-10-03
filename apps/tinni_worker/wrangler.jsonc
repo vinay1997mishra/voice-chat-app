@@ -6,6 +6,9 @@
   "observability": {
     "enabled": true
   },
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
     "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev"
   },
