@@ -3923,7 +3923,7 @@ export class AppDirectoryStore extends DurableObject {
         if (!row) throw new Error("Room not found");
         return { room: rowToRoom(row) };
       }
-      case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount);
+      case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount, data.asset || "coins");
       case "wallet-seller": return this._manageWallet(data.user_id, "coin_seller", data.operation, data.amount);
       case "wallet-merchant": return this._manageWallet(data.user_id, "merchant", data.operation, data.amount);
       case "bd-activate": return this._setHierarchy(data.user_id, "bd", null, String(data.operation) !== "remove");
