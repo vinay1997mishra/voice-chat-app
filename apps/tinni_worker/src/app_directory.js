@@ -2457,6 +2457,96 @@ export class AppDirectoryStore extends DurableObject {
     return this._privilegedWalletGuard(guard.user_id, guard.wallet_type);
   }
 
+  _recordPrivilegedWalletTransaction({
+    userId,
+    walletType,
+    kind,
+    coinsDelta = 0,
+    usdCents = 0,
+    counterpartyUserId = null,
+    referenceId = null,
+    note = "",
+    createdAt = Date.now(),
+  }) {
+    const id = "priv-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      `INSERT INTO privileged_wallet_transactions
+        (id,user_id,wallet_type,kind,coins_delta,usd_cents,counterparty_user_id,reference_id,note,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      id,
+      String(userId),
+      String(walletType),
+      String(kind),
+      Math.trunc(Number(coinsDelta || 0)),
+      Math.trunc(Number(usdCents || 0)),
+      counterpartyUserId == null ? null : String(counterpartyUserId),
+      referenceId == null ? null : String(referenceId),
+      String(note || ""),
+      Number(createdAt || Date.now()),
+    );
+    return id;
+  }
+
+  _companyDollarState(limitValue = 200) {
+    const limit = Math.max(1, Math.min(1000, Number(limitValue) || 200));
+    const row = this.ctx.storage.sql.exec(
+      "SELECT usd_cents,updated_at FROM company_dollar_balance WHERE singleton_id=1 LIMIT 1",
+    ).toArray()[0] || { usd_cents: 0, updated_at: 0 };
+    const ledger = this.ctx.storage.sql.exec(
+      `SELECT l.*, u.display_name
+         FROM company_dollar_ledger l
+         LEFT JOIN app_users u ON u.user_id=l.sender_user_id
+        ORDER BY l.created_at DESC
+        LIMIT ?`,
+      limit,
+    ).toArray().map((item) => ({
+      id: String(item.id),
+      kind: String(item.kind),
+      sender_user_id: item.sender_user_id ? String(item.sender_user_id) : null,
+      sender_name: item.display_name ? String(item.display_name) : null,
+      sender_wallet_type: item.sender_wallet_type ? String(item.sender_wallet_type) : null,
+      usd_cents_delta: Number(item.usd_cents_delta || 0),
+      balance_before: Number(item.balance_before || 0),
+      balance_after: Number(item.balance_after || 0),
+      actor: String(item.actor || "system"),
+      reason: String(item.reason || ""),
+      reference_id: item.reference_id ? String(item.reference_id) : null,
+      created_at: Number(item.created_at || 0),
+    }));
+    return {
+      usd_cents: Math.max(0, Number(row.usd_cents || 0)),
+      updated_at: Number(row.updated_at || 0),
+      ledger,
+    };
+  }
+
+  ownerDeductCompanyDollars(usdCentsValue, reasonValue = "") {
+    const usdCents = Math.floor(Number(usdCentsValue || 0));
+    if (!Number.isSafeInteger(usdCents) || usdCents <= 0) {
+      throw new Error("Enter a valid dollar amount");
+    }
+    const reason = cleanText(reasonValue, 240);
+    const current = this._companyDollarState(1);
+    if (current.usd_cents < usdCents) {
+      throw new Error("Company dollar balance is too low");
+    }
+    const before = current.usd_cents;
+    const after = before - usdCents;
+    const now = Date.now();
+    const id = "company-dollar-" + crypto.randomUUID();
+    this.ctx.storage.sql.exec(
+      "UPDATE company_dollar_balance SET usd_cents=?,updated_at=? WHERE singleton_id=1",
+      after, now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO company_dollar_ledger
+        (id,kind,sender_user_id,sender_wallet_type,usd_cents_delta,balance_before,balance_after,actor,reason,reference_id,created_at)
+       VALUES (?,'owner_deduct',NULL,NULL,?,?,?,?,?,?,?)`,
+      id, -usdCents, before, after, "owner", reason, id, now,
+    );
+    return { ok: true, usd_cents: after, deducted_usd_cents: usdCents, transaction_id: id };
+  }
+
   _ownerUnfreezeWalletSecurity(userIdValue, walletTypeValue = "normal") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
