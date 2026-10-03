@@ -338,6 +338,7 @@ export class AppDirectoryStore extends DurableObject {
         room_id TEXT PRIMARY KEY,
         password_salt TEXT NOT NULL,
         password_hash TEXT NOT NULL,
+        display_password TEXT,
         generation INTEGER NOT NULL DEFAULT 1,
         updated_at INTEGER NOT NULL
       );
@@ -1203,6 +1204,7 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE lucky_gift_results ADD COLUMN session_id TEXT",
       "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE room_locks ADD COLUMN display_password TEXT",
       "ALTER TABLE owner_user_tags ADD COLUMN kind TEXT NOT NULL DEFAULT 'custom'",
       "ALTER TABLE owner_user_tags ADD COLUMN designation TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE owner_user_tags ADD COLUMN background_color TEXT"
@@ -8015,7 +8017,11 @@ export class AppDirectoryStore extends DurableObject {
     if (existing) throw new Error("Wallet password is already set. Use reset password.");
 
     const password = String(passwordValue || "");
-    if (password.length < 6 || password.length > 64) {
+    if (wallet.wallet_type === "coin_seller") {
+      if (!/^\d{4}$/.test(password)) {
+        throw new Error("Coin Seller wallet PIN must be exactly 4 digits");
+      }
+    } else if (password.length < 6 || password.length > 64) {
       throw new Error("Wallet password must be 6 to 64 characters");
     }
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -8044,6 +8050,9 @@ export class AppDirectoryStore extends DurableObject {
   async verifyRoleWalletPassword(userIdValue, walletTypeValue, passwordValue) {
     const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
     const password = String(passwordValue || "");
+    if (wallet.wallet_type === "coin_seller" && !/^\d{4}$/.test(password)) {
+      return false;
+    }
     const row = this.ctx.storage.sql.exec(
       "SELECT password_salt,password_hash FROM privileged_wallet_credentials WHERE user_id=? AND wallet_type=? LIMIT 1",
       wallet.user_id,
@@ -8171,7 +8180,11 @@ export class AppDirectoryStore extends DurableObject {
     const wallet = this._activePrivilegedWalletRow(userIdValue, walletTypeValue);
     const requestId = String(requestIdValue || "").trim();
     const password = String(newPasswordValue || "");
-    if (password.length < 6 || password.length > 64) {
+    if (wallet.wallet_type === "coin_seller") {
+      if (!/^\d{4}$/.test(password)) {
+        throw new Error("Coin Seller wallet PIN must be exactly 4 digits");
+      }
+    } else if (password.length < 6 || password.length > 64) {
       throw new Error("Wallet password must be 6 to 64 characters");
     }
     const request = this.ctx.storage.sql.exec(
@@ -8805,10 +8818,16 @@ export class AppDirectoryStore extends DurableObject {
       };
     }
     if (String(room.owner_id) === userId) {
+      const ownerLock = this._roomLockRow(roomId);
       return {
         ok: true,
         allowed: true,
         owner_bypass: true,
+        locked: Number(room.locked) === 1,
+        room_password:
+          Number(room.locked) === 1 && ownerLock?.display_password
+            ? String(ownerLock.display_password)
+            : null,
         blocked: false,
         attempts_remaining: 5,
       };
@@ -9076,7 +9095,6 @@ export class AppDirectoryStore extends DurableObject {
     const ownerId = String(ownerIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
     const locked = Boolean(input?.locked);
-    const password = String(input?.password || "");
     const room = this._roomRow(roomId);
 
     if (!room) throw new Error("Room not found");
@@ -9087,31 +9105,41 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     const oldLock = this._roomLockRow(roomId);
     const nextGeneration = Number(oldLock?.generation || 0) + 1;
+    let generatedPassword = null;
 
     if (locked) {
-      if (!/^\\d{5}$/.test(password)) {
-        throw new Error("Room password must be exactly 5 digits");
-      }
+      const randomValue = crypto.getRandomValues(new Uint32Array(1))[0];
+      generatedPassword = String(10000 + (randomValue % 90000));
       const salt = crypto.getRandomValues(new Uint8Array(16));
-      const hash = await deriveSecret(password, salt, 120000);
+      const hash = await deriveSecret(generatedPassword, salt, 120000);
       this.ctx.storage.sql.exec(
         `INSERT INTO room_locks
-          (room_id, password_salt, password_hash, generation, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+          (room_id, password_salt, password_hash, display_password, generation, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(room_id) DO UPDATE SET
            password_salt = excluded.password_salt,
            password_hash = excluded.password_hash,
+           display_password = excluded.display_password,
            generation = excluded.generation,
            updated_at = excluded.updated_at`,
         roomId,
         toBase64Url(salt),
         toBase64Url(hash),
+        generatedPassword,
         nextGeneration,
         now,
       );
       this.ctx.storage.sql.exec(
         "UPDATE app_rooms SET locked = 1, updated_at = ? WHERE id = ?",
         now,
+        roomId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_lock_attempts WHERE room_id = ?",
+        roomId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_access_grants WHERE room_id = ?",
         roomId,
       );
     } else {
@@ -9122,7 +9150,7 @@ export class AppDirectoryStore extends DurableObject {
       );
       if (oldLock) {
         this.ctx.storage.sql.exec(
-          "UPDATE room_locks SET generation = ?, updated_at = ? WHERE room_id = ?",
+          "UPDATE room_locks SET display_password = NULL, generation = ?, updated_at = ? WHERE room_id = ?",
           nextGeneration,
           now,
           roomId,
@@ -9152,6 +9180,8 @@ export class AppDirectoryStore extends DurableObject {
     return {
       ok: true,
       room: rowToRoom(updated),
+      room_password: generatedPassword,
+      owner_bypass: true,
     };
   }
 
