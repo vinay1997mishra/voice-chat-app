@@ -2811,6 +2811,130 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
+  const hierarchyClose = e.target.closest("[data-owner-hierarchy-close]");
+  if (hierarchyClose) {
+    document.getElementById("ownerHierarchyDialog")?.close();
+    if (ownerFullDashboardUserId && sessionCan("users.full_dashboard")) {
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    }
+    return;
+  }
+
+  const roleOpenButton = e.target.closest("[data-owner-role-open]");
+  if (roleOpenButton) {
+    await openOwnerHierarchyDashboard(
+      roleOpenButton.dataset.ownerRoleUser || ownerFullDashboardUserId,
+      roleOpenButton.dataset.ownerRoleOpen,
+    );
+    return;
+  }
+
+  const roleRemoveButton = e.target.closest("[data-owner-role-remove]");
+  if (roleRemoveButton) {
+    await removeOwnerHierarchyRole(
+      roleRemoveButton.dataset.ownerRoleUser || ownerFullDashboardUserId,
+      roleRemoveButton.dataset.ownerRoleRemove,
+    );
+    return;
+  }
+
+  const tagRemoveButton = e.target.closest("[data-owner-tag-remove]");
+  if (tagRemoveButton) {
+    if (!sessionCan("messaging.tags")) {
+      toast("Tag remove permission is not active.");
+      return;
+    }
+    const userId = String(tagRemoveButton.dataset.ownerTagUser || ownerFullDashboardUserId);
+    const tagId = String(tagRemoveButton.dataset.ownerTagRemove || "");
+    if (!userId || !tagId) return;
+    if (!confirm("Remove this tag from ID " + userId + "?")) return;
+    try {
+      await api(
+        "/api/owner/tags/" + encodeURIComponent(userId) + "/" + encodeURIComponent(tagId),
+        { method: "DELETE" },
+      );
+      toast("Tag removed.");
+      if (ownerFullDashboardUserId === userId) await openOwnerFullDashboard(userId);
+      else await openOwnerUserProfile(userId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const hierarchyRangeButton = e.target.closest("[data-owner-hierarchy-range]");
+  if (hierarchyRangeButton) {
+    const nextRange = String(hierarchyRangeButton.dataset.ownerHierarchyRange || "15d");
+    if (nextRange !== "custom") {
+      ownerHierarchyRange = nextRange;
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, nextRange);
+    } else {
+      ownerHierarchyRange = "custom";
+      const fromInput = document.getElementById("ownerHierarchyFrom");
+      fromInput?.focus();
+      toast("Select From and To dates, then tap Apply Custom.");
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-owner-hierarchy-custom-apply]")) {
+    ownerHierarchyCustomFrom = String(document.getElementById("ownerHierarchyFrom")?.value || "");
+    ownerHierarchyCustomTo = String(document.getElementById("ownerHierarchyTo")?.value || "");
+    ownerHierarchyRange = "custom";
+    await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, "custom");
+    return;
+  }
+
+  const hierarchyUserButton = e.target.closest("[data-owner-hierarchy-user]");
+  if (hierarchyUserButton) {
+    const targetId = String(hierarchyUserButton.dataset.ownerHierarchyUser || "");
+    document.getElementById("ownerHierarchyDialog")?.close();
+    await openOwnerUserProfile(targetId);
+    return;
+  }
+
+  const removeHostButton = e.target.closest("[data-owner-hierarchy-remove-host]");
+  if (removeHostButton) {
+    if (!sessionCan("hierarchy.host_manage")) {
+      toast("Host management permission is not active.");
+      return;
+    }
+    const hostId = String(removeHostButton.dataset.ownerHierarchyRemoveHost || "");
+    if (!hostId || !confirm("Remove Host ID " + hostId + " from this Agency?")) return;
+    try {
+      await runOwnerAction("host-remove", {
+        host_user_id: hostId,
+        agency_owner_id: ownerHierarchyUserId,
+      });
+      toast("Host removed from Agency.");
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, ownerHierarchyRange);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  const unlinkAgencyButton = e.target.closest("[data-owner-hierarchy-unlink-agency]");
+  if (unlinkAgencyButton) {
+    if (!sessionCan("hierarchy.agency_bd_link")) {
+      toast("Agency/BD link permission is not active.");
+      return;
+    }
+    const agencyId = String(unlinkAgencyButton.dataset.ownerHierarchyUnlinkAgency || "");
+    if (!agencyId || !confirm("Remove Agency ID " + agencyId + " from this BD?")) return;
+    try {
+      await runOwnerAction("agency-from-bd", {
+        agency_owner_id: agencyId,
+        bd_user_id: ownerHierarchyUserId,
+      });
+      toast("Agency removed from BD.");
+      await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, ownerHierarchyRange);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const fullViewButton = e.target.closest("[data-owner-full-view]");
   if (fullViewButton) {
     await openOwnerFullDashboard(fullViewButton.dataset.ownerFullView);
@@ -3602,6 +3726,17 @@ document.body.addEventListener("click", async e => {
     }
     return;
   }
+});
+
+document.body.addEventListener("input", (event) => {
+  const input = event.target.closest("#ownerHierarchyMemberSearch");
+  if (!input) return;
+  const query = String(input.value || "").trim().toLowerCase();
+  document.querySelectorAll("#ownerHierarchyMemberList [data-hierarchy-search]")
+    .forEach((row) => {
+      const haystack = String(row.dataset.hierarchySearch || "").toLowerCase();
+      row.hidden = query && !haystack.includes(query);
+    });
 });
 
 document.getElementById("actionForm").addEventListener("submit", async e => {
