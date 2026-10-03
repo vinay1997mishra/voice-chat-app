@@ -267,3 +267,14 @@ For every future intentional feature/layout change:
 6. Do not recover an old behavior from legacy docs or an older branch.
 
 **Final rule:** the current implementation + this latest blueprint are the baseline. Older blueprints are not valid input anymore.
+
+## Gift economy, selected-seat animation, and Rocket anti-regression lock
+
+- Gift delivery animation must originate from the **center of the room screen** and travel to the **selected recipient ID/seat DP**. It must not fly from a fixed screen corner.
+- **Lucky Gift social value is fixed at 10%** of the charged gift value. That same 10% is the only amount added to the recipient seat received-value display, room gift ranking, and Rocket progress.
+- Every gift that is **not Lucky** contributes **100%** of its charged value to the recipient seat received-value display, room gift ranking, and Rocket progress.
+- Gift Diamonds are **Host-only**. A recipient who is not an active Host receives **0 Diamonds** from gifting. Once the recipient is an active Host, normal gifts credit **100% Diamonds** and Lucky Gifts credit **10% Diamonds**.
+- Host eligibility must be checked server-side at gift-send time. Client UI labels do not grant Diamond eligibility.
+- Rocket has exactly **10 sequential stages**. The amount required to complete each stage is: **1 = 8M, 2 = 15M, 3 = 30M, 4 = 50M, 5 = 90M, 6 = 150M, 7 = 200M, 8 = 250M, 9 = 350M, 10 = 500M**.
+- Rocket uses the same server-derived social gift value as room ranking: Lucky = 10%, all other gifts = 100%. Do not maintain a second conflicting gift-value formula in the client.
+
