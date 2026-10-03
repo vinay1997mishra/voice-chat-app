@@ -17,7 +17,6 @@ import 'store_screen.dart';
 import 'recharge_screen.dart';
 import 'cp_screen.dart';
 import 'privacy_policy_screen.dart';
-import 'personal_profile_screen.dart';
 import 'public_profile_screen.dart';
 import 'guardian_screen.dart';
 import 'mine_function_screens.dart';
