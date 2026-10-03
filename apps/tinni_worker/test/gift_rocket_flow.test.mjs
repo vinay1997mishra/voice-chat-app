@@ -50,8 +50,8 @@ assert.match(
 );
 assert.match(
   index,
-  /tx\?\.receiver_diamonds \?\? tx\?\.ranking_value \?\? 0/,
-  "Seat received totals must use credited diamonds, not raw gift coins",
+  /tx\?\.ranking_value \?\?\s*tx\?\.social_value_coins \?\?\s*tx\?\.receiver_diamonds \?\?\s*tx\?\.total_cost \?\?\s*0/,
+  "Seat/ranking totals must prefer the authoritative social gift value before any fallback",
 );
 assert.doesNotMatch(
   index,
