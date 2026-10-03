@@ -69,10 +69,22 @@ void main() {
 
     expect(
       find.byKey(const Key('live-owner-tag-92000002-Official Host')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('live-owner-medal-92000002-Verified')),
+      findsNothing,
+    );
+
+    state.roomSession.controller!.addRoomMessage(
+      'Tagged Friend',
+      'Hello from tagged user',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('room-comment-tag-92000002-Official Host'),
+      ),
       findsOneWidget,
     );
 
@@ -89,11 +101,11 @@ void main() {
     );
     expect(
       find.byKey(const Key('room-owner-tag-92000002-Official Host')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('room-owner-medal-92000002-Verified')),
-      findsOneWidget,
+      findsNothing,
     );
 
     await tester.binding.handlePopRoute();
@@ -221,15 +233,9 @@ void main() {
     final lockSetting =
         find.byKey(const Key('room-type-setting-lock'));
     await tester.ensureVisible(lockSetting);
-    await tester.tap(lockSetting);
-    await tester.pumpAndSettle();
-    expect(find.text('Exactly 5 digits'), findsOneWidget);
-    final passwordField = tester.widget<TextField>(
-      find.byType(TextField).last,
-    );
-    expect(passwordField.maxLength, 5);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    expect(lockSetting, findsOneWidget);
+    expect(find.text('Exactly 5 digits'), findsNothing);
+    expect(find.textContaining('Create room password'), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -323,6 +329,46 @@ void main() {
       find.byKey(const Key('room-rocket-floating-button')),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('room-gift-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-normal')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-lucky')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-cp')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-country')), findsOneWidget);
+    expect(find.byKey(const Key('gift-category-luxury')), findsOneWidget);
+    expect(find.text('Popular'), findsNothing);
+    expect(find.text('Backpack'), findsNothing);
+    expect(find.byKey(const Key('room-gift-wallet-coins')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('gift-category-lucky')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('lucky-gift-quantity-selector')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('lucky-quantity-plus')), findsOneWidget);
+    expect(find.byKey(const Key('lucky-quantity-presets')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lucky-quantity-presets')));
+    await tester.pumpAndSettle();
+    for (final quantity in const <int>[
+      9,
+      21,
+      51,
+      99,
+      199,
+      599,
+      899,
+      2999,
+      7999,
+    ]) {
+      expect(find.text('×' + quantity.toString()), findsOneWidget);
+    }
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('room-rank-hall-button')));
     await tester.pumpAndSettle();
