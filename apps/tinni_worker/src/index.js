@@ -2733,17 +2733,21 @@ export default {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
-            const diamonds = Number(
-              tx?.receiver_diamonds ?? tx?.ranking_value ?? 0,
+            const socialValue = Number(
+              tx?.ranking_value ??
+              tx?.social_value_coins ??
+              tx?.receiver_diamonds ??
+              tx?.total_cost ??
+              0,
             );
             if (!receiverId ||
-                !Number.isSafeInteger(diamonds) ||
-                diamonds <= 0) {
+                !Number.isSafeInteger(socialValue) ||
+                socialValue <= 0) {
               continue;
             }
             receiverTotals.set(
               receiverId,
-              Number(receiverTotals.get(receiverId) || 0) + diamonds,
+              Number(receiverTotals.get(receiverId) || 0) + socialValue,
             );
           }
           const visualReceiverIds = [...new Set(
@@ -2753,7 +2757,7 @@ export default {
           )];
           await getRoomPresenceStore(env, roomId).recordGift({
             receivers: [...receiverTotals.entries()].map(
-              ([user_id, diamonds]) => ({ user_id, coins: diamonds }),
+              ([user_id, socialValue]) => ({ user_id, coins: socialValue }),
             ),
             event: {
               id: String(transactions[0]?.id || crypto.randomUUID()),
