@@ -11,6 +11,21 @@ const RECHARGE_PROVIDER_MIN_USD = 5;
 const RECHARGE_PROVIDER_MIN_COINS = COINS_PER_USD * RECHARGE_PROVIDER_MIN_USD;
 const CALL_VERIFICATION_IMAGE_MAX_LENGTH = 500000;
 const VALID_GENDERS = new Set(["male", "female"]);
+const SUPPORTED_LANGUAGES = new Set([
+  "English",
+  "Hindi",
+  "Urdu",
+  "Arabic",
+  "Bengali",
+  "Malayalam",
+  "Filipino (Tagalog)",
+  "Persian (Farsi)",
+  "Kurdish",
+  "Baluchi",
+  "Chinese (Simplified)",
+  "Chinese (Traditional)",
+  "Korean",
+]);
 const PBKDF2_MAX_ITERATIONS = 100000;
 const encoder = new TextEncoder();
 
@@ -3598,6 +3613,10 @@ export class AppDirectoryStore extends DurableObject {
     const countryName = cleanText(input?.country_name, 80);
     const flagEmoji = cleanText(input?.flag_emoji, 16);
     const gender = cleanText(input?.gender, 12).toLowerCase();
+    const requestedLanguage = cleanText(input?.language || "English", 40);
+    const language = SUPPORTED_LANGUAGES.has(requestedLanguage)
+      ? requestedLanguage
+      : "English";
     const avatarDataUrl = input?.avatar_data_url
       ? String(input.avatar_data_url)
       : null;
@@ -3671,6 +3690,17 @@ export class AppDirectoryStore extends DurableObject {
         (user_id, coins, diamonds, updated_at)
        VALUES (?, 0, 0, ?)`,
       userId,
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO user_preferences
+        (user_id,message_voice,message_vibration,room_floating_only,language,updated_at)
+       VALUES (?,1,1,0,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         language=excluded.language,
+         updated_at=excluded.updated_at`,
+      userId,
+      language,
       now,
     );
     return this.getUserById(userId);
@@ -3814,6 +3844,7 @@ export class AppDirectoryStore extends DurableObject {
         country_name: profile.country_name,
         flag_emoji: profile.flag_emoji,
         gender: profile.gender,
+        language: profile.language,
         avatar_data_url: profile.avatar_data_url,
       });
     } else {
@@ -6542,7 +6573,7 @@ export class AppDirectoryStore extends DurableObject {
       input.language === undefined ? current.language : input.language,
       40,
     );
-    const language = ["English", "Hindi", "Urdu"].includes(requestedLanguage)
+    const language = SUPPORTED_LANGUAGES.has(requestedLanguage)
       ? requestedLanguage
       : "English";
     const next = {

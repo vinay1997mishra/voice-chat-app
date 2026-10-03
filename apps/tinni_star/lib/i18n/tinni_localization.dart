@@ -1,3 +1,33 @@
+const List<String> tinniSupportedLanguages = <String>[
+  'English',
+  'Hindi',
+  'Urdu',
+  'Arabic',
+  'Bengali',
+  'Malayalam',
+  'Filipino (Tagalog)',
+  'Persian (Farsi)',
+  'Kurdish',
+  'Baluchi',
+  'Chinese (Simplified)',
+  'Chinese (Traditional)',
+  'Korean',
+];
+
+const Set<String> tinniRtlLanguages = <String>{
+  'Urdu',
+  'Arabic',
+  'Persian (Farsi)',
+  'Kurdish',
+  'Baluchi',
+};
+
+bool tinniIsSupportedLanguage(String value) =>
+    tinniSupportedLanguages.contains(value.trim());
+
+bool tinniIsRtlLanguage(String value) =>
+    tinniRtlLanguages.contains(value.trim());
+
 String tinniText(String language, String key) {
   final normalized = language.trim().toLowerCase();
   final values = normalized == 'hindi'

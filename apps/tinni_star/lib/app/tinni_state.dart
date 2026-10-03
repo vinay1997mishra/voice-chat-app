@@ -29,6 +29,7 @@ import '../games/fruit_party_remote.dart';
 import '../identity/identity.dart';
 import '../infra/realtime.dart';
 import '../infra/app_backend_service.dart';
+import '../i18n/tinni_localization.dart';
 import '../infra/livekit_rtc.dart';
 import '../infra/platform_services.dart';
 import '../media/ktv_features.dart';
@@ -201,9 +202,7 @@ class TinniState {
   void setLanguagePreference(String value) {
     final normalized = value.trim();
     languagePreference.value =
-        const {'English', 'Hindi', 'Urdu'}.contains(normalized)
-            ? normalized
-            : 'English';
+        tinniIsSupportedLanguage(normalized) ? normalized : 'English';
   }
 
   Future<void> refreshAccountPreferences() async {

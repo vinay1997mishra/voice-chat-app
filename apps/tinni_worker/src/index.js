@@ -1338,6 +1338,7 @@ export default {
             country_name: profile.country_name,
             flag_emoji: profile.flag_emoji,
             gender: profile.gender,
+            language: profile.language,
             avatar_data_url: profile.avatar_data_url,
           });
         }
@@ -1569,6 +1570,7 @@ export default {
             country_name: profile.country_name,
             flag_emoji: profile.flag_emoji,
             gender: profile.gender,
+            language: profile.language,
             avatar_data_url: profile.avatar_data_url,
           });
         }

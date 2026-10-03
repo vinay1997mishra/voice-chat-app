@@ -4,6 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/i18n/tinni_localization.dart';
 
 void main() {
+  test('supported language registry includes all launch languages', () {
+    expect(tinniSupportedLanguages, containsAll(<String>[
+      'English',
+      'Hindi',
+      'Urdu',
+      'Arabic',
+      'Bengali',
+      'Malayalam',
+      'Filipino (Tagalog)',
+      'Persian (Farsi)',
+      'Kurdish',
+      'Baluchi',
+      'Chinese (Simplified)',
+      'Chinese (Traditional)',
+      'Korean',
+    ]));
+    expect(tinniSupportedLanguages.first, 'English');
+  });
+
   test('English is the localization fallback', () {
     expect(tinniText('', 'wallet'), 'Wallet');
     expect(tinniText('unknown', 'message'), 'Message');
