@@ -84,6 +84,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
 
+    try {
+      final liveWallet = await widget.state.backend.wallet(account.authToken);
+      widget.state.wallet.applyRemote(liveWallet);
+      if (mounted) setState(() {});
+    } catch (_) {}
+
     final recipientController = TextEditingController();
     final amountController = TextEditingController(
       text: widget.state.wallet.withdrawableUsdCents >= 200 ? '2.00' : '',
