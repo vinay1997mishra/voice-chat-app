@@ -47,6 +47,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const Key('messages-inbox')), findsOneWidget);
+    expect(
+      find.byKey(const Key('message-thread-tinni-official')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('message-thread-tinni-activity')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('message-thread-friend-1')), findsOneWidget);
     expect(
       find.byKey(const Key('messages-random-call-button')),
@@ -129,6 +137,43 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Verify Call ID'), findsOneWidget);
+  });
+
+  testWidgets('role invitation message shows Accept and Reject actions',
+      (tester) async {
+    final state = makeState();
+    state.social.directMessages.add(
+      const ChatMessage(
+        id: 'role-invite-message',
+        from: 'bd-100',
+        to: '91000001',
+        text:
+            '[ROLE_INVITE:invite-100:agency] BD User invited you to become Agency.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MessagesScreen(
+          state: state,
+          targetUserId: 'bd-100',
+          targetName: 'BD User',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.byKey(const Key('role-invite-accept-invite-100')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('role-invite-reject-invite-100')),
+      findsOneWidget,
+    );
+    expect(find.text('Accept Agency'), findsOneWidget);
+    expect(find.text('Reject'), findsOneWidget);
   });
 
   testWidgets('Calls tile is removed from More', (tester) async {
