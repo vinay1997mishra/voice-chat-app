@@ -279,6 +279,34 @@ async function enforceImageSafety(env, {
   );
 }
 
+function isApprovedUserMediaUrl(env, value, userId, kind) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  let parsed;
+  let publicOrigin;
+  try {
+    parsed = new URL(raw);
+    publicOrigin = new URL(String(env.PUBLIC_API_ORIGIN || ""));
+  } catch (_) {
+    return false;
+  }
+  if (parsed.origin !== publicOrigin.origin) return false;
+  if (!parsed.pathname.startsWith("/media/")) return false;
+  let key;
+  try {
+    key = decodeURIComponent(parsed.pathname.slice("/media/".length));
+  } catch (_) {
+    return false;
+  }
+  const id = String(userId || "").trim();
+  const expected = kind === "avatar"
+    ? "profiles/" + id + "/avatar"
+    : kind === "room_dp"
+      ? "rooms/" + id + "/dp"
+      : "";
+  return Boolean(expected) && key === expected;
+}
+
 function getCookie(request, name) {
   const cookie = request.headers.get("cookie") || "";
   for (const part of cookie.split(";")) {
@@ -2036,6 +2064,25 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (body.avatar_data_url !== undefined && body.avatar_data_url !== null) {
+        const nextAvatar = String(body.avatar_data_url || "").trim();
+        const currentAvatar = String(appSession.user.avatar_data_url || "").trim();
+        if (
+          nextAvatar &&
+          nextAvatar !== currentAvatar &&
+          !isApprovedUserMediaUrl(
+            env,
+            nextAvatar,
+            appSession.user.user_id,
+            "avatar",
+          )
+        ) {
+          return json({
+            ok: false,
+            error: "Profile photo must be uploaded and safety-approved first",
+          }, 400);
+        }
+      }
       try {
         const user = await getAppDirectoryStore(env).updateUserProfile(
           appSession.user.user_id,
@@ -3190,6 +3237,20 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (
+        body.photo_data_url &&
+        !isApprovedUserMediaUrl(
+          env,
+          body.photo_data_url,
+          appSession.user.user_id,
+          "room_dp",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Room photo must be uploaded and safety-approved first",
+        }, 400);
+      }
       try {
         const room = await getAppDirectoryStore(env).createRoom(
           appSession.user.user_id,
@@ -3235,6 +3296,20 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      if (
+        body.photo_data_url &&
+        !isApprovedUserMediaUrl(
+          env,
+          body.photo_data_url,
+          appSession.user.user_id,
+          "room_dp",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Room photo must be uploaded and safety-approved first",
+        }, 400);
+      }
       const roomId = String(body.room_id || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       try {
