@@ -9079,12 +9079,26 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
+  sendDirectMessage(fromUserIdValue, toUserIdValue, textValue, optionsValue = {}) {
     const fromUserId = String(fromUserIdValue || "").trim();
     const toUserId = String(toUserIdValue || "").trim();
-    const text = cleanText(textValue, 1000);
+    const options = optionsValue && typeof optionsValue === "object" ? optionsValue : {};
+    const messageKind = String(options.message_kind || "text").trim().toLowerCase() === "image"
+      ? "image"
+      : "text";
+    const mediaUrl = messageKind === "image" ? String(options.media_url || "").trim() : "";
+    const text = cleanText(textValue, messageKind === "image" ? 200 : 1000);
     if (!fromUserId || !toUserId) throw new Error("user IDs are required");
-    if (!text) throw new Error("Message cannot be empty");
+    if (messageKind === "image") {
+      if (!this.areFriends(fromUserId, toUserId)) {
+        throw new Error("Photos can only be sent to mutual friends");
+      }
+      if (!mediaUrl || mediaUrl.length > 2500 || !/^https:\/\//i.test(mediaUrl)) {
+        throw new Error("Approved message photo URL is required");
+      }
+    } else if (!text) {
+      throw new Error("Message cannot be empty");
+    }
     if (this.isBlockedBetween(fromUserId, toUserId)) {
       throw new Error("Messaging is unavailable because one of these users is blocked");
     }
@@ -9096,34 +9110,43 @@ export class AppDirectoryStore extends DurableObject {
     if (!target) throw new Error("User not found");
 
     const now = Date.now();
-    const id =
-      "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
+    const id = String(options.id || "").trim() ||
+      ("dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8));
+    const storedText = messageKind === "image" ? (text || "Photo") : text;
     this.ctx.storage.sql.exec(
       `INSERT INTO direct_messages
-        (id, from_user_id, to_user_id, text, created_at, seen_at)
-       VALUES (?, ?, ?, ?, ?, NULL)`,
+        (id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
       id,
       fromUserId,
       toUserId,
-      text,
+      storedText,
+      messageKind,
+      mediaUrl || null,
       now,
     );
     const sender = this.ctx.storage.sql.exec(
       "SELECT display_name FROM app_users WHERE user_id=? LIMIT 1", fromUserId,
     ).toArray()[0];
+    const preview = messageKind === "image" ? "Photo" : storedText;
     this._notifyUser(
       toUserId,
       "message",
       String(sender?.display_name || fromUserId),
-      text,
-      { source_user_id: fromUserId, metadata: { message_id: id } },
+      preview,
+      {
+        source_user_id: fromUserId,
+        metadata: { message_id: id, message_kind: messageKind },
+      },
     );
     const message = {
       id,
       from: fromUserId,
       from_name: String(sender?.display_name || fromUserId),
       to: toUserId,
-      text,
+      text: storedText,
+      message_kind: messageKind,
+      media_url: mediaUrl || null,
       created_at: now,
       seen_at: null,
     };
@@ -9134,6 +9157,19 @@ export class AppDirectoryStore extends DurableObject {
     return message;
   }
 
+  canAccessDirectMessageMedia(userIdValue, messageIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const messageId = String(messageIdValue || "").trim();
+    if (!userId || !messageId) return false;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT from_user_id,to_user_id,message_kind
+         FROM direct_messages
+        WHERE id=? LIMIT 1`,
+      messageId,
+    ).toArray()[0];
+    if (!row || String(row.message_kind || "text") !== "image") return false;
+    return String(row.from_user_id) === userId || String(row.to_user_id) === userId;
+  }
 
   sendOfficialMessage(toUserIdValue, textValue, contextValue = {}) {
     const toUserId = String(toUserIdValue || "").trim();
