@@ -6836,9 +6836,19 @@ export class AppDirectoryStore extends DurableObject {
       created_at: Number(item.created_at || 0),
     }));
 
-    const receivedTotal = receivedDollars.reduce(
-      (sum, item) => sum + Number(item.usd_cents || 0), 0,
-    );
+    const settlementTotalRow = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(usd_cents),0) AS total FROM settlement_transfers WHERE recipient_user_id=? AND recipient_role=?",
+      userId, walletType,
+    ).toArray()[0];
+    const merchantTotalRow = walletType === "merchant"
+      ? this.ctx.storage.sql.exec(
+          "SELECT COALESCE(SUM(usd_cents),0) AS total FROM role_dollar_transfers WHERE destination_type='merchant' AND recipient_user_id=?",
+          userId,
+        ).toArray()[0]
+      : { total: 0 };
+    const receivedTotal =
+      Math.max(0, Number(settlementTotalRow?.total || 0)) +
+      Math.max(0, Number(merchantTotalRow?.total || 0));
     return {
       user_id: userId,
       wallet_type: walletType,
