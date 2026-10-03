@@ -2641,6 +2641,7 @@ The main Tinni room adopts the supplied reference-video room flow without changi
 - Every seat keeps the **No.X** label and heart/intimacy pill.
 - A red mic-off badge appears on the seat when that seat is room-muted, presence-muted, or the seated user has **Self Mute** enabled.
 - **Rocket** stays above **Game** in the right-side floating stack with the small progress bar between them.
+- Rocket uses the approved **realistic stealth-black visual**: matte/graphite metallic body, sharp glossy black nose cone, dark aerodynamic fins with restrained red accents, cyan/blue glass window, metallic steel engine nozzle and a white-hot/yellow/orange exhaust flame. No cartoon/emoji/pink-purple rocket visual is allowed.
 - Rocket and Game remain outside the 4-box.
 - LP/Game country ribbons use reference-style gold-edged room banners while preserving existing LP-first / game-next priority and country targeting.
 
