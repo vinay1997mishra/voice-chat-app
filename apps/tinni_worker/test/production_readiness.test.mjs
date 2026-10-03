@@ -23,6 +23,31 @@ assert.match(
   /effect_media_configured:\s*Boolean\(env\.EFFECT_MEDIA\)/,
   "App config must report R2 media binding availability",
 );
+assert.match(
+  index,
+  /image_moderation_configured:\s*Boolean\(env\.IMAGE_MODERATION_URL\)/,
+  "App config must report image moderation availability",
+);
+assert.match(
+  index,
+  /await enforceImageSafety\(env, \{[\s\S]*surface: "room_dp"/,
+  "Room DP upload must pass server-side image moderation before storage",
+);
+assert.match(
+  index,
+  /await enforceImageSafety\(env, \{[\s\S]*surface: "profile_" \+ slot/,
+  "Profile media upload must pass server-side image moderation before storage",
+);
+assert.match(
+  index,
+  /Image safety check is temporarily unavailable\. Upload blocked\./,
+  "User image moderation must fail closed when the moderation service is unavailable",
+);
+assert.match(
+  index,
+  /Animated WebP images are not allowed/,
+  "Animated WebP uploads must be rejected to avoid frame-based moderation bypass",
+);
 
 console.log("Production readiness guards passed");
 
