@@ -1042,6 +1042,222 @@ async function openOwnerUserProfile(userId) {
   }
 }
 
+function ownerFullMessageRows(messages) {
+  const items = Array.isArray(messages) ? messages : [];
+  return items.length
+    ? items.map((message) => `
+        <div class="owner-history-row">
+          <strong>${escapeHtml(message.from_user_id)} → ${escapeHtml(message.to_user_id)}</strong>
+          <span>${escapeHtml(message.message_kind === "image" ? "📷 Photo" : message.text)}</span>
+          <small>${escapeHtml(formatFullTimestamp(message.created_at))}</small>
+        </div>
+      `).join("")
+    : '<div class="empty-state">No stored Tinni messages.</div>';
+}
+
+async function openOwnerFullDashboard(userId) {
+  if (!sessionCan("users.full_dashboard")) {
+    toast("Full ID Dashboard permission is not active.");
+    return;
+  }
+  const dialog = document.getElementById("ownerFullDashboardDialog");
+  const root = document.getElementById("ownerFullDashboardContent");
+  if (!dialog || !root) return;
+
+  ownerFullDashboardUserId = String(userId || "").trim();
+  ownerFullDashboardRoomId = "";
+  if (!ownerFullDashboardUserId) return;
+
+  root.innerHTML = '<div class="empty-state">Loading Full ID Dashboard…</div>';
+  document.getElementById("ownerProfileDialog")?.close();
+  if (!dialog.open) dialog.showModal();
+
+  try {
+    const data = await api(
+      "/api/owner/user-detail?user_id=" +
+        encodeURIComponent(ownerFullDashboardUserId),
+    );
+    const detail = data.detail || {};
+    const user = detail.user || {};
+    const controls = detail.controls || {};
+    const wallet = detail.wallet || {};
+    const room = detail.owned_room || detail.current_room || null;
+    const messages = Array.isArray(detail.messages) ? detail.messages : [];
+    const calls = Array.isArray(detail.calls) ? detail.calls : [];
+    const identityTags = Array.isArray(detail.identity_tags)
+      ? detail.identity_tags
+      : [];
+    const hierarchy = Array.isArray(detail.hierarchy) ? detail.hierarchy : [];
+    ownerFullDashboardUserId = String(user.user_id || ownerFullDashboardUserId);
+    ownerFullDashboardRoomId = String(
+      room?.id || room?.room_id || "",
+    );
+
+    const verified = user.call_verified === true ||
+      Number(user.call_verified || 0) === 1;
+    const roomName = String(room?.title || room?.room_name || "");
+    const roomDp = String(room?.photo_data_url || "");
+    const roomBackground = String(room?.theme_asset || "");
+    const profileButtons = [
+      fullDashboardActionButton("user-name", "Change Name", "btn primary"),
+      fullDashboardActionButton("user-dp", "Change DP"),
+      fullDashboardActionButton("id-change", "Change Public ID"),
+      fullDashboardActionButton("user-ban", controls.banned ? "Unban ID" : "Ban / Unban ID"),
+      fullDashboardActionButton("device-ban", "Device Ban / Unban"),
+      fullDashboardActionButton("user-invisible", "Invisible ON / OFF"),
+      fullDashboardActionButton("locked-bypass", "Locked-room Bypass"),
+    ].filter(Boolean).join("");
+
+    const walletButtons = [
+      fullDashboardActionButton("wallet-normal", "Normal Wallet", "btn primary"),
+      fullDashboardActionButton("wallet-seller", "Coin Seller Wallet"),
+      fullDashboardActionButton("wallet-merchant", "Merchant Wallet"),
+      fullDashboardActionButton("vip-grant", "VIP Add / Remove"),
+    ].filter(Boolean).join("");
+
+    const hierarchyButtons = [
+      fullDashboardActionButton("bd-activate", "BD Add / Remove"),
+      fullDashboardActionButton("agency-activate", "Agency Add / Remove"),
+      fullDashboardActionButton("host-add", "Add as Host"),
+      fullDashboardActionButton("host-remove", "Remove Host"),
+    ].filter(Boolean).join("");
+
+    const roomButtons = ownerFullDashboardRoomId
+      ? [
+          fullDashboardActionButton("room-name", "Change Room Name", "btn primary"),
+          fullDashboardActionButton("room-dp", "Change Room DP"),
+          fullDashboardActionButton("room-bg", "Change Room Background"),
+          fullDashboardActionButton("room-ban", "Room Ban / Unban"),
+          fullDashboardActionButton("room-live", "View Live Users / Seats"),
+        ].filter(Boolean).join("")
+      : "";
+
+    root.innerHTML = `
+      <div class="owner-profile-hero">
+        ${user.avatar_data_url
+          ? `<img src="${escapeHtml(user.avatar_data_url)}" alt="" class="owner-profile-avatar">`
+          : '<div class="owner-profile-avatar owner-profile-avatar-fallback">◎</div>'}
+        <div style="min-width:0;flex:1">
+          <h2>${escapeHtml(user.display_name || ownerFullDashboardUserId)}</h2>
+          <p>ID ${escapeHtml(ownerFullDashboardUserId)} • ${escapeHtml(user.gender || "")} • ${escapeHtml(user.country_name || "")}</p>
+          <div class="chips">${userTagHtml(identityTags)}</div>
+        </div>
+        <button type="button" class="btn secondary" data-owner-full-refresh>Refresh ID</button>
+      </div>
+
+      <div class="owner-full-dashboard-note">
+        Full View selected ID ka owner-control workspace hai. Sirf is ID se related controls yahan grouped hain.
+        Har server change audit log me record hota hai.
+      </div>
+
+      <div class="rule-grid owner-profile-grid">
+        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
+        <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
+        <div class="rule"><strong>Diamonds</strong><span>${fmt(wallet.diamonds || 0)}</span></div>
+        <div class="rule"><strong>VIP</strong><span>${Number(controls.vip_level || 0) || "None"}</span></div>
+        <div class="rule"><strong>ID</strong><span>${controls.banned ? "Banned" : "Active"}</span></div>
+        <div class="rule"><strong>Device</strong><span>${controls.device_banned ? "Blocked" : "Active"}</span></div>
+        <div class="rule"><strong>Verified</strong><span>${verified ? "Yes" : "No"}</span></div>
+        <div class="rule"><strong>Last seen</strong><span>${escapeHtml(formatFullTimestamp(detail.presence?.last_seen))}</span></div>
+      </div>
+
+      <div class="owner-full-dashboard-grid">
+        <section class="panel">
+          <div class="panel-head"><div><h3>Profile / ID Control</h3><p>Name, DP, ID and account restrictions.</p></div></div>
+          <div class="owner-full-action-grid">${profileButtons || '<span class="muted">No profile-control permission active.</span>'}</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h3>Wallet / VIP</h3><p>Selected ID wallet and VIP controls.</p></div></div>
+          <div class="rule-grid">
+            <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
+            <div class="rule"><strong>Diamonds</strong><span>${fmt(wallet.diamonds || 0)}</span></div>
+            <div class="rule"><strong>USD</strong><span>${escapeHtml(String(wallet.diamond_usd || wallet.usd || "0"))}</span></div>
+          </div>
+          <div class="owner-full-action-grid">${walletButtons || '<span class="muted">No wallet/VIP permission active.</span>'}</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h3>BD / Agency / Host</h3><p>Current role relationships and direct role controls.</p></div></div>
+          <div class="chips">${ownerDetailRoleHtml(hierarchy)}</div>
+          <div class="owner-full-action-grid">${hierarchyButtons || '<span class="muted">No hierarchy permission active.</span>'}</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h3>Call Verification</h3><p>Current Call ID status for this ID.</p></div><span class="badge ${verified ? "gold" : ""}">${verified ? "Verified" : "Unverified"}</span></div>
+          <div class="owner-full-action-grid">
+            ${!verified && sessionCan("verification.direct_verify")
+              ? '<button type="button" class="btn primary" data-full-direct-verify>Direct Verify</button>'
+              : ""}
+            ${verified && sessionCan("verification.revoke")
+              ? '<button type="button" class="btn secondary" data-full-revoke-verify>Remove Verified</button>'
+              : ""}
+            ${!sessionCan("verification.direct_verify") && !sessionCan("verification.revoke")
+              ? '<span class="muted">No verification control permission active.</span>'
+              : ""}
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h3>Owned / Current Room</h3><p>${ownerFullDashboardRoomId ? "Room ID " + escapeHtml(ownerFullDashboardRoomId) : "No room linked to this ID."}</p></div></div>
+          ${ownerFullDashboardRoomId ? `
+            <div class="rule-grid">
+              <div class="rule"><strong>Name</strong><span>${escapeHtml(roomName || "—")}</span></div>
+              <div class="rule"><strong>DP</strong><span>${roomDp ? "Set" : "Not set"}</span></div>
+              <div class="rule"><strong>Background</strong><span>${roomBackground ? "Set" : "Not set"}</span></div>
+              <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count || 0)}</span></div>
+            </div>
+            <div class="owner-full-action-grid">${roomButtons}</div>
+            ${currentSession?.role === "owner" && detail.current_room?.room_id
+              ? `<div class="button-row" style="margin-top:8px">
+                  <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(detail.current_room.room_id)}">Listen to Room — no mic</button>
+                  <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
+                </div>`
+              : ""}
+          ` : '<div class="empty-state">This ID does not currently own or occupy a room.</div>'}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h3>Tags / Identity</h3><p>Current selected-ID tags.</p></div></div>
+          <div class="chips">${userTagHtml(identityTags)}</div>
+          ${sessionCan("messaging.tags") ? `
+            <div class="button-row" style="margin-top:10px">
+              <button type="button" class="btn secondary" data-full-owner-add-tag>Add Custom Tag</button>
+            </div>` : ""}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h3>Inbox / Messages</h3><p>Owner-panel sent messages show here for 48 hours; user inbox keeps them.</p></div>
+            <span class="badge">${messages.length}</span>
+          </div>
+          ${sessionCan("messaging.send") ? `
+            <div class="owner-full-message-box">
+              <textarea id="ownerFullMessageText" maxlength="2000" placeholder="Send as Tinni Official to this ID…"></textarea>
+              <button type="button" class="btn primary" data-full-owner-message-send>Send Tinni Official Message</button>
+            </div>` : ""}
+          <div class="owner-history-list" style="margin-top:10px">${ownerFullMessageRows(messages)}</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Call History</h3><span class="badge">${calls.length}</span></div>
+          <div class="owner-history-list">
+            ${calls.length ? calls.map((call) => `
+              <div class="owner-history-row">
+                <strong>${escapeHtml(call.caller_id)} → ${escapeHtml(call.receiver_id)}</strong>
+                <span>${escapeHtml(call.media)} • ${escapeHtml(call.state)}</span>
+                <small>${escapeHtml(formatFullTimestamp(call.updated_at || call.created_at))}</small>
+              </div>
+            `).join("") : '<div class="empty-state">No stored Tinni call history.</div>'}
+          </div>
+        </section>
+      </div>
+    `;
+  } catch (error) {
+    root.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to open Full ID Dashboard.")}</div>`;
+  }
+}
+
 async function loadOwnerNotifications() {
   const root = document.getElementById("ownerNotifications");
   if (!root || currentSession?.role !== "owner") return;
