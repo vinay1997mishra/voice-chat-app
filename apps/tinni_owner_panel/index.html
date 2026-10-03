@@ -127,7 +127,7 @@
         </section>
 
         <section class="view" id="view-users">
-          <article class="panel">
+          <article class="panel" data-requires-permission="users.search">
             <div class="panel-head"><div><h2>User Search & Investigation</h2><p>Current ID + old ID lookup with live account data.</p></div><button class="btn primary" data-action="user-search">Search</button></div>
             <div class="form-grid two">
               <label><span>User / old ID / name / email</span><input id="userSearchId" placeholder="e.g. 10000001" /></label>
@@ -170,7 +170,7 @@
             </div>
           </article>
 
-          <div id="verification-page-verified" class="verification-page">
+          <div id="verification-page-verified" class="verification-page" data-requires-permission="verification.view">
             <article class="panel">
               <div class="panel-head">
                 <div><h2>Verified IDs</h2><p>All IDs currently carrying the Verified call tag.</p></div>
@@ -180,7 +180,7 @@
             </article>
           </div>
 
-          <div id="verification-page-requests" class="verification-page" hidden>
+          <div id="verification-page-requests" class="verification-page" data-requires-permission="verification.review" hidden>
             <article class="panel">
               <div class="panel-head">
                 <div><h2>Verification Requests</h2><p>3 live photos + system result. Owner makes the final decision.</p></div>
@@ -189,7 +189,7 @@
             </article>
           </div>
 
-          <div id="verification-page-direct" class="verification-page" hidden>
+          <div id="verification-page-direct" class="verification-page" data-requires-permission="verification.direct_verify" hidden>
             <article class="panel">
               <div class="panel-head">
                 <div>
@@ -210,7 +210,7 @@
         </section>
 
         <section class="view" id="view-messaging">
-          <article class="panel">
+          <article class="panel" data-requires-permission="messaging.search">
             <div class="panel-head">
               <div>
                 <h2>Messages & Tags</h2>
@@ -231,7 +231,7 @@
           </article>
 
           <div class="grid two">
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.send">
               <div class="panel-head"><div><h2>Send Official Message</h2><p>The message appears from Tinni Official in Inbox.</p></div></div>
               <label><span>Message</span><textarea id="ownerBulkMessage" rows="6" maxlength="2000" placeholder="Write message…"></textarea></label>
               <div class="button-row">
@@ -239,7 +239,7 @@
                 <button class="btn secondary" data-owner-message-all>Send to All Users</button>
               </div>
             </article>
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.tags">
               <div class="panel-head"><div><h2>Custom User Tag</h2><p>Whatever name you type becomes the tag. Choose its color and apply it to selected IDs.</p></div></div>
               <label><span>Tag name</span><input id="ownerTagName" maxlength="40" placeholder="e.g. Official Host" /></label>
               <label><span>Tag color</span><input id="ownerTagColor" type="color" value="#FFD54F" /></label>
@@ -247,7 +247,7 @@
                 <button class="btn primary" data-owner-tag-selected>Apply Tag to Selected</button>
               </div>
             </article>
-            <article class="panel">
+            <article class="panel" data-requires-permission="messaging.officials">
               <div class="panel-head"><div><h2>V Official Tag</h2><p>Premium circular official badge. Gold ring, silver V, and a gold position label.</p></div><div class="v-official-preview"><span>V</span></div></div>
               <label><span>Position / Designation</span><input id="ownerVDesignation" maxlength="40" placeholder="e.g. Official Manager" /></label>
               <label><span>V badge background</span>
@@ -274,7 +274,7 @@
             </article>
           </div>
 
-          <article class="panel" id="officialsPanel">
+          <article class="panel" id="officialsPanel" data-requires-permission="messaging.officials">
             <div class="panel-head">
               <div>
                 <h2>Officials</h2>
@@ -433,6 +433,17 @@
       <button class="icon-btn" type="button" data-owner-profile-close>✕</button>
     </div>
     <div id="ownerProfileContent" class="owner-profile-content">Loading…</div>
+  </dialog>
+
+  <dialog id="ownerFullDashboardDialog" class="owner-profile-dialog owner-full-dashboard-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3>Full ID Dashboard</h3>
+        <p>Selected ID ka A-to-Z control dashboard. Every change is server-side and audit logged.</p>
+      </div>
+      <button class="icon-btn" type="button" data-owner-full-close>✕</button>
+    </div>
+    <div id="ownerFullDashboardContent" class="owner-profile-content">Loading full dashboard…</div>
   </dialog>
 
   <dialog id="actionDialog">
