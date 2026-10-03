@@ -78,6 +78,7 @@ let ownerListenRoomId = "";
 let ownerListenAudioElements = [];
 let ownerFullDashboardUserId = "";
 let ownerFullDashboardRoomId = "";
+let ownerFullRefreshAfterAction = false;
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -921,7 +922,9 @@ function renderOfficials() {
         </div>
       </div>
       <div class="button-row official-actions">
-        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(item.user_id)}">Full Details</button>
+${sessionCan("users.full_dashboard")
+          ? `<button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(item.user_id)}">Full Details</button>`
+          : ""}
         <button type="button" class="btn secondary" data-owner-official-edit="${escapeHtml(item.user_id)}"
           data-tag-id="${escapeHtml(item.tag_id)}"
           data-designation="${escapeHtml(item.designation)}"
@@ -1965,7 +1968,9 @@ async function renderUserInvestigation(users) {
       </div>
       <div style="margin-top:8px">${userTagHtml(user.identity_tags || user.tags)}</div>
       <div class="button-row" style="margin-top:10px">
-        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>
+${sessionCan("users.full_dashboard")
+          ? `<button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>`
+          : ""}
       </div>
     </div>
   `).join("");
