@@ -4587,10 +4587,23 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
 
+    const friend = this.areFriends(userId, targetId);
+    this._notifyMessageSocket(userId, {
+      type: "friend_status_changed",
+      peer_user_id: targetId,
+      friend,
+    });
+    this._notifyMessageSocket(targetId, {
+      type: "friend_status_changed",
+      peer_user_id: userId,
+      friend,
+    });
+
     return {
       ok: true,
       target_user_id: targetId,
       following: Boolean(followingValue),
+      friend,
     };
   }
 
@@ -8646,7 +8659,7 @@ export class AppDirectoryStore extends DurableObject {
     this.markConversationSeen(userId, peerUserId);
 
     return this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at
          FROM direct_messages
         WHERE (from_user_id = ? AND to_user_id = ?)
            OR (from_user_id = ? AND to_user_id = ?)
@@ -8662,6 +8675,8 @@ export class AppDirectoryStore extends DurableObject {
       from: String(row.from_user_id),
       to: String(row.to_user_id),
       text: String(row.text),
+      message_kind: String(row.message_kind || "text"),
+      media_url: row.media_url ? String(row.media_url) : null,
       created_at: Number(row.created_at),
       seen_at: row.seen_at == null ? null : Number(row.seen_at),
     }));
@@ -8671,69 +8686,77 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
 
-    const threads = this.listFriends(userId).map((friend) => {
-      const friendId = String(friend.user_id);
+    const friendRows = this.listFriends(userId);
+    const friendIds = new Set(friendRows.map((friend) => String(friend.user_id)));
+    const friendById = new Map(friendRows.map((friend) => [String(friend.user_id), friend]));
+    const peerRows = this.ctx.storage.sql.exec(
+      `SELECT DISTINCT
+          CASE WHEN from_user_id=? THEN to_user_id ELSE from_user_id END AS peer_id
+         FROM direct_messages
+        WHERE (from_user_id=? OR to_user_id=?)
+          AND from_user_id<>'tinni-official'
+          AND to_user_id<>'tinni-official'`,
+      userId, userId, userId,
+    ).toArray();
+    const peerIds = new Set([
+      ...friendIds,
+      ...peerRows.map((row) => String(row.peer_id || "")).filter(Boolean),
+    ]);
+    const threads = [];
+
+    for (const peerId of peerIds) {
+      const friend = friendById.get(peerId);
+      const peer = this.ctx.storage.sql.exec(
+        "SELECT display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+        peerId,
+      ).toArray()[0];
+      if (!peer && !friend) continue;
       const last = this.ctx.storage.sql.exec(
-        `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+        `SELECT id,from_user_id,to_user_id,text,message_kind,media_url,created_at,seen_at
            FROM direct_messages
-          WHERE (from_user_id = ? AND to_user_id = ?)
-             OR (from_user_id = ? AND to_user_id = ?)
-          ORDER BY created_at DESC
-          LIMIT 1`,
-        userId,
-        friendId,
-        friendId,
-        userId,
+          WHERE (from_user_id=? AND to_user_id=?)
+             OR (from_user_id=? AND to_user_id=?)
+          ORDER BY created_at DESC LIMIT 1`,
+        userId, peerId, peerId, userId,
       ).toArray()[0];
       const unread = this.ctx.storage.sql.exec(
-        `SELECT COUNT(*) AS count
-           FROM direct_messages
-          WHERE from_user_id = ?
-            AND to_user_id = ?
-            AND seen_at IS NULL`,
-        friendId,
-        userId,
+        `SELECT COUNT(*) AS count FROM direct_messages
+          WHERE from_user_id=? AND to_user_id=? AND seen_at IS NULL`,
+        peerId, userId,
       ).toArray()[0];
-
-      return {
-        user_id: friendId,
-        display_name: String(friend.display_name || friendId),
-        avatar_data_url: friend.avatar_data_url
-          ? String(friend.avatar_data_url)
-          : null,
-        is_friend: true,
-        last_message: last
-          ? {
-              id: String(last.id),
-              from: String(last.from_user_id),
-              to: String(last.to_user_id),
-              text: String(last.text),
-              created_at: Number(last.created_at),
-              seen_at: last.seen_at == null ? null : Number(last.seen_at),
-            }
-          : null,
+      threads.push({
+        user_id: peerId,
+        display_name: String(peer?.display_name || friend?.display_name || peerId),
+        avatar_data_url: peer?.avatar_data_url
+          ? String(peer.avatar_data_url)
+          : (friend?.avatar_data_url ? String(friend.avatar_data_url) : null),
+        is_friend: friendIds.has(peerId),
+        last_message: last ? {
+          id: String(last.id),
+          from: String(last.from_user_id),
+          to: String(last.to_user_id),
+          text: String(last.text),
+          message_kind: String(last.message_kind || "text"),
+          media_url: last.media_url ? String(last.media_url) : null,
+          created_at: Number(last.created_at),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        } : null,
         unread_count: Number(unread?.count || 0),
-      };
-    });
+      });
+    }
 
     const official = this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, created_at, seen_at
+      `SELECT id,from_user_id,to_user_id,text,message_kind,media_url,created_at,seen_at
          FROM direct_messages
-        WHERE (from_user_id = 'tinni-official' AND to_user_id = ?)
-           OR (from_user_id = ? AND to_user_id = 'tinni-official')
-        ORDER BY created_at DESC
-        LIMIT 1`,
-      userId,
-      userId,
+        WHERE (from_user_id='tinni-official' AND to_user_id=?)
+           OR (from_user_id=? AND to_user_id='tinni-official')
+        ORDER BY created_at DESC LIMIT 1`,
+      userId, userId,
     ).toArray()[0];
-
     if (official) {
       const unreadOfficial = this.ctx.storage.sql.exec(
-        `SELECT COUNT(*) AS count
-           FROM direct_messages
-          WHERE from_user_id = 'tinni-official'
-            AND to_user_id = ?
-            AND seen_at IS NULL`,
+        `SELECT COUNT(*) AS count FROM direct_messages
+          WHERE from_user_id='tinni-official' AND to_user_id=? AND seen_at IS NULL`,
         userId,
       ).toArray()[0];
       threads.push({
@@ -8746,6 +8769,8 @@ export class AppDirectoryStore extends DurableObject {
           from: String(official.from_user_id),
           to: String(official.to_user_id),
           text: String(official.text),
+          message_kind: String(official.message_kind || "text"),
+          media_url: official.media_url ? String(official.media_url) : null,
           created_at: Number(official.created_at),
           seen_at: official.seen_at == null ? null : Number(official.seen_at),
         },
@@ -9501,60 +9526,7 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  sendDirectMessage(fromUserIdValue, toUserIdValue, textValue) {
-    const fromUserId = String(fromUserIdValue || "").trim();
-    const toUserId = String(toUserIdValue || "").trim();
-    const text = cleanText(textValue, 1000);
-    if (!fromUserId || !toUserId) throw new Error("user IDs are required");
-    if (!text) throw new Error("Message cannot be empty");
-    if (this.isBlockedBetween(fromUserId, toUserId)) {
-      throw new Error("Messaging is unavailable because one of these users is blocked");
-    }
-
-    const target = this.ctx.storage.sql.exec(
-      "SELECT user_id FROM app_users WHERE user_id = ? LIMIT 1",
-      toUserId,
-    ).toArray()[0];
-    if (!target) throw new Error("User not found");
-
-    const now = Date.now();
-    const id =
-      "dm-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
-    this.ctx.storage.sql.exec(
-      `INSERT INTO direct_messages
-        (id, from_user_id, to_user_id, text, created_at, seen_at)
-       VALUES (?, ?, ?, ?, ?, NULL)`,
-      id,
-      fromUserId,
-      toUserId,
-      text,
-      now,
-    );
-    const sender = this.ctx.storage.sql.exec(
-      "SELECT display_name FROM app_users WHERE user_id=? LIMIT 1", fromUserId,
-    ).toArray()[0];
-    this._notifyUser(
-      toUserId,
-      "message",
-      String(sender?.display_name || fromUserId),
-      text,
-      { source_user_id: fromUserId, metadata: { message_id: id } },
-    );
-    const message = {
-      id,
-      from: fromUserId,
-      from_name: String(sender?.display_name || fromUserId),
-      to: toUserId,
-      text,
-      created_at: now,
-      seen_at: null,
-    };
-    this._notifyMessageSocket(toUserId, {
-      type: "message_received",
-      message,
-    });
-    return message;
-  }
+  sendDirectMessage(fromUserIdValue, toUserIdValue, textValue, optionsValue = {}
 
 
   sendOfficialMessage(toUserIdValue, textValue, contextValue = {}) {
