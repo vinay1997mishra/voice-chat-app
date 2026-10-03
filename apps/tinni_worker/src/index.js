@@ -299,12 +299,42 @@ function isApprovedUserMediaUrl(env, value, userId, kind) {
     return false;
   }
   const id = String(userId || "").trim();
-  const expected = kind === "avatar"
-    ? "profiles/" + id + "/avatar"
-    : kind === "room_dp"
-      ? "rooms/" + id + "/dp"
-      : "";
-  return Boolean(expected) && key === expected;
+  if (kind === "avatar") {
+    return key === "profiles/" + id + "/avatar";
+  }
+  if (kind === "room_dp") {
+    return key === "rooms/" + id + "/dp";
+  }
+  if (kind === "room_theme") {
+    return key.startsWith("rooms/" + id + "/themes/") &&
+      key.length > ("rooms/" + id + "/themes/").length;
+  }
+  return false;
+}
+
+async function enforceSignupAvatarSafety(env, profile) {
+  if (!profile || typeof profile !== "object") return;
+  const raw = String(profile.avatar_data_url || "").trim();
+  if (!raw) return;
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+  if (!match) {
+    throw new Error("Signup profile photo must be JPEG, PNG or WebP");
+  }
+  let bytes;
+  try {
+    const decoded = atob(match[2]);
+    bytes = Uint8Array.from(decoded, (ch) => ch.charCodeAt(0));
+  } catch (_) {
+    throw new Error("Signup profile photo data is invalid");
+  }
+  if (bytes.byteLength < 1 || bytes.byteLength > 650000) {
+    throw new Error("Signup profile photo must be 650 KB or smaller");
+  }
+  await enforceImageSafety(env, {
+    bytes,
+    mimeType: match[1],
+    surface: "signup_avatar",
+  });
 }
 
 function getCookie(request, name) {
@@ -1381,6 +1411,62 @@ export default {
       return json({ ok: true, url: mediaUrl }, 201);
     }
 
+    if (url.pathname === "/room-theme-media" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Room media storage is not configured" }, 503);
+      }
+      const body = await request.json().catch(() => ({}));
+      const dataUrl = String(body.data_url || "");
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+      if (!match) {
+        return json({ ok: false, error: "Room background must be JPEG, PNG or WebP" }, 400);
+      }
+      let bytes;
+      try {
+        const raw = atob(match[2]);
+        bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+      } catch (_) {
+        return json({ ok: false, error: "Invalid room background data" }, 400);
+      }
+      if (bytes.byteLength < 1 || bytes.byteLength > 2500000) {
+        return json({ ok: false, error: "Room background must be 2.5 MB or smaller" }, 400);
+      }
+      try {
+        await enforceImageSafety(env, {
+          bytes,
+          mimeType: match[1],
+          surface: "room_theme",
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Room background failed safety checks"),
+        }, 400);
+      }
+      const userId = String(appSession.user.user_id || "").trim();
+      const key =
+        "rooms/" + userId + "/themes/" +
+        Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 10);
+      const updatedAt = Date.now();
+      await env.EFFECT_MEDIA.put(key, bytes, {
+        httpMetadata: { contentType: match[1] },
+        customMetadata: {
+          user_id: userId,
+          kind: "room_theme",
+          updated_at: String(updatedAt),
+        },
+      });
+      const mediaUrl =
+        (env.PUBLIC_API_ORIGIN || url.origin) +
+        "/media/" +
+        encodeURIComponent(key) +
+        "?v=" +
+        updatedAt;
+      return json({ ok: true, url: mediaUrl }, 201);
+    }
+
     if (url.pathname === "/profile-media" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -1579,6 +1665,7 @@ export default {
         }
 
         if (!user) {
+          await enforceSignupAvatarSafety(env, profile);
           user = await store.createUser({
             auth_provider: "google",
             auth_subject: google.sub,
@@ -1809,6 +1896,7 @@ export default {
           }
         }
         if (!user) {
+          await enforceSignupAvatarSafety(env, profile);
           const email = pending.email ||
             ("facebook-" + pending.facebook_id + "@tinni.invalid");
           user = await store.createUser({
@@ -1928,6 +2016,7 @@ export default {
         : null;
       const store = getAppDirectoryStore(env);
       try {
+        await enforceSignupAvatarSafety(env, profile);
         const completed = await store.completeEmailPassword(
           setup.requestId,
           body.password,
@@ -3812,6 +3901,19 @@ export default {
       const roomId = String(body.room_id || "").trim();
       if (!roomId) {
         return json({ ok: false, error: "room_id is required" }, 400);
+      }
+      if (
+        !isApprovedUserMediaUrl(
+          env,
+          body.asset,
+          appSession.user.user_id,
+          "room_theme",
+        )
+      ) {
+        return json({
+          ok: false,
+          error: "Custom room background must be uploaded and safety-approved first",
+        }, 400);
       }
       try {
         const theme = await getAppDirectoryStore(env).createUserRoomTheme(
