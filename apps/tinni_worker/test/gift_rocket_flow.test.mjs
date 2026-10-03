@@ -35,8 +35,13 @@ assert.match(
 );
 assert.match(
   directory,
-  /"heart-ring": \{ name: "Heart Ring", price: 1800, category: "cp" \}/,
-  "CP gift must remain server-supported",
+  /"cp-heart": \{ name: "My Heart", price: 44444, category: "cp" \}/,
+  "CP heart gift must remain server-supported",
+);
+assert.match(
+  directory,
+  /"cp-invite": \{ name: "CP Invite", price: 2222222, category: "cp", cp_invite: true \}/,
+  "CP Invite must remain server-supported at the locked Tinni price",
 );
 assert.match(
   directory,
