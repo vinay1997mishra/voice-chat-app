@@ -334,3 +334,18 @@ For every future intentional feature/layout change:
 - Full ID Dashboard sections are themselves drill-down controls: profile/ID, wallet/VIP, hierarchy, verification, room, identity/tags, messages, calls and advanced per-ID investigation.
 - Any user ID exposed inside a nested Full-ID record (message participants, call participants, live room users, hierarchy members) must be tappable and open that referenced user's Full User ID/Profile. The operator can continue drilling deeper instead of reaching a dead-end summary.
 - Staff sub-panels receive none of these controls by default. Full-ID and hierarchy-detail access require explicit permissions, and every mutation remains server-authoritative and audit logged.
+
+
+## Final Money & Language Lock
+
+- Host first target: **4,000,000 eligible received coins = USD 1.60**.
+- Agency commission: **20% of achieved Host target earnings**. A Host below 4,000,000 eligible coins in the settlement cycle contributes **zero Agency commission**.
+- BD commission is calculated from the combined qualifying Host-target earnings under the BD's Agencies: **USD 500 = 7%**, **USD 1,000 = 10%**.
+- Host dollar transfer minimum remains **USD 2**.
+- Agency and BD transfer only their own earned commission and may transfer from **USD 10** to an active Coin Seller or Merchant.
+- Host sent/withdrawn dollar history is visible only in the Host Panel. Agency/BD panels do not expose individual Host dollar transactions.
+- Agency/BD percentage commission remains a **dollar balance** and is not converted into coins.
+- Dollars received by a Coin Seller convert immediately into the seller coin wallet at **USD 1 = 2,220,000 coins**. This special settlement conversion does not change the normal Tinni base economy constant used elsewhere.
+- English remains the default language until the user chooses another language.
+- Create Tinni ID and Settings > Language use the same supported-language registry: English, Hindi, Urdu, Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese (Simplified), Chinese (Traditional), Korean.
+- User-generated names, room text and numeric IDs are not auto-translated; unsupported UI strings fall back to English.
