@@ -2461,6 +2461,175 @@ document.body.addEventListener("click", async e => {
     return;
   }
 
+  const fullClose = e.target.closest("[data-owner-full-close]");
+  if (fullClose) {
+    document.getElementById("ownerFullDashboardDialog")?.close();
+    return;
+  }
+
+  const fullViewButton = e.target.closest("[data-owner-full-view]");
+  if (fullViewButton) {
+    await openOwnerFullDashboard(fullViewButton.dataset.ownerFullView);
+    return;
+  }
+
+  if (e.target.closest("[data-owner-full-refresh]")) {
+    await openOwnerFullDashboard(ownerFullDashboardUserId);
+    return;
+  }
+
+  const fullActionButton = e.target.closest("[data-full-owner-action]");
+  if (fullActionButton) {
+    const action = String(fullActionButton.dataset.fullOwnerAction || "");
+    if (!action) return;
+
+    if (action === "room-live") {
+      if (!ownerFullDashboardRoomId) {
+        toast("No room linked to this ID.");
+        return;
+      }
+      try {
+        const result = await api(
+          "/api/owner/room-live?room_id=" +
+            encodeURIComponent(ownerFullDashboardRoomId),
+        );
+        const liveRoot = document.getElementById("ownerFullRoomLive");
+        const members = Array.isArray(result?.presence?.members)
+          ? result.presence.members
+          : [];
+        if (liveRoot) {
+          liveRoot.hidden = false;
+          liveRoot.className = "action-list";
+          liveRoot.innerHTML = members.length
+            ? members.map((member) => `
+                <div class="owner-history-row">
+                  <strong>${escapeHtml(member.display_name || member.user_id)}</strong>
+                  <span>ID ${escapeHtml(member.user_id)} • ${member.seat_index === null || member.seat_index === undefined ? "Audience" : "Seat " + (Number(member.seat_index) + 1)}</span>
+                </div>
+              `).join("")
+            : '<div class="empty-state">No live users in this room.</div>';
+        }
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+
+    const userIdActions = new Set([
+      "user-name", "user-dp", "user-ban", "device-ban", "user-invisible",
+      "locked-bypass", "id-change", "wallet-normal", "wallet-seller",
+      "wallet-merchant", "vip-grant", "bd-activate", "agency-activate",
+    ]);
+    const roomActions = new Set(["room-ban", "room-name", "room-dp", "room-bg"]);
+    const preset = {};
+    if (userIdActions.has(action)) preset.user_id = ownerFullDashboardUserId;
+    if (action === "host-add" || action === "host-remove") {
+      preset.host_user_id = ownerFullDashboardUserId;
+    }
+    if (roomActions.has(action)) {
+      if (!ownerFullDashboardRoomId) {
+        toast("No room linked to this ID.");
+        return;
+      }
+      preset.room_id = ownerFullDashboardRoomId;
+    }
+    ownerFullRefreshAfterAction = true;
+    openAction(action, preset);
+    return;
+  }
+
+  if (e.target.closest("[data-full-owner-message-send]")) {
+    if (!sessionCan("messaging.send")) {
+      toast("Official message permission is not active.");
+      return;
+    }
+    const textValue = String(
+      document.getElementById("ownerFullMessageText")?.value || "",
+    ).trim();
+    if (!textValue) {
+      toast("Write a message first.");
+      return;
+    }
+    try {
+      await api("/api/owner/official-message", {
+        method: "POST",
+        body: JSON.stringify({
+          target_user_id: ownerFullDashboardUserId,
+          message: textValue,
+          recipient_kind: "full_id_dashboard",
+        }),
+      });
+      toast("Tinni Official message sent.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-owner-add-tag]")) {
+    if (!sessionCan("messaging.tags")) {
+      toast("User tag permission is not active.");
+      return;
+    }
+    const name = prompt("Custom tag name", "");
+    if (name === null || !name.trim()) return;
+    const color = prompt("Tag color HEX", "#FFD54F");
+    if (color === null) return;
+    try {
+      await api("/api/owner/tags", {
+        method: "POST",
+        body: JSON.stringify({
+          user_ids: [ownerFullDashboardUserId],
+          name: name.trim(),
+          color: color.trim() || "#FFD54F",
+        }),
+      });
+      toast("Tag added to selected ID.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-direct-verify]")) {
+    if (!sessionCan("verification.direct_verify")) return;
+    const note = prompt("Verification note (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" +
+          encodeURIComponent(ownerFullDashboardUserId) +
+          "/verify",
+        { method: "POST", body: JSON.stringify({ note }) },
+      );
+      toast("Selected ID verified.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+  if (e.target.closest("[data-full-revoke-verify]")) {
+    if (!sessionCan("verification.revoke")) return;
+    if (!confirm("Remove Verified status from this ID?")) return;
+    const note = prompt("Reason (optional)", "") || "";
+    try {
+      await api(
+        "/api/call-verifications/user/" +
+          encodeURIComponent(ownerFullDashboardUserId) +
+          "/revoke",
+        { method: "POST", body: JSON.stringify({ note }) },
+      );
+      toast("Verified status removed.");
+      await openOwnerFullDashboard(ownerFullDashboardUserId);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
   const listenRoomButton = e.target.closest("[data-owner-listen-room]");
   if (listenRoomButton) {
     await startOwnerListen(listenRoomButton.dataset.ownerListenRoom);
