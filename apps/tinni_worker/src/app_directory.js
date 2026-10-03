@@ -5188,10 +5188,10 @@ export class AppDirectoryStore extends DurableObject {
     const luckySessionId = isLucky
       ? cleanText(input?.lucky_session_id || ("lucky-session-" + crypto.randomUUID()), 96)
       : "";
-    // Product rule: Lucky gifts contribute/credit 10% social value.
-    // Every non-Lucky gift contributes/credits 100%.
-    const receiverDiamondPercent = isLucky ? 10 : 100;
-    const charmWealthPercent = receiverDiamondPercent;
+    // Product rule: Lucky gifts count 10% for room/seat/ranking/rocket.
+    // Every non-Lucky gift counts 100%. Diamonds are Host-only.
+    const socialValuePercent = isLucky ? 10 : 100;
+    const charmWealthPercent = socialValuePercent;
     if (isLucky) {
       const dailyCap = Math.max(0, Math.floor(Number(luckyConfig.daily_send_cap || 0)));
       if (dailyCap > 0) {
@@ -5264,9 +5264,11 @@ export class AppDirectoryStore extends DurableObject {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, roomId, senderId, receiverId, giftId, giftName, quantity, chargedUnitPrice, receiverTotal, now,
       );
-      const receiverDiamonds = Math.floor(
-        receiverTotal * receiverDiamondPercent / 100,
+      const socialValueCoins = Math.floor(
+        receiverTotal * socialValuePercent / 100,
       );
+      const receiverIsHost = this._isActiveHost(receiverId);
+      const receiverDiamonds = receiverIsHost ? socialValueCoins : 0;
       transactions.push({
         id,
         room_id: roomId,
@@ -5277,8 +5279,9 @@ export class AppDirectoryStore extends DurableObject {
         quantity,
         unit_price: chargedUnitPrice,
         total_cost: receiverTotal,
+        social_value_coins: socialValueCoins,
         receiver_diamonds: receiverDiamonds,
-        ranking_value: receiverDiamonds,
+        ranking_value: socialValueCoins,
         created_at: now,
       });
 
@@ -5292,15 +5295,11 @@ export class AppDirectoryStore extends DurableObject {
           receiverDiamonds, now, receiverId,
         );
         this.ctx.storage.sql.exec(
-          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'gift_diamonds',0,?,?,?,?)",
+          "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?)",
           "wallet-" + crypto.randomUUID(), receiverId, receiverDiamonds, id,
-          (isLucky ? "Lucky gift 10% diamonds: " : "Gift diamonds: ") + giftName, now,
+          (isLucky ? "Lucky host gift 10%: " : "Host gift 100%: ") + giftName, now,
         );
-        // Host/Agency/BD settlement accounting remains host-only even though
-        // the virtual Diamond reward itself is now credited to every receiver.
-        if (this._isActiveHost(receiverId)) {
-          this._recordHostEligibleGift(receiverId, receiverDiamonds, now);
-        }
+        this._recordHostEligibleGift(receiverId, receiverDiamonds, now);
       }
 
       if (isLucky && receiverTotal > 0) {
@@ -5321,7 +5320,7 @@ export class AppDirectoryStore extends DurableObject {
           highestMultiplier,
           receiverHighestMultiplier,
         );
-        const socialValueCoins = receiverDiamonds;
+        // Lucky ranking/seat/rocket value is always 10%, even for non-Hosts.
         const resultId = "lucky-" + crypto.randomUUID();
         this.ctx.storage.sql.exec(
           `INSERT INTO lucky_gift_results
