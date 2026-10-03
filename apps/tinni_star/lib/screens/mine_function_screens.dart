@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app/tinni_state.dart';
 import '../auth/app_auth_api.dart';
+import '../i18n/tinni_localization.dart';
 import 'login_screen.dart';
 
 const _mineBg = Color(0xFF030201);
@@ -1155,7 +1156,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const values = ['English', 'Hindi', 'Urdu'];
+    const values = tinniSupportedLanguages;
     return Scaffold(
       key: const Key('language-settings-screen'),
       backgroundColor: _mineBg,
