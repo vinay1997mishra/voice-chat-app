@@ -2721,3 +2721,12 @@ Canonical current room rules:
 - **CP Invite** is the confession/invitation flow and may be sent only when neither side already has an active/pending CP flow. Active CP appears on the ID/Profile CP card with the two avatars, heart/CP identity, level/intimacy/day information, and an All my CP entry to the CP area.
 - **CP intimacy rules:** regular gifts use 100% of the normalized reference-coin intimacy value; Lucky gifts use 10%; same-day mutual CP gifting gives the eligible gift a 1.2x exchange multiplier; known first level threshold is Lv.1 -> Lv.2 at 200K intimacy; level-cycle duration is 7 days; after 3 consecutive days without intimacy, decay starts on day 4 at 5% per day until activity resumes. Do not invent later level thresholds that were not supplied; keep later thresholds owner-configurable.
 
+
+
+## Unified locked identity and profile behavior
+- **Messages & Tags / V Official identity** remains the Owner-facing identity management section. **Do not rename it to Tags/Medals**.
+- Public and Mine profiles must not show placeholder identity boxes such as **Non-VIP** or **Incomplete**; show real assigned identity tags instead.
+- Mine must not show Props.
+- Mine must not show Personal information / Profile Information.
+- Long-pressing an ID copies it and shows the floating confirmation **Copied**.
+- The profile **cover photo is persistent** until the user changes it or completes **explicit removal confirmation**.
