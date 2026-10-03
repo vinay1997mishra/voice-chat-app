@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/tinni_state.dart';
@@ -58,6 +59,20 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       return NetworkImage(source);
     }
     return null;
+  }
+
+  Future<void> _copyUserId(String userId) async {
+    await Clipboard.setData(ClipboardData(text: userId));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Copied'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   Future<ImageSource?> _pickSource() {
@@ -125,6 +140,64 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => uploadingSlot = null);
+    }
+  }
+
+  Future<void> _removeCover() async {
+    final account = widget.state.auth.current;
+    if (account == null || uploadingSlot != null || media['cover'] == null) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove cover photo?'),
+        content: const Text(
+          'The cover will stay on your profile until you explicitly remove '
+          'or replace it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('profile-cover-remove-confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => uploadingSlot = 'cover');
+    try {
+      await widget.state.backend.deleteProfileMedia(
+        account.authToken,
+        'cover',
+      );
+      if (!mounted) return;
+      setState(() {
+        media = <String, String?>{...media, 'cover': null};
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Cover photo removed.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text(error.toString().replaceFirst('Bad state: ', '')),
         ),
       );
@@ -460,11 +533,21 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                                   fontWeight: FontWeight.w900,
                                 ),
                               ),
-                              Text(
-                                'UID: ${account.userId}',
-                                style: const TextStyle(
-                                  color: RoyalPalette.muted,
-                                  fontSize: 10,
+                              GestureDetector(
+                                key: const Key('personal-profile-uid-long-press'),
+                                behavior: HitTestBehavior.opaque,
+                                onLongPress: () =>
+                                    _copyUserId(account.userId),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 3),
+                                  child: Text(
+                                    'UID: ${account.userId}',
+                                    style: const TextStyle(
+                                      color: RoyalPalette.muted,
+                                      fontSize: 10,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -478,9 +561,21 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                     top: 12,
                     child: _UploadBadge(
                       busy: uploadingSlot == 'cover',
-                      label: 'Cover photo',
+                      label: cover == null ? 'Add cover' : 'Change cover',
                     ),
                   ),
+                  if (cover != null)
+                    Positioned(
+                      right: 12,
+                      top: 52,
+                      child: IconButton.filledTonal(
+                        key: const Key('profile-cover-remove'),
+                        tooltip: 'Remove cover',
+                        onPressed:
+                            uploadingSlot == null ? _removeCover : null,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ),
                 ],
               ),
             ),
