@@ -1086,23 +1086,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ]),
               const SizedBox(height: 9),
               _mineMenuGroup([
+                if (widget.state.wallet.isBd)
+                  _mineMenuRow(
+                    key: const Key('mine-bd-panel'),
+                    icon: Icons.account_tree_rounded,
+                    label: 'BD Panel',
+                    onTap: () => _openMineScreen(
+                      HostDataScreen(
+                        state: widget.state,
+                        roleLabel: 'BD',
+                        onTransfer: _showSettlementTransfer,
+                      ),
+                    ),
+                  ),
+                if (widget.state.wallet.isAgency)
+                  _mineMenuRow(
+                    key: const Key('mine-agency-panel'),
+                    icon: Icons.business_center_rounded,
+                    label: 'Agency Panel',
+                    onTap: () => _openMineScreen(
+                      HostDataScreen(
+                        state: widget.state,
+                        roleLabel: 'Agency',
+                        onTransfer: _showSettlementTransfer,
+                      ),
+                    ),
+                  ),
+                if (widget.state.wallet.isHost)
+                  _mineMenuRow(
+                    key: const Key('mine-host-panel'),
+                    icon: Icons.monitor_heart_rounded,
+                    label: 'Host Panel',
+                    onTap: () => _openMineScreen(
+                      HostDataScreen(
+                        state: widget.state,
+                        roleLabel: 'Host',
+                        onTransfer: _showSettlementTransfer,
+                      ),
+                    ),
+                  ),
                 _mineMenuRow(
                   key: const Key('mine-task'),
                   icon: Icons.task_alt_rounded,
                   label: tinniText(language, 'task'),
                   onTap: () => _openMineScreen(
                     TaskScreen(state: widget.state),
-                  ),
-                ),
-                _mineMenuRow(
-                  key: const Key('mine-host-data'),
-                  icon: Icons.monitor_heart_rounded,
-                  label: tinniText(language, 'host_data'),
-                  onTap: () => _openMineScreen(
-                    HostDataScreen(
-                      state: widget.state,
-                      onTransfer: _showSettlementTransfer,
-                    ),
                   ),
                 ),
               ]),
