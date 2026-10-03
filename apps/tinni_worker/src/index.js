@@ -4229,9 +4229,11 @@ export default {
       const roomId = String(body.room_id || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       const store = getRoomPresenceStore(env, roomId);
+      const directory = getAppDirectoryStore(env);
       const user = appSession.user;
+      const identityTags = await directory.listUserIdentityTags(user.user_id);
       if (url.pathname.endsWith("/join")) {
-        const access = await getAppDirectoryStore(env).roomAccessState(
+        const access = await directory.roomAccessState(
           user.user_id,
           roomId,
         );
@@ -4256,7 +4258,7 @@ export default {
         equipped_frame_id: body.equipped_frame_id,
         equipped_entry_id: body.equipped_entry_id,
         equipped_profile_card_id: body.equipped_profile_card_id,
-        owner_tags: Array.isArray(user.tags) ? user.tags : [],
+        owner_tags: Array.isArray(identityTags) ? identityTags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
           body.seat_index === null || body.seat_index === undefined
@@ -4264,7 +4266,6 @@ export default {
             : Number(body.seat_index),
       };
       try {
-        const directory = getAppDirectoryStore(env);
         if (url.pathname.endsWith("/join")) {
           const result = await store.join(presenceBody);
           await directory.touchPresence(
