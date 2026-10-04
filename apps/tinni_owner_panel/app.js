@@ -1670,9 +1670,9 @@ async function openOwnerFullDashboard(userId) {
       ? recentRooms.map((item) => `
           <div class="owner-history-row">
             <div class="owner-history-people">
-              <button type="button" class="owner-inline-user" data-owner-full-room-open="${escapeHtml(item.room_id || "")}">
+              <span class="owner-inline-user owner-inline-user-name">
                 ${escapeHtml(item.room_name || item.room_id || "Party Room")}
-              </button>
+              </span>
               ${item.is_current ? '<span class="badge gold">Current</span>' : ""}
             </div>
             <span>Room ${escapeHtml(item.room_id || "")} • Owner ${escapeHtml(item.owner_name || item.owner_id || "—")}</span>
