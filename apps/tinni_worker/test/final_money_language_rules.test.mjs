@@ -24,8 +24,13 @@ const localization = fs.readFileSync(
 
 assert.match(
   directory,
-  /const COIN_SELLER_SETTLEMENT_COINS_PER_USD = 2220000;/,
-  "Coin Seller settlement conversion must stay at $1 = 2,220,000 coins",
+  /automatic_dollar_to_coin_conversion:\s*false/,
+  "Automatic dollar-to-coin conversion must stay disabled",
+);
+assert.match(
+  directory,
+  /CREATE TABLE IF NOT EXISTS role_dollar_balances/,
+  "Coin Seller and Merchant USD must use a separate persistent dollar balance",
 );
 assert.match(
   directory,
@@ -49,8 +54,13 @@ assert.match(
 );
 assert.match(
   directory,
-  /recipient\.role === "coin_seller"[\s\S]{0,900}COIN_SELLER_SETTLEMENT_COINS_PER_USD[\s\S]{0,900}_creditPrivilegedWalletAuthorized/,
-  "Coin Seller settlement dollars must convert immediately into seller coins",
+  /transferSettlement\([\s\S]{0,5200}credited_coins:\s*0/,
+  "Hierarchy settlement dollars must never auto-credit recipient coins",
+);
+assert.match(
+  directory,
+  /recipientAfter = recipientBefore \+ usdCents/,
+  "Coin Seller or Merchant settlement recipient must receive USD into its Dollar Wallet",
 );
 assert.match(
   directory,
@@ -74,8 +84,8 @@ assert.match(
 );
 assert.match(
   ownerPanel,
-  /\$1 = 2,220,000 seller coins/,
-  "Owner Panel must document seller settlement conversion",
+  /No automatic dollar-to-coin conversion/,
+  "Owner Panel must document that role dollars remain USD",
 );
 
 for (const language of [
