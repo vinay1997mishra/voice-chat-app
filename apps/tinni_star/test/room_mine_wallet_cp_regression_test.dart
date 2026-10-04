@@ -161,6 +161,24 @@ void main() {
     expect(presenceWorker.contains('User is not in the room'), true);
     expect(presenceWorker.contains('User is already on a seat'), true);
     expect(presenceWorker.contains('Seat is already occupied'), true);
+    expect(presenceWorker.contains('You cannot invite yourself to a seat'), true);
+    expect(
+      presenceWorker.contains('Seat is outside the current room seat range'),
+      true,
+    );
+    expect(
+      presenceWorker.contains('_broadcastPresence("seat_invite_changed", now)'),
+      true,
+    );
+    expect(presenceWorker.contains('User is no longer in the room'), true);
+    expect(
+      presenceWorker.contains('Invited seat is no longer available'),
+      true,
+    );
+    expect(
+      presence.contains('pendingSeatInvite?.createdAt.millisecondsSinceEpoch'),
+      true,
+    );
     expect(blueprint.contains('## Empty-Seat Invite Flow — LOCKED'), true);
     expect(changeLock.contains('Empty-seat invite lock:'), true);
   });
