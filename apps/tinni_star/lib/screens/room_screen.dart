@@ -160,7 +160,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     _selectedGiftRecipients.add(widget.room.ownerId ?? widget.room.id);
     final session = widget.state.roomSession;
-    if (session.room?.id != widget.room.id || session.controller == null) {
+    if (session.room?.id != widget.room.id || !session.backendSessionActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _openRoom();
       });
