@@ -78,6 +78,9 @@ void main() {
     expect(details, contains('minimum_transfer_usd_cents'));
     expect(details, contains("'Cryptocurrency (USDT)'"));
     expect(details, contains("'USDT wallet address'"));
+    expect(details, contains("Key('usdt-scan-qr-button')"));
+    expect(details, contains("Key('usdt-qr-scanner-screen')"));
+    expect(details, contains('MobileScanner(onDetect: _onDetect)'));
     expect(details, contains("Key('role-wallet-send-dollars')"));
     expect(details, contains("'Open Dollar Wallet'"));
     expect(details, isNot(contains("value: 'merchant'")));
