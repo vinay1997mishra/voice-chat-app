@@ -157,27 +157,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
           else
             for (final item in rows)
-              RadioListTile<String>(
-                dense: true,
-                value: item.role + ':' + item.userId,
-                groupValue: selected == null
-                    ? null
-                    : selected!.role + ':' + selected!.userId,
-                title: Text(item.displayName),
-                subtitle: Text(
-                  'ID ' +
-                      item.userId +
-                      ' • ' +
-                      (item.role == 'coin_seller'
-                          ? 'Coin Seller'
-                          : 'Merchant'),
-                ),
-                onChanged: sending
-                    ? null
-                    : (_) => setDialogState(() {
-                          selected = item;
-                          errorText = null;
-                        }),
+              Builder(
+                builder: (_) {
+                  final isSelected = selected?.role == item.role &&
+                      selected?.userId == item.userId;
+                  return ListTile(
+                    dense: true,
+                    selected: isSelected,
+                    leading: Icon(
+                      isSelected
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                    ),
+                    title: Text(item.displayName),
+                    subtitle: Text(
+                      'ID ' +
+                          item.userId +
+                          ' • ' +
+                          (item.role == 'coin_seller'
+                              ? 'Coin Seller'
+                              : 'Merchant'),
+                    ),
+                    onTap: sending
+                        ? null
+                        : () => setDialogState(() {
+                              selected = item;
+                              errorText = null;
+                            }),
+                  );
+                },
               ),
         ],
       );
