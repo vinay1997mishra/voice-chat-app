@@ -3539,6 +3539,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
+                        if (giftCategory == 'Lucky')
+                          IconButton(
+                            key: const Key('lucky-gift-details-button'),
+                            tooltip: 'Lucky Gift details',
+                            onPressed: () {
+                              Navigator.pop(context);
+                              unawaited(_showLuckyGiftDetails());
+                            },
+                            icon: const Icon(
+                              Icons.info_outline_rounded,
+                              color: Color(0xFFFFC247),
+                            ),
+                          ),
                         const SizedBox(width: 8),
                       ],
                     ),
