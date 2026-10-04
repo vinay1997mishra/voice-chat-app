@@ -6,6 +6,10 @@ const directory = fs.readFileSync(
   new URL("../src/app_directory.js", import.meta.url),
   "utf8",
 );
+const roomPresence = fs.readFileSync(
+  new URL("../src/room_presence.js", import.meta.url),
+  "utf8",
+);
 const wranglerConfig = fs.readFileSync(
   new URL("../wrangler.jsonc", import.meta.url),
   "utf8",
@@ -173,6 +177,47 @@ assert.match(
   directory,
   /INSERT OR REPLACE INTO owner_panel_message_log\(message_id,user_id,created_at\)/,
   "Sending from the Owner Panel must mark the message for panel-only 48-hour retention",
+);
+
+assert.match(
+  roomPresence,
+  /setMicMode\(modeValue\)[\s\S]{0,900}_broadcastPresence\("mic_mode_changed"\)/,
+  "Free Mic changes must broadcast immediately to every live room client",
+);
+assert.match(
+  roomPresence,
+  /requestSeat\(input\)[\s\S]{0,900}this\.micMode\(\) === "free"[\s\S]{0,500}return this\.takeSeat/,
+  "A stale client calling seat-request in Free Mic mode must still join directly",
+);
+assert.match(
+  roomPresence,
+  /seat_count INTEGER NOT NULL DEFAULT 0/,
+  "Realtime room presence must persist the active room seat count",
+);
+assert.match(
+  roomPresence,
+  /setSeatCount\(seatCountValue\)[\s\S]{0,2600}_broadcastPresence\("seat_count_changed"/,
+  "Seat-count changes must be pushed to real users already inside the room",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/rooms\/seat-count"[\s\S]{0,1500}store\.setSeatCount\(result\.room\.seat_count\)/,
+  "Room seat-count API must synchronize the live presence object after persistence",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/room-presence\/mic-mode"[\s\S]{0,900}findRoomByExactId\(roomId\)/,
+  "Free Mic must work for locked rooms instead of depending on the public room list",
+);
+assert.match(
+  directory,
+  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,1800}WHERE r\.owner_id = \?/[\s\S]{0,500}COALESCE\(r\.closed, 0\) = 0/,
+  "Mine must be able to resolve the signed-in user's room even when it is locked",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/rooms"[\s\S]{0,800}findOwnedRoomByUserId\([\s\S]{0,300}rooms\.unshift\(ownedRoom\)/,
+  "Room sync must include the signed-in user's own locked room so Create my room does not reappear",
 );
 
 assert.match(
