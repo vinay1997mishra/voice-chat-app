@@ -4480,7 +4480,7 @@ export default {
       }
 
       try {
-        return json(await store.clearComments(actorId));
+        return json(await store.clearComments(actorId, actorIsOwner));
       } catch (error) {
         return json({
           ok: false,
