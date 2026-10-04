@@ -52,6 +52,9 @@ class ActiveRoomSession extends ChangeNotifier {
   String? connectionError;
 
   Timer? _presenceTimer;
+  Timer? _presenceRecoveryTimer;
+  bool _presenceRecoveryRunning = false;
+  int _presenceRecoveryDelaySeconds = 2;
   String? _activeAuthToken;
   String? _activeUserId;
   bool _liveSyncInitialized = false;
@@ -588,6 +591,84 @@ class ActiveRoomSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _cancelPresenceRecovery({bool resetBackoff = false}) {
+    _presenceRecoveryTimer?.cancel();
+    _presenceRecoveryTimer = null;
+    if (resetBackoff) {
+      _presenceRecoveryDelaySeconds = 2;
+    }
+  }
+
+  void _schedulePresenceRecovery({bool immediate = false}) {
+    if (_presenceRecoveryTimer != null ||
+        _presenceRecoveryRunning ||
+        room == null ||
+        _activeAuthToken == null) {
+      return;
+    }
+
+    final delaySeconds = immediate ? 0 : _presenceRecoveryDelaySeconds;
+    if (!immediate) {
+      _presenceRecoveryDelaySeconds =
+          (_presenceRecoveryDelaySeconds * 2).clamp(2, 30).toInt();
+    }
+
+    _presenceRecoveryTimer = Timer(Duration(seconds: delaySeconds), () {
+      _presenceRecoveryTimer = null;
+      unawaited(_recoverPresence());
+    });
+  }
+
+  Future<void> _recoverPresence() async {
+    if (_presenceRecoveryRunning) return;
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) return;
+
+    _presenceRecoveryRunning = true;
+    var retry = false;
+    try {
+      await presence.join(
+        roomId: roomId,
+        authToken: authToken,
+        seatIndex: controller?.mySeat,
+        micEnabled: _micEnabledForPresence,
+        familyTag: _familyTag,
+        hostTag: _hostTag,
+        agencyName: _agencyName,
+        equippedFrameId: _equippedFrameId,
+        equippedEntryId: _equippedEntryId,
+        equippedProfileCardId: _equippedProfileCardId,
+      );
+      await presence.connectLive(
+        roomId: roomId,
+        authToken: authToken,
+      );
+      if (!presence.connected) {
+        throw StateError('Room presence reconnect pending');
+      }
+      _presenceRecoveryDelaySeconds = 2;
+      _syncLiveState(force: true);
+      await _applyForcedSeatChange();
+      await _enforceModerationMute();
+      if (!_roomSoundEnabled && connected) {
+        await realtime.setRemoteAudioEnabled(false);
+      }
+    } catch (error) {
+      final message = error.toString().toLowerCase();
+      if (message.contains('kicked from this room')) {
+        await close();
+        return;
+      }
+      retry = true;
+    } finally {
+      _presenceRecoveryRunning = false;
+      if (retry && room != null && _activeAuthToken != null) {
+        _schedulePresenceRecovery();
+      }
+    }
+  }
+
   Future<void> _startPresence() async {
     final roomId = room?.id;
     final authToken = _activeAuthToken;
@@ -613,11 +694,15 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
       );
+      _cancelPresenceRecovery(resetBackoff: true);
       _syncLiveState(force: true);
       await _applyForcedSeatChange();
       await _enforceModerationMute();
     } catch (_) {
-      // Keep the room open; presence will retry on the next heartbeat.
+      // Do not wait for the 60-second fallback heartbeat. Recover room
+      // membership immediately with bounded exponential backoff while keeping
+      // the RoomScreen, seat selection and local controls alive.
+      _schedulePresenceRecovery(immediate: true);
     }
 
     _presenceTimer?.cancel();
@@ -632,6 +717,12 @@ class ActiveRoomSession extends ChangeNotifier {
       final currentRoomId = room?.id;
       final currentAuthToken = _activeAuthToken;
       if (currentRoomId == null || currentAuthToken == null) return;
+
+      if (!presence.connected) {
+        _schedulePresenceRecovery(immediate: true);
+        return;
+      }
+
       try {
         await presence.heartbeat(
           roomId: currentRoomId,
@@ -652,17 +743,20 @@ class ActiveRoomSession extends ChangeNotifier {
         _syncLiveState(force: true);
         await _applyForcedSeatChange();
         await _enforceModerationMute();
-        if (!_roomSoundEnabled) {
+        if (!_roomSoundEnabled && connected) {
           await realtime.setRemoteAudioEnabled(false);
         }
       } catch (error) {
         final message = error.toString().toLowerCase();
         if (message.contains('kicked from this room')) {
           await close();
+          return;
         }
+        _schedulePresenceRecovery(immediate: true);
       }
     });
   }
+
 
   Future<void> _applyForcedSeatChange() async {
     if (!presence.selfSeatForced) return;
@@ -719,6 +813,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }) async {
     _presenceTimer?.cancel();
     _presenceTimer = null;
+    _cancelPresenceRecovery(resetBackoff: true);
     presence.removeListener(_onPresenceChanged);
     await presence.disconnectLive();
 
@@ -738,6 +833,12 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _onPresenceChanged() {
+    if (presence.connected) {
+      _cancelPresenceRecovery(resetBackoff: true);
+    } else if (room != null && _activeAuthToken != null) {
+      _schedulePresenceRecovery(immediate: true);
+    }
+
     final roomController = controller;
     roomController?.setInviteMode(presence.micMode != 'free');
     final serverSeatCount = presence.seatCount;
@@ -873,6 +974,7 @@ class ActiveRoomSession extends ChangeNotifier {
   @override
   void dispose() {
     _presenceTimer?.cancel();
+    _presenceRecoveryTimer?.cancel();
     unawaited(presence.disconnectLive());
     presence.removeListener(_onPresenceChanged);
     controller?.removeListener(_onRoomChanged);
