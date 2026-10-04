@@ -1241,6 +1241,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         roomId: widget.room.id,
         authToken: account.authToken,
       );
+      if (!session.presence.connected) {
+        throw StateError('Room presence reconnect pending');
+      }
       session.resume();
     } catch (_) {
       if (mounted && _roomRecoveryTimer == null) {
@@ -1268,6 +1271,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       SnackBar(
         content: Text(clean),
         duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Widget _buildRoomConnectionStatus() {
+    final presence = widget.state.roomSession.presence;
+    final shouldShow = presence.liveReconnecting ||
+        (!presence.liveConnected && presence.lastError != null);
+    if (!shouldShow) return const SizedBox.shrink();
+
+    final text = presence.connected
+        ? 'Room reconnecting…'
+        : 'Connection problem • retrying…';
+
+    return IgnorePointer(
+      child: Center(
+        child: Container(
+          key: const Key('room-connection-retrying'),
+          constraints: const BoxConstraints(maxWidth: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xE621143A),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFFFFD45A).withValues(alpha: 0.72),
+            ),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Color(0x44000000),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFFFFD45A),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -9519,6 +9580,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
+              ),
+            if (widget.state.roomSession.presence.liveReconnecting ||
+                (!widget.state.roomSession.presence.liveConnected &&
+                    widget.state.roomSession.presence.lastError != null))
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 94,
+                child: _buildRoomConnectionStatus(),
               ),
             if (_fruitJackpotOpen)
               Positioned(
