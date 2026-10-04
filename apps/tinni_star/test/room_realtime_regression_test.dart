@@ -14,6 +14,18 @@ void main() {
     expect(roomScreen, contains('takeMySeat(index)'));
   });
 
+  test('room stays online through websocket reconnect fallback', () {
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    expect(
+      session,
+      contains('Timer.periodic(const Duration(minutes: 1)'),
+    );
+    expect(session, contains('if (presence.liveConnected) return;'));
+    expect(session, contains('await presence.heartbeat('));
+    expect(session, contains('await presence.connectLive('));
+  });
+
   test('live seat-count changes resize the active room for real users', () {
     final presence =
         File('lib/room/room_presence_service.dart').readAsStringSync();
