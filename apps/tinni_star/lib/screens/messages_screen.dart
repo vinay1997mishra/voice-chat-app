@@ -1151,7 +1151,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             !mine &&
                             message.text.startsWith('[CALL_VERIFY]');
                         final roleInviteMatch = RegExp(
-                          r'^\[ROLE_INVITE:([^:\]]+):(host|agency)\]\s*(.*)
+                          r'^\[ROLE_INVITE:([^:]+):(host|agency)\]\s*(.*)',
+                        ).firstMatch(message.text);
                         final inviteId = roleInviteMatch?.group(1) ?? '';
                         final inviteRole = roleInviteMatch?.group(2) ?? '';
                         final inviteStatus =
