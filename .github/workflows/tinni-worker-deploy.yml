@@ -45,3 +45,14 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         working-directory: apps/tinni_worker
         run: npx wrangler deploy
+
+      - name: Verify deployed Worker health
+        if: steps.creds.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://tinni-star-api.mishrajii7991.workers.dev"
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 "$base/health"
+          echo
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 "$base/health/deep"
+          echo
