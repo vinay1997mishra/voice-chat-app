@@ -1680,15 +1680,19 @@ export class RoomPresenceStore extends DurableObject {
     } catch (_) {}
   }
 
-  async _clearDirectoryPresence(userId, roomId, now = Date.now()) {
+  async _markDirectorySocketDisconnected(userId, roomId, now = Date.now()) {
     if (!userId || !roomId) return;
     try {
       const directoryId = this.env.APP_DIRECTORY.idFromName("tinni-app-directory");
       const directory = this.env.APP_DIRECTORY.get(directoryId);
-      await directory.clearPresence(
+      // A transient WebSocket drop is not an explicit room exit. Keep the
+      // user's room presence and seat alive, but mark the socket disconnected
+      // so reconnect/fallback logic can restore the live transport.
+      await directory.touchPresence(
         userId,
         roomId,
         this._members(now).length,
+        false,
       );
     } catch (_) {}
   }
@@ -1921,7 +1925,7 @@ export class RoomPresenceStore extends DurableObject {
         return String(other.userId || "").trim() === userId;
       });
     if (!replacementActive) {
-      await this._clearDirectoryPresence(userId, roomId, now);
+      await this._markDirectorySocketDisconnected(userId, roomId, now);
     }
   }
 
