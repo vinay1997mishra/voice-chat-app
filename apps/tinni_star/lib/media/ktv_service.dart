@@ -42,6 +42,8 @@ class KtvService {
   AudioPlayer? _player;
   bool _completionListenerAttached = false;
   bool _outputMuted = false;
+  bool _paused = false;
+  final List<KtvQueueEntry> _history = <KtvQueueEntry>[];
   AudioPlayer get _audio {
     final player = _player ??= AudioPlayer();
     if (!_completionListenerAttached) {
@@ -60,7 +62,10 @@ class KtvService {
     if (next != null) await playCurrent();
   }
   bool get isPlaying => _player?.playing ?? false;
+  bool get isPaused => _paused;
   bool get outputMuted => _outputMuted;
+  bool get canPlayPrevious => _history.isNotEmpty;
+  bool get canPlayNext => queue.isNotEmpty;
 
   Future<void> setOutputMuted(bool muted) async {
     _outputMuted = muted;
@@ -77,14 +82,39 @@ class KtvService {
     await _audio.setFilePath(path);
     await _audio.setVolume(_outputMuted ? 0.0 : 1.0);
     await _audio.play();
+    _paused = false;
   }
 
-  Future<void> pause() => _audio.pause();
-  Future<void> resume() => _audio.play();
+  Future<void> pause() async {
+    final player = _player;
+    if (player == null || !player.playing) return;
+    await player.pause();
+    _paused = true;
+  }
+
+  Future<void> resume() async {
+    if (current == null) return;
+    if (_paused && _player != null) {
+      await _audio.play();
+      _paused = false;
+      return;
+    }
+    await playCurrent();
+  }
+
+  Future<void> togglePlayPause() async {
+    if (current == null) return;
+    if (isPlaying) {
+      await pause();
+    } else {
+      await resume();
+    }
+  }
 
   Future<void> stopPlayback() async {
     final player = _player;
     if (player != null) await player.stop();
+    _paused = false;
   }
 
   Future<void> stopForSeatDown(String userId) async {
@@ -92,6 +122,7 @@ class KtvService {
     if (id.isEmpty) return;
     final currentBelongsToUser = current?.userId == id;
     queue.removeWhere((entry) => entry.userId == id);
+    _history.removeWhere((entry) => entry.userId == id);
     if (currentBelongsToUser) {
       await stopPlayback();
       current = null;
@@ -102,13 +133,21 @@ class KtvService {
     await stopPlayback();
     current = null;
     queue.clear();
+    _history.clear();
   }
 
   Future<KtvQueueEntry?> playNext() async {
-    await _audio.stop();
+    await stopPlayback();
     final next = startNext();
     if (next != null) await playCurrent();
     return next;
+  }
+
+  Future<KtvQueueEntry?> playPrevious() async {
+    await stopPlayback();
+    final previous = startPrevious();
+    if (previous != null) await playCurrent();
+    return previous;
   }
 
   Future<void> dispose() async {
@@ -276,6 +315,7 @@ class KtvService {
 
     library.removeAt(index);
     queue.removeWhere((entry) => entry.song.id == songId);
+    _history.removeWhere((entry) => entry.song.id == songId);
 
     if (current?.song.id == songId) {
       current = null;
@@ -289,11 +329,21 @@ class KtvService {
   }
 
   KtvQueueEntry? startNext() {
+    final active = current;
+    if (active != null) _history.add(active);
     if (queue.isEmpty) {
       current = null;
       return null;
     }
     current = queue.removeAt(0);
+    return current;
+  }
+
+  KtvQueueEntry? startPrevious() {
+    if (_history.isEmpty) return null;
+    final active = current;
+    if (active != null) queue.insert(0, active);
+    current = _history.removeLast();
     return current;
   }
 
