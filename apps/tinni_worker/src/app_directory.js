@@ -4934,6 +4934,36 @@ export class AppDirectoryStore extends DurableObject {
     return row ? rowToRoom(row) : null;
   }
 
+  findOwnedRoomByUserId(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return null;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji,
+              COALESCE(pc.member_count, 0) AS member_count,
+              COALESCE(pc.member_count, 0) * 500 AS active_user_exp,
+              COALESCE(gx.gift_coins, 0) AS sending_exp,
+              COALESCE(gx.gift_coins, 0) AS receiving_exp,
+              (COALESCE(pc.member_count, 0) * 500)
+                + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
+         FROM app_rooms r
+         JOIN app_users u ON u.user_id = r.owner_id
+         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+         LEFT JOIN (
+           SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
+             FROM gift_transactions
+            GROUP BY room_id
+         ) gx ON gx.room_id = r.id
+        WHERE r.owner_id = ?
+          AND COALESCE(r.closed, 0) = 0
+        ORDER BY r.updated_at DESC, r.created_at DESC
+        LIMIT 1`,
+      userId,
+    ).toArray()[0];
+    return row ? rowToRoom(row) : null;
+  }
+
   findUserByExactPublicId(publicIdValue) {
     const raw = String(publicIdValue || "").trim();
     if (!raw) return null;
