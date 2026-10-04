@@ -1150,11 +1150,564 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         final verificationNotice = _isOfficial &&
                             !mine &&
                             message.text.startsWith('[CALL_VERIFY]');
-                        final roleInviteMatch = !mine
-                            ? RegExp(
-                                r'^\[ROLE_INVITE:([^:\]]+):(host|agency)\]\s*(.*)$',
-                              ).firstMatch(message.text)
-                            : null;
+                        final roleInviteMatch = RegExp(
+                          r'^\[ROLE_INVITE:([^:\]]+):(host|agency)\]\s*(.*)
+                        final inviteId = roleInviteMatch?.group(1) ?? '';
+                        final inviteRole = roleInviteMatch?.group(2) ?? '';
+                        final inviteStatus =
+                            roleInviteStatuses[inviteId] ?? 'pending';
+                        final displayText = verificationNotice
+                            ? message.text
+                                .replaceFirst('[CALL_VERIFY]', '')
+                                .trim()
+                            : roleInviteMatch != null
+                                ? (roleInviteMatch.group(3) ?? '').trim()
+                                : message.text;
+                        return Align(
+                          alignment: mine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 300),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              gradient: FeaturePalette.glow(
+                                mine
+                                    ? FeaturePalette.social
+                                    : FeaturePalette.message,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: (mine
+                                        ? FeaturePalette.social
+                                        : FeaturePalette.message)
+                                    .withValues(alpha: 0.70),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (mine
+                                          ? FeaturePalette.social
+                                          : FeaturePalette.message)
+                                      .withValues(alpha: 0.18),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: mine
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                if (message.isImage)
+                                  _messagePhoto(message)
+                                else
+                                  SelectableText(
+                                    displayText,
+                                    key: Key(
+                                      'message-selectable-' +
+                                          (message.id ?? index.toString()),
+                                    ),
+                                  ),
+                                if (verificationNotice) ...[
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    key: Key(
+                                      'official-call-verify-' +
+                                          (message.id ?? index.toString()),
+                                    ),
+                                    onPressed: _openCallVerification,
+                                    icon: const Icon(
+                                      Icons.verified_user_rounded,
+                                    ),
+                                    label: const Text('Verify Call ID'),
+                                  ),
+                                ],
+                                if (roleInviteMatch != null &&
+                                    message.to == _myUserId) ...[
+                                  const SizedBox(height: 8),
+                                  if (inviteStatus == 'pending')
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      children: [
+                                        OutlinedButton(
+                                          key: Key(
+                                            'role-invite-reject-' + inviteId,
+                                          ),
+                                          onPressed: respondingRoleInvites
+                                                  .contains(inviteId)
+                                              ? null
+                                              : () => _respondRoleInvite(
+                                                    inviteId,
+                                                    false,
+                                                  ),
+                                          child: const Text('Reject'),
+                                        ),
+                                        FilledButton(
+                                          key: Key(
+                                            'role-invite-accept-' + inviteId,
+                                          ),
+                                          onPressed: respondingRoleInvites
+                                                  .contains(inviteId)
+                                              ? null
+                                              : () => _respondRoleInvite(
+                                                    inviteId,
+                                                    true,
+                                                  ),
+                                          child: Text(
+                                            'Accept ' +
+                                                (inviteRole == 'host'
+                                                    ? 'Host'
+                                                    : 'Agency'),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Text(
+                                      inviteStatus == 'accepted'
+                                          ? 'Accepted'
+                                          : 'Rejected',
+                                      style: TextStyle(
+                                        color: inviteStatus == 'accepted'
+                                            ? FeaturePalette.social
+                                            : Colors.redAccent,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                ],
+                                const SizedBox(height: 3),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _timeLabel(message.createdAt),
+                                      style: const TextStyle(
+                                        color: RoyalPalette.muted,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                    if (mine) ...[
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        message.seenAt != null
+                                            ? 'Seen'
+                                            : 'Sent',
+                                        key: Key(
+                                          'message-status-' +
+                                              (message.id ??
+                                                  index.toString()),
+                                        ),
+                                        style: TextStyle(
+                                          color: message.seenAt != null
+                                              ? FeaturePalette.social
+                                              : RoyalPalette.muted,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: RoyalPalette.nearBlack,
+                border: Border(
+                  top: BorderSide(
+                    color: (_isOfficial
+                            ? FeaturePalette.rank
+                            : FeaturePalette.social)
+                        .withValues(alpha: 0.72),
+                  ),
+                ),
+              ),
+              child: _isOfficial
+                  ? const Row(
+                      children: [
+                        ShiningIcon(
+                          icon: Icons.verified_rounded,
+                          color: FeaturePalette.rank,
+                          size: 18,
+                          boxSize: 34,
+                          glow: 0.34,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Messages from Tinni Official are official platform notices.',
+                            style: TextStyle(
+                              color: RoyalPalette.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : !_isFriend
+                      ? const Row(
+                          key: Key('message-mutual-follow-lock'),
+                          children: [
+                            ShiningIcon(
+                              icon: Icons.lock_outline_rounded,
+                              color: FeaturePalette.social,
+                              size: 18,
+                              boxSize: 34,
+                              glow: 0.28,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Both users must follow each other to become Friends. Messages and photos unlock after the follow is mutual.',
+                                style: TextStyle(
+                                  color: RoyalPalette.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                      children: [
+                        IconButton(
+                            key: const Key('message-photo-button'),
+                            tooltip: 'Send photo',
+                            onPressed: sendingImage ? null : _pickAndSendPhoto,
+                            icon: sendingImage
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const ShiningIcon(
+                                    icon: Icons.image_rounded,
+                                    color: FeaturePalette.social,
+                                    size: 20,
+                                    boxSize: 36,
+                                    glow: 0.30,
+                                  ),
+                          ),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('message-input'),
+                            controller: controller,
+                            onSubmitted: (_) => send(),
+                            decoration: InputDecoration(
+                              hintText: 'Message ' + _targetName + '…',
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('message-send-button'),
+                          onPressed: sending ? null : send,
+                          icon: sending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const ShiningIcon(
+                                  icon: Icons.send_rounded,
+                                  color: FeaturePalette.message,
+                                  size: 20,
+                                  boxSize: 36,
+                                  glow: 0.34,
+                                ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _isInbox ? _buildInbox() : _buildConversation();
+  }
+}
+
+
+
+class _ActivityInboxScreen extends StatefulWidget {
+  const _ActivityInboxScreen({required this.state});
+
+  final TinniState state;
+
+  @override
+  State<_ActivityInboxScreen> createState() => _ActivityInboxScreenState();
+}
+
+class _ActivityInboxScreenState extends State<_ActivityInboxScreen> {
+  bool loading = true;
+  String? error;
+  List<RemoteNotification> notices = const <RemoteNotification>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = widget.state.auth.current;
+    if (account == null) {
+      if (mounted) setState(() => loading = false);
+      return;
+    }
+    try {
+      final values = await widget.state.backend.notifications(
+        account.authToken,
+      );
+      if (!mounted) return;
+      setState(() {
+        notices = values
+            .where((notice) => notice.type != 'message')
+            .toList(growable: false);
+        loading = false;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  Future<void> _markRead(RemoteNotification notice) async {
+    if (notice.read) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    try {
+      await widget.state.backend.markNotificationRead(
+        account.authToken,
+        notice.id,
+      );
+      await _load();
+    } catch (_) {}
+  }
+
+  String _date(RemoteNotification notice) {
+    if (notice.createdAt <= 0) return '';
+    final d = DateTime.fromMillisecondsSinceEpoch(
+      notice.createdAt,
+    ).toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${d.year} '
+        '${two(d.hour)}:${two(d.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: const Key('activity-inbox'),
+      appBar: AppBar(
+        title: const Text(
+          'Activity',
+          style: TextStyle(
+            color: FeaturePalette.social,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  if (notices.isEmpty)
+                    const RoyalPanel(
+                      child: Padding(
+                        padding: EdgeInsets.all(18),
+                        child: Text(
+                          'No activity yet.',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                      ),
+                    ),
+                  for (final notice in notices)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: RoyalPanel(
+                        key: Key('activity-notice-' + notice.id),
+                        onTap: () => _markRead(notice),
+                        gradient: FeaturePalette.glow(
+                          notice.read
+                              ? RoyalPalette.muted
+                              : FeaturePalette.social,
+                        ),
+                        accentColor: notice.read
+                            ? RoyalPalette.muted
+                            : FeaturePalette.social,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  notice.read
+                                      ? Icons.notifications_none_rounded
+                                      : Icons.notifications_active_rounded,
+                                  color: FeaturePalette.social,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    notice.title,
+                                    style: const TextStyle(
+                                      color: RoyalPalette.cream,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                if (!notice.read)
+                                  const Text(
+                                    'NEW',
+                                    style: TextStyle(
+                                      color: FeaturePalette.social,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              notice.message,
+                              style: const TextStyle(
+                                color: RoyalPalette.cream,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _date(notice),
+                              style: const TextStyle(
+                                color: RoyalPalette.muted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _MessageIdentityTag extends StatelessWidget {
+  const _MessageIdentityTag({required this.tag});
+
+  final Map<String, dynamic> tag;
+
+  Color _hex(String? raw, Color fallback) {
+    final value = (raw ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = tag['kind']?.toString() ?? 'custom';
+    final label = (tag['designation']?.toString().trim().isNotEmpty ?? false)
+        ? tag['designation']!.toString().trim()
+        : (tag['name']?.toString() ?? 'Tag');
+    if (kind == 'v_official') {
+      final bg = _hex(tag['background_color']?.toString(), const Color(0xFF69C9FF));
+      return Container(
+        padding: const EdgeInsets.fromLTRB(3, 2, 7, 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12100C),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: RoyalPalette.deepGold),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: bg,
+                border: Border.all(color: RoyalPalette.gold, width: 1.5),
+              ),
+              child: const Text(
+                'V',
+                style: TextStyle(
+                  color: Color(0xFFE4E7ED),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: RoyalPalette.gold,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final color = _hex(tag['color']?.toString(), RoyalPalette.gold);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .75)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: kind == 'auto_role' ? RoyalPalette.gold : color,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+,
+                        ).firstMatch(message.text);
                         final inviteId = roleInviteMatch?.group(1) ?? '';
                         final inviteRole = roleInviteMatch?.group(2) ?? '';
                         final inviteStatus =
