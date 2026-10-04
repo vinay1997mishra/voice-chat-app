@@ -31,6 +31,7 @@ const SUPPORTED_LANGUAGES = new Set([
   "Chinese (Traditional)",
   "Korean",
 ]);
+const PBKDF2_MAX_ITERATIONS = 100000;
 const encoder = new TextEncoder();
 
 function toBase64Url(bytes) {
@@ -59,6 +60,11 @@ function safeEqualBytes(a, b) {
 }
 
 async function deriveSecret(secret, saltBytes, iterations) {
+  const requested = Math.floor(Number(iterations || PBKDF2_MAX_ITERATIONS));
+  const safeIterations = Math.max(
+    1,
+    Math.min(PBKDF2_MAX_ITERATIONS, requested),
+  );
   const material = await crypto.subtle.importKey(
     "raw",
     encoder.encode(String(secret)),
@@ -71,7 +77,7 @@ async function deriveSecret(secret, saltBytes, iterations) {
       name: "PBKDF2",
       hash: "SHA-256",
       salt: saltBytes,
-      iterations,
+      iterations: safeIterations,
     },
     material,
     256,
@@ -1094,6 +1100,7 @@ export class AppDirectoryStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS settlement_transfers (
         id TEXT PRIMARY KEY,
         sender_user_id TEXT NOT NULL,
+        sender_role TEXT NOT NULL DEFAULT 'host',
         recipient_user_id TEXT NOT NULL,
         recipient_role TEXT NOT NULL,
         usd_cents INTEGER NOT NULL,
@@ -1102,6 +1109,8 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_settlement_transfers_sender
         ON settlement_transfers(sender_user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_settlement_transfers_recipient
+        ON settlement_transfers(recipient_user_id, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS diamond_conversions (
         id TEXT PRIMARY KEY,
@@ -1292,6 +1301,7 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE direct_messages ADD COLUMN seen_at INTEGER",
       "ALTER TABLE direct_messages ADD COLUMN message_kind TEXT NOT NULL DEFAULT 'text'",
       "ALTER TABLE direct_messages ADD COLUMN media_url TEXT",
+      "ALTER TABLE settlement_transfers ADD COLUMN sender_role TEXT NOT NULL DEFAULT 'host'",
       "ALTER TABLE app_users ADD COLUMN call_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_users ADD COLUMN call_verification_status TEXT NOT NULL DEFAULT 'unverified'",
       "ALTER TABLE app_users ADD COLUMN call_verified_at INTEGER",
@@ -8397,30 +8407,42 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  transferSettlement(senderUserIdValue, recipientUserIdValue, usdCentsValue) {
+  transferSettlement(
+    senderUserIdValue,
+    recipientUserIdValue,
+    usdCentsValue,
+    senderRoleValue = "",
+  ) {
     const senderId = this._resolveOwnerUserId(senderUserIdValue);
     this._enforceActionRate(senderId, "settlement_transfer", 5, 60000, 300000);
+    const wallet = this.getWallet(senderId);
+    const requestedRole = String(senderRoleValue || "").trim().toLowerCase();
+    const senderRole = ["host", "agency", "bd"].includes(requestedRole)
+      ? requestedRole
+      : (wallet.is_host ? "host" : wallet.is_agency ? "agency" : wallet.is_bd ? "bd" : "");
+    if (!senderRole ||
+        (senderRole === "host" && !wallet.is_host) ||
+        (senderRole === "agency" && !wallet.is_agency) ||
+        (senderRole === "bd" && !wallet.is_bd)) {
+      throw new Error("Active Host, Agency or BD role is required");
+    }
+
     const recipient = this.settlementRecipient(recipientUserIdValue);
     const usdCents = Math.floor(Number(usdCentsValue || 0));
-
-    const wallet = this.getWallet(senderId);
-    if (!(wallet.is_host || wallet.is_agency || wallet.is_bd)) {
-      throw new Error("Only Host, Agency or BD settlement can be transferred");
-    }
-    const minimumUsdCents = (wallet.is_agency || wallet.is_bd)
-      ? AGENCY_BD_SETTLEMENT_MIN_USD_CENTS
-      : HOST_SETTLEMENT_MIN_USD_CENTS;
-    if (usdCents < minimumUsdCents) {
+    const minimumUsdCents = senderRole === "host"
+      ? HOST_SETTLEMENT_MIN_USD_CENTS
+      : AGENCY_BD_SETTLEMENT_MIN_USD_CENTS;
+    if (!Number.isSafeInteger(usdCents) || usdCents < minimumUsdCents) {
       throw new Error(
-        (wallet.is_agency || wallet.is_bd)
-          ? "Minimum Agency/BD transfer is $10"
-          : "Minimum Host transfer is $2",
+        senderRole === "host"
+          ? "Minimum Host transfer is $2"
+          : "Minimum Agency/BD transfer is $10",
       );
     }
-    if (senderId === recipient.user_id) throw new Error("Cannot transfer to your own account");
-    if (wallet.withdrawable_usd_cents < usdCents) {
-      throw new Error("Settlement balance is not enough");
+    if (senderId === recipient.user_id) {
+      throw new Error("Cannot transfer to your own account");
     }
+
     const recipientWallet = this._privilegedWalletGuard(
       recipient.user_id,
       recipient.role,
@@ -8429,27 +8451,31 @@ export class AppDirectoryStore extends DurableObject {
       throw new Error("Recipient Coin Seller or Merchant wallet is security-frozen");
     }
 
-    let remaining = usdCents;
     let diamondsDebited = 0;
-    const commissionRow = this._ensureSettlementBalance(senderId);
-    const commissionCents = Number(commissionRow?.usd_cents || 0);
-    const commissionDebit = Math.min(remaining, commissionCents);
-    if (commissionDebit > 0) {
-      this.ctx.storage.sql.exec(
-        "UPDATE settlement_balances SET usd_cents=usd_cents-?,updated_at=? WHERE user_id=?",
-        commissionDebit, Date.now(), senderId,
-      );
-      remaining -= commissionDebit;
-    }
-    if (remaining > 0) {
-      if (!wallet.is_host) throw new Error("Settlement balance is not enough");
+    if (senderRole === "host") {
+      const hostAvailableCents = Math.max(0, Number(wallet.diamond_usd_cents || 0));
+      if (hostAvailableCents < usdCents) {
+        throw new Error("Host dollar balance is not enough");
+      }
       diamondsDebited = Math.ceil(
-        remaining * HOST_TARGET_RECEIVED_COINS / HOST_TARGET_USD_CENTS,
+        usdCents * HOST_TARGET_RECEIVED_COINS / HOST_TARGET_USD_CENTS,
       );
-      if (diamondsDebited > wallet.diamonds) throw new Error("Diamond balance is not enough");
+      if (diamondsDebited > wallet.diamonds) {
+        throw new Error("Diamond balance is not enough");
+      }
       this.ctx.storage.sql.exec(
         "UPDATE app_wallets SET diamonds=diamonds-?,updated_at=? WHERE user_id=?",
         diamondsDebited, Date.now(), senderId,
+      );
+    } else {
+      const commissionRow = this._ensureSettlementBalance(senderId);
+      const commissionCents = Math.max(0, Number(commissionRow?.usd_cents || 0));
+      if (commissionCents < usdCents) {
+        throw new Error("Commission dollar balance is not enough");
+      }
+      this.ctx.storage.sql.exec(
+        "UPDATE settlement_balances SET usd_cents=usd_cents-?,updated_at=? WHERE user_id=?",
+        usdCents, Date.now(), senderId,
       );
     }
 
@@ -8472,6 +8498,7 @@ export class AppDirectoryStore extends DurableObject {
         usdCents, now, recipient.user_id,
       );
     }
+
     this._recordPrivilegedWalletTransaction({
       userId: recipient.user_id,
       walletType: recipient.role,
@@ -8480,21 +8507,27 @@ export class AppDirectoryStore extends DurableObject {
       usdCents,
       counterpartyUserId: senderId,
       referenceId: id,
-      note: "Settlement received from ID " + senderId,
+      note: "Settlement received from " + senderRole.toUpperCase() +
+        " ID " + senderId,
       createdAt: now,
     });
     this.ctx.storage.sql.exec(
-      "INSERT INTO settlement_transfers(id,sender_user_id,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?)",
-      id, senderId, recipient.user_id, recipient.role, usdCents, diamondsDebited, now,
+      "INSERT INTO settlement_transfers(id,sender_user_id,sender_role,recipient_user_id,recipient_role,usd_cents,diamonds_debited,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      id, senderId, senderRole, recipient.user_id, recipient.role,
+      usdCents, diamondsDebited, now,
     );
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'settlement_transfer',0,?,?,?,?,?)",
       "wallet-" + crypto.randomUUID(), senderId, -diamondsDebited, id,
-      "Transferred $" + (usdCents / 100).toFixed(2) + " to " + recipient.user_id, now,
+      "Transferred $" + (usdCents / 100).toFixed(2) + " from " +
+        senderRole.toUpperCase() + " to " +
+        recipient.role.replaceAll("_", " ") + " ID " + recipient.user_id,
+      now,
     );
     return {
       ok: true,
       transfer_id: id,
+      sender_role: senderRole,
       recipient,
       usd_cents: usdCents,
       credited_coins: creditedCoins,
@@ -8506,13 +8539,20 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  settlementTransfers(userIdValue) {
+  settlementTransfers(userIdValue, senderRoleValue = "host") {
     const userId = this._resolveOwnerUserId(userIdValue);
+    const requestedRole = String(senderRoleValue || "").trim().toLowerCase();
+    const senderRole = ["host", "agency", "bd"].includes(requestedRole)
+      ? requestedRole
+      : "host";
     return this.ctx.storage.sql.exec(
-      "SELECT * FROM settlement_transfers WHERE sender_user_id=? ORDER BY created_at DESC LIMIT 200",
+      "SELECT * FROM settlement_transfers WHERE sender_user_id=? AND sender_role=? ORDER BY created_at DESC LIMIT 200",
       userId,
+      senderRole,
     ).toArray().map((row) => ({
-      id: String(row.id), sender_user_id: String(row.sender_user_id),
+      id: String(row.id),
+      sender_user_id: String(row.sender_user_id),
+      sender_role: String(row.sender_role || "host"),
       recipient_user_id: String(row.recipient_user_id),
       recipient_role: String(row.recipient_role),
       usd_cents: Number(row.usd_cents || 0),
