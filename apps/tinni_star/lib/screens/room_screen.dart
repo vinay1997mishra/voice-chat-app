@@ -4258,6 +4258,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final current = widget.state.ktv.current;
           final localSongCount = widget.state.ktv.localSongCount;
           final canAddLocalSong = widget.state.ktv.canAddLocalSong;
+          final canPlayPrevious = widget.state.ktv.canPlayPrevious;
+          final canPlayNext = widget.state.ktv.canPlayNext;
+          final musicPlaying = widget.state.ktv.isPlaying;
           final onSeat = controller.mySeat != null;
           return SafeArea(
             key: const Key('room-music-panel'),
@@ -4326,17 +4329,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                        if (current != null)
-                          IconButton(
-                            tooltip: 'Next',
-                            onPressed: onSeat
-                                ? () async {
-                                    await widget.state.ktv.playNext();
-                                    setSheetState(() {});
-                                  }
-                                : null,
-                            icon: const Icon(Icons.skip_next_rounded),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        IconButton(
+                          key: const Key('room-music-previous-button'),
+                          tooltip: 'Previous',
+                          onPressed: onSeat && canPlayPrevious
+                              ? () async {
+                                  await widget.state.ktv.playPrevious();
+                                  setSheetState(() {});
+                                }
+                              : null,
+                          icon: const Icon(Icons.skip_previous_rounded),
+                        ),
+                        IconButton(
+                          key: const Key('room-music-play-pause-button'),
+                          tooltip: musicPlaying ? 'Pause' : 'Play',
+                          onPressed: onSeat && current != null
+                              ? () async {
+                                  await widget.state.ktv.togglePlayPause();
+                                  setSheetState(() {});
+                                }
+                              : null,
+                          icon: Icon(
+                            musicPlaying
+                                ? Icons.pause_circle_filled_rounded
+                                : Icons.play_circle_fill_rounded,
+                            size: 34,
+                            color: FeaturePalette.music,
                           ),
+                        ),
+                        IconButton(
+                          key: const Key('room-music-stop-button'),
+                          tooltip: 'Stop',
+                          onPressed: onSeat && current != null
+                              ? () async {
+                                  await widget.state.ktv.stopPlayback();
+                                  setSheetState(() {});
+                                }
+                              : null,
+                          icon: const Icon(Icons.stop_circle_rounded),
+                        ),
+                        IconButton(
+                          key: const Key('room-music-next-button'),
+                          tooltip: 'Next',
+                          onPressed: onSeat && canPlayNext
+                              ? () async {
+                                  await widget.state.ktv.playNext();
+                                  setSheetState(() {});
+                                }
+                              : null,
+                          icon: const Icon(Icons.skip_next_rounded),
+                        ),
                       ],
                     ),
                   ),
