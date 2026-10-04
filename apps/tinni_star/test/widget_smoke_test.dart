@@ -122,8 +122,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
 
-    await state.roomSession.close();
-    await tester.pump();
   });
 
   testWidgets(
@@ -276,8 +274,6 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    await state.roomSession.close();
-    await tester.pump();
   });
 
 
@@ -516,8 +512,6 @@ void main() {
       findsOneWidget,
     );
 
-    await state.roomSession.close();
-    await tester.pump();
   });
 
 
@@ -578,8 +572,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
 
-    await state.roomSession.close();
-    await tester.pump();
   });
 
 }
