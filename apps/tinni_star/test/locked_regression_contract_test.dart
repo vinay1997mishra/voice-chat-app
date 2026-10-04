@@ -32,6 +32,22 @@ void main() {
     expect(login, contains('items: tinniSupportedLanguages'));
   });
 
+  test('generic Feature Center stays permanently removed', () {
+    final retired = File('lib/screens/feature_center_screen.dart');
+    final home = File('lib/screens/home_screen.dart').readAsStringSync();
+    final cpRanking =
+        File('lib/screens/cp_ranking_screen.dart').readAsStringSync();
+
+    expect(retired.existsSync(), isFalse);
+    expect(home, isNot(contains('FeatureCenterScreen')));
+    expect(home, isNot(contains('feature_center_screen.dart')));
+    expect(home, isNot(contains('openFeatureCenter')));
+    expect(home, contains('openCpRanking'));
+    expect(home, contains('openFamilyRanking'));
+    expect(cpRanking, isNot(contains('FeatureCenterScreen')));
+    expect(cpRanking, contains('CpScreen('));
+  });
+
   test('retired Mine entries stay removed', () {
     final profile = File('lib/screens/profile_screen.dart').readAsStringSync();
     expect(profile, isNot(contains("Key('mine-personal-information')")));
