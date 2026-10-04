@@ -73,6 +73,22 @@ class RoomGiftVisualEvent {
   final DateTime createdAt;
 }
 
+class RoomChatEvent {
+  const RoomChatEvent({
+    required this.id,
+    required this.userId,
+    required this.displayName,
+    required this.text,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String userId;
+  final String displayName;
+  final String text;
+  final DateTime createdAt;
+}
+
 class RoomPresenceMember {
   const RoomPresenceMember({
     required this.userId,
@@ -150,6 +166,7 @@ class RoomPresenceService extends ChangeNotifier {
   String micMode = 'apply';
   bool publicScreenEnabled = false;
   int commentsClearVersion = 0;
+  int ownerCommentsClearVersion = 0;
   bool selfMicMuted = false;
   bool selfChatBanned = false;
   bool selfSeatForced = false;
@@ -159,6 +176,7 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomLuckyNumberEvent> luckyNumberEvents =
       <RoomLuckyNumberEvent>[];
   RoomGiftVisualEvent? latestGiftVisualEvent;
+  RoomChatEvent? latestChatEvent;
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
@@ -248,6 +266,35 @@ class RoomPresenceService extends ChangeNotifier {
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
+      if (data['type']?.toString() == 'chat_message') {
+        final rawMessage = data['message'];
+        if (rawMessage is Map) {
+          final message = rawMessage.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+          final id = message['id']?.toString().trim() ?? '';
+          final text = message['text']?.toString().trim() ?? '';
+          if (id.isNotEmpty && text.isNotEmpty) {
+            final createdAtMs = _asInt(message['created_at']);
+            latestChatEvent = RoomChatEvent(
+              id: id,
+              userId: message['user_id']?.toString() ?? '',
+              displayName:
+                  message['display_name']?.toString().trim().isNotEmpty == true
+                      ? message['display_name'].toString().trim()
+                      : 'User',
+              text: text,
+              createdAt: DateTime.fromMillisecondsSinceEpoch(
+                createdAtMs > 0
+                    ? createdAtMs
+                    : DateTime.now().millisecondsSinceEpoch,
+              ),
+            );
+            notifyListeners();
+          }
+        }
+        return;
+      }
       if (data['type']?.toString() == 'gift_sent') {
         final rawGift = data['gift'];
         if (rawGift is Map) {
@@ -320,6 +367,24 @@ class RoomPresenceService extends ChangeNotifier {
       'seat_index': seatIndex,
       'mic_enabled': micEnabled,
     });
+  }
+
+  Future<void> sendChatMessage(String text) async {
+    final value = text.trim();
+    if (value.isEmpty) return;
+    if (value.length > 500) {
+      throw StateError('Comment is too long.');
+    }
+    final socket = _liveSocket;
+    if (socket == null || socket.readyState != WebSocket.open) {
+      throw StateError('Room chat is reconnecting.');
+    }
+    socket.add(
+      jsonEncode(<String, Object?>{
+        'type': 'chat_message',
+        'text': value,
+      }),
+    );
   }
 
   void _scheduleLiveReconnect() {
@@ -399,12 +464,14 @@ class RoomPresenceService extends ChangeNotifier {
       micMode = 'apply';
       publicScreenEnabled = false;
       commentsClearVersion = 0;
+      ownerCommentsClearVersion = 0;
       selfMicMuted = false;
       selfChatBanned = false;
       selfSeatForced = false;
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
       latestGiftVisualEvent = null;
+      latestChatEvent = null;
       seatRequests.clear();
       lockedSeats.clear();
       mutedSeats.clear();
@@ -514,6 +581,10 @@ class RoomPresenceService extends ChangeNotifier {
     if (data.containsKey('comments_clear_version')) {
       commentsClearVersion = _asInt(data['comments_clear_version']);
     }
+    if (data.containsKey('owner_comments_clear_version')) {
+      ownerCommentsClearVersion =
+          _asInt(data['owner_comments_clear_version']);
+    }
     notifyListeners();
   }
 
@@ -529,6 +600,10 @@ class RoomPresenceService extends ChangeNotifier {
     );
     if (data.containsKey('comments_clear_version')) {
       commentsClearVersion = _asInt(data['comments_clear_version']);
+    }
+    if (data.containsKey('owner_comments_clear_version')) {
+      ownerCommentsClearVersion =
+          _asInt(data['owner_comments_clear_version']);
     }
     if (data.containsKey('public_screen_enabled')) {
       publicScreenEnabled = data['public_screen_enabled'] == true;
@@ -965,6 +1040,8 @@ class RoomPresenceService extends ChangeNotifier {
       ..write('|')
       ..write(commentsClearVersion)
       ..write('|')
+      ..write(ownerCommentsClearVersion)
+      ..write('|')
       ..write(selfMicMuted)
       ..write('|')
       ..write(selfChatBanned)
@@ -1028,6 +1105,12 @@ class RoomPresenceService extends ChangeNotifier {
       commentsClearVersion = math.max(
         0,
         _asInt(data['comments_clear_version']),
+      );
+    }
+    if (data.containsKey('owner_comments_clear_version')) {
+      ownerCommentsClearVersion = math.max(
+        0,
+        _asInt(data['owner_comments_clear_version']),
       );
     }
 
