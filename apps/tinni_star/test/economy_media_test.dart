@@ -77,6 +77,33 @@ void main() {
     );
   });
 
+  test('music queue supports previous and next navigation', () {
+    final ktv = KtvService();
+    final first = ktv.addLocalSong(
+      fileName: 'First.mp3',
+      sourcePath: '/phone/Music/First.mp3',
+    );
+    final second = ktv.addLocalSong(
+      fileName: 'Second.mp3',
+      sourcePath: '/phone/Music/Second.mp3',
+    );
+
+    ktv.addToQueue(first, 'u1');
+    ktv.addToQueue(second, 'u1');
+
+    expect(ktv.startNext()?.song.id, first.id);
+    expect(ktv.canPlayPrevious, false);
+    expect(ktv.canPlayNext, true);
+
+    expect(ktv.startNext()?.song.id, second.id);
+    expect(ktv.canPlayPrevious, true);
+    expect(ktv.canPlayNext, false);
+
+    expect(ktv.startPrevious()?.song.id, first.id);
+    expect(ktv.current?.song.id, first.id);
+    expect(ktv.queue.first.song.id, second.id);
+  });
+
   test('removing phone music also clears it from queue/current', () {
     final ktv = KtvService();
     final local = ktv.addLocalSong(
