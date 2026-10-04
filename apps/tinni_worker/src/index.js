@@ -3036,6 +3036,7 @@ export default {
           appSession.user.user_id,
           body.recipient_user_id,
           body.usd_cents,
+          body.sender_role,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer settlement") }, 400);
@@ -3047,7 +3048,10 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
         ok: true,
-        transfers: await getAppDirectoryStore(env).settlementTransfers(appSession.user.user_id),
+        transfers: await getAppDirectoryStore(env).settlementTransfers(
+          appSession.user.user_id,
+          url.searchParams.get("role") || "host",
+        ),
       });
     }
 
@@ -6094,6 +6098,122 @@ export default {
           ok: false,
           error: String(error?.message || "Unable to remove room theme"),
         }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/user-conversation" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
+      if (!userId || !peerUserId) {
+        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
+      }
+      try {
+        const result = await getAppDirectoryStore(env).ownerConversation(
+          userId,
+          peerUserId,
+          url.searchParams.get("limit") || 500,
+        );
+        await writeAudit(env, session, "user.inbox.thread.view", "user", userId, {
+          peer_user_id: peerUserId,
+          message_count: Array.isArray(result?.messages) ? result.messages.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
+      }
+    }
+
+    if (url.pathname === "/api/owner/user-inbox" && request.method === "GET") {
+      if (!ownerOnly(session)) {
+        return json({ ok: false, error: "Owner access required" }, 403);
+      }
+      const userId = String(url.searchParams.get("user_id") || "").trim();
+      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
+      try {
+        const result = await getAppDirectoryStore(env).ownerMessageThreads(userId);
+        await writeAudit(env, session, "user.inbox.view", "user", userId, {
+          thread_count: Array.isArray(result?.threads) ? result.threads.length : 0,
+        });
+        return json({ ok: true, ...result });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/coins/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).coinsHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/diamonds/convert" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).convertDiamonds(
+          appSession.user.user_id,
+          body.diamonds,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to convert diamonds") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/diamonds/history" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        ...(await getAppDirectoryStore(env).diamondHistory(
+          appSession.user.user_id,
+          url.searchParams.get("limit") || 200,
+        )),
+      });
+    }
+
+    if (url.pathname === "/wallet/role-detail" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          wallet: await getAppDirectoryStore(env).roleWalletDetail(
+            appSession.user.user_id,
+            url.searchParams.get("wallet_type") || "",
+            url.searchParams.get("limit") || 200,
+          ),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load role wallet") }, 400);
+      }
+    }
+
+    if (url.pathname === "/wallet/role-dollars/transfer" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json(await getAppDirectoryStore(env).transferRoleDollars(
+          appSession.user.user_id,
+          body.wallet_type,
+          body.destination_type,
+          body.recipient_user_id,
+          body.usd_cents,
+          body.password,
+          body.request_id,
+        ), 201);
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
       }
     }
 
