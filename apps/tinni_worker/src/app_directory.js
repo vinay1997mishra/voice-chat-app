@@ -187,6 +187,7 @@ function rowToRoom(row) {
     seat_row_sizes: seatLayout.row_sizes,
     party_mode: String(row.party_mode),
     locked: Number(row.locked) === 1,
+    closed: Number(row.closed || 0) === 1,
     photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
     theme_id: row.theme_id ? String(row.theme_id) : "royal-dark",
     theme_asset: row.theme_asset ? String(row.theme_asset) : null,
@@ -4935,7 +4936,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   findOwnedRoomByUserId(userIdValue) {
-    const userId = String(userIdValue || "").trim();
+    const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return null;
     const row = this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
@@ -4956,7 +4957,6 @@ export class AppDirectoryStore extends DurableObject {
             GROUP BY room_id
          ) gx ON gx.room_id = r.id
         WHERE r.owner_id = ?
-          AND COALESCE(r.closed, 0) = 0
         ORDER BY r.updated_at DESC, r.created_at DESC
         LIMIT 1`,
       userId,
@@ -11986,7 +11986,28 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       ownerId,
     ).toArray()[0];
-    if (existing) return rowToRoom(existing);
+    if (existing) {
+      if (Number(existing.closed || 0) === 1) {
+        const now = Date.now();
+        this.ctx.storage.sql.exec(
+          "UPDATE app_rooms SET closed = 0, updated_at = ? WHERE id = ?",
+          now,
+          String(existing.id),
+        );
+        const reopened = this.ctx.storage.sql.exec(
+          `SELECT r.*, u.display_name AS owner_name,
+                  u.avatar_data_url AS owner_avatar_data_url,
+                  u.flag_emoji AS owner_flag_emoji
+             FROM app_rooms r
+             JOIN app_users u ON u.user_id = r.owner_id
+            WHERE r.id = ?
+            LIMIT 1`,
+          String(existing.id),
+        ).toArray()[0];
+        return rowToRoom(reopened);
+      }
+      return rowToRoom(existing);
+    }
 
     const title = cleanText(input?.title, 60);
     const seatCount = Number(input?.seat_count || 12);
