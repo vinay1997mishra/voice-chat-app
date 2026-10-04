@@ -84,6 +84,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Map<String, ImageProvider> _avatarProviderCache =
       <String, ImageProvider>{};
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
+  Timer? _roomRecoveryTimer;
+  bool _roomRecoveryRunning = false;
   static const List<int> _rocketStageTargets = <int>[
     8000000,
     15000000,
@@ -756,6 +758,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyBubbleTimer?.cancel();
     _luckyComboExpiryTimer?.cancel();
     _luckyComboCountdownTimer?.cancel();
+    _roomRecoveryTimer?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -1194,13 +1197,76 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     });
   }
 
+  bool _isTransientRoomServerError(String text) {
+    final lower = text.toLowerCase();
+    return lower.contains('temporarily unavailable') ||
+        lower.contains('invalid response') ||
+        lower.contains('connection problem') ||
+        lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('timed out') ||
+        lower.contains('connection closed');
+  }
+
+  void _scheduleRoomRecovery() {
+    if (!mounted || _roomRecoveryRunning || _roomRecoveryTimer != null) {
+      return;
+    }
+    _roomRecoveryTimer = Timer(const Duration(milliseconds: 350), () {
+      _roomRecoveryTimer = null;
+      unawaited(_recoverRoomConnection());
+    });
+  }
+
+  Future<void> _recoverRoomConnection() async {
+    if (!mounted || _roomRecoveryRunning) return;
+    final account = widget.state.auth.current;
+    if (account == null) return;
+
+    _roomRecoveryRunning = true;
+    try {
+      final session = widget.state.roomSession;
+      if (session.room?.id != widget.room.id || !session.backendSessionActive) {
+        await _openRoom();
+        return;
+      }
+
+      await session.presence.refresh(
+        roomId: widget.room.id,
+        authToken: account.authToken,
+      );
+      await session.presence.connectLive(
+        roomId: widget.room.id,
+        authToken: account.authToken,
+      );
+      session.resume();
+    } catch (_) {
+      if (mounted && _roomRecoveryTimer == null) {
+        _roomRecoveryTimer = Timer(const Duration(seconds: 2), () {
+          _roomRecoveryTimer = null;
+          _scheduleRoomRecovery();
+        });
+      }
+    } finally {
+      _roomRecoveryRunning = false;
+    }
+  }
+
   void _snack(String text) {
     if (!mounted) return;
+    final clean = text.replaceFirst('Bad state: ', '').trim();
+    if (_isTransientRoomServerError(clean)) {
+      _scheduleRoomRecovery();
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(text),
+        content: Text(clean),
         duration: const Duration(seconds: 1),
       ),
     );
