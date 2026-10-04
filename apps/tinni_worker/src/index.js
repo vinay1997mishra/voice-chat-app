@@ -4801,11 +4801,30 @@ export default {
         return json({ ok: false, error: "Only room owner/admin can invite to seats" }, 403);
       }
 
+      const seatCount = Number(room.seat_count || 0);
+      if (
+        !Number.isInteger(seatCount) ||
+        seatCount < 1 ||
+        seatIndex >= seatCount
+      ) {
+        return json({
+          ok: false,
+          error: "Seat is outside the current room seat range",
+        }, 400);
+      }
+      if (targetUserId === actorId) {
+        return json({
+          ok: false,
+          error: "You cannot invite yourself to a seat",
+        }, 400);
+      }
+
       try {
         return json(await store.inviteToSeat({
           target_user_id: targetUserId,
           invited_by: actorId,
           seat_index: seatIndex,
+          max_seat_count: seatCount,
         }));
       } catch (error) {
         return json({
@@ -4819,13 +4838,32 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const store = getRoomPresenceStore(env, roomId);
+      if (!(await store.isMember(String(appSession.user.user_id)))) {
+        return json({
+          ok: false,
+          error: "User is no longer in the room",
+        }, 403);
+      }
+
       try {
         return json(
-          await getRoomPresenceStore(env, String(body.room_id || "").trim())
-            .respondSeatInvite({
-              user_id: appSession.user.user_id,
-              accepted: body.accepted === true,
-            }),
+          await store.respondSeatInvite({
+            user_id: appSession.user.user_id,
+            accepted: body.accepted === true,
+            max_seat_count: Number(room.seat_count || 0),
+          }),
         );
       } catch (error) {
         return json({
