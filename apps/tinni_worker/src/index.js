@@ -3560,7 +3560,16 @@ export default {
     if (url.pathname === "/rooms" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const rooms = await getAppDirectoryStore(env).listRooms();
+      const directory = getAppDirectoryStore(env);
+      const rooms = await directory.listRooms();
+      // Public room discovery remains unlocked-only, but Mine must always
+      // receive the signed-in user's own room even when that room is locked.
+      const ownedRoom = await directory.findOwnedRoomByUserId(
+        appSession.user.user_id,
+      );
+      if (ownedRoom && !rooms.some((item) => String(item.id) === String(ownedRoom.id))) {
+        rooms.unshift(ownedRoom);
+      }
       return json({ ok: true, rooms });
     }
 
@@ -3617,7 +3626,15 @@ export default {
         return json({ ok: false, error: "Only room owner/admin can change seat count" }, 403);
       }
       try {
-        return json(await directory.updateRoomSeatCount(actorId, roomId, seatCount, isAdmin));
+        const result = await directory.updateRoomSeatCount(
+          actorId,
+          roomId,
+          seatCount,
+          isAdmin,
+        );
+        // Push the authoritative seat count to every user already in the room.
+        await store.setSeatCount(result.room.seat_count);
+        return json(result);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to change seat count") }, 400);
       }
@@ -4462,10 +4479,8 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const directory = getAppDirectoryStore(env);
+      const room = await directory.findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       if (String(room.owner_id) !== String(appSession.user.user_id)) {
         return json({ ok: false, error: "Only the room owner can change mic mode" }, 403);
@@ -4754,10 +4769,8 @@ export default {
       }
 
       try {
-        const rooms = await getAppDirectoryStore(env).listRooms();
-        const room = rooms.find(
-          (item) => String(item.id || item.room_id || "") === roomId,
-        );
+        const directory = getAppDirectoryStore(env);
+        const room = await directory.findRoomByExactId(roomId);
         if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
         const store = getRoomPresenceStore(env, roomId);
