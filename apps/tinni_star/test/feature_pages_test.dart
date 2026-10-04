@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/community/family_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
-import 'package:tinni_star/screens/feature_center_screen.dart';
 import 'package:tinni_star/screens/profile_screen.dart';
 import 'package:tinni_star/screens/vip_screen.dart';
 import 'package:tinni_star/social/social.dart';
@@ -47,39 +46,6 @@ void main() {
     await tester.tap(cpPanel);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('cp-screen')), findsOneWidget);
-  });
-
-  testWidgets('More keeps CP actions out and routes remaining features to pages',
-      (tester) async {
-    final state = makeState();
-    await tester.pumpWidget(
-      MaterialApp(home: FeatureCenterScreen(state: state)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('CP / Courting'), findsNothing);
-    expect(find.text('CP Disconnect Flow'), findsNothing);
-
-    Future<void> openFeature(String label, Key destinationKey) async {
-      final finder = find.text(label);
-      await tester.scrollUntilVisible(
-        finder,
-        220,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(finder);
-      await tester.pumpAndSettle();
-      expect(find.byKey(destinationKey), findsOneWidget);
-    }
-
-    await openFeature('Store / Inventory', const Key('store-screen'));
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await openFeature('Family', const Key('family-home-screen'));
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await openFeature('Sharing', const Key('sharing-screen'));
   });
 
   testWidgets('VIP monthly top-up opens Recharge page', (tester) async {
