@@ -3052,6 +3052,7 @@ export default {
           body.usd_cents,
           body.password,
           body.request_id,
+          body.usdt_address,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
@@ -3064,12 +3065,28 @@ export default {
       return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id) });
     }
 
+    if (url.pathname === "/wallet/settlement/recipients" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json({
+          ok: true,
+          ...(await getAppDirectoryStore(env).settlementRecipients(
+            url.searchParams.get("q") || "",
+          )),
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load recipients") }, 400);
+      }
+    }
+
     if (url.pathname === "/wallet/settlement/recipient" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       try {
         const recipient = await getAppDirectoryStore(env).settlementRecipient(
           url.searchParams.get("user_id") || "",
+          url.searchParams.get("role") || "",
         );
         return json({ ok: true, recipient });
       } catch (error) {
@@ -3087,6 +3104,7 @@ export default {
           body.recipient_user_id,
           body.usd_cents,
           body.sender_role,
+          body.recipient_role,
         ), 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to transfer settlement") }, 400);
