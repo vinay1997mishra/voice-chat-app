@@ -1417,13 +1417,42 @@ export default {
 
     if (url.pathname === "/health/deep" && request.method === "GET") {
       try {
-        const rooms = await getAppDirectoryStore(env).listRooms();
+        const directory = getAppDirectoryStore(env);
+        const rooms = await directory.listRooms();
+        const probeUserId = Array.isArray(rooms) && rooms.length
+          ? String(rooms[0]?.owner_id || "")
+          : "";
+        let profileOk = true;
+        let messagesOk = true;
+        let walletOk = true;
+        let recentRoomsOk = true;
+
+        if (probeUserId) {
+          profileOk = Boolean(await directory.getUserById(probeUserId));
+          messagesOk = Array.isArray(
+            await directory.listMessageThreads(probeUserId),
+          );
+          walletOk = Boolean(await directory.getWallet(probeUserId));
+          recentRoomsOk = Array.isArray(
+            await directory.listRecentRooms(probeUserId),
+          );
+        }
+
+        const checks = {
+          rooms: Array.isArray(rooms),
+          profile: profileOk,
+          messages: messagesOk,
+          wallet: walletOk,
+          recent_rooms: recentRoomsOk,
+        };
+        const ok = Object.values(checks).every(Boolean);
         return json({
-          ok: true,
+          ok,
           service: "tinni-star-api",
-          app_directory: "ok",
+          app_directory: ok ? "ok" : "degraded",
           room_count: Array.isArray(rooms) ? rooms.length : 0,
-        });
+          checks,
+        }, ok ? 200 : 503);
       } catch (error) {
         console.error("Tinni Star deep health failed", error);
         return json({
