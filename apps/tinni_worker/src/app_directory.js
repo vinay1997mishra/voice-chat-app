@@ -2128,7 +2128,7 @@ export class AppDirectoryStore extends DurableObject {
       coin_seller_settlement_coins_per_usd: COIN_SELLER_SETTLEMENT_COINS_PER_USD,
       room_online_exp_per_minute: 50, room_online_daily_minutes_cap: 480,
       host_first_target_received_coins: HOST_TARGET_RECEIVED_COINS, host_first_target_usd: HOST_TARGET_USD_CENTS / 100,
-      agency_commission_percent: 20, bd_target_1_usd: 500,
+      agency_commission_percent: 10, bd_target_1_usd: 500,
       bd_target_1_percent: 7, bd_target_2_usd: 1000,
       bd_target_2_percent: 10, minimum_transfer_usd: HOST_SETTLEMENT_MIN_USD_CENTS / 100,
       agency_bd_minimum_transfer_usd: AGENCY_BD_SETTLEMENT_MIN_USD_CENTS / 100,
@@ -2149,7 +2149,7 @@ export class AppDirectoryStore extends DurableObject {
         diamond_usd_reference_cents: HOST_TARGET_USD_CENTS,
         host_first_target_received_coins: HOST_TARGET_RECEIVED_COINS,
         host_first_target_usd: HOST_TARGET_USD_CENTS / 100,
-        agency_commission_percent: 20,
+        agency_commission_percent: 10,
         minimum_transfer_usd: HOST_SETTLEMENT_MIN_USD_CENTS / 100,
         agency_bd_minimum_transfer_usd: AGENCY_BD_SETTLEMENT_MIN_USD_CENTS / 100,
         coin_seller_settlement_coins_per_usd:
@@ -3580,7 +3580,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     const agencyCommissionPercent = Math.max(
       0,
-      Number(hierarchyPolicies.agency_commission_percent || 20),
+      Number(hierarchyPolicies.agency_commission_percent || 10),
     );
     const qualifyingAgencyHosts = this.ctx.storage.sql.exec(
       `SELECT e.eligible_coins
