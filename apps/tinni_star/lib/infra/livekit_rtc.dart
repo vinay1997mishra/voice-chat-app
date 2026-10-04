@@ -244,10 +244,18 @@ class LiveKitRtcAdapter implements RtcAdapter {
     final raw = await utf8.decoder.bind(response).join();
     Map<String, dynamic> data = <String, dynamic>{};
     if (raw.trim().isNotEmpty) {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        data = decoded.map(
-          (key, value) => MapEntry(key.toString(), value),
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          data = decoded.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+        }
+      } on FormatException {
+        throw StateError(
+          raw.toLowerCase().contains('error code: 1101')
+              ? 'Voice server is temporarily unavailable. Please retry.'
+              : 'Voice server returned an invalid response. Please retry.',
         );
       }
     }
