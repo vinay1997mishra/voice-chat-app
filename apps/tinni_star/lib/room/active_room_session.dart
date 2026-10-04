@@ -18,6 +18,7 @@ class ActiveRoomSession extends ChangeNotifier {
     required this.foregroundService,
     required this.permissions,
     required this.presence,
+    this.enablePresenceFallbackTimer = true,
     this.familyTagProvider,
     this.hostTagProvider,
     this.agencyNameProvider,
@@ -33,6 +34,7 @@ class ActiveRoomSession extends ChangeNotifier {
   final RoomForegroundServiceBridge foregroundService;
   final RoomPermissionBridge permissions;
   final RoomPresenceService presence;
+  final bool enablePresenceFallbackTimer;
   final String? Function()? familyTagProvider;
   final String? Function()? hostTagProvider;
   final String? Function()? agencyNameProvider;
@@ -619,6 +621,8 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     _presenceTimer?.cancel();
+    _presenceTimer = null;
+    if (!enablePresenceFallbackTimer) return;
     _presenceTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
       // Healthy rooms stay entirely on the hibernating WebSocket. HTTP is
       // emergency fallback only while realtime is disconnected. The long
