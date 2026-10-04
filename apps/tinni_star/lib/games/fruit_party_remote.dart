@@ -221,11 +221,29 @@ class FruitPartyRemoteService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
     final body = await utf8.decoder.bind(response).join();
-    if (body.trim().isEmpty) return <String, dynamic>{};
-    final decoded = jsonDecode(body);
-    return decoded is Map<String, dynamic>
-        ? decoded
-        : <String, dynamic>{'error': 'Invalid server response'};
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return <String, dynamic>{};
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+      return <String, dynamic>{};
+    } on FormatException {
+      final lower = trimmed.toLowerCase();
+      if (lower.contains('error code: 1101')) {
+        throw StateError(
+          'Tinni Star server is temporarily unavailable. Please retry.',
+        );
+      }
+      throw StateError(
+        'Tinni Star server returned an invalid response. Please retry.',
+      );
+    }
   }
 
   static Map<String, dynamic> _asMap(dynamic value) {
