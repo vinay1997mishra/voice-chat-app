@@ -96,13 +96,12 @@ export class RoomPresenceStore extends DurableObject {
       INSERT OR IGNORE INTO room_runtime_settings (
         id,
         mic_mode,
-        seat_count,
         public_screen_enabled,
         comments_clear_version,
         owner_comments_clear_version,
         updated_at
       )
-      VALUES (1, 'apply', 0, 0, 0, 0, 0);
+      VALUES (1, 'apply', 0, 0, 0, 0);
 
       CREATE TABLE IF NOT EXISTS room_lucky_numbers (
         id TEXT PRIMARY KEY,
