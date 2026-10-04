@@ -66,6 +66,7 @@ class ActiveRoomSession extends ChangeNotifier {
   final Set<String> _seenRoomChatEventIds = <String>{};
   final Set<String> _seenRoomJoinKeys = <String>{};
   bool _roomJoinSnapshotInitialized = false;
+  bool _disposed = false;
 
   List<RoomPresenceMember> get liveMembers =>
       List<RoomPresenceMember>.unmodifiable(presence.members);
@@ -600,7 +601,8 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _schedulePresenceRecovery({bool immediate = false}) {
-    if (_presenceRecoveryTimer != null ||
+    if (_disposed ||
+        _presenceRecoveryTimer != null ||
         _presenceRecoveryRunning ||
         room == null ||
         _activeAuthToken == null) {
@@ -620,7 +622,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   Future<void> _recoverPresence() async {
-    if (_presenceRecoveryRunning) return;
+    if (_disposed || _presenceRecoveryRunning) return;
     final roomId = room?.id;
     final authToken = _activeAuthToken;
     if (roomId == null || authToken == null) return;
@@ -663,7 +665,10 @@ class ActiveRoomSession extends ChangeNotifier {
       retry = true;
     } finally {
       _presenceRecoveryRunning = false;
-      if (retry && room != null && _activeAuthToken != null) {
+      if (retry &&
+          !_disposed &&
+          room != null &&
+          _activeAuthToken != null) {
         _schedulePresenceRecovery();
       }
     }
@@ -973,8 +978,12 @@ class ActiveRoomSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _activeAuthToken = null;
+    _activeUserId = null;
     _presenceTimer?.cancel();
     _presenceRecoveryTimer?.cancel();
+    _presenceRecoveryTimer = null;
     unawaited(presence.disconnectLive());
     presence.removeListener(_onPresenceChanged);
     controller?.removeListener(_onRoomChanged);
