@@ -695,6 +695,55 @@ function getAppDirectoryStore(env) {
   return env.APP_DIRECTORY.get(id);
 }
 
+async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
+  const roomId = String(roomIdValue || "").trim();
+  const user = appSession?.user;
+  const userId = String(user?.user_id || "").trim();
+  if (!roomId || !userId) throw new Error("Room session is unavailable");
+
+  const directory = getAppDirectoryStore(env);
+  const room = await directory.findRoomByExactId(roomId);
+  if (!room) throw new Error("Room not found");
+
+  const access = await directory.roomAccessState(userId, roomId);
+  if (!access?.allowed) {
+    if (access?.reason === "blocked_by_room_owner") {
+      throw new Error("You cannot enter this user's room.");
+    }
+    if (access?.reason === "invite_required") {
+      throw new Error("Room invite is required.");
+    }
+    throw new Error("Room password is required.");
+  }
+
+  const store = getRoomPresenceStore(env, roomId);
+  if (await store.isMember(userId)) {
+    return { store, directory, room, rejoined: false };
+  }
+
+  const identityTags = await directory.listUserIdentityTags(userId);
+  const result = await store.join({
+    room_id: roomId,
+    user_id: userId,
+    display_name: user.display_name,
+    avatar_data_url: user.avatar_data_url,
+    flag_emoji: user.flag_emoji,
+    country_code: user.country_code,
+    owner_tags: Array.isArray(identityTags) ? identityTags : [],
+    owner_medals: Array.isArray(user.medals) ? user.medals : [],
+    seat_index: null,
+    mic_enabled: false,
+  });
+  await directory.touchPresence(
+    userId,
+    roomId,
+    result.members?.length || 0,
+    false,
+  );
+  await directory.markRecentRoom(userId, roomId);
+  return { store, directory, room, rejoined: true };
+}
+
 function isPublicAsset(pathname) {
   return pathname === "/login" ||
     pathname === "/login.html" ||
@@ -4451,9 +4500,21 @@ export default {
       const directory = getAppDirectoryStore(env);
       const room = await directory.findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      const store = getRoomPresenceStore(env, roomId);
+      let store = getRoomPresenceStore(env, roomId);
       if (!(await store.isMember(appSession.user.user_id))) {
-        return json({ ok: false, error: "Join the room first" }, 403);
+        try {
+          const ensured = await ensureRoomPresenceMember(
+            env,
+            roomId,
+            appSession,
+          );
+          store = ensured.store;
+        } catch (error) {
+          return json({
+            ok: false,
+            error: String(error?.message || "Unable to restore room session"),
+          }, 403);
+        }
       }
 
       const headers = new Headers(request.headers);
@@ -4739,8 +4800,27 @@ export default {
       const directory = getAppDirectoryStore(env);
       const room = await directory.findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      const store = getRoomPresenceStore(env, roomId);
+      let store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
+      if (!(await store.isMember(actorId))) {
+        try {
+          const ensured = await ensureRoomPresenceMember(
+            env,
+            roomId,
+            appSession,
+          );
+          store = ensured.store;
+        } catch (error) {
+          return json({
+            ok: false,
+            error: String(error?.message || "Unable to restore room session"),
+          }, 403);
+        }
+      }
+      const seatCount = Number(room.seat_count || 0);
+      if (!Number.isInteger(seatCount) || seatIndex >= seatCount) {
+        return json({ ok: false, error: "Seat is outside the current room seat range" }, 400);
+      }
       const isManager = await store.isManager(actorId);
       const isMember = await store.isMember(actorId);
       const privileged = String(room.owner_id) === actorId || (isManager && isMember);
@@ -4773,8 +4853,23 @@ export default {
         const room = await directory.findRoomByExactId(roomId);
         if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
-        const store = getRoomPresenceStore(env, roomId);
+        let store = getRoomPresenceStore(env, roomId);
         const actorId = String(appSession.user.user_id);
+        if (!(await store.isMember(actorId))) {
+          const ensured = await ensureRoomPresenceMember(
+            env,
+            roomId,
+            appSession,
+          );
+          store = ensured.store;
+        }
+        const seatCount = Number(room.seat_count || 0);
+        if (!Number.isInteger(seatCount) || seatIndex >= seatCount) {
+          return json({
+            ok: false,
+            error: "Seat is outside the current room seat range",
+          }, 400);
+        }
         const isManager = await store.isManager(actorId);
         const isMember = await store.isMember(actorId);
         const privileged =
@@ -5239,6 +5334,7 @@ export default {
           body.seat_index === null || body.seat_index === undefined
             ? null
             : Number(body.seat_index),
+        mic_enabled: body.mic_enabled === true,
       };
       try {
         if (url.pathname.endsWith("/join")) {
