@@ -43,6 +43,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final ScrollController _roomMessageScrollController = ScrollController();
   int _lastRoomMessageCount = 0;
+  int? _lastCommentsClearVersion;
   String? _roomLockPassword;
   final Set<String> _selectedGiftRecipients = <String>{};
   GiftDefinition? _seatGiftEffect;
@@ -706,7 +707,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool get _canTypeInRoom {
     final userId = widget.state.auth.current?.userId;
     if (userId == null) return false;
-    return widget.state.roomControls.canTypeInRoom(userId);
+    if (widget.state.roomSession.presence.publicScreenEnabled) {
+      return true;
+    }
+    final role = widget.state.roomControls.roles[userId];
+    return role == RoomRole.owner || role == RoomRole.admin;
   }
 
   @override
@@ -949,6 +954,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _refresh() {
     if (!mounted) return;
+
+    final presence = widget.state.roomSession.presence;
+    widget.state.roomControls.setPublicScreenEnabled(
+      presence.publicScreenEnabled,
+    );
+
+    final clearVersion = presence.commentsClearVersion;
+    final previousClearVersion = _lastCommentsClearVersion;
+    _lastCommentsClearVersion = clearVersion;
+    if (previousClearVersion != null &&
+        clearVersion > previousClearVersion) {
+      widget.state.roomSession.controller?.clearRoomMessages();
+    }
+
     final messageCount =
         widget.state.roomSession.controller?.messages.length ?? 0;
     final hasNewMessage = messageCount > _lastRoomMessageCount;
@@ -5887,28 +5906,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               key: const Key('public-screen-admin-owner-only'),
               leading: const Icon(Icons.admin_panel_settings_rounded),
               title: const Text('Only Admin/Owner can type'),
-              trailing: !controls.publicScreenEnabled
+              trailing: !widget.state.roomSession.presence.publicScreenEnabled
                   ? const Icon(Icons.check_rounded, color: RoyalPalette.gold)
                   : null,
-              onTap: () {
-                controls.setPublicScreenEnabled(false);
+              onTap: () async {
                 Navigator.pop(sheetContext);
-                if (mounted) setState(() {});
-                _snack('Public Screen: only Admin/Owner can type.');
+                try {
+                  await widget.state.roomSession.setRoomPublicScreen(false);
+                  controls.setPublicScreenEnabled(false);
+                  if (mounted) setState(() {});
+                  _snack('Public Screen: only Admin/Owner can type.');
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
               },
             ),
             ListTile(
               key: const Key('public-screen-everyone'),
               leading: const Icon(Icons.forum_rounded),
               title: const Text('Everyone can type'),
-              trailing: controls.publicScreenEnabled
+              trailing: widget.state.roomSession.presence.publicScreenEnabled
                   ? const Icon(Icons.check_rounded, color: RoyalPalette.gold)
                   : null,
-              onTap: () {
-                controls.setPublicScreenEnabled(true);
+              onTap: () async {
                 Navigator.pop(sheetContext);
-                if (mounted) setState(() {});
-                _snack('Public Screen: everyone can type.');
+                try {
+                  await widget.state.roomSession.setRoomPublicScreen(true);
+                  controls.setPublicScreenEnabled(true);
+                  if (mounted) setState(() {});
+                  _snack('Public Screen: everyone can type.');
+                } catch (error) {
+                  _snack(
+                    error.toString().replaceFirst('Bad state: ', ''),
+                  );
+                }
               },
             ),
             if (_canModerateSeats)
@@ -5916,11 +5949,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 key: const Key('public-screen-clear-comments'),
                 leading: const Icon(Icons.cleaning_services_rounded),
                 title: const Text('Clear comments area'),
-                onTap: () {
-                  controller.clearRoomMessages();
+                onTap: () async {
                   Navigator.pop(sheetContext);
-                  if (mounted) setState(() {});
-                  _snack('Comments area cleared.');
+                  try {
+                    await widget.state.roomSession.clearRoomComments();
+                    _snack('Comments area cleared.');
+                  } catch (error) {
+                    _snack(
+                      error.toString().replaceFirst('Bad state: ', ''),
+                    );
+                  }
                 },
               ),
           ],
