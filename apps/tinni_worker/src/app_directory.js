@@ -10835,7 +10835,21 @@ export class AppDirectoryStore extends DurableObject {
     }
     if (!themeId) throw new Error("theme_id is required");
 
-    const builtIn = new Set(["royal-dark", "night-blue", "rose-gold"]);
+    const builtIn = new Set([
+      "royal-dark",
+      "night-blue",
+      "rose-gold",
+      "mood-happy",
+      "mood-sad",
+      "mood-boring",
+      "mood-love",
+      "mood-mountain-view",
+      "mood-alone",
+      "mood-with-her",
+      "mood-with-him",
+      "mood-love-scene",
+      "mood-rainy-love",
+    ]);
     if (!builtIn.has(themeId)) {
       const now = Date.now();
       const theme = this.ctx.storage.sql.exec(
