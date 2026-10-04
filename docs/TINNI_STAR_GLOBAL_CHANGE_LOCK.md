@@ -16,3 +16,5 @@
 - Rocket/Game visual lock: keep the approved realistic stealth-black Rocket and compact black-and-white six-white-key Game keyboard logo. Do not restore cartoon/simple rocket or controller/gamepad icons.
 
 - Owner wallet/backend lock: Company Dollars balance + permanent ledger + owner-only manual dollar deduction stay connected to Worker storage; normal user Owner controls must support both coins and diamonds; Coin Seller/Merchant permanent ledgers keep company credits, owner debits, coin sends, settlement receipts, dollar sends and received-dollar history; Wallet detail pages must remain connected to these backend APIs.
+
+- Empty-seat invite lock: Owner/Admin empty-seat controls must keep **Invite**; Invite opens a panel for that exact seat, shows only currently in-room off-seat users/admins, supports ID-number search only within that eligible set, never searches/invites IDs outside the room, and the invited user receives Owner/Admin + exact Seat No. Accept/Decline popup. Backend seat/member eligibility remains authoritative.
