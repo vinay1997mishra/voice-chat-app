@@ -297,6 +297,11 @@ assert.match(
   "VIP-assigned store items must enforce the required VIP level when purchased",
 );
 assert.match(
+  directory,
+  /requiredVipLevel[\s\S]{0,500}_userControls\(userId\)[\s\S]{0,500}vipState\(userId\)/,
+  "VIP asset requirements must honor both Owner-granted and actively purchased VIP",
+);
+assert.match(
   index,
   /"ring-new":"assets\.frames"[\s\S]{0,180}"bubble-new":"assets\.frames"[\s\S]{0,180}"profile-background-new":"assets\.frames"/,
   "Ring, Bubble and Profile Background owner actions must be permission-wired",
