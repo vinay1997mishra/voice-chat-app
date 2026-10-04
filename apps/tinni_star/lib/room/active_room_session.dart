@@ -374,6 +374,31 @@ class ActiveRoomSession extends ChangeNotifier {
     controller?.setInviteMode(presence.micMode != 'free');
   }
 
+  Future<void> setRoomPublicScreen(bool enabled) async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.setPublicScreenEnabled(
+      roomId: roomId,
+      authToken: authToken,
+      enabled: enabled,
+    );
+  }
+
+  Future<void> clearRoomComments() async {
+    final roomId = room?.id;
+    final authToken = _activeAuthToken;
+    if (roomId == null || authToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.clearComments(
+      roomId: roomId,
+      authToken: authToken,
+    );
+  }
+
     Future<void> requestMySeat(int seatIndex) async {
     final roomId = room?.id;
     final authToken = _activeAuthToken;
