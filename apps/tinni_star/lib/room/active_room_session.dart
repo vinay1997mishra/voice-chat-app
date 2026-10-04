@@ -58,6 +58,7 @@ class ActiveRoomSession extends ChangeNotifier {
   bool _roomSoundEnabled = true;
   bool _moderationForcedMicOff = false;
   final Set<String> _seenLuckyNumberEventIds = <String>{};
+  final Set<String> _seenRoomChatEventIds = <String>{};
   final Set<String> _seenRoomJoinKeys = <String>{};
   bool _roomJoinSnapshotInitialized = false;
 
@@ -147,6 +148,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _roomSoundEnabled = true;
     _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
+    _seenRoomChatEventIds.clear();
     _seenRoomJoinKeys.clear();
     _roomJoinSnapshotInitialized = false;
     controller = RoomController(
@@ -399,6 +401,13 @@ class ActiveRoomSession extends ChangeNotifier {
     );
   }
 
+  Future<void> sendRoomComment(String text) async {
+    if (room == null || _activeAuthToken == null) {
+      throw StateError('Room session is not active.');
+    }
+    await presence.sendChatMessage(text);
+  }
+
     Future<void> requestMySeat(int seatIndex) async {
     final roomId = room?.id;
     final authToken = _activeAuthToken;
@@ -539,6 +548,7 @@ class ActiveRoomSession extends ChangeNotifier {
     connectionError = null;
     _moderationForcedMicOff = false;
     _seenLuckyNumberEventIds.clear();
+    _seenRoomChatEventIds.clear();
     _seenRoomJoinKeys.clear();
     _roomJoinSnapshotInitialized = false;
 
@@ -706,6 +716,7 @@ class ActiveRoomSession extends ChangeNotifier {
     final roomController = controller;
     roomController?.setInviteMode(presence.micMode != 'free');
     _syncRoomJoinMessages();
+    _syncRoomChatMessages();
     _syncLuckyNumberMessages();
     if (roomController != null) {
       for (var index = 0; index < roomController.seats.length; index++) {
@@ -798,6 +809,17 @@ class ActiveRoomSession extends ChangeNotifier {
         'entered the room',
       );
     }
+  }
+
+  void _syncRoomChatMessages() {
+    final roomController = controller;
+    final event = presence.latestChatEvent;
+    if (roomController == null || event == null) return;
+    if (!_seenRoomChatEventIds.add(event.id)) return;
+    roomController.addRoomMessage(
+      event.displayName,
+      event.text,
+    );
   }
 
   void _syncLuckyNumberMessages() {
