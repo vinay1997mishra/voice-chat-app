@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../i18n/tinni_localization.dart';
@@ -9,6 +7,7 @@ import '../screens/login_screen.dart';
 import '../screens/messages_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/room_screen.dart';
+import '../ui/room_dp.dart';
 import '../ui/royal_theme.dart';
 import 'tinni_state.dart';
 
@@ -210,18 +209,6 @@ class _MiniRoomBar extends StatelessWidget {
       }
     }
 
-    final photoSource = displayRoom.photoDataUrl?.trim() ?? '';
-    ImageProvider? roomDp;
-    if (photoSource.startsWith('data:image/')) {
-      try {
-        roomDp = MemoryImage(base64Decode(photoSource.split(',').last));
-      } catch (_) {
-        roomDp = null;
-      }
-    } else if (photoSource.startsWith('https://') ||
-        photoSource.startsWith('http://')) {
-      roomDp = NetworkImage(photoSource);
-    }
     final roomName = displayRoom.title.trim().isNotEmpty
         ? displayRoom.title.trim()
         : (displayRoom.ownerName?.trim().isNotEmpty == true
@@ -240,33 +227,13 @@ class _MiniRoomBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: FeaturePalette.family.withValues(alpha: .72),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: FeaturePalette.family.withValues(alpha: .22),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: CircleAvatar(
-                  backgroundColor: RoyalPalette.panel,
-                  backgroundImage: roomDp,
-                  child: roomDp == null
-                      ? const Icon(
-                          Icons.meeting_room_rounded,
-                          color: FeaturePalette.family,
-                          size: 20,
-                        )
-                      : null,
-                ),
+              RoomDp(
+                key: const Key('mini-room-dp'),
+                room: displayRoom,
+                size: 42,
+                radius: 21,
+                fit: BoxFit.cover,
+                fallbackSize: 18,
               ),
               const SizedBox(width: 10),
               Expanded(
