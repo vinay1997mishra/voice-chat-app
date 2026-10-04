@@ -120,6 +120,9 @@ void main() {
     await tester.tap(find.byKey(const Key('mini-room-bar')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tinni-seat-grid')), findsOneWidget);
+
+    await state.roomSession.close();
+    await tester.pump();
   });
 
   testWidgets(
@@ -270,6 +273,9 @@ void main() {
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
+
+    await state.roomSession.close();
+    await tester.pump();
   });
 
 
@@ -506,6 +512,9 @@ void main() {
       find.byKey(const Key('reference-room-setup-save')),
       findsOneWidget,
     );
+
+    await state.roomSession.close();
+    await tester.pump();
   });
 
 
@@ -564,6 +573,9 @@ void main() {
     await tester.tap(find.byKey(const Key('room-type-cover-open')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('room-cover-theme-page')), findsOneWidget);
+
+    await state.roomSession.close();
+    await tester.pump();
   });
 
 }
