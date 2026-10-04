@@ -5443,6 +5443,7 @@ export default {
       const message = String(body.message || "").trim();
       const reportId = String(body.report_id || "").trim();
       const recipientKind = String(body.recipient_kind || "").trim();
+      const contextPeerUserId = String(body.context_peer_user_id || "").trim();
 
       if (!targetUserId) {
         return json({ ok: false, error: "target_user_id is required" }, 400);
@@ -5463,6 +5464,7 @@ export default {
             action: "owner_message",
             report_id: reportId || null,
             recipient_kind: recipientKind || null,
+            context_peer_user_id: contextPeerUserId || null,
           },
         );
         await directory.markOwnerPanelMessage(
@@ -5481,6 +5483,7 @@ export default {
             sender_name: "Tinni Official",
             report_id: reportId || null,
             recipient_kind: recipientKind || null,
+            context_peer_user_id: contextPeerUserId || null,
             message_id: officialMessage.id,
           },
         );
@@ -6035,7 +6038,7 @@ export default {
         "agency-to-bd":"hierarchy.agency_bd_link","agency-from-bd":"hierarchy.agency_bd_link","host-add":"hierarchy.host_manage",
         "host-remove":"hierarchy.host_manage","bd-target":"hierarchy.targets","complaints":"hierarchy.complaints",
         "role-new":"roles.manage","vip-new":"vip.create","vip-grant":"vip.grant_remove","gift-new":"gifts.create","lucky-gift-config":"gifts.edit",
-        "entry-new":"assets.entries","profile-card-new":"assets.frames","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
+        "vehicle-new":"assets.entries","entry-new":"assets.entries","profile-card-new":"assets.frames","ring-new":"assets.frames","bubble-new":"assets.frames","profile-background-new":"assets.frames","frame-new":"assets.frames","banner-new":"banners.create","game-switch":"games.toggle",
         "game-limits":"games.limits","game-stats":"games.investigate","policy-new":"policies.create","policy-set":"policies.edit",
         "feature-set":"policies.edit","pricing-set":"policies.pricing","user-price-override-set":"policies.pricing","user-price-override-remove":"policies.pricing",
       };
@@ -6048,8 +6051,8 @@ export default {
         const kind = String(item.kind || "");
         if (kind === "vip") requiredPermission = operation === "toggle" ? "vip.toggle" : "vip.edit";
         else if (kind === "gift") requiredPermission = operation === "remove" ? "gifts.remove" : "gifts.edit";
-        else if (kind === "entry") requiredPermission = "assets.entries";
-        else if (kind === "frame") requiredPermission = "assets.frames";
+        else if (kind === "entry" || kind === "vehicle") requiredPermission = "assets.entries";
+        else if (["frame","profile_card","ring","bubble","profile_background"].includes(kind)) requiredPermission = "assets.frames";
         else if (kind === "banner") requiredPermission = operation === "remove" ? "banners.remove" : "banners.create";
         else requiredPermission = "roles.manage";
       }
@@ -6093,7 +6096,7 @@ export default {
           requiredPermission = "gifts.edit";
         } else if (kind === "entry" || kind === "vehicle") {
           requiredPermission = "assets.entries";
-        } else if (kind === "frame" || kind === "profile_card") {
+        } else if (["frame", "profile_card", "ring", "bubble", "profile_background"].includes(kind)) {
           requiredPermission = "assets.frames";
         } else if (kind === "banner") {
           requiredPermission = "banners.create";
@@ -6233,6 +6236,7 @@ export default {
         await writeAudit(env, session, "room.theme.create", "room_theme", theme.id, {
           name: theme.name,
           permanent: Boolean(theme.permanent),
+          price_coins: Number(theme.price_coins || 0),
           starts_at: theme.starts_at || null,
           expires_at: theme.expires_at || null,
         });
