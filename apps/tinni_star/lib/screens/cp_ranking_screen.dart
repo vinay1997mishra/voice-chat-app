@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
-import 'feature_center_screen.dart';
+import 'cp_screen.dart';
 
 class CpRankingScreen extends StatefulWidget {
   const CpRankingScreen({super.key, required this.state});
@@ -143,7 +143,7 @@ class _CpRankingScreenState extends State<CpRankingScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => FeatureCenterScreen(
+                          builder: (_) => CpScreen(
                             state: widget.state,
                           ),
                         ),
