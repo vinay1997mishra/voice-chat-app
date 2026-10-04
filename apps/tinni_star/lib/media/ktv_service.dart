@@ -118,10 +118,7 @@ class KtvService {
     if (player != null) await player.dispose();
   }
 
-  final List<Song> library = <Song>[
-    const Song(id: 's1', title: 'Tinni Nights', singer: 'Demo Artist'),
-    const Song(id: 's2', title: 'Star Voice', singer: 'Demo Artist'),
-  ];
+  final List<Song> library = <Song>[];
 
   final List<KtvQueueEntry> queue = <KtvQueueEntry>[];
   KtvQueueEntry? current;
