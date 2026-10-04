@@ -8975,7 +8975,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         key: const Key('room-game-floating-button'),
                         radius: 26,
                         onTap: _showGamePanel,
-                        child: const _ReferenceGameLogo(size: 42),
+                        child: const _ReferenceGameLogo(size: 54),
                       ),
                     ),
                   ],
