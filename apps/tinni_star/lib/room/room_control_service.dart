@@ -287,7 +287,13 @@ class RoomControlService {
     if (!soundEnabled || !giftSoundEnabled) return false;
     return !lucky || luckyGiftEffectEnabled;
   }
-  bool togglePublicScreen() => publicScreenEnabled = !publicScreenEnabled;
+  bool setPublicScreenEnabled(bool enabled) {
+    publicScreenEnabled = enabled;
+    return publicScreenEnabled;
+  }
+
+  bool togglePublicScreen() =>
+      setPublicScreenEnabled(!publicScreenEnabled);
   bool toggleGroupPk() => groupPkEnabled = !groupPkEnabled;
   bool toggleEvent() => eventActive = !eventActive;
 
