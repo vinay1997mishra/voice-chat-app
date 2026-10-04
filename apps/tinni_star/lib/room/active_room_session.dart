@@ -134,7 +134,11 @@ class ActiveRoomSession extends ChangeNotifier {
     required String userId,
     required String authToken,
   }) async {
-    if (room?.id == nextRoom.id && controller != null) {
+    final sameRoom = room?.id == nextRoom.id && controller != null;
+
+    // A previous voice/permission failure must never leave a dead RoomScreen
+    // that only resumes a controller with no authenticated backend session.
+    if (sameRoom && _activeAuthToken != null && _activeUserId != null) {
       minimized = false;
       notifyListeners();
       return;
@@ -159,47 +163,64 @@ class ActiveRoomSession extends ChangeNotifier {
     connecting = true;
     connected = false;
     connectionError = null;
+
+    // Room controls/presence are authenticated independently from microphone
+    // permission and LiveKit. Keep these credentials active even if voice is
+    // unavailable so seats, chat, gifts and moderation continue to work.
+    _activeAuthToken = authToken;
+    _activeUserId = userId;
     notifyListeners();
 
-    try {
-      final granted = await permissions.requestVoiceRoomPermissions();
-      if (!granted) {
-        connectionError = 'Microphone permission is required.';
-        connecting = false;
-        notifyListeners();
-        return;
-      }
+    // Start server-authoritative room presence first. _startPresence keeps its
+    // own reconnect fallback, so a temporary network error does not destroy
+    // the authenticated room session.
+    await _startPresence();
+    await _applyForcedSeatChange();
+    await _enforceModerationMute();
 
-      await foregroundService.start();
-      _activeAuthToken = authToken;
-      _activeUserId = userId;
-
-      // Voice and room-presence are independent network joins. Start both
-      // together so the seat backend is ready by the time LiveKit audio is
-      // connected instead of making the user wait for them sequentially.
-      await Future.wait<void>([
-        realtime.enterRoom(
-          nextRoom.id,
-          userId,
-          authToken: authToken,
-        ),
-        _startPresence(),
-      ]);
-
-      connected = true;
-      connecting = false;
-      connectionError = null;
-      await _applyForcedSeatChange();
-      await _enforceModerationMute();
-    } catch (error) {
+    final granted = await permissions.requestVoiceRoomPermissions();
+    if (!granted) {
       connecting = false;
       connected = false;
-      connectionError = error.toString();
-      await _stopPresence(sendLeave: true);
-      await foregroundService.stop();
+      connectionError =
+          'Microphone permission is required for voice. Room controls remain active.';
+      notifyListeners();
+      return;
     }
+
+    try {
+      await foregroundService.start();
+      await realtime.enterRoom(
+        nextRoom.id,
+        userId,
+        authToken: authToken,
+      );
+      connected = true;
+      connectionError = null;
+    } catch (error) {
+      // Voice must never tear down the room backend session. Keep presence,
+      // auth and all non-voice room functions alive when LiveKit is missing,
+      // unavailable or reconnecting.
+      connected = false;
+      connectionError = 'Voice unavailable: ' + error.toString();
+      try {
+        await realtime.exitRoom();
+      } catch (_) {}
+      try {
+        await foregroundService.stop();
+      } catch (_) {}
+    } finally {
+      connecting = false;
+    }
+
     notifyListeners();
   }
+
+  bool get backendSessionActive =>
+      room != null &&
+      controller != null &&
+      _activeAuthToken != null &&
+      _activeUserId != null;
 
   void minimize() {
     if (!hasRoom) return;
