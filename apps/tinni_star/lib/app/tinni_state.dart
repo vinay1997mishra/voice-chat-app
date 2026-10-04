@@ -91,6 +91,8 @@ class TinniState {
     analytics = BackendAnalyticsAdapter(
       tokenProvider: () => auth.current?.authToken,
     );
+    backend.diagnosticSink = analytics.event;
+    roomPresence.diagnosticSink = analytics.event;
     crashReporter = BackendCrashReporter(
       tokenProvider: () => auth.current?.authToken,
     );
