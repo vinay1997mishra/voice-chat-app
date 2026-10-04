@@ -69,5 +69,37 @@
       "type": "durable-object",
       "storage": "sqlite"
     }
+  },
+  "previews": {
+    "observability": {
+      "enabled": true
+    },
+    "ai": {
+      "binding": "AI"
+    },
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "STAFF_AUTH",
+          "class_name": "StaffAuthStore"
+        },
+        {
+          "name": "FRUIT_GAME",
+          "class_name": "FruitGameStore"
+        },
+        {
+          "name": "FRUIT_PARTY",
+          "class_name": "FruitPartyStore"
+        },
+        {
+          "name": "ROOM_PRESENCE",
+          "class_name": "RoomPresenceStore"
+        },
+        {
+          "name": "APP_DIRECTORY",
+          "class_name": "AppDirectoryStore"
+        }
+      ]
+    }
   }
 }
