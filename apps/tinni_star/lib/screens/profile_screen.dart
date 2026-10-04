@@ -88,68 +88,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final senderRole = senderRoleValue.trim().toLowerCase();
     if (!const <String>{'host', 'agency', 'bd'}.contains(senderRole)) return;
     final minimumCents = senderRole == 'host' ? 200 : 1000;
-    int availableForRole(RemoteWallet wallet) => senderRole == 'host'
-        ? wallet.diamondUsdCents
-        : wallet.commissionUsdCents;
 
     RemoteWallet liveWallet;
+    Map<String, List<SettlementRecipient>> directory;
     try {
-      liveWallet = await widget.state.backend.wallet(account.authToken);
+      final values = await Future.wait<dynamic>([
+        widget.state.backend.wallet(account.authToken),
+        widget.state.backend.settlementRecipients(account.authToken),
+      ]);
+      liveWallet = values[0] as RemoteWallet;
+      directory =
+          values[1] as Map<String, List<SettlementRecipient>>;
       widget.state.wallet.applyRemote(liveWallet);
       if (mounted) setState(() {});
-    } catch (_) {
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.state.backend.userSafeError(error))),
+      );
       return;
     }
     if (!mounted) return;
 
-    var availableCents = availableForRole(liveWallet);
-    final recipientController = TextEditingController();
+    var availableCents = liveWallet.withdrawableUsdCents;
     final amountController = TextEditingController(
       text: availableCents >= minimumCents
           ? (minimumCents / 100).toStringAsFixed(2)
           : '',
     );
-    SettlementRecipient? recipient;
+    final searchController = TextEditingController();
+    SettlementRecipient? selected;
+    String searchText = '';
     String? errorText;
-    bool searching = false;
     bool sending = false;
+
+    List<SettlementRecipient> filtered(String key) {
+      final rows = directory[key] ?? const <SettlementRecipient>[];
+      final q = searchText.trim().toLowerCase();
+      if (q.isEmpty) return rows;
+      return rows.where((item) {
+        return item.userId.toLowerCase().contains(q) ||
+            item.displayName.toLowerCase().contains(q);
+      }).toList(growable: false);
+    }
+
+    Widget recipientSection(
+      String title,
+      List<SettlementRecipient> rows,
+      StateSetter setDialogState,
+    ) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 4),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('No active IDs.'),
+            )
+          else
+            for (final item in rows)
+              RadioListTile<String>(
+                dense: true,
+                value: item.role + ':' + item.userId,
+                groupValue: selected == null
+                    ? null
+                    : selected!.role + ':' + selected!.userId,
+                title: Text(item.displayName),
+                subtitle: Text(
+                  'ID ' +
+                      item.userId +
+                      ' • ' +
+                      (item.role == 'coin_seller'
+                          ? 'Coin Seller'
+                          : 'Merchant'),
+                ),
+                onChanged: sending
+                    ? null
+                    : (_) => setDialogState(() {
+                          selected = item;
+                          errorText = null;
+                        }),
+              ),
+        ],
+      );
+    }
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          Future<void> searchRecipient() async {
-            final id = recipientController.text.trim();
-            if (id.isEmpty) return;
-            setDialogState(() {
-              searching = true;
-              errorText = null;
-              recipient = null;
-            });
-            try {
-              final value = await widget.state.backend.settlementRecipient(
-                account.authToken,
-                id,
-              );
-              if (!dialogContext.mounted) return;
-              setDialogState(() => recipient = value);
-            } catch (error) {
-              if (!dialogContext.mounted) return;
-              setDialogState(() {
-                errorText = widget.state.backend.userSafeError(error);
-              });
-            } finally {
-              if (dialogContext.mounted) {
-                setDialogState(() => searching = false);
-              }
-            }
-          }
-
           Future<void> sendTransfer() async {
-            final selected = recipient;
-            if (selected == null) {
+            final recipient = selected;
+            if (recipient == null) {
               setDialogState(
-                () => errorText = 'Search and select a recipient first.',
+                () => errorText = 'Select a Coin Seller or Merchant first.',
               );
               return;
             }
@@ -173,14 +215,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final refreshed =
                   await widget.state.backend.wallet(account.authToken);
               widget.state.wallet.applyRemote(refreshed);
-              availableCents = availableForRole(refreshed);
+              availableCents = refreshed.withdrawableUsdCents;
               if (cents > availableCents) {
                 if (!dialogContext.mounted) return;
                 setDialogState(() {
                   sending = false;
                   errorText = 'Available ' +
                       senderRole.toUpperCase() +
-                      ' balance is only \$' +
+                      ' dollar balance is only \$' +
                       (availableCents / 100).toStringAsFixed(2) +
                       '.';
                 });
@@ -188,7 +230,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
               final remote = await widget.state.backend.transferSettlement(
                 account.authToken,
-                recipientUserId: selected.userId,
+                recipientUserId: recipient.userId,
+                recipientRole: recipient.role,
                 usdCents: cents,
                 senderRole: senderRole,
               );
@@ -201,10 +244,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SnackBar(
                     content: Text(
                       senderRole.toUpperCase() +
-                          ' transferred \$' +
+                          ' sent \$' +
                           (cents / 100).toStringAsFixed(2) +
-                          ' to ID ' +
-                          selected.userId,
+                          ' to ' +
+                          (recipient.role == 'coin_seller'
+                              ? 'Coin Seller'
+                              : 'Merchant') +
+                          ' ' +
+                          recipient.displayName +
+                          ' • ID ' +
+                          recipient.userId,
                     ),
                   ),
                 );
@@ -218,46 +267,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
           }
 
+          final sellers = filtered('coin_sellers');
+          final merchants = filtered('merchants');
           return AlertDialog(
-            title: Text(senderRole.toUpperCase() + ' dollar transfer'),
+            title: Text(senderRole.toUpperCase() + ' Dollar Wallet'),
             content: SizedBox(
-              width: 420,
+              width: 440,
+              height: 520,
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Available ' +
-                        senderRole.toUpperCase() +
-                        ': \$' +
+                    'Available: \$' +
                         (availableCents / 100).toStringAsFixed(2),
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   TextField(
-                    controller: recipientController,
-                    keyboardType: TextInputType.number,
+                    controller: searchController,
                     decoration: const InputDecoration(
-                      labelText: 'Coin Seller / Merchant User ID',
+                      labelText: 'Search name or ID',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
+                    onChanged: (value) => setDialogState(() {
+                      searchText = value;
+                      selected = null;
+                    }),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        recipientSection('Coin Sellers', sellers, setDialogState),
+                        recipientSection('Merchants', merchants, setDialogState),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonal(
-                    onPressed: searching ? null : searchRecipient,
-                    child: Text(searching ? 'Searching…' : 'Search ID'),
-                  ),
-                  if (recipient != null) ...[
-                    const SizedBox(height: 10),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.verified_rounded),
-                      title: Text(recipient!.displayName),
-                      subtitle: Text(
-                        'ID ' +
-                            recipient!.userId +
-                            ' • ' +
-                            recipient!.role.replaceAll('_', ' '),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 8),
                   TextField(
                     controller: amountController,
@@ -286,17 +331,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
+              FilledButton.icon(
                 onPressed: sending ? null : sendTransfer,
-                child: Text(sending ? 'Sending…' : 'Confirm transfer'),
+                icon: const Icon(Icons.attach_money_rounded),
+                label: Text(sending ? 'Sending…' : 'Send Dollars'),
               ),
             ],
           );
         },
       ),
     );
-    recipientController.dispose();
     amountController.dispose();
+    searchController.dispose();
   }
 
   Future<void> _loadOwnerTags() async {
