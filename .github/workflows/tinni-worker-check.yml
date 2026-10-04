@@ -8,7 +8,7 @@ on:
       - 'apps/tinni_owner_panel/**'
       - '.github/workflows/tinni-worker-check.yml'
   pull_request:
-    branches: [main, tinnistart97]
+    branches: [main, fix/final-gift-rocket-flow]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
