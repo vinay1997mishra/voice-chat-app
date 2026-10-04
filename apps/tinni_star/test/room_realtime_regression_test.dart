@@ -52,8 +52,10 @@ void main() {
     final start = app.indexOf('class _MiniRoomBar');
     expect(start, greaterThanOrEqualTo(0));
     final mini = app.substring(start);
-    expect(mini, contains('displayRoom.photoDataUrl'));
-    expect(mini, contains('backgroundImage: roomDp'));
+    expect(mini, contains("Key('mini-room-dp')"));
+    expect(mini, contains('RoomDp('));
+    expect(mini, contains('room: displayRoom'));
+    expect(mini, contains('fit: BoxFit.cover'));
     expect(mini, contains('final roomName = displayRoom.title.trim().isNotEmpty'));
     expect(mini, contains('roomName,'));
   });
