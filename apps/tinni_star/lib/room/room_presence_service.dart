@@ -716,10 +716,14 @@ class RoomPresenceService extends ChangeNotifier {
       '/room-presence/seat-take',
       authToken,
       <String, Object>{'room_id': roomId, 'seat_index': seatIndex},
-      applyResponse: false,
+      // Always apply the authoritative HTTP response immediately. Seat
+      // placement must remain visible even while the realtime WebSocket is
+      // reconnecting or blocked by the carrier/OEM.
+      applyResponse: true,
     );
     selfSeatForced = true;
-    selfForcedSeatIndex = _asInt(data['seat_index']);
+    selfForcedSeatIndex =
+        data['seat_index'] == null ? seatIndex : _asInt(data['seat_index']);
     notifyListeners();
   }
 
@@ -784,7 +788,8 @@ class RoomPresenceService extends ChangeNotifier {
         'room_id': roomId,
         'accepted': accepted,
       },
-      applyResponse: false,
+      // Keep the seat/member snapshot correct even without realtime.
+      applyResponse: true,
     );
     pendingSeatInvite = null;
     if (accepted) {
@@ -881,25 +886,69 @@ class RoomPresenceService extends ChangeNotifier {
     Map<String, Object> payload, {
     bool applyResponse = true,
   }) async {
-    final request = await _httpClient.postUrl(apiBase.replace(path: path));
-    request.headers.contentType = ContentType.json;
-    request.headers.set(
-      HttpHeaders.authorizationHeader,
-      'Bearer $authToken',
-    );
-    request.write(jsonEncode(payload));
-    final response = await request.close();
-    final data = await _readJson(response);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        data['error']?.toString() ?? 'Room action failed',
-      );
+    const maxAttempts = 3;
+    Object? lastFailure;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        final request = await _httpClient.postUrl(apiBase.replace(path: path));
+        request.headers.contentType = ContentType.json;
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $authToken',
+        );
+        request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+        request.write(jsonEncode(payload));
+
+        final response = await request.close().timeout(
+          const Duration(seconds: 15),
+        );
+        final data = await _readJson(response);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          final message =
+              data['error']?.toString() ?? 'Room action failed';
+          if (response.statusCode >= 500 && attempt + 1 < maxAttempts) {
+            await Future<void>.delayed(
+              Duration(milliseconds: attempt == 0 ? 250 : 700),
+            );
+            continue;
+          }
+          throw StateError(message);
+        }
+
+        connected = true;
+        lastError = null;
+        if (applyResponse) {
+          _apply(data);
+        }
+        notifyListeners();
+        return data;
+      } catch (error) {
+        lastFailure = error;
+        final lower = error.toString().toLowerCase();
+        final transient = lower.contains('temporarily unavailable') ||
+            lower.contains('invalid response') ||
+            lower.contains('socketexception') ||
+            lower.contains('failed host lookup') ||
+            lower.contains('connection refused') ||
+            lower.contains('network is unreachable') ||
+            lower.contains('connection closed') ||
+            lower.contains('timed out') ||
+            lower.contains('timeoutexception');
+        if (transient && attempt + 1 < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 0 ? 250 : 700),
+          );
+          continue;
+        }
+        lastError = error.toString();
+        liveReconnecting = !liveConnected;
+        notifyListeners();
+        rethrow;
+      }
     }
-    if (applyResponse) {
-      _apply(data);
-      notifyListeners();
-    }
-    return data;
+
+    throw StateError(lastFailure?.toString() ?? 'Room action failed');
   }
 
   Future<Map<String, dynamic>> sendGift({
