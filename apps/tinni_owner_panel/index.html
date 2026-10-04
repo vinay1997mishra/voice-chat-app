@@ -147,6 +147,8 @@
                 <button data-action="user-invisible">Invisible ID</button>
                 <button data-action="locked-bypass">Locked-room Bypass</button>
                 <button data-action="id-change">Change Public ID</button>
+                <button data-action="unique-id-new">Create Unique ID</button>
+                <button data-action="unique-id-price">Unique ID Price / Duration</button>
                 <button data-action="vip-grant">VIP Add / Remove</button>
               </div>
             </article>
@@ -304,7 +306,7 @@
                 <h2>Room Theme Manager</h2>
                 <p>Add global room themes free from the Owner Panel. Choose start/end date and time or make a theme permanent. Sexual or political themes are not allowed.</p>
               </div>
-              <button class="btn primary" data-action="room-theme-new">+ Add Free Theme</button>
+              <button class="btn primary" data-action="room-theme-new">+ Add Room Theme</button>
             </div>
             <div id="roomThemeList" class="empty-state">Loading room themes…</div>
           </article>
@@ -372,7 +374,14 @@
         </section>
 
         <section class="view" id="view-assets">
-          <div class="grid two"><article class="panel"><h2>Vehicle / Animal / 3D Entries</h2><p class="muted">Add new entry assets, edit old entries, assign to VIP and disable them.</p><button class="btn primary" data-action="entry-new">+ Add Entry</button><div id="entryCatalogList" class="empty-state">Loading entries…</div></article><article class="panel"><h2>Frames</h2><p class="muted">Profile, seat and VIP frames with add/edit/disable controls.</p><button class="btn primary" data-action="frame-new">+ Add Frame</button><div id="frameCatalogList" class="empty-state">Loading frames…</div></article></div>
+          <div class="grid two">
+            <article class="panel"><h2>Vehicle / Animal / 3D Entries</h2><p class="muted">Add entry effects, set price/validity, assign a VIP level, edit or disable them.</p><button class="btn primary" data-action="entry-new">+ Add Entry</button><div id="entryCatalogList" class="empty-state">Loading entries…</div></article>
+            <article class="panel"><h2>Profile Cards</h2><p class="muted">Create purchasable profile cards with price, validity, country and schedule controls.</p><button class="btn primary" data-action="profile-card-new">+ Add Profile Card</button><div id="profileCardCatalogList" class="empty-state">Loading profile cards…</div></article>
+            <article class="panel"><h2>Rings</h2><p class="muted">Create and manage ring assets exposed to the app store/equipment flow.</p><button class="btn primary" data-action="ring-new">+ Add Ring</button><div id="ringCatalogList" class="empty-state">Loading rings…</div></article>
+            <article class="panel"><h2>Chat Bubbles</h2><p class="muted">Create and manage chat bubble assets with pricing and validity.</p><button class="btn primary" data-action="bubble-new">+ Add Bubble</button><div id="bubbleCatalogList" class="empty-state">Loading bubbles…</div></article>
+            <article class="panel"><h2>Profile Backgrounds</h2><p class="muted">Create and manage profile background assets with pricing and validity.</p><button class="btn primary" data-action="profile-background-new">+ Add Profile Background</button><div id="profileBackgroundCatalogList" class="empty-state">Loading profile backgrounds…</div></article>
+            <article class="panel"><h2>Frames</h2><p class="muted">Profile, seat and VIP frames with add/edit/disable controls.</p><button class="btn primary" data-action="frame-new">+ Add Frame</button><div id="frameCatalogList" class="empty-state">Loading frames…</div></article>
+          </div>
         </section>
 
         <section class="view" id="view-banners">
