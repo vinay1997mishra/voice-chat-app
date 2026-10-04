@@ -8076,7 +8076,12 @@ export class AppDirectoryStore extends DurableObject {
       if (data.ends_at && Number(data.ends_at) <= now) return false;
       const countries = Array.isArray(data.countries) ? data.countries.map((v) => String(v).toUpperCase()) : [];
       return !country || countries.length === 0 || countries.includes(country);
-    }).map((item) => ({ ...item, price_coins: Math.max(0, Number(item.data?.coin_price ?? item.data?.price ?? 0)), duration_days: Math.max(0, Number(item.data?.duration_days ?? 0)) }));
+    }).map((item) => ({
+      ...item,
+      price_coins: Math.max(0, Number(item.data?.coin_price ?? item.data?.price ?? 0)),
+      duration_days: Math.max(0, Number(item.data?.duration_days ?? 0)),
+      required_vip_level: Math.max(0, Math.floor(Number(item.data?.vip_level || 0))),
+    }));
   }
 
   purchaseCatalogItem(userIdValue, kindValue, itemIdValue, countryCodeValue = "") {
@@ -8087,6 +8092,11 @@ export class AppDirectoryStore extends DurableObject {
     }
     const item = this.purchasableCatalog(kind, countryCodeValue).find((v) => v.id === String(itemIdValue || "").trim());
     if (!item) throw new Error("Item is unavailable");
+    const requiredVipLevel = Math.max(0, Math.floor(Number(item.required_vip_level || item.data?.vip_level || 0)));
+    const userVipLevel = Math.max(0, Math.floor(Number(this._userControls(userId).vip_level || 0)));
+    if (requiredVipLevel > 0 && userVipLevel < requiredVipLevel) {
+      throw new Error("VIP " + requiredVipLevel + " or higher is required for this item");
+    }
     const existing = this.ctx.storage.sql.exec("SELECT item_id FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1", userId, item.id).toArray()[0];
     if (existing) return { ok: true, duplicate: true, inventory: this.inventoryState(userId), wallet: this.getWallet(userId) };
     const effective = this._effectivePrice(userId, kind + ":" + item.id, item.price_coins, item.duration_days);
@@ -8126,6 +8136,12 @@ export class AppDirectoryStore extends DurableObject {
         userId,itemId,kind,Date.now(),
       ).toArray()[0];
       if (!owned) throw new Error("Item is not owned or has expired");
+      const catalogItem = this.ownerCatalog(kind).find((entry) => String(entry.id) === itemId);
+      const requiredVipLevel = Math.max(0, Math.floor(Number(catalogItem?.data?.vip_level || 0)));
+      const userVipLevel = Math.max(0, Math.floor(Number(this._userControls(userId).vip_level || 0)));
+      if (requiredVipLevel > 0 && userVipLevel < requiredVipLevel) {
+        throw new Error("VIP " + requiredVipLevel + " or higher is required to equip this item");
+      }
     }
     const now = Date.now();
     this.ctx.storage.sql.exec(
