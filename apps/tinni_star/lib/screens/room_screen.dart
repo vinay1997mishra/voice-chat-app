@@ -2401,6 +2401,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _createRoomCustomGift() async {
+    final file = await FilePicker.pickFile(
+      dialogTitle: 'Custom Gift',
+      type: FileType.custom,
+      allowedExtensions: const <String>['png', 'jpg', 'jpeg', 'webp', 'mp4'],
+    );
+    if (file == null || !mounted) return;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      _snack('This custom gift file could not be opened.');
+      return;
+    }
+
+    final nameController = TextEditingController(
+      text: file.name.contains('.')
+          ? file.name.substring(0, file.name.lastIndexOf('.'))
+          : file.name,
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Custom Gift'),
+        content: TextField(
+          controller: nameController,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'Gift name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = nameController.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (name == null || name.isEmpty) return;
+
+    final lower = file.name.toLowerCase();
+    final assetType = lower.endsWith('.mp4') ? 'video' : 'image';
+    final id = 'custom-' + DateTime.now().microsecondsSinceEpoch.toString();
+    widget.state.customGifts.create(
+      id: id,
+      name: name,
+      assetType: assetType,
+      assetPath: path,
+    );
+    widget.state.customGifts.submit(id);
+    _snack(name + ' added to Custom Gifts and sent for review.');
+  }
+
   int _giftInt(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -3537,6 +3595,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('room-custom-gift-create'),
+                          tooltip: 'Create Custom Gift',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            unawaited(_createRoomCustomGift());
+                          },
+                          icon: const Icon(
+                            Icons.add_photo_alternate_rounded,
+                            color: FeaturePalette.gift,
                           ),
                         ),
                         if (giftCategory == 'Lucky')
