@@ -35,7 +35,7 @@ test("transient websocket loss keeps room membership instead of exiting", () => 
 
 test("public room online count comes from live user presence", () => {
   const start = directory.indexOf("async listRooms()");
-  const end = directory.indexOf("_pruneRoomThemes(", start);
+  const end = directory.indexOf("\n  _pruneRoomThemes(", start);
   assert.ok(start >= 0 && end > start);
   const listRooms = directory.slice(start, end);
   assert.match(listRooms, /FROM app_user_presence/);
