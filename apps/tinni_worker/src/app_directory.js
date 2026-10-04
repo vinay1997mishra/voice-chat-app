@@ -8093,7 +8093,11 @@ export class AppDirectoryStore extends DurableObject {
     const item = this.purchasableCatalog(kind, countryCodeValue).find((v) => v.id === String(itemIdValue || "").trim());
     if (!item) throw new Error("Item is unavailable");
     const requiredVipLevel = Math.max(0, Math.floor(Number(item.required_vip_level || item.data?.vip_level || 0)));
-    const userVipLevel = Math.max(0, Math.floor(Number(this._userControls(userId).vip_level || 0)));
+    const userVipLevel = Math.max(
+      0,
+      Math.floor(Number(this._userControls(userId).vip_level || 0)),
+      Math.floor(Number(this.vipState(userId)?.vip_level || 0)),
+    );
     if (requiredVipLevel > 0 && userVipLevel < requiredVipLevel) {
       throw new Error("VIP " + requiredVipLevel + " or higher is required for this item");
     }
@@ -8138,7 +8142,11 @@ export class AppDirectoryStore extends DurableObject {
       if (!owned) throw new Error("Item is not owned or has expired");
       const catalogItem = this.ownerCatalog(kind).find((entry) => String(entry.id) === itemId);
       const requiredVipLevel = Math.max(0, Math.floor(Number(catalogItem?.data?.vip_level || 0)));
-      const userVipLevel = Math.max(0, Math.floor(Number(this._userControls(userId).vip_level || 0)));
+      const userVipLevel = Math.max(
+      0,
+      Math.floor(Number(this._userControls(userId).vip_level || 0)),
+      Math.floor(Number(this.vipState(userId)?.vip_level || 0)),
+    );
       if (requiredVipLevel > 0 && userVipLevel < requiredVipLevel) {
         throw new Error("VIP " + requiredVipLevel + " or higher is required to equip this item");
       }
