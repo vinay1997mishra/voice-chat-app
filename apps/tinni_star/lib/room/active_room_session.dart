@@ -740,6 +740,12 @@ class ActiveRoomSession extends ChangeNotifier {
   void _onPresenceChanged() {
     final roomController = controller;
     roomController?.setInviteMode(presence.micMode != 'free');
+    final serverSeatCount = presence.seatCount;
+    if (roomController != null &&
+        serverSeatCount != null &&
+        roomController.seats.length != serverSeatCount) {
+      roomController.setSeatCount(serverSeatCount);
+    }
     _syncRoomJoinMessages();
     _syncRoomChatMessages();
     _syncLuckyNumberMessages();
