@@ -19,12 +19,19 @@ This file defines features that must survive future updates. A feature may be ch
 ## Wallet
 - Coins and Diamonds are separate clickable wallet blocks.
 - Coins History, Seller Received Coins, Diamonds conversion/history and role wallet detail screens remain present.
+- Host / Agency / BD / Coin Seller / Merchant dollar balances are separate persistent USD balances and never auto-convert into coins.
+- Host / Agency / BD dollar balance is clickable and opens Dollar Wallet with history plus Send Dollars.
+- Host / Agency / BD can send dollars only to an active Coin Seller or Merchant selected from separate name + ID lists.
+- Host dollar transfer minimum is $2; Agency / BD minimum is $10.
 - Coin Seller / Merchant histories are permanent backend/database ledgers.
-- Zero Coin Seller balance displays as 00.
+- Zero Coin Seller coin balance displays as 00.
+- Coin Seller / Merchant Total Dollars opens Dollar Wallet and received-dollar history.
 - Coin Seller dollar transfer minimum is $300.
 - Merchant dollar transfer minimum is $1000.
-- Coin Seller may send dollars to Merchant or Company; Merchant may send dollars to Company.
-- Successful dollar transfer immediately debits sender balance and is replay-safe.
+- Coin Seller / Merchant dollar destinations are Company or Cryptocurrency (USDT), not another role wallet.
+- USDT requests keep the address, amount, sender before/after balance, timestamp, reference and payout status. Actual blockchain broadcast requires configured payout-provider confirmation.
+- Successful transfers immediately debit the sender USD and are replay-safe.
+- Every Host/Agency/BD → Coin Seller/Merchant transfer keeps sender/receiver IDs and roles, USD amount, timestamp, transaction ID and sender/receiver before/after balances.
 - Owner Panel keeps Company Dollars ledger and manual dollar deduction.
 - Company ledger keeps sender type/name/ID, amount, timestamp, reference, before balance and after balance.
 
