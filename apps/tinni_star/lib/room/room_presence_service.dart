@@ -1050,6 +1050,14 @@ class RoomPresenceService extends ChangeNotifier {
       ..write('|')
       ..write(selfForcedSeatIndex)
       ..write('|')
+      ..write(pendingSeatInvite?.seatIndex)
+      ..write(':')
+      ..write(pendingSeatInvite?.invitedBy ?? '')
+      ..write(':')
+      ..write(
+        pendingSeatInvite?.createdAt.millisecondsSinceEpoch ?? 0,
+      )
+      ..write('|')
       ..write(lockedSeats.join(','))
       ..write('|')
       ..write(mutedSeats.join(','));
