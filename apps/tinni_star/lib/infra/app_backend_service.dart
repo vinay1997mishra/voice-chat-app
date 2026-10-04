@@ -119,12 +119,26 @@ class AppBackendService {
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  void Function(String name, Map<String, Object?> properties)? diagnosticSink;
+
+  void _diagnostic(String name, Map<String, Object?> properties) {
+    try {
+      diagnosticSink?.call(name, <String, Object?>{
+        'source': 'app_backend',
+        ...properties,
+      });
+    } catch (_) {
+      // Diagnostics must never break a user request.
+    }
+  }
 
   String userSafeError(Object error) {
     var text = error.toString().replaceFirst('Bad state: ', '').trim();
     final lower = text.toLowerCase();
 
-    if (lower.contains('socketexception') ||
+    if (lower.contains('cloudflare_1101') ||
+        lower.contains('server is temporarily unavailable') ||
+        lower.contains('socketexception') ||
         lower.contains('connection timed out') ||
         lower.contains('failed host lookup') ||
         lower.contains('connection refused') ||
@@ -132,14 +146,14 @@ class AppBackendService {
         lower.contains('handshakeexception') ||
         lower.contains('connection closed') ||
         lower.contains('timed out')) {
-      return 'Connection problem. Please check your internet and retry.';
+      return 'Service connection interrupted. Please retry.';
     }
 
     if (lower.contains('formatexception') ||
         lower.contains('<!doctype') ||
         lower.contains('<html') ||
         lower.contains('invalid response')) {
-      return 'Tinni Star server returned an invalid response. Please retry.';
+      return 'Service response interrupted. Please retry.';
     }
 
     if (lower.contains('pbkdf2 failed') ||
@@ -1274,7 +1288,7 @@ class AppBackendService {
       queryParameters: queryParameters,
     );
     final verb = method.trim().toUpperCase();
-    final maxAttempts = verb == 'GET' ? 3 : 1;
+    final maxAttempts = verb == 'GET' ? 4 : 1;
 
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
@@ -1316,9 +1330,7 @@ class AppBackendService {
           } on FormatException {
             final rawBody = text.trim().toLowerCase();
             if (rawBody.contains('error code: 1101')) {
-              throw StateError(
-                'Tinni Star server is temporarily unavailable. Please retry.',
-              );
+              throw StateError('cloudflare_1101');
             }
             throw StateError(
               'Tinni Star server returned an invalid response. Please retry.',
@@ -1336,6 +1348,13 @@ class AppBackendService {
             );
             continue;
           }
+          _diagnostic('backend_request_failure', <String, Object?>{
+            'method': verb,
+            'path': path,
+            'status': response.statusCode,
+            'attempt': attempt + 1,
+            'error': message,
+          });
           throw StateError(safe);
         }
         return data;
@@ -1354,13 +1373,23 @@ class AppBackendService {
           );
           continue;
         }
+        _diagnostic('backend_transport_failure', <String, Object?>{
+          'method': verb,
+          'path': path,
+          'attempt': attempt + 1,
+          'error': error.toString(),
+          'safe_error': safe,
+        });
         throw StateError(safe);
       }
     }
 
-    throw StateError(
-      'Tinni Star server is temporarily unavailable. Please retry.',
-    );
+    _diagnostic('backend_retry_exhausted', <String, Object?>{
+      'method': verb,
+      'path': path,
+      'attempts': maxAttempts,
+    });
+    throw StateError('Service connection interrupted. Please retry.');
   }
 
   RemoteCp? _cp(dynamic value) {
