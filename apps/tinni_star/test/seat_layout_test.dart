@@ -57,6 +57,10 @@ void main() {
     expect(SeatLayoutSpec.forCount(33).rowLengths, [6, 6, 6, 6, 5, 4]);
     expect(SeatLayoutSpec.forCount(36).rowLengths, [6, 6, 6, 6, 6, 6]);
     expect(SeatLayoutSpec.forCount(37).rowLengths, [6, 6, 6, 6, 6, 4, 3]);
+    expect(SeatLayoutSpec.forCount(38).rowLengths, [6, 6, 6, 6, 6, 4, 4]);
+    expect(SeatLayoutSpec.forCount(39).rowLengths, [6, 6, 6, 6, 6, 5, 4]);
+    expect(SeatLayoutSpec.forCount(40).rowLengths, [6, 6, 6, 6, 6, 5, 5]);
+    expect(SeatLayoutSpec.forCount(41).rowLengths, [6, 6, 6, 6, 6, 6, 5]);
     expect(SeatLayoutSpec.forCount(42).rowLengths, [6, 6, 6, 6, 6, 6, 6]);
   });
 
