@@ -42,4 +42,28 @@ test("public room online count comes from live user presence", () => {
   assert.match(listRooms, /room_socket_connected/);
   assert.match(listRooms, /last_seen >= \?/);
   assert.doesNotMatch(listRooms, /LEFT JOIN app_room_presence_counts/);
+
+
+test("room join stays successful when secondary directory work fails", () => {
+  assert.match(
+    index,
+    /bestEffortRoomDirectoryTask\(\s*"join\.touch_presence"/,
+    "room join must not fail because presence summary sync failed",
+  );
+  assert.match(
+    index,
+    /bestEffortRoomDirectoryTask\(\s*"join\.mark_recent_room"/,
+    "room join must not fail because recent-room history failed",
+  );
+  assert.match(
+    index,
+    /bestEffortRoomDirectoryTask\(\s*"join\.notify_followers"/,
+    "room join must not fail because follower notification failed",
+  );
+  assert.match(
+    index,
+    /Room access check temporarily unavailable\. Retrying\./,
+    "access-store faults must return a retryable response instead of the global 500 fallback",
+  );
+});
 });
