@@ -6287,7 +6287,6 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
         totalCost, now, senderId,
       );
-      this._recordRoomGiftSending(room, totalCost, now);
     }
 
     const transactions = [];
@@ -6397,6 +6396,14 @@ export class AppDirectoryStore extends DurableObject {
           recent_multipliers: recentMultipliers,
         });
       }
+    }
+
+    const roomSocialValue = transactions.reduce(
+      (sum, item) => sum + Math.max(0, Number(item.social_value_coins || 0)),
+      0,
+    );
+    if (roomSocialValue > 0) {
+      this._recordRoomGiftSending(room, roomSocialValue, now);
     }
 
     if (isCpInvite) {
