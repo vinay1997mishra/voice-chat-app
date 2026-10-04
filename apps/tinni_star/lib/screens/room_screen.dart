@@ -960,7 +960,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       presence.publicScreenEnabled,
     );
 
-    final clearVersion = presence.commentsClearVersion;
+    final currentUserId = widget.state.auth.current?.userId;
+    final roomOwnerId =
+        _roomSnapshot.ownerId ?? widget.room.ownerId ?? widget.room.id;
+    final isOwnerForCommentClear =
+        currentUserId != null && currentUserId == roomOwnerId;
+    final clearVersion = isOwnerForCommentClear
+        ? presence.ownerCommentsClearVersion
+        : presence.commentsClearVersion;
     final previousClearVersion = _lastCommentsClearVersion;
     _lastCommentsClearVersion = clearVersion;
     if (previousClearVersion != null &&
@@ -8915,7 +8922,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           contentPadding:
                               const EdgeInsets.fromLTRB(10, 10, 8, 10),
                         ),
-                        onSubmitted: (_) {
+                        onSubmitted: (_) async {
                           if (widget.state.roomSession.moderationChatBanned) {
                             _snack('Room owner/admin has chat banned this ID.');
                             return;
@@ -8928,8 +8935,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           }
                           final value = chat.text.trim();
                           if (value.isEmpty) return;
-                          controller.sendMessage(value);
-                          chat.clear();
+                          try {
+                            await widget.state.roomSession.sendRoomComment(
+                              value,
+                            );
+                            chat.clear();
+                          } catch (error) {
+                            _snack(
+                              error
+                                  .toString()
+                                  .replaceFirst('Bad state: ', ''),
+                            );
+                          }
                         },
                       ),
                     ),
