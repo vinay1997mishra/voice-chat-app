@@ -307,6 +307,48 @@ assert.match(
   "Ring, Bubble and Profile Background owner actions must be permission-wired",
 );
 
+
+assert.match(
+  directory,
+  /CREATE TABLE IF NOT EXISTS role_dollar_balances/,
+  "Coin Seller and Merchant must have a separate persistent USD balance",
+);
+assert.match(
+  directory,
+  /automatic_dollar_to_coin_conversion:\s*false/,
+  "Automatic dollar-to-coin conversion must stay disabled",
+);
+assert.match(
+  directory,
+  /settlementRecipients\(queryValue[\s\S]{0,1800}coin_sellers:[\s\S]{0,300}merchants:/,
+  "Hierarchy Dollar Wallet must expose separate active Coin Seller and Merchant lists",
+);
+assert.match(
+  directory,
+  /transferSettlement\([\s\S]{0,5200}credited_coins:\s*0[\s\S]{0,600}recipient_balance_after:/,
+  "Host, Agency and BD dollar transfers must credit recipient USD without automatic coin conversion",
+);
+assert.match(
+  directory,
+  /\["company","crypto_usdt"\]\.includes\(destinationType\)/,
+  "Coin Seller and Merchant dollar sends must be limited to Company or USDT",
+);
+assert.match(
+  directory,
+  /status = "pending_usdt"/,
+  "USDT payout must remain pending until an external payout provider confirms blockchain execution",
+);
+assert.match(
+  index,
+  /url\.pathname === "\/wallet\/settlement\/recipients"/,
+  "Worker must expose active Coin Seller and Merchant recipient lists",
+);
+assert.match(
+  index,
+  /body\.usdt_address/,
+  "USDT payout address must reach the server-side transfer ledger",
+);
+
 console.log("Production readiness guards passed");
 
 assert.match(
