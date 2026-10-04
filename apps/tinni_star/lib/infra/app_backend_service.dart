@@ -819,8 +819,19 @@ class AppBackendService {
     return _map(data['stats']);
   }
 
-  Future<List<Map<String, dynamic>>> settlementTransfers(String token) async {
-    final data = await _request('GET', '/wallet/settlement/transfers', token);
+  Future<List<Map<String, dynamic>>> settlementTransfers(
+    String token, {
+    String senderRole = 'host',
+  }) async {
+    final role = const <String>{'host', 'agency', 'bd'}.contains(senderRole)
+        ? senderRole
+        : 'host';
+    final data = await _request(
+      'GET',
+      '/wallet/settlement/transfers',
+      token,
+      queryParameters: <String, String>{'role': role},
+    );
     final raw = data['transfers'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
