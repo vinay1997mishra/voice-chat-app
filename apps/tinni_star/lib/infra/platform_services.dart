@@ -197,7 +197,16 @@ class BackendRemoteConfigAdapter implements RemoteConfigAdapter {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Remote config HTTP ${response.statusCode}');
     }
-    final decoded = raw.trim().isEmpty ? null : jsonDecode(raw);
+    dynamic decoded;
+    if (raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        throw StateError(
+          'Tinni Star server returned an invalid remote config. Please retry.',
+        );
+      }
+    }
     if (decoded is! Map) return const <String, Object?>{};
     final remote = decoded['remote_config'];
     if (remote is! Map) return const <String, Object?>{};
