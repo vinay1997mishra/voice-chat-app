@@ -390,3 +390,849 @@ For every future intentional feature/layout change:
 - Microphone permission failure may disable voice only; it must not produce a dead room where non-voice actions return `Room session is not active`.
 - LiveKit failure may report voice unavailable, but must not tear down room presence/auth or disable the rest of the room.
 - All app built-in room themes, including the full `mood-*` set exposed by the client, are backend-recognized built-ins and must not be rejected as unavailable/expired.
+
+
+---
+
+## Owner Master Panel — A-to-Z Detailed Blueprint — LOCKED
+
+This section is the code-matched functional blueprint for the standalone **Tinni Star Owner Web Panel** and its protected Worker-backed controls. It is authoritative for Owner Panel behavior unless the Platform Owner explicitly changes a rule later.
+
+### 1. Platform separation, authentication and authority
+
+- The Owner Panel is a **separate web control center**, not a normal Android-app page and not a Room Owner/Admin tool.
+- Normal users and room owners do not automatically receive Owner Panel access.
+- Owner/staff login is authenticated by the Worker. Frontend code must never contain Owner passwords, API tokens, D1 credentials, signing secrets or equivalent privileged secrets.
+- The main Platform Owner has unrestricted Owner Panel authority. Custom staff panels receive only permissions explicitly selected by the Owner.
+- Every server-backed sensitive change must be authorized server-side and audit logged. Hiding a button in the UI is not authorization.
+- The panel includes server-health status, Refresh, Logout, Quick Action and global search.
+- Global search supports current user ID, old user ID and user lookup; user investigation must resolve ID changes without losing historical account relationships.
+- Main navigation contains: **Dashboard, Notifications, Users, Call Verification, Messages & Tags, Rooms, Wallets, BD / Agency / Host, Roles / Posts, VIP, Gifts, Entries / Frames, Banners, Games, Policies, Custom Panels, Audit Log**.
+- Main-Owner-only capabilities include Company-dollar manual deduction, Wallet Security Freeze removal, Owner notification inbox, friend-conversation deep inspection and Owner listen-only room access unless explicitly redesigned later.
+
+### 2. Dashboard and master control center
+
+The Dashboard is the first Owner overview and must show server-backed values for:
+
+- Total registered users.
+- Total created/active rooms as returned by Owner state.
+- Sending Today / coins received activity.
+- Owner Treasury coin balance.
+- Owner Treasury wallet card, separate from the Owner's normal user wallet.
+- **Add Coins** to Owner Treasury.
+- **Send Coins** from Owner Treasury.
+- **Master Feature Switches** loaded dynamically from server configuration. Each switch is a server master flag and can be changed only by a session with policy-edit authority.
+- **A-to-Z Owner Controls** module launcher for Users, Call Verification, Messages & Tags, Rooms, Wallets, BD/Agency/Host, Roles/Posts, VIP, Gifts, Entries/Frames, Banners, Games, Policies and Custom Panels.
+
+Feature flags are data-driven. New backend flags may appear automatically and should not need code edits merely to display ON/OFF status.
+
+### 3. Notifications / complaint routing
+
+- App complaints and platform alerts are routed to the **main Owner notification inbox**.
+- Custom staff panels do not automatically receive Owner notifications.
+- Show unread count and total loaded notification count.
+- Each notification shows title, source user/system, target type/ID when present, exact timestamp and message.
+- Complaint metadata may include screenshots/investigation context supplied by backend.
+- Owner can **Mark read**, **Delete**, and **Refresh** notifications.
+- Hierarchy **Exit Requests / Complaints** opens this notification/complaint workflow.
+
+### 4. Users — search, investigation and Owner overrides
+
+#### 4.1 Search result
+
+Search accepts user ID, old ID, name or email where supported. Results show:
+
+- Display name and current user ID.
+- Old-ID match indicator when resolved through a previous ID.
+- Gender and country.
+- Verified / Unverified.
+- Coins and Diamonds.
+- ID ban status.
+- Device access status.
+- Invisible-ID status.
+- Locked-room bypass status.
+- VIP level.
+- Email.
+- Current identity tags.
+- **Open ID / Full Profile** when Full Dashboard permission is active.
+
+#### 4.2 Owner override actions
+
+- ID Ban / Unban, with reason.
+- Device Ban / Unban.
+- Invisible ID ON/OFF.
+- Locked-room Bypass ON/OFF.
+- Change Public ID.
+- Create Unique ID.
+- Change Unique ID price/duration.
+- VIP Add / Remove.
+- Full ID Dashboard also exposes Change User Name and Change User DP.
+
+#### 4.3 Unique ID
+
+- Numeric Unique ID: 4–8 digits.
+- Name ID: 3–20 letters/numbers/underscore and remains Owner-Master controlled.
+- Coin price; 0 means free.
+- Ownership duration days; 0 means permanent.
+- Owner can change price and duration later.
+- Public-ID changes must preserve relevant wallet, ledger, counterparty, history and identity references.
+
+### 5. Full ID Dashboard — selected-user A-to-Z workspace
+
+Opening **Full ID Dashboard** creates one consolidated Owner workspace for the selected ID. Every server change remains audit logged.
+
+Header/summary includes:
+
+- User DP, display name, user ID, gender, country and identity tags.
+- Refresh ID.
+- Email.
+- Coins.
+- Diamonds.
+- VIP.
+- ID Active/Banned.
+- Device Active/Blocked.
+- Verified Yes/No.
+- Last seen.
+
+#### 5.1 Profile / ID Control
+
+Actions:
+
+- Change Name.
+- Change DP.
+- Change Public ID.
+- Ban / Unban ID.
+- Device Ban / Unban.
+- Invisible ON/OFF.
+- Locked-room Bypass.
+
+#### 5.2 Wallet / VIP
+
+Shows:
+
+- Coins.
+- Diamonds.
+- Withdrawable USD.
+- Settlement/commission USD.
+- Coin Seller wallet status/balance.
+- Merchant wallet status/balance.
+
+Actions:
+
+- Normal Wallet.
+- Coin Seller Wallet.
+- Merchant Wallet.
+- VIP Add / Remove.
+
+#### 5.3 BD / Agency / Host
+
+- Shows active hierarchy identities for the selected ID.
+- BD Add / Remove.
+- Agency Add / Remove.
+- Add as Host.
+- Remove Host.
+- Clicking Host/Agency/BD identity opens role-specific full details when permitted.
+
+#### 5.4 Call Verification
+
+- Shows current Verified status.
+- Direct Verify when unverified and authorized.
+- Remove Verified when verified and authorized.
+
+#### 5.5 Party Rooms / Current Room
+
+Shows current room or owned room plus recent Party Room history:
+
+- Current vs owned-room status.
+- Room name.
+- Room ID.
+- DP set/not set.
+- Background set/not set.
+- Seat count.
+
+Actions:
+
+- Change Room Name.
+- Change Room DP.
+- Change Room Background.
+- Room Ban / Unban.
+- View Live Users / Seats.
+
+Recent Party Room history shows room name/ID, owner identity, current marker and last-entered timestamp.
+
+#### 5.6 Owner listen-only room audio
+
+For the main Owner only, when the selected user is currently in a room:
+
+- **Listen to Current Room — no mic** obtains a protected Owner listen token.
+- Owner receives remote audio only.
+- Owner microphone is never published.
+- **Stop Listening** disconnects and clears attached audio.
+- This remains an Owner investigation function, not an ordinary room feature.
+
+#### 5.7 Tags / Identity
+
+Identity detail can show:
+
+- Tag label.
+- Tag ID.
+- Type/kind.
+- Color.
+- Background.
+- Assigned timestamp.
+- Full ID View jump.
+- Role-linked wallet/role information where applicable.
+
+#### 5.8 Inbox / Messages
+
+- Full Dashboard shows stored Tinni messages.
+- Authorized session can send a **Tinni Official** message to the selected ID.
+- Main Owner gets **Open Friend Inbox / Conversations**.
+
+Friend Inbox shows:
+
+- Selected user identity.
+- Conversation count.
+- Peer DP/name/ID.
+- Friend marker.
+- Message count.
+- Last message.
+- Last-message timestamp.
+
+Conversation detail shows:
+
+- Both IDs.
+- Sender per message.
+- Message text.
+- Exact timestamp.
+- Seen state.
+- Back to Inbox / Close.
+
+Owner can send an **Official reply** while inspecting a friend conversation. The reply stays from **Tinni Official** and must never impersonate the friend/peer.
+
+#### 5.9 Call History
+
+Shows:
+
+- Caller ID.
+- Receiver ID.
+- Media type.
+- Call state.
+- Created/updated timestamp.
+- Nested IDs can be reopened for investigation.
+
+#### 5.10 User Activity / Advanced
+
+- Per-user Fruit Jackpot / Fruit Party investigation.
+- Set per-user Price / Free / Validity.
+- Remove per-user price override.
+- User game detail exposes Jackpot/Party bets, payouts and net.
+
+### 6. Call Verification
+
+One section with three pages:
+
+#### Verified IDs
+- List all current Verified IDs.
+- Search by ID/name.
+- Authorized session can remove Verified.
+
+#### Verification Requests
+- Show pending verification requests.
+- Three live photos/system result may be reviewed where provided.
+- Owner/reviewer makes final approve/reject decision.
+
+#### Direct Verify
+- Search existing ID/name.
+- Confirm account result.
+- Optional Owner note.
+- Directly attach Verified without camera verification when authorized.
+- Direct Verify and Revoke are separate permissions.
+
+### 7. Messages & Tags
+
+#### User selection
+- Search ID/name/email.
+- Select only required users.
+- Visible selected count.
+- Clear Selected.
+- Search row shows identity, country/gender, tags and **Open ID**.
+
+#### Tinni Official messages
+- Message UI limit: 2000 characters.
+- **Send to Selected**.
+- **Send to All Users**.
+- Message appears as **Tinni Official**, not fake private-friend identity.
+
+#### Custom User Tag
+- Type any allowed tag name.
+- Choose tag color.
+- Apply to selected IDs.
+- User-specific colored tags stay separate from reusable Roles/Posts definitions.
+
+#### V Official
+- Circular official badge.
+- Gold ring.
+- Silver V.
+- Gold Position/Designation label.
+- Owner enters Position/Designation.
+- Background presets:
+  - Sky Blue #69C9FF
+  - Light Green #8FE6A8
+  - Golden #D4A72C
+  - Black #101010
+  - Red #D93636
+  - Purple #7B3DBB
+- Apply V Official to selected IDs.
+
+#### Officials directory
+- Every V Official appears in Officials.
+- Each Position/Designation has its own page/tab.
+- Refresh reloads current server state.
+- Official user can be opened for full ID details and permitted identity controls.
+
+### 8. Rooms
+
+Actions:
+
+- Room Ban / Unban.
+- Change Room Name.
+- Change Room DP.
+- Add / Remove Background.
+- View Live Users / Seats.
+
+Live-room investigation shows server-backed:
+
+- Room ID.
+- Owner ID.
+- Room name.
+- Country.
+- Seat count.
+- Online-now members.
+- Mic mode.
+- Locked status.
+- Live users and seat state.
+
+#### Room Theme Manager
+
+Create global room theme with:
+
+- Theme name.
+- HTTPS image URL / approved image data.
+- Coin price; 0 means free.
+- Scheduled or Permanent duration.
+- Start date/time; blank means now.
+- End date/time for scheduled themes.
+- Remove theme when authorized.
+- List shows price and active time range.
+- Sexual or political themes are blocked by policy.
+- Panel persists room-theme price. Actual purchase/entitlement charging must remain server-authoritative and must not be invented only from this display field.
+
+### 9. Wallets and Company ledger
+
+#### Normal User Wallet
+- Select Coins or Diamonds.
+- Enter amount.
+- Add / Remove.
+- Normal coin-wallet Ban / Unban.
+
+#### Coin Seller Wallet
+- Create/activate.
+- Add coins.
+- Remove coins.
+- Ban / Unban.
+
+#### Merchant Wallet
+- Create/activate.
+- Add coins.
+- Remove coins.
+- Ban / Unban.
+
+#### Owner Treasury
+- Separate from Owner normal-user wallet.
+- Add Treasury coins.
+- Send Treasury coins to Normal, Coin Seller or Merchant wallet.
+- Every movement is audit logged.
+- Base app value remains **2,000,000 coins = $1** except the locked Coin Seller settlement conversion below.
+
+#### Company Dollars — Owner only
+- Persistent current Company USD balance.
+- Receives qualifying Coin Seller/Merchant transfers.
+- Owner can manually deduct a positive USD amount and optional reason.
+- Ledger columns:
+  - Date/time.
+  - Sender name/ID.
+  - Sender wallet/type.
+  - Amount.
+  - Before balance.
+  - After balance.
+  - Transaction/reference ID.
+- Incoming transfers and manual deductions remain permanent audit/ledger records.
+
+Locked related rules:
+
+- Coin Seller role-wallet dollar transfer minimum: **$300**.
+- Merchant role-wallet dollar transfer minimum: **$1000**.
+- Coin Seller settlement conversion: **$1 = 2,220,000 seller coins**.
+- Agency/BD earned commission remains dollars.
+- Agency/BD may transfer earned commission from **$10** to active Coin Seller/Merchant.
+- Host dollar transfer minimum: **$2**.
+
+#### Wallet Security Freeze — Owner only
+- Unexpected coin credits may be quarantined and freeze affected wallet.
+- Owner selects User ID and wallet type: normal, Coin Seller or Merchant.
+- Only Platform Owner can remove this freeze.
+
+### 10. BD / Agency / Host hierarchy
+
+Controls:
+
+- Activate / Remove BD.
+- Add Agency to any BD.
+- Remove Agency from BD.
+- BD Targets / Commission.
+- Activate / Remove Agency.
+- Add Host to any Agency.
+- Remove Host with Owner override.
+- Exit Requests / Complaints.
+
+Current locked rules shown in panel:
+
+- Host can join only same-country Agency.
+- Settlement: **1–15** and **16–month end**, local country time.
+- Host first target: **4,000,000 received coins = $1.60**.
+- Agency commission: **10% of achieved Host target payout**; no achieved target = no commission.
+- BD target 1: **$500 combined agency target = 7%**.
+- BD target 2: **$1,000 combined agency target = 10%**.
+- Host transfer minimum: **$2**.
+- Agency/BD transfer minimum: **$10**.
+- Coin Seller settlement: **$1 = 2,220,000 seller coins**; Agency/BD commission remains dollars.
+- Manual Host removal/approval dates shown: **1st, 2nd, 16th, 17th**.
+- Complaint timer: **1 month**, then system auto-exit if unresolved.
+- After auto-exit: **48-hour** join-another-Agency window before configured diamond auto-exchange behavior.
+
+### 11. Host / Agency / BD full-detail dashboards
+
+Requires Full ID Dashboard plus hierarchy-detail permission.
+
+Date filters:
+
+- 7 Days.
+- 15 Days.
+- This Month.
+- Last Month.
+- Custom From/To.
+
+Common stats:
+
+- Received coins.
+- Diamonds earned.
+- Settlement balance.
+- Withdrawable USD.
+
+Host additionally:
+
+- Target.
+- Target progress %.
+- Remaining.
+- Target payout.
+- Private chats.
+- Followers.
+- Parent Agency.
+
+Agency additionally:
+
+- Hosts.
+- Combined target.
+- Combined target progress.
+- Commission %.
+- Searchable Host list.
+- Host row: received coins, target, progress, joined time.
+- Remove Host when authorized.
+
+BD additionally:
+
+- Agencies.
+- Hosts.
+- Combined target.
+- Progress.
+- Target 1 amount/percent.
+- Target 2 amount/percent.
+- Searchable Agency list.
+- Agency row can show Host totals/progress.
+- Remove Agency from BD when authorized.
+
+Role dashboard can jump back to Full ID View and remove role according to current permission.
+
+### 12. Roles / Posts
+
+- Reusable definitions, separate from per-user colored tags.
+- Create Name + Type: **Role** or **Post**.
+- Existing items support **Edit, Disable/Enable, Remove** when authorized.
+- Catalog stays extensible for future reusable role/post definitions.
+
+### 13. VIP Manager
+
+Create/Edit fields:
+
+- VIP name.
+- VIP level.
+- Display order.
+- Price / requirement.
+- Validity days; 0 permanent.
+- Badge asset/label.
+- Profile frame.
+- Seat frame.
+- Vehicle/animal/3D entry.
+- Entry animation asset.
+- Entry audio asset.
+- Requirements.
+- Privileges.
+- Permissions/benefits.
+- Special effects.
+- Country targeting.
+- Effective from/until.
+
+VIP list shows Level, Name, Status, Entry, Frame, Price and Actions.
+
+Actions:
+
+- Create new VIP.
+- Edit existing VIP.
+- Enable / Disable.
+- Remove.
+- Grant / Remove VIP from user.
+
+VIP-required catalog items must honor effective active VIP from either Owner-granted VIP or active purchased VIP entitlement.
+
+### 14. Gifts and Lucky Gift settings
+
+Gift catalog supports:
+
+- Add.
+- Edit.
+- Remove.
+- Enable / Disable.
+- Coin price.
+- Validity.
+- Asset/animation URL.
+- Display order.
+- Country targeting.
+- Effective start/end scheduling.
+
+New Gift additionally supports:
+
+- Lucky/Rebate flag.
+- Lucky emoji.
+- Maximum multiplier.
+- Big-win/high-win threshold.
+- Host reward %.
+- Charm/Wealth %.
+- Prize-pool contribution %.
+
+Global Lucky Gift settings:
+
+- System enabled.
+- Maximum multiplier.
+- Rare/high-win threshold.
+- Banner threshold.
+- Ultra-banner threshold.
+- Host reward %.
+- Charm/Wealth %.
+- Prize-pool %.
+- Daily rank #1/#2/#3 share percentages; total cannot exceed 100%.
+- Daily send cap; 0 unlimited.
+- Country-specific banners ON/OFF.
+- Testing mode.
+- Event mode.
+- Data-driven multiplier-weight JSON.
+
+### 15. Entries / Frames / decorative catalogs
+
+Separate Owner catalogs:
+
+1. Vehicle / Animal / 3D Entries.
+2. Profile Cards.
+3. Rings.
+4. Chat Bubbles.
+5. Profile Backgrounds.
+6. Frames.
+
+Common fields/actions:
+
+- Name.
+- Asset URL.
+- Coin price.
+- Validity days; 0 permanent.
+- Display order.
+- Country codes; blank all.
+- Effective from.
+- Effective until.
+- Edit.
+- Enable / Disable.
+- Remove.
+
+Entry Effects additionally support **Assign VIP level; 0 = none**.
+
+Frames additionally support **Assign VIP level**.
+
+Catalog authorization is resolved by item kind; decorative item controls must not fall back to unrestricted generic permission.
+
+### 16. Banner Scheduler
+
+- Banner title.
+- Banner image URL.
+- Display order.
+- Country targeting.
+- Start date/time.
+- Auto-removal/end date/time.
+- Manual removal.
+- Catalog enable/disable behavior where exposed.
+
+### 17. Games
+
+Covers Fruit Jackpot + Fruit Party server-recorded activity.
+
+Summary:
+
+- Total Bets.
+- Total Bet Coins.
+- Total Payout.
+- Game Status.
+- Min/Max bet display.
+
+Controls:
+
+- Enable / Disable Games.
+- Bet Limits.
+- User Betting Investigation.
+
+Investigation:
+
+- Jackpot total bet/payout.
+- Party total bet/payout.
+- House net.
+- Unique recorded players.
+- Selected user Jackpot net.
+- Selected user Party net.
+- Selected user Jackpot bet coins.
+- Selected user Party bet coins.
+
+### 18. Policies & Economy Editor
+
+Purpose: change supported rules without editing Worker code.
+
+Controls:
+
+- Create New Setting key/value.
+- Edit existing policy.
+- Global Pricing.
+- Per-user Price / Free / Validity.
+- Remove User Override.
+
+Global Pricing includes:
+
+- Direct call coins/min.
+- Random call coins/min.
+- Verified receiver diamond %.
+- Default room-theme coins.
+- CP connect coins.
+- CP disconnect coins.
+- Default frame coins.
+- Default VIP coins.
+- Unique ID purchase coins.
+- Free User IDs.
+
+Per-user override includes:
+
+- User ID.
+- Price key.
+- Custom price coins; 0 free.
+- Custom purchased validity days; blank item default, 0 permanent.
+- Override expiry date/time; blank no expiry.
+
+Price-key examples include call:direct, frame:<id>, vip:<id>, entry:<id>, vehicle:<id>, profile_card:<id>, and * where backend rules permit.
+
+### 19. Custom Staff Panels
+
+Owner can create **10–20+** separate staff panels.
+
+Create fields:
+
+- Panel name.
+- Optional assigned User ID.
+- Staff login Gmail/Email.
+- Password.
+- Confirm password.
+- Minimum password length: 10 characters.
+- Exact selected permissions.
+
+Existing staff controls:
+
+- Login Active / Disabled.
+- Change Gmail / Password.
+- Group **All** toggle.
+- Individual permission toggles.
+- Blank new-password field keeps current password.
+
+Staff starts with no powers beyond permissions Owner enables. Server session permissions remain authoritative.
+
+### 20. Exact staff permission matrix
+
+#### Users
+- users.search — Search/view user details.
+- users.full_dashboard — Open Full ID Dashboard.
+- users.edit_profile — Change user name/DP.
+- users.ban_id — ID ban/unban.
+- users.ban_device — Device ban/unban.
+- users.invisible — Invisible ID.
+- users.locked_room_bypass — Locked-room bypass.
+- users.change_id — Change public ID.
+- users.unique_id — Create/price Unique IDs.
+
+#### Call Verification
+- verification.view — View verification pages/status.
+- verification.review — Approve/reject requests.
+- verification.direct_verify — Direct Verify.
+- verification.revoke — Remove Verified.
+
+#### Messages & Tags
+- messaging.search — Search IDs.
+- messaging.send — Send Tinni Official messages.
+- messaging.tags — Create/apply user tags.
+- messaging.officials — View/manage V Official positions.
+
+#### Rooms
+- rooms.search — Search/view room.
+- rooms.ban — Ban/unban.
+- rooms.rename — Rename.
+- rooms.dp — Change DP.
+- rooms.background — Add/remove background.
+- rooms.live_seats — View live users/seats.
+- rooms.theme_view — View themes.
+- rooms.theme_create — Add/schedule themes.
+- rooms.theme_remove — Remove themes.
+
+#### Wallets
+- wallets.normal — Normal wallet.
+- wallets.seller — Coin Seller wallet.
+- wallets.merchant — Merchant wallet.
+- wallets.treasury_send — Send Treasury coins.
+
+#### BD / Agency / Host
+- hierarchy.view_details — Full role details.
+- hierarchy.bd_manage — Activate/remove BD.
+- hierarchy.agency_manage — Activate/remove Agency.
+- hierarchy.agency_bd_link — Link/unlink Agency under BD.
+- hierarchy.host_manage — Add/remove Host.
+- hierarchy.targets — Targets/commission.
+- hierarchy.complaints — Exit requests/complaints.
+
+#### Roles / Posts
+- roles.view — View roles/posts.
+- roles.manage — Create/edit/remove reusable roles/posts.
+
+#### VIP
+- vip.view — View VIP.
+- vip.create — Create VIP.
+- vip.edit — Edit VIP.
+- vip.toggle — Enable/disable VIP.
+- vip.grant_remove — Grant/remove VIP.
+
+#### Gifts
+- gifts.view — View catalog.
+- gifts.create — Add gifts.
+- gifts.edit — Edit gifts/Lucky settings.
+- gifts.remove — Remove/disable gifts.
+
+#### Entries / Frames
+- assets.entries — Manage vehicle/animal/3D entries.
+- assets.frames — Manage frames, Profile Cards, Rings, Chat Bubbles, Profile Backgrounds.
+
+#### Banners
+- banners.view — View.
+- banners.create — Create/schedule.
+- banners.remove — Remove.
+
+#### Games
+- games.view — View status/stats.
+- games.toggle — Enable/disable.
+- games.limits — Bet limits.
+- games.investigate — User betting investigation.
+
+#### Policies
+- policies.view — View policies/economy.
+- policies.create — Create settings.
+- policies.edit — Edit rules/feature flags.
+- policies.pricing — Pricing/free rules.
+
+#### Audit
+- audit.view — View audit log.
+- audit.export — Export audit log.
+
+### 21. Audit Log and privacy
+
+UI includes:
+
+- Panel Activity Records summary.
+- Refresh.
+- Record Privacy.
+- Full Audit Log.
+- Export.
+- Delete All Records.
+
+Record fields include:
+
+- Date/time/year.
+- Panel/session identity.
+- Action.
+- Target.
+- Details.
+
+Rules:
+
+- Main Owner sees all records.
+- Staff can see only its own activity when audit.view is granted.
+- Export requires permission.
+- **Only main Owner can delete audit records**.
+- Delete All requires explicit confirmation.
+- Export downloads server-backed JSON records.
+
+### 22. Backend/API connection contract
+
+Owner Panel functions must use protected Worker APIs rather than local-only fake success. Functional API families include:
+
+- Owner state/dashboard.
+- Owner action dispatcher.
+- User search/full user detail.
+- Friend inbox/conversation inspector.
+- Tinni Official messages.
+- Owner notifications.
+- Tags/V Official/Officials.
+- Room live investigation.
+- Owner listen-only token.
+- Game stats.
+- Call verification.
+- Owner catalog.
+- Room themes.
+- Staff panels.
+- Audit log.
+- Session and health.
+
+A UI action must not claim success when its protected server action fails.
+
+### 23. Owner Panel regression lock
+
+Unless explicitly changed by Platform Owner:
+
+- Owner Panel stays separate from normal Android user and Room Owner/Admin controls.
+- Main Owner remains A-to-Z authority over supported server-configurable modules.
+- Staff gets only explicitly assigned permissions.
+- Owner-only investigation tools do not leak to ordinary staff.
+- Full ID Dashboard retains profile, wallet, hierarchy, verification, room history, messaging, call history and advanced investigation.
+- Friend-conversation replies remain **Tinni Official**, never friend impersonation.
+- Listen-in remains listen-only with no Owner mic publication.
+- Company Dollars and audit records remain persistent server records.
+- Wallet/role/catalog changes remain server-authoritative and audit logged.
+- Role/tag/VIP/gift/asset/banner/policy systems remain data-driven wherever backend supports that catalog type.
+- More-specific locked hierarchy, wallet, settlement, pricing and safety rules elsewhere in this blueprint remain authoritative.
