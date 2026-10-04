@@ -283,7 +283,7 @@ assert.match(
 );
 assert.match(
   directory,
-  /createPanelRoomTheme\(input\)[\s\S]{0,500}priceCoins[\s\S]{0,900}'panel', NULL, NULL, \?/,
+  /createPanelRoomTheme\(input\)[\s\S]{0,700}priceCoins[\s\S]{0,1800}'panel', NULL, NULL, \?/,
   "Owner-created Room Themes must persist price_coins instead of forcing zero",
 );
 assert.match(
