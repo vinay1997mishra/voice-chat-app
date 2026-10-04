@@ -1307,13 +1307,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFFFFD45A),
-                ),
+              const Icon(
+                Icons.sync_rounded,
+                color: Color(0xFFFFD45A),
+                size: 16,
               ),
               const SizedBox(width: 8),
               Flexible(
