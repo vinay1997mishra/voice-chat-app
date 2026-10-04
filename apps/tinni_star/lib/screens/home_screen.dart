@@ -18,7 +18,6 @@ import '../ui/royal_theme.dart';
 
 import 'cp_ranking_screen.dart';
 import 'discover_screen.dart';
-import 'feature_center_screen.dart';
 import 'family_ranking_screen.dart';
 import 'gifts_screen.dart';
 import 'ranking_screen.dart';
@@ -473,17 +472,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void openFeatureCenter() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => FeatureCenterScreen(state: widget.state),
-      ),
-    ).then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
   void openSearch() {
     Navigator.push(
       context,
@@ -883,7 +871,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'THE GREAT NAVIGATOR',
                 subtitle: 'Featured seasonal event',
                 icon: Icons.explore_rounded,
-                onTap: openFeatureCenter,
+                onTap: openSearch,
               ),
             ],
           ),
@@ -977,7 +965,7 @@ class _HomeScreenState extends State<HomeScreen> {
         'Weekly CP',
         'Couple ranking, intimacy and heartbeat activities',
         Icons.favorite_rounded,
-        openFeatureCenter,
+        openCpRanking,
       ),
       (
         'Gift Festival',
@@ -995,7 +983,7 @@ class _HomeScreenState extends State<HomeScreen> {
         'Family Party',
         'Family sign-in, contribution and group activities',
         Icons.groups_rounded,
-        openFeatureCenter,
+        openFamilyRanking,
       ),
     ];
 
