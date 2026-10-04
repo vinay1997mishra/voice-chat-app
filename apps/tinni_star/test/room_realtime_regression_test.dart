@@ -71,4 +71,30 @@ void main() {
     expect(mini, contains('final roomName = displayRoom.title.trim().isNotEmpty'));
     expect(mini, contains('roomName,'));
   });
+
+  test('room presence retries immediately instead of waiting one minute', () {
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    expect(session, contains('_presenceRecoveryTimer'));
+    expect(session, contains('_schedulePresenceRecovery(immediate: true)'));
+    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 30)'));
+    expect(session, contains('await presence.join('));
+    expect(session, contains("throw StateError('Room presence reconnect pending')"));
+  });
+
+  test('room reconnect state stays visible and diagnostics are emitted', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
+    final state = File('lib/app/tinni_state.dart').readAsStringSync();
+
+    expect(room, contains("Key('room-connection-retrying')"));
+    expect(room, contains("'Room reconnecting…'"));
+    expect(room, contains("'Connection problem • retrying…'"));
+    expect(presence, contains('bool liveReconnecting = false;'));
+    expect(presence, contains("'room_transport_failure'"));
+    expect(presence, contains("'room_presence_request_failure'"));
+    expect(state, contains('roomPresence.diagnosticSink = analytics.event;'));
+  });
+
 }
