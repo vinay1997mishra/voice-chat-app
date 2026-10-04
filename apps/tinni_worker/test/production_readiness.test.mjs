@@ -14,6 +14,10 @@ const ownerPanelApp = fs.readFileSync(
   new URL("../../tinni_owner_panel/app.js", import.meta.url),
   "utf8",
 );
+const ownerPanelHtml = fs.readFileSync(
+  new URL("../../tinni_owner_panel/index.html", import.meta.url),
+  "utf8",
+);
 
 assert.match(
   index,
@@ -242,6 +246,60 @@ assert.match(
   ownerPanelApp,
   /data-owner-tag-remove/,
   "Full ID views must expose tag removal controls when permission allows",
+);
+
+
+assert.match(
+  ownerPanelApp,
+  /\/api\/owner\/user-inbox\?user_id=/,
+  "Full ID Dashboard must wire the owner-only friend inbox route",
+);
+assert.match(
+  ownerPanelApp,
+  /\/api\/owner\/user-conversation\?user_id=/,
+  "Owner friend inbox must open conversation-wise message history",
+);
+assert.match(
+  ownerPanelApp,
+  /data-owner-conversation-reply[\s\S]{0,1200}\/api\/owner\/official-message/,
+  "Conversation inspector must support an audited Tinni Official reply",
+);
+assert.match(
+  ownerPanelHtml,
+  /data-action="unique-id-new"[\s\S]{0,220}data-action="unique-id-price"/,
+  "Owner Panel must visibly expose Unique ID creation and price/duration controls",
+);
+for (const action of ["profile-card-new", "ring-new", "bubble-new", "profile-background-new"]) {
+  assert.match(
+    ownerPanelHtml,
+    new RegExp('data-action="' + action + '"'),
+    "Owner Panel must visibly expose " + action,
+  );
+}
+assert.match(
+  ownerPanelApp,
+  /price_coins:\s*priceCoins[\s\S]{0,180}permanent/,
+  "Owner Room Theme form must send the configured coin price",
+);
+assert.match(
+  directory,
+  /createPanelRoomTheme\(input\)[\s\S]{0,500}priceCoins[\s\S]{0,900}'panel', NULL, NULL, \?/,
+  "Owner-created Room Themes must persist price_coins instead of forcing zero",
+);
+assert.match(
+  directory,
+  /"entry-new"[\s\S]{0,420}vip_level:\s*Math\.max/,
+  "Entry Effect creation must persist the assigned VIP level",
+);
+assert.match(
+  directory,
+  /requiredVipLevel[\s\S]{0,500}VIP " \+ requiredVipLevel \+ " or higher is required for this item"/,
+  "VIP-assigned store items must enforce the required VIP level when purchased",
+);
+assert.match(
+  index,
+  /"ring-new":"assets\.frames"[\s\S]{0,180}"bubble-new":"assets\.frames"[\s\S]{0,180}"profile-background-new":"assets\.frames"/,
+  "Ring, Bubble and Profile Background owner actions must be permission-wired",
 );
 
 console.log("Production readiness guards passed");
