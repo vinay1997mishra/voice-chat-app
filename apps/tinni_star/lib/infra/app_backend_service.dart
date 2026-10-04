@@ -236,9 +236,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load Trends');
     }
@@ -328,9 +326,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load role portal');
     }
@@ -351,9 +347,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load role invitations',
@@ -449,9 +443,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load Ludo');
     }
@@ -608,9 +600,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load medals');
     }
@@ -801,9 +791,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load Family Wallet',
@@ -928,9 +916,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load CP ranking');
     }
@@ -1072,9 +1058,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Recipient not found');
     }
@@ -1150,9 +1134,7 @@ class AppBackendService {
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
-    final data = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : _map(jsonDecode(text));
+    final data = _decodeJsonText(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load wallet password status',
@@ -1375,6 +1357,24 @@ class AppBackendService {
     }
     items.sort((a, b) => a.level.compareTo(b.level));
     return List.unmodifiable(items);
+  }
+
+  Map<String, dynamic> _decodeJsonText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return <String, dynamic>{};
+    try {
+      return _map(jsonDecode(trimmed));
+    } on FormatException {
+      final lower = trimmed.toLowerCase();
+      if (lower.contains('error code: 1101')) {
+        throw StateError(
+          'Tinni Star server is temporarily unavailable. Please retry.',
+        );
+      }
+      throw StateError(
+        'Tinni Star server returned an invalid response. Please retry.',
+      );
+    }
   }
 
   Future<Map<String, dynamic>> _request(
