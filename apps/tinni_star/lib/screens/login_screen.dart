@@ -392,6 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
       if (!mounted) return;
+      widget.state.setLanguagePreference(selectedLanguage);
       await _finishLogin(result);
     } catch (error) {
       if (!mounted) return;
