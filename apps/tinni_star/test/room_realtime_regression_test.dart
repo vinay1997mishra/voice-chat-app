@@ -36,7 +36,7 @@ void main() {
     );
   });
 
-  test('main in-room title pill shows room name without room ID underneath', () {
+  test('main in-room title pill keeps room name and Room ID together', () {
     final roomScreen = File('lib/screens/room_screen.dart').readAsStringSync();
     final start = roomScreen.indexOf("Key('reference-room-title-pill')");
     final end = roomScreen.indexOf('actions: [', start);
@@ -44,7 +44,7 @@ void main() {
     expect(end, greaterThan(start));
     final header = roomScreen.substring(start, end);
     expect(header, contains('_roomTitle'));
-    expect(header, isNot(contains('_roomSnapshot.displayId')));
+    expect(header, contains('_roomSnapshot.displayId'));
   });
 
   test('minimized room bar renders the real room DP and room name', () {
