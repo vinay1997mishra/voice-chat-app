@@ -221,8 +221,18 @@ assert.match(
 );
 assert.match(
   directory,
-  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,1800}WHERE r\.owner_id = \?[\s\S]{0,500}COALESCE\(r\.closed, 0\) = 0/,
-  "Mine must be able to resolve the signed-in user's room even when it is locked",
+  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,300}this\._resolveOwnerUserId\(userIdValue\)[\s\S]{0,1800}WHERE r\.owner_id = \?/,
+  "Mine must resolve the signed-in user's persistent owned room across ID changes",
+);
+assert.doesNotMatch(
+  directory,
+  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,2200}COALESCE\(r\.closed, 0\) = 0/,
+  "A closed owned room must remain discoverable in Mine instead of showing Create my room again",
+);
+assert.match(
+  directory,
+  /async createRoom\(ownerIdValue, input\)[\s\S]{0,2200}Number\(existing\.closed \|\| 0\) === 1[\s\S]{0,900}UPDATE app_rooms SET closed = 0/,
+  "Create fallback must reopen the same persistent room instead of creating a second room",
 );
 assert.match(
   index,
