@@ -95,17 +95,46 @@ void main() {
     expect(room.contains("if (!_canModerateSeats && label == 'Public Screen')"), true);
     expect(room.contains('roomSession.clearRoomComments()'), true);
     expect(room.contains('presence.commentsClearVersion'), true);
+    expect(room.contains('presence.ownerCommentsClearVersion'), true);
+    expect(room.contains('isOwnerForCommentClear'), true);
     expect(controller.contains('void clearRoomMessages()'), true);
     expect(controller.contains('messages.clear();'), true);
     expect(controls.contains('setPublicScreenEnabled(bool enabled)'), true);
     expect(presence.contains("'/room-presence/public-screen'"), true);
     expect(presence.contains("'/room-presence/clear-comments'"), true);
+    expect(presence.contains('ownerCommentsClearVersion'), true);
+    expect(presence.contains("type': 'chat_message'"), true);
     expect(session.contains('Future<void> setRoomPublicScreen(bool enabled)'), true);
     expect(session.contains('Future<void> clearRoomComments()'), true);
+    expect(session.contains('Future<void> sendRoomComment(String text)'), true);
+    expect(session.contains('_syncRoomChatMessages()'), true);
     expect(workerIndex.contains('"/room-presence/public-screen"'), true);
     expect(workerIndex.contains('"/room-presence/clear-comments"'), true);
+    expect(workerIndex.contains('store.clearComments(actorId, actorIsOwner)'), true);
     expect(presenceWorker.contains('public_screen_enabled'), true);
     expect(presenceWorker.contains('comments_clear_version'), true);
+    expect(presenceWorker.contains('owner_comments_clear_version'), true);
+    expect(presenceWorker.contains('clear_scope: ownerClear ? "all" : "non_owner"'), true);
+    expect(presenceWorker.contains('payload?.type === "chat_message"'), true);
+    expect(presenceWorker.contains('_broadcastRoomEvent({'), true);
+  });
+
+  test('new room entrants receive only post-join live comments', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    final presenceWorker =
+        File('../tinni_worker/src/room_presence.js').readAsStringSync();
+
+    expect(room.contains('roomSession.sendRoomComment('), true);
+    expect(room.contains('controller.sendMessage(value);'), false);
+    expect(presence.contains('RoomChatEvent? latestChatEvent;'), true);
+    expect(session.contains('_seenRoomChatEventIds'), true);
+    expect(session.contains('presence.latestChatEvent'), true);
+    expect(presenceWorker.contains('type: "chat_message"'), true);
+    expect(presenceWorker.contains('chat_history'), false);
   });
 
   test('room action notification lasts one second', () {
