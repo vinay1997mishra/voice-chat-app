@@ -211,4 +211,18 @@ void main() {
     expect(presence, contains("lower.contains('temporarily unavailable')"));
   });
 
+
+  test('backend transient failures keep diagnostics and stronger read retry', () {
+    final backend =
+        File('lib/infra/app_backend_service.dart').readAsStringSync();
+    final state = File('lib/app/tinni_state.dart').readAsStringSync();
+
+    expect(backend, contains("final maxAttempts = verb == 'GET' ? 4 : 1;"));
+    expect(backend, contains("throw StateError('cloudflare_1101')"));
+    expect(backend, contains("'backend_transport_failure'"));
+    expect(backend, contains("'backend_request_failure'"));
+    expect(backend, contains("'Service connection interrupted. Please retry.'"));
+    expect(state, contains('backend.diagnosticSink = analytics.event;'));
+  });
+
 }
