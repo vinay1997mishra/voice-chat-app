@@ -1565,7 +1565,10 @@ async function openOwnerFullDashboard(userId) {
     const user = detail.user || {};
     const controls = detail.controls || {};
     const wallet = detail.wallet || {};
-    const room = detail.owned_room || detail.current_room || null;
+    const currentRoom = detail.current_room || null;
+    const ownedRoom = detail.owned_room || null;
+    const room = currentRoom || ownedRoom || null;
+    const recentRooms = Array.isArray(detail.recent_rooms) ? detail.recent_rooms : [];
     const messages = Array.isArray(detail.messages) ? detail.messages : [];
     const calls = Array.isArray(detail.calls) ? detail.calls : [];
     const identityTags = Array.isArray(detail.identity_tags)
@@ -1574,7 +1577,7 @@ async function openOwnerFullDashboard(userId) {
     const hierarchy = Array.isArray(detail.hierarchy) ? detail.hierarchy : [];
     ownerFullDashboardUserId = String(user.user_id || ownerFullDashboardUserId);
     ownerFullDashboardRoomId = String(
-      room?.id || room?.room_id || "",
+      room?.room_id || room?.id || "",
     );
 
     const verified = user.call_verified === true ||
@@ -1663,26 +1666,51 @@ async function openOwnerFullDashboard(userId) {
       `,
       verified ? "Verified" : "Unverified",
     );
+    const recentRoomRows = recentRooms.length
+      ? recentRooms.map((item) => `
+          <div class="owner-history-row">
+            <div class="owner-history-people">
+              <button type="button" class="owner-inline-user" data-owner-full-room-open="${escapeHtml(item.room_id || "")}">
+                ${escapeHtml(item.room_name || item.room_id || "Party Room")}
+              </button>
+              ${item.is_current ? '<span class="badge gold">Current</span>' : ""}
+            </div>
+            <span>Room ${escapeHtml(item.room_id || "")} • Owner ${escapeHtml(item.owner_name || item.owner_id || "—")}</span>
+            <small>${escapeHtml(formatFullTimestamp(item.last_entered_at))}</small>
+          </div>
+        `).join("")
+      : '<div class="empty-state">No recent Party Room history.</div>';
+
     const roomPanel = ownerDrillPanel(
       "room",
-      "Owned / Current Room",
-      ownerFullDashboardRoomId ? "Tap to open room name, DP, background, ban and live-seat controls." : "No room linked to this ID.",
-      ownerFullDashboardRoomId ? `
-        <div class="rule-grid">
-          <div class="rule"><strong>Name</strong><span>${escapeHtml(roomName || "—")}</span></div>
-          <div class="rule"><strong>DP</strong><span>${roomDp ? "Set" : "Not set"}</span></div>
-          <div class="rule"><strong>Background</strong><span>${roomBackground ? "Set" : "Not set"}</span></div>
-          <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count || 0)}</span></div>
+      "Party Rooms / Current Room",
+      ownerFullDashboardRoomId
+        ? "Current/owned room controls plus recent Party Room history."
+        : "Recent Party Room history for this ID.",
+      `
+        ${ownerFullDashboardRoomId ? `
+          <div class="rule-grid">
+            <div class="rule"><strong>Current view</strong><span>${currentRoom ? "Currently in room" : "Owned room"}</span></div>
+            <div class="rule"><strong>Name</strong><span>${escapeHtml(roomName || "—")}</span></div>
+            <div class="rule"><strong>Room ID</strong><span>${escapeHtml(ownerFullDashboardRoomId)}</span></div>
+            <div class="rule"><strong>DP</strong><span>${roomDp ? "Set" : "Not set"}</span></div>
+            <div class="rule"><strong>Background</strong><span>${roomBackground ? "Set" : "Not set"}</span></div>
+            <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count || 0)}</span></div>
+          </div>
+          <div class="owner-full-action-grid">${roomButtons}</div>
+          <div id="ownerFullRoomLive" class="empty-state" style="margin-top:8px" hidden></div>
+          ${currentSession?.role === "owner" && currentRoom?.room_id ? `
+            <div class="button-row" style="margin-top:8px">
+              <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(currentRoom.room_id)}">Listen to Current Room — no mic</button>
+              <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
+            </div>` : ""}
+        ` : '<div class="empty-state">This ID is not currently occupying or owning a room.</div>'}
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-head"><h3>Recent Party Rooms</h3><span class="badge">${recentRooms.length}</span></div>
+          <div class="owner-history-list">${recentRoomRows}</div>
         </div>
-        <div class="owner-full-action-grid">${roomButtons}</div>
-        <div id="ownerFullRoomLive" class="empty-state" style="margin-top:8px" hidden></div>
-        ${currentSession?.role === "owner" && detail.current_room?.room_id ? `
-          <div class="button-row" style="margin-top:8px">
-            <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(detail.current_room.room_id)}">Listen to Room — no mic</button>
-            <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
-          </div>` : ""}
-      ` : '<div class="empty-state">This ID does not currently own or occupy a room.</div>',
-      ownerFullDashboardRoomId ? "Room " + ownerFullDashboardRoomId : "No room",
+      `,
+      currentRoom ? "Current room" : (ownedRoom ? "Owned room" : String(recentRooms.length) + " recent"),
     );
     const tagsPanel = ownerDrillPanel(
       "identity",
