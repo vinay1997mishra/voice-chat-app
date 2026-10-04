@@ -345,7 +345,7 @@ For every future intentional feature/layout change:
 - Agency and BD transfer only their own earned commission and may transfer from **USD 10** to an active Coin Seller or Merchant.
 - Host sent/withdrawn dollar history is visible only in the Host Panel. Agency/BD panels do not expose individual Host dollar transactions.
 - Agency/BD percentage commission remains a **dollar balance** and is not converted into coins.
-- Dollars received by a Coin Seller convert immediately into the seller coin wallet at **USD 1 = 2,220,000 coins**. This special settlement conversion does not change the normal Tinni base economy constant used elsewhere.
+- Dollars received by a Coin Seller or Merchant stay in that role's **Dollar Wallet as USD**. No settlement receipt automatically credits coins.
 - English remains the default language until the user chooses another language.
 - Create Tinni ID and Settings > Language use the same supported-language registry: English, Hindi, Urdu, Arabic, Bengali, Malayalam, Filipino (Tagalog), Persian (Farsi), Kurdish, Baluchi, Chinese (Simplified), Chinese (Traditional), Korean.
 - User-generated names, room text and numeric IDs are not auto-translated; unsupported UI strings fall back to English.
@@ -366,7 +366,7 @@ For every future intentional feature/layout change:
 - Coin Seller/Merchant permanent wallet ledgers record Company/Owner credits, Owner debits, coin sends to users, settlement receipts, dollar transfers, and received dollars.
 - User Wallet opens permanent **Coins History**, **Diamonds / conversion history**, **Coin Seller/Merchant wallet details**, **Received Dollars** and sent-dollar history through Worker APIs.
 - Dollar transfer ledger is replay-safe through unique request IDs. Coin Seller dollar-transfer minimum remains **$300** and Merchant remains **$1000** for their role-wallet transfer flow.
-- Latest settlement lock remains unchanged: Agency/BD transfer minimum **$10**; Coin Seller settlement receipts convert immediately at **$1 = 2,220,000 seller coins**; Agency/BD commission remains dollars.
+- Latest settlement lock: Host minimum **$2**, Agency/BD minimum **$10**; Coin Seller/Merchant settlement receipts remain USD, and no role's dollar balance is automatically converted to coins.
 
 
 ## Empty-Seat Invite Flow — LOCKED
