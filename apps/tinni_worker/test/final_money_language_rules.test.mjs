@@ -34,8 +34,8 @@ assert.match(
 );
 assert.match(
   directory,
-  /agency_commission_percent: 20/,
-  "Agency commission must stay 20%",
+  /agency_commission_percent: 10/,
+  "Agency commission must stay 10%",
 );
 assert.match(
   directory,
