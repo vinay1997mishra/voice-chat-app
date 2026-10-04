@@ -79,16 +79,33 @@ void main() {
         File('lib/room/room_controller.dart').readAsStringSync();
     final controls =
         File('lib/room/room_control_service.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    final workerIndex =
+        File('../tinni_worker/src/index.js').readAsStringSync();
+    final presenceWorker =
+        File('../tinni_worker/src/room_presence.js').readAsStringSync();
 
     expect(room.contains("title: const Text('Only Admin/Owner can type')"), true);
     expect(room.contains("title: const Text('Everyone can type')"), true);
     expect(room.contains("title: const Text('Clear comments area')"), true);
     expect(room.contains("key: const Key('public-screen-clear-comments')"), true);
     expect(room.contains("if (!_canModerateSeats && label == 'Public Screen')"), true);
-    expect(room.contains('controller.clearRoomMessages();'), true);
+    expect(room.contains('roomSession.clearRoomComments()'), true);
+    expect(room.contains('presence.commentsClearVersion'), true);
     expect(controller.contains('void clearRoomMessages()'), true);
     expect(controller.contains('messages.clear();'), true);
     expect(controls.contains('setPublicScreenEnabled(bool enabled)'), true);
+    expect(presence.contains("'/room-presence/public-screen'"), true);
+    expect(presence.contains("'/room-presence/clear-comments'"), true);
+    expect(session.contains('Future<void> setRoomPublicScreen(bool enabled)'), true);
+    expect(session.contains('Future<void> clearRoomComments()'), true);
+    expect(workerIndex.contains('"/room-presence/public-screen"'), true);
+    expect(workerIndex.contains('"/room-presence/clear-comments"'), true);
+    expect(presenceWorker.contains('public_screen_enabled'), true);
+    expect(presenceWorker.contains('comments_clear_version'), true);
   });
 
   test('room action notification lasts one second', () {
