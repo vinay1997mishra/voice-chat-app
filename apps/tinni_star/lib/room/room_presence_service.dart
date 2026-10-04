@@ -145,11 +145,15 @@ class RoomPresenceService extends ChangeNotifier {
   RoomPresenceService({
     Uri? apiBase,
     HttpClient? httpClient,
+    this.liveConnectTimeout = const Duration(seconds: 15),
   })  : apiBase = apiBase ??
             Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
+  final Duration liveConnectTimeout;
+  int _liveGeneration = 0;
+  bool _disposed = false;
   final HttpClient _httpClient;
   WebSocket? _liveSocket;
   StreamSubscription<dynamic>? _liveSocketSubscription;
@@ -203,7 +207,12 @@ class RoomPresenceService extends ChangeNotifier {
   }) async {
     final cleanRoomId = roomId.trim();
     final token = authToken.trim();
-    if (cleanRoomId.isEmpty || token.isEmpty) return;
+    if (_disposed || cleanRoomId.isEmpty || token.isEmpty) return;
+    if (_liveWanted &&
+        (cleanRoomId != _liveRoomId || token != _liveAuthToken)) {
+      await disconnectLive();
+    }
+    if (_disposed) return;
     _liveWanted = true;
     _liveRoomId = cleanRoomId;
     _liveAuthToken = token;
@@ -211,6 +220,8 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   Future<void> disconnectLive() async {
+    _liveGeneration++;
+    _liveConnecting = false;
     _liveWanted = false;
     _liveRoomId = null;
     _liveAuthToken = null;
@@ -229,13 +240,15 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   Future<void> _openLiveSocket() async {
-    if (!_liveWanted || _liveConnecting) return;
+    if (_disposed || !_liveWanted || _liveConnecting) return;
     final roomId = _liveRoomId;
     final token = _liveAuthToken;
     if (roomId == null || token == null) return;
     final existing = _liveSocket;
     if (existing != null && existing.readyState == WebSocket.open) return;
 
+    final generation = ++_liveGeneration;
+    var acceptingSocket = true;
     _liveConnecting = true;
     liveReconnecting = true;
     notifyListeners();
@@ -250,13 +263,23 @@ class RoomPresenceService extends ChangeNotifier {
         headers: <String, dynamic>{
           HttpHeaders.authorizationHeader: 'Bearer $token',
         },
-      );
-      if (!_liveWanted ||
+      ).then((socket) {
+        // A timed-out handshake may finish after a replacement connection.
+        if (!acceptingSocket || _disposed || generation != _liveGeneration) {
+          unawaited(socket.close());
+        }
+        return socket;
+      }).timeout(liveConnectTimeout);
+      if (_disposed ||
+          !_liveWanted ||
+          generation != _liveGeneration ||
           roomId != _liveRoomId ||
           token != _liveAuthToken) {
         await socket.close();
         return;
       }
+      _liveReconnectTimer?.cancel();
+      _liveReconnectTimer = null;
       _liveSocket = socket;
       _liveReconnectDelaySeconds = 2;
       liveReconnecting = false;
@@ -270,12 +293,16 @@ class RoomPresenceService extends ChangeNotifier {
       // application presence Durable Object for recurring app messages.
       socket.pingInterval = const Duration(seconds: 20);
       _liveSocketSubscription = socket.listen(
-        _handleLiveSocketData,
-        onDone: _handleLiveSocketClosed,
-        onError: (_) => _handleLiveSocketClosed(),
+        (raw) {
+          if (identical(_liveSocket, socket)) _handleLiveSocketData(raw);
+        },
+        onDone: () => _handleLiveSocketClosed(socket),
+        onError: (_) => _handleLiveSocketClosed(socket),
         cancelOnError: true,
       );
     } catch (error) {
+      acceptingSocket = false;
+      if (_disposed || generation != _liveGeneration || !_liveWanted) return;
       liveReconnecting = true;
       lastError = error.toString();
       _diagnostic('room_transport_failure', <String, Object?>{
@@ -286,7 +313,8 @@ class RoomPresenceService extends ChangeNotifier {
       notifyListeners();
       _scheduleLiveReconnect();
     } finally {
-      _liveConnecting = false;
+      acceptingSocket = false;
+      if (generation == _liveGeneration) _liveConnecting = false;
     }
   }
 
@@ -367,17 +395,22 @@ class RoomPresenceService extends ChangeNotifier {
       }
       if (!data.containsKey('members')) return;
       final before = _visibleStateSignature();
+      final wasConnected = connected;
+      final hadError = lastError != null;
       _apply(Map<String, dynamic>.from(data));
       connected = true;
       liveReconnecting = false;
       lastError = null;
-      if (before != _visibleStateSignature()) {
+      if (!wasConnected || hadError || before != _visibleStateSignature()) {
         notifyListeners();
       }
     } catch (_) {}
   }
 
-  void _handleLiveSocketClosed() {
+  void _handleLiveSocketClosed(WebSocket socket) {
+    if (_disposed || !identical(_liveSocket, socket)) return;
+    final subscription = _liveSocketSubscription;
+    unawaited(subscription?.cancel());
     _liveSocket = null;
     _liveSocketSubscription = null;
     if (_liveWanted) {
@@ -429,7 +462,7 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   void _scheduleLiveReconnect() {
-    if (!_liveWanted || _liveReconnectTimer != null) return;
+    if (_disposed || !_liveWanted || _liveReconnectTimer != null) return;
     final delaySeconds = _liveReconnectDelaySeconds;
     _liveReconnectDelaySeconds =
         (_liveReconnectDelaySeconds * 2).clamp(2, 120).toInt();
@@ -1461,6 +1494,9 @@ class RoomPresenceService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _liveGeneration++;
+    _liveWanted = false;
     _liveReconnectTimer?.cancel();
     _liveSocketSubscription?.cancel();
     try {

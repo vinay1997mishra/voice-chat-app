@@ -1257,3 +1257,11 @@ Unless explicitly changed by Platform Owner:
 - Wallet/role/catalog changes remain server-authoritative and audit logged.
 - Role/tag/VIP/gift/asset/banner/policy systems remain data-driven wherever backend supports that catalog type.
 - More-specific locked hierarchy, wallet, settlement, pricing and safety rules elsewhere in this blueprint remain authoritative.
+
+
+## Reconnection and seat recovery — October 4, 2026
+
+- Room WebSocket handshakes have a 15-second deadline. A late handshake, old-room snapshot, or stale socket close must never replace or clear the current room connection.
+- Switching rooms or login sessions closes the previous presence transport before opening its replacement. Closing/disposal invalidates pending connections and prevents new retries.
+- Recovering the same presence snapshot still notifies room controls when connectivity or an error changes. Authoritative HTTP seat placement remains usable during WebSocket recovery.
+- Fruit Jackpot and Fruit Party share an in-flight state refresh, bound response/header/body waits, and refresh disconnected state before a bet. Failed authentication/server responses display their actual error. Bet submissions are never automatically replayed after an ambiguous network failure.
