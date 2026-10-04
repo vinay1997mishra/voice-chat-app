@@ -60,12 +60,30 @@ void main() {
     expect(backend, contains("'/wallet/role-dollars/transfer'"));
   });
 
-  test('locked seller and merchant dollar limits stay visible in source contract', () {
-    final details = File('lib/screens/wallet_detail_screens.dart').readAsStringSync();
+  test('locked dollar wallets keep manual USD flow and crypto destination', () {
+    final profile = File('lib/screens/profile_screen.dart').readAsStringSync();
+    final hierarchy =
+        File('lib/screens/mine_function_screens.dart').readAsStringSync();
+    final details =
+        File('lib/screens/wallet_detail_screens.dart').readAsStringSync();
+    final backend = File('lib/infra/app_backend_service.dart').readAsStringSync();
+
+    expect(profile, contains('settlementRecipients(account.authToken)'));
+    expect(profile, contains("'Coin Sellers'"));
+    expect(profile, contains("'Merchants'"));
+    expect(profile, contains('recipientRole: recipient.role'));
+    expect(hierarchy, contains("Key('role-dollar-wallet-open')"));
+    expect(hierarchy, contains("Key('role-dollar-wallet-send')"));
+    expect(hierarchy, contains("'Dollar Wallet'"));
     expect(details, contains('minimum_transfer_usd_cents'));
-    expect(details, contains("'Dollar Transfer"));
-    expect(details, contains("'Merchant'"));
-    expect(details, contains("'Company'"));
+    expect(details, contains("'Cryptocurrency (USDT)'"));
+    expect(details, contains("'USDT wallet address'"));
+    expect(details, contains("Key('role-wallet-send-dollars')"));
+    expect(details, contains("'Open Dollar Wallet'"));
+    expect(details, isNot(contains("value: 'merchant'")));
+    expect(backend, contains("'/wallet/settlement/recipients'"));
+    expect(backend, contains("'recipient_role': recipientRole"));
+    expect(backend, contains("'usdt_address': usdtAddress"));
   });
 
   test('Popular and New stay limited to online rooms', () {
