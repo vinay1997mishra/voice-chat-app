@@ -155,10 +155,18 @@ class ModerationService {
     final body = await utf8.decoder.bind(response).join();
     Map<String, dynamic> data = <String, dynamic>{};
     if (body.trim().isNotEmpty) {
-      final decoded = jsonDecode(body);
-      if (decoded is Map) {
-        data = decoded.map(
-          (key, value) => MapEntry(key.toString(), value),
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          data = decoded.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+        }
+      } on FormatException {
+        throw StateError(
+          body.toLowerCase().contains('error code: 1101')
+              ? 'Tinni Star server is temporarily unavailable. Please retry.'
+              : 'Tinni Star server returned an invalid response. Please retry.',
         );
       }
     }
