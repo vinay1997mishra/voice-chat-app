@@ -24,6 +24,7 @@ dependencies:
   just_audio: ^0.10.5
   path_provider: ^2.1.5
   video_player: ^2.14.0
+  mobile_scanner: ^7.4.2
   flutter_svga: ^0.0.13
   pag: ^1.0.7
 
