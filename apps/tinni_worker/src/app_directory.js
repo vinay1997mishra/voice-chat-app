@@ -9661,6 +9661,110 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  ownerMessageThreads(userIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    if (!userId) throw new Error("user ID is required");
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+
+    const friendIds = new Set(
+      this.listFriends(userId).map((item) => String(item.user_id)),
+    );
+    const threads = this.ownerInboxThreads(userId).map((item) => {
+      const peerId = String(item.peer_user_id || "").trim();
+      const last = item.last_message || null;
+      return {
+        user_id: peerId,
+        display_name: String(item.display_name || peerId),
+        avatar_data_url: item.avatar_data_url
+          ? String(item.avatar_data_url)
+          : null,
+        is_friend: friendIds.has(peerId),
+        message_count: Number(item.message_count || 0),
+        last_message: last ? {
+          id: String(last.id),
+          from: String(last.from_user_id),
+          to: String(last.to_user_id),
+          text: String(last.text || ""),
+          message_kind: String(last.message_kind || "text"),
+          media_url: last.media_url ? String(last.media_url) : null,
+          created_at: Number(last.created_at || 0),
+          seen_at: last.seen_at == null ? null : Number(last.seen_at),
+        } : null,
+      };
+    });
+
+    return {
+      user: {
+        user_id: String(target.user_id),
+        display_name: String(target.display_name || target.user_id),
+        avatar_data_url: target.avatar_data_url
+          ? String(target.avatar_data_url)
+          : null,
+      },
+      threads,
+    };
+  }
+
+  ownerConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const rawPeerId = String(peerUserIdValue || "").trim();
+    const peerId = rawPeerId === "tinni-official"
+      ? rawPeerId
+      : this._resolveOwnerUserId(rawPeerId);
+    if (!userId || !peerId) throw new Error("user IDs are required");
+
+    const target = this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!target) throw new Error("User not found");
+    const peer = peerId === "tinni-official"
+      ? null
+      : this.ctx.storage.sql.exec(
+          "SELECT user_id,display_name,avatar_data_url FROM app_users WHERE user_id=? LIMIT 1",
+          peerId,
+        ).toArray()[0];
+
+    const messages = this.ownerInboxConversation(
+      userId,
+      peerId,
+      limitValue,
+    ).map((row) => ({
+      id: String(row.id),
+      from: String(row.from_user_id),
+      to: String(row.to_user_id),
+      text: String(row.text || ""),
+      message_kind: String(row.message_kind || "text"),
+      media_url: row.media_url ? String(row.media_url) : null,
+      created_at: Number(row.created_at || 0),
+      seen_at: row.seen_at == null ? null : Number(row.seen_at),
+    }));
+
+    return {
+      user: {
+        user_id: String(target.user_id),
+        display_name: String(target.display_name || target.user_id),
+        avatar_data_url: target.avatar_data_url
+          ? String(target.avatar_data_url)
+          : null,
+      },
+      peer: {
+        user_id: peerId,
+        display_name: peerId === "tinni-official"
+          ? "Tinni Official"
+          : String(peer?.display_name || peerId),
+        avatar_data_url: peer?.avatar_data_url
+          ? String(peer.avatar_data_url)
+          : null,
+      },
+      messages,
+    };
+  }
+
   listMessageThreads(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
