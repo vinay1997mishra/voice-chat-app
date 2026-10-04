@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
@@ -602,10 +603,35 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: usdtAddressController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'USDT wallet address',
-                        hintText: 'Paste or enter the scanned USDT address',
-                        prefixIcon: Icon(Icons.qr_code_scanner_rounded),
+                        hintText: 'Paste address or scan its QR code',
+                        prefixIcon: const Icon(Icons.account_balance_wallet_rounded),
+                        suffixIcon: IconButton(
+                          key: const Key('usdt-scan-qr-button'),
+                          tooltip: 'Scan USDT QR',
+                          onPressed: sending
+                              ? null
+                              : () async {
+                                  final scanned =
+                                      await Navigator.of(dialogContext).push<String>(
+                                    MaterialPageRoute<String>(
+                                      builder: (_) =>
+                                          const _UsdtQrScannerScreen(),
+                                    ),
+                                  );
+                                  if (scanned == null ||
+                                      scanned.trim().isEmpty ||
+                                      !dialogContext.mounted) {
+                                    return;
+                                  }
+                                  setDialogState(() {
+                                    usdtAddressController.text = scanned.trim();
+                                    dialogError = null;
+                                  });
+                                },
+                          icon: const Icon(Icons.qr_code_scanner_rounded),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1072,6 +1098,71 @@ class _ReceivedDollarsScreenState extends State<ReceivedDollarsScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _UsdtQrScannerScreen extends StatefulWidget {
+  const _UsdtQrScannerScreen();
+
+  @override
+  State<_UsdtQrScannerScreen> createState() => _UsdtQrScannerScreenState();
+}
+
+class _UsdtQrScannerScreenState extends State<_UsdtQrScannerScreen> {
+  bool _handled = false;
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final barcode in capture.barcodes) {
+      final value = barcode.rawValue?.trim() ?? '';
+      if (value.isEmpty) continue;
+      _handled = true;
+      Navigator.of(context).pop(value);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: const Key('usdt-qr-scanner-screen'),
+      appBar: AppBar(
+        title: const Text('Scan USDT Address'),
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(onDetect: _onDetect),
+          IgnorePointer(
+            child: Center(
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: RoyalPalette.gold,
+                    width: 3,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              minimum: EdgeInsets.all(20),
+              child: RoyalPanel(
+                child: Text(
+                  'Place the USDT wallet QR inside the frame. The scanned value will fill the address field.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
