@@ -40,6 +40,16 @@ assert.match(
 );
 assert.match(
   index,
+  /room_presence:\s*roomPresenceOk/,
+  "Deep health must expose room presence status",
+);
+assert.match(
+  index,
+  /getRoomPresenceStore\(env, probeRoomId\)\.state\(\)/,
+  "Deep health must exercise the real room presence Durable Object",
+);
+assert.match(
+  index,
   /effect_media_configured:\s*Boolean\(env\.EFFECT_MEDIA\)/,
   "App config must report R2 media binding availability",
 );
