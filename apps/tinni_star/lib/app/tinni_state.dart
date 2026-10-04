@@ -49,6 +49,7 @@ import '../social/social.dart';
 class TinniState {
   TinniState({
     required this.runtime,
+    this.roomPresenceFallbackTimerEnabled = true,
   })  : connector = AnamikaConnector(runtime: runtime),
         wallet = WalletService(),
         auth = AuthService(),
@@ -107,6 +108,7 @@ class TinniState {
       foregroundService: roomForegroundService,
       permissions: roomPermissions,
       presence: roomPresence,
+      enablePresenceFallbackTimer: roomPresenceFallbackTimerEnabled,
       familyTagProvider: () {
         final userId = auth.current?.userId;
         if (userId == null || !family.exists || !family.isMember(userId)) {
@@ -143,6 +145,8 @@ class TinniState {
       },
     );
   }
+
+  final bool roomPresenceFallbackTimerEnabled;
 
   final ValueNotifier<String> languagePreference =
       ValueNotifier<String>('English');
