@@ -4129,20 +4129,28 @@ document.body.addEventListener("click", async e => {
         data.charm_wealth_percent = Math.max(0, Math.min(100, Number(charmPercent || 10)));
         data.prize_pool_percent = Math.max(0, Math.min(100, Number(poolPercent || 2)));
       }
-    } else if (item.kind === "entry" || item.kind === "frame") {
+    } else if (["entry","vehicle","frame","profile_card","ring","bubble","profile_background"].includes(item.kind)) {
       const asset = prompt("Asset URL", String(data.asset_url || ""));
       if (asset === null) return;
-      const vipLevel = prompt("VIP level", String(data.vip_level || 0));
-      if (vipLevel === null) return;
+      const price = prompt("Coin price", String(data.price ?? data.coin_price ?? 0));
+      if (price === null) return;
+      const durationDays = prompt("Validity days (0 = permanent)", String(data.duration_days || 0));
+      if (durationDays === null) return;
       data.asset_url = asset.trim();
-      data.vip_level = Number(vipLevel || 0);
+      data.price = Math.max(0, Number(price || 0));
+      data.duration_days = Math.max(0, Number(durationDays || 0));
+      if (item.kind === "entry" || item.kind === "vehicle" || item.kind === "frame") {
+        const vipLevel = prompt("VIP level (0 = none)", String(data.vip_level || 0));
+        if (vipLevel === null) return;
+        data.vip_level = Math.max(0, Math.floor(Number(vipLevel || 0)));
+      }
     } else if (item.kind === "banner") {
       const asset = prompt("Banner image URL", String(data.asset_url || ""));
       if (asset === null) return;
       data.asset_url = asset.trim();
     }
 
-    if (["gift","entry","frame","banner"].includes(item.kind)) {
+    if (["gift","entry","vehicle","frame","profile_card","ring","bubble","profile_background","banner"].includes(item.kind)) {
       const order = prompt("Display order", String(data.order || 0)); if (order === null) return;
       const countries = prompt("Country codes, comma separated (blank = all)", Array.isArray(data.countries) ? data.countries.join(", ") : ""); if (countries === null) return;
       const startsAt = prompt("Effective from (ISO/date-time, blank = none)", data.starts_at ? String(data.starts_at) : ""); if (startsAt === null) return;
