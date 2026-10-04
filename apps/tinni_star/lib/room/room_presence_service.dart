@@ -985,50 +985,85 @@ class RoomPresenceService extends ChangeNotifier {
     String? equippedProfileCardId,
     bool notifyOnlyOnVisibleChange = false,
   }) async {
-    try {
-      final request = await _httpClient.postUrl(apiBase.replace(path: path));
-      request.headers.contentType = ContentType.json;
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer $authToken',
-      );
-      request.write(
-        jsonEncode(<String, Object?>{
-          'room_id': roomId,
-          'seat_index': seatIndex,
-          'mic_enabled': micEnabled,
-          'family_tag': familyTag,
-          'host_tag': hostTag,
-          'agency_name': agencyName,
-          'equipped_frame_id': equippedFrameId,
-          'equipped_entry_id': equippedEntryId,
-          'equipped_profile_card_id': equippedProfileCardId,
-        }),
-      );
-      final response = await request.close();
-      final data = await _readJson(response);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
-          data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
+    const maxAttempts = 3;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        final request =
+            await _httpClient.postUrl(apiBase.replace(path: path));
+        request.headers.contentType = ContentType.json;
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $authToken',
         );
-      }
-      final before = notifyOnlyOnVisibleChange
-          ? _visibleStateSignature()
-          : null;
-      final wasConnected = connected;
-      _apply(data);
-      connected = true;
-      lastError = null;
-      if (!notifyOnlyOnVisibleChange ||
-          !wasConnected ||
-          before != _visibleStateSignature()) {
+        request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+        request.write(
+          jsonEncode(<String, Object?>{
+            'room_id': roomId,
+            'seat_index': seatIndex,
+            'mic_enabled': micEnabled,
+            'family_tag': familyTag,
+            'host_tag': hostTag,
+            'agency_name': agencyName,
+            'equipped_frame_id': equippedFrameId,
+            'equipped_entry_id': equippedEntryId,
+            'equipped_profile_card_id': equippedProfileCardId,
+          }),
+        );
+
+        final response = await request.close().timeout(
+          const Duration(seconds: 15),
+        );
+        final data = await _readJson(response);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          final message =
+              data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}';
+          if (response.statusCode >= 500 && attempt + 1 < maxAttempts) {
+            await Future<void>.delayed(
+              Duration(milliseconds: attempt == 0 ? 250 : 700),
+            );
+            continue;
+          }
+          throw StateError(message);
+        }
+
+        final before = notifyOnlyOnVisibleChange
+            ? _visibleStateSignature()
+            : null;
+        final wasConnected = connected;
+        _apply(data);
+        connected = true;
+        lastError = null;
+        if (!notifyOnlyOnVisibleChange ||
+            !wasConnected ||
+            before != _visibleStateSignature()) {
+          notifyListeners();
+        }
+        return;
+      } catch (error) {
+        final lower = error.toString().toLowerCase();
+        final transient = lower.contains('temporarily unavailable') ||
+            lower.contains('invalid response') ||
+            lower.contains('socketexception') ||
+            lower.contains('failed host lookup') ||
+            lower.contains('connection refused') ||
+            lower.contains('network is unreachable') ||
+            lower.contains('connection closed') ||
+            lower.contains('timed out') ||
+            lower.contains('timeoutexception');
+
+        if (transient && attempt + 1 < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 0 ? 250 : 700),
+          );
+          continue;
+        }
+
+        connected = false;
+        lastError = error.toString();
         notifyListeners();
+        rethrow;
       }
-    } catch (error) {
-      connected = false;
-      lastError = error.toString();
-      notifyListeners();
-      rethrow;
     }
   }
 
