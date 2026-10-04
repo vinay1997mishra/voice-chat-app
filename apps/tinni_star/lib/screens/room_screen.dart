@@ -8823,16 +8823,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             fontSize: 14,
                           ),
                         ),
-                        Text(
-                          '🏅 ' + _roomSnapshot.displayId,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFFFD45A),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
                       ],
                     ),
                   ),
