@@ -80,13 +80,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _showSettlementTransfer() async {
+  Future<void> _showSettlementTransfer(String senderRoleValue) async {
     final account = widget.state.auth.current;
     if (account == null) return;
 
+    final senderRole = senderRoleValue.trim().toLowerCase();
+    if (!const <String>{'host', 'agency', 'bd'}.contains(senderRole)) return;
+    final minimumCents = senderRole == 'host' ? 200 : 1000;
+    int availableForRole(RemoteWallet wallet) => senderRole == 'host'
+        ? wallet.diamondUsdCents
+        : wallet.commissionUsdCents;
+
+    RemoteWallet liveWallet;
+    try {
+      liveWallet = await widget.state.backend.wallet(account.authToken);
+      widget.state.wallet.applyRemote(liveWallet);
+      if (mounted) setState(() {});
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+
+    var availableCents = availableForRole(liveWallet);
     final recipientController = TextEditingController();
     final amountController = TextEditingController(
-      text: widget.state.wallet.withdrawableUsdCents >= 200 ? '2.00' : '',
+      text: availableCents >= minimumCents
+          ? (minimumCents / 100).toStringAsFixed(2)
+          : '',
     );
     SettlementRecipient? recipient;
     String? errorText;
@@ -115,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             } catch (error) {
               if (!dialogContext.mounted) return;
               setDialogState(() {
-                errorText = error.toString().replaceFirst('Bad state: ', '');
+                errorText = widget.state.backend.userSafeError(error);
               });
             } finally {
               if (dialogContext.mounted) {
@@ -134,8 +154,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
             final amount = double.tryParse(amountController.text.trim()) ?? 0;
             final cents = (amount * 100).round();
-            if (cents < 200) {
-              setDialogState(() => errorText = 'Minimum transfer is \$2.00.');
+            if (cents < minimumCents) {
+              setDialogState(
+                () => errorText = 'Minimum ' +
+                    senderRole.toUpperCase() +
+                    ' transfer is \$' +
+                    (minimumCents / 100).toStringAsFixed(2) +
+                    '.',
+              );
               return;
             }
             setDialogState(() {
@@ -143,10 +169,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               errorText = null;
             });
             try {
+              final refreshed =
+                  await widget.state.backend.wallet(account.authToken);
+              widget.state.wallet.applyRemote(refreshed);
+              availableCents = availableForRole(refreshed);
+              if (cents > availableCents) {
+                if (!dialogContext.mounted) return;
+                setDialogState(() {
+                  sending = false;
+                  errorText = 'Available ' +
+                      senderRole.toUpperCase() +
+                      ' balance is only \$' +
+                      (availableCents / 100).toStringAsFixed(2) +
+                      '.';
+                });
+                return;
+              }
               final remote = await widget.state.backend.transferSettlement(
                 account.authToken,
                 recipientUserId: selected.userId,
                 usdCents: cents,
+                senderRole: senderRole,
               );
               widget.state.wallet.applyRemote(remote);
               if (!dialogContext.mounted) return;
@@ -156,7 +199,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Transferred \$' +
+                      senderRole.toUpperCase() +
+                          ' transferred \$' +
                           (cents / 100).toStringAsFixed(2) +
                           ' to ID ' +
                           selected.userId,
@@ -167,20 +211,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
             } catch (error) {
               if (!dialogContext.mounted) return;
               setDialogState(() {
-                errorText = error.toString().replaceFirst('Bad state: ', '');
+                errorText = widget.state.backend.userSafeError(error);
                 sending = false;
               });
             }
           }
 
           return AlertDialog(
-            title: const Text('Transfer settlement'),
+            title: Text(senderRole.toUpperCase() + ' dollar transfer'),
             content: SizedBox(
               width: 420,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Available: ' + widget.state.wallet.withdrawableUsdText),
+                  Text(
+                    'Available ' +
+                        senderRole.toUpperCase() +
+                        ': \$' +
+                        (availableCents / 100).toStringAsFixed(2),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: recipientController,
@@ -213,8 +262,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: amountController,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'USD amount (minimum \$2)',
+                    decoration: InputDecoration(
+                      labelText: 'USD amount (minimum \$' +
+                          (minimumCents / 100).toStringAsFixed(0) +
+                          ')',
                     ),
                   ),
                   if (errorText != null) ...[
@@ -268,7 +319,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final decoded = body.trim().isEmpty ? null : jsonDecode(body);
       if (decoded is! Map) return;
-      final rawTags = decoded['identity_tags'];
+      final rawTags = decoded['identity_tags'] ?? decoded['tags'];
       final tags = rawTags is List
           ? rawTags
               .whereType<Map>()
@@ -1084,6 +1135,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     StoreScreen(state: widget.state),
                   ),
                 ),
+                _mineMenuRow(
+                  key: const Key('mine-reward-records'),
+                  icon: Icons.receipt_long_rounded,
+                  label: tinniText(language, 'reward_records'),
+                  onTap: () => _openMineScreen(
+                    RewardRecordsScreen(state: widget.state),
+                  ),
+                ),
               ]),
               const SizedBox(height: 9),
               _mineMenuGroup([
@@ -1096,7 +1155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'BD',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('bd'),
                       ),
                     ),
                   ),
@@ -1109,7 +1168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'Agency',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('agency'),
                       ),
                     ),
                   ),
@@ -1122,7 +1181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       HostDataScreen(
                         state: widget.state,
                         roleLabel: 'Host',
-                        onTransfer: _showSettlementTransfer,
+                        onTransfer: () => _showSettlementTransfer('host'),
                       ),
                     ),
                   ),
