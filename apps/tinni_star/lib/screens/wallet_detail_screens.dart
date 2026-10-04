@@ -561,10 +561,9 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
     final account = widget.state.auth.current;
     if (account == null) return;
     final amountController = TextEditingController();
-    final recipientController = TextEditingController();
+    final usdtAddressController = TextEditingController();
     final passwordController = TextEditingController();
-    String destination =
-        widget.walletType == 'coin_seller' ? 'merchant' : 'company';
+    String destination = 'company';
     String? dialogError;
     bool sending = false;
 
@@ -572,50 +571,53 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Dollar Transfer'),
+          title: const Text('Send Dollars'),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.walletType == 'coin_seller')
-                    DropdownButtonFormField<String>(
-                      initialValue: destination,
-                      decoration: const InputDecoration(labelText: 'Destination'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'merchant',
-                          child: Text('Merchant'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'company',
-                          child: Text('Company'),
-                        ),
-                      ],
-                      onChanged: sending
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              setDialogState(() => destination = value);
-                            },
-                    )
-                  else
-                    const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Destination'),
-                      trailing: Text('Company'),
-                    ),
-                  if (destination == 'merchant') ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: destination,
+                    decoration: const InputDecoration(labelText: 'Destination'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'company',
+                        child: Text('Company'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'crypto_usdt',
+                        child: Text('Cryptocurrency (USDT)'),
+                      ),
+                    ],
+                    onChanged: sending
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            setDialogState(() => destination = value);
+                          },
+                  ),
+                  if (destination == 'crypto_usdt') ...[
                     const SizedBox(height: 8),
                     TextField(
-                      controller: recipientController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: <TextInputFormatter>[
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
-                      decoration:
-                          const InputDecoration(labelText: 'Merchant User ID'),
+                      controller: usdtAddressController,
+                      decoration: const InputDecoration(
+                        labelText: 'USDT wallet address',
+                        hintText: 'Paste or enter the scanned USDT address',
+                        prefixIcon: Icon(Icons.qr_code_scanner_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'USDT payout is recorded first; blockchain payout needs the configured payout provider.',
+                        style: TextStyle(
+                          color: RoyalPalette.muted,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -624,8 +626,11 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
-                      labelText:
-                          'USD amount (minimum ${_walletUsd(_walletInt(data['minimum_transfer_usd_cents']))})',
+                      labelText: 'USD amount (minimum ' +
+                          _walletUsd(
+                            _walletInt(data['minimum_transfer_usd_cents']),
+                          ) +
+                          ')',
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -673,17 +678,18 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                       final cents = (amount * 100).round();
                       final minimum =
                           _walletInt(data['minimum_transfer_usd_cents']);
-                      final recipient = recipientController.text.trim();
+                      final usdtAddress = usdtAddressController.text.trim();
                       if (cents < minimum) {
                         setDialogState(
                           () => dialogError =
-                              'Minimum ${_walletUsd(minimum)}.',
+                              'Minimum ' + _walletUsd(minimum) + '.',
                         );
                         return;
                       }
-                      if (destination == 'merchant' && recipient.isEmpty) {
+                      if (destination == 'crypto_usdt' &&
+                          usdtAddress.length < 8) {
                         setDialogState(
-                          () => dialogError = 'Enter Merchant ID.',
+                          () => dialogError = 'Enter a valid USDT address.',
                         );
                         return;
                       }
@@ -707,15 +713,18 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                         dialogError = null;
                       });
                       try {
-                        final requestId =
-                            '${account.userId}-${widget.walletType}-'
-                            '${DateTime.now().microsecondsSinceEpoch}';
-                        await widget.state.backend.transferRoleDollars(
+                        final requestId = account.userId +
+                            '-' +
+                            widget.walletType +
+                            '-' +
+                            DateTime.now().microsecondsSinceEpoch.toString();
+                        final result =
+                            await widget.state.backend.transferRoleDollars(
                           account.authToken,
                           walletType: widget.walletType,
                           destinationType: destination,
-                          recipientUserId:
-                              destination == 'merchant' ? recipient : null,
+                          usdtAddress:
+                              destination == 'crypto_usdt' ? usdtAddress : null,
                           usdCents: cents,
                           password: password,
                           requestId: requestId,
@@ -723,6 +732,19 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                         if (!dialogContext.mounted) return;
                         Navigator.pop(dialogContext);
                         await _load();
+                        if (!mounted) return;
+                        final status = result['status']?.toString() ?? '';
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              destination == 'company'
+                                  ? 'Dollars sent to Company.'
+                                  : status == 'pending_usdt'
+                                      ? 'USDT payout request recorded.'
+                                      : 'USDT transfer updated.',
+                            ),
+                          ),
+                        );
                       } catch (e) {
                         if (!dialogContext.mounted) return;
                         setDialogState(() {
@@ -731,7 +753,7 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                         });
                       }
                     },
-              child: Text(sending ? 'Sending…' : 'Confirm'),
+              child: Text(sending ? 'Sending…' : 'Send Dollars'),
             ),
           ],
         ),
@@ -739,7 +761,7 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
     );
 
     amountController.dispose();
-    recipientController.dispose();
+    usdtAddressController.dispose();
     passwordController.dispose();
   }
 
@@ -750,12 +772,14 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
         .where((row) =>
             row['kind'] == 'company_credit' ||
             row['kind'] == 'owner_debit' ||
-            row['kind'] == 'dollars_to_company')
+            row['kind'] == 'dollars_to_company' ||
+            row['kind'] == 'dollars_to_crypto')
         .toList(growable: false);
     final sentRows = transactions
         .where((row) =>
             row['kind'] == 'coins_sent' ||
-            row['kind'] == 'dollars_to_merchant')
+            row['kind'] == 'dollars_to_company' ||
+            row['kind'] == 'dollars_to_crypto')
         .toList(growable: false);
 
     return Scaffold(
@@ -807,6 +831,7 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                                 builder: (_) => ReceivedDollarsScreen(
                                   state: widget.state,
                                   walletType: widget.walletType,
+                                  onSend: _transferDollars,
                                 ),
                               ),
                             );
@@ -834,7 +859,7 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                                 ),
                                 const SizedBox(height: 3),
                                 const Text(
-                                  'View Received',
+                                  'Open Dollar Wallet',
                                   style: TextStyle(
                                     color: RoyalPalette.gold,
                                     fontSize: 11,
@@ -846,20 +871,6 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: data['security_frozen'] == true
-                          ? null
-                          : _transferDollars,
-                      icon: const Icon(Icons.attach_money_rounded),
-                      label: Text(
-                        'Dollar Transfer • Min '
-                        '${_walletUsd(_walletInt(data['minimum_transfer_usd_cents']))}',
-                      ),
-                    ),
                   ),
                   if (error != null) ...[
                     const SizedBox(height: 10),
@@ -885,10 +896,12 @@ class ReceivedDollarsScreen extends StatefulWidget {
     super.key,
     required this.state,
     required this.walletType,
+    required this.onSend,
   });
 
   final TinniState state;
   final String walletType;
+  final Future<void> Function() onSend;
 
   @override
   State<ReceivedDollarsScreen> createState() => _ReceivedDollarsScreenState();
@@ -932,7 +945,7 @@ class _ReceivedDollarsScreenState extends State<ReceivedDollarsScreen> {
   Widget build(BuildContext context) {
     final rows = _walletRows(data['received_dollars']);
     return Scaffold(
-      appBar: AppBar(title: const Text('Received Dollars')),
+      appBar: AppBar(title: const Text('Dollar Wallet')),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -941,6 +954,43 @@ class _ReceivedDollarsScreenState extends State<ReceivedDollarsScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(14),
                 children: [
+                  RoyalPanel(
+                    gradient: FeaturePalette.glow(FeaturePalette.wallet),
+                    accentColor: FeaturePalette.wallet,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Available Dollars',
+                          style: TextStyle(color: RoyalPalette.muted),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _walletUsd(_walletInt(data['total_usd_cents'])),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            key: const Key('role-wallet-send-dollars'),
+                            onPressed: data['security_frozen'] == true
+                                ? null
+                                : () async {
+                                    await widget.onSend();
+                                    await _load();
+                                  },
+                            icon: const Icon(Icons.attach_money_rounded),
+                            label: const Text('Send Dollars'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   RoyalPanel(
                     gradient: FeaturePalette.glow(FeaturePalette.family),
                     accentColor: FeaturePalette.family,
