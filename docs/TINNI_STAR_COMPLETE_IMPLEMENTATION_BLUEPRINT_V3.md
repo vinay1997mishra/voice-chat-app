@@ -339,7 +339,7 @@ For every future intentional feature/layout change:
 ## Final Money & Language Lock
 
 - Host first target: **4,000,000 eligible received coins = USD 1.60**.
-- Agency commission: **20% of achieved Host target earnings**. A Host below 4,000,000 eligible coins in the settlement cycle contributes **zero Agency commission**.
+- Agency commission: **10% of achieved Host target earnings**. A Host below 4,000,000 eligible coins in the settlement cycle contributes **zero Agency commission**.
 - BD commission is calculated from the combined qualifying Host-target earnings under the BD's Agencies: **USD 500 = 7%**, **USD 1,000 = 10%**.
 - Host dollar transfer minimum remains **USD 2**.
 - Agency and BD transfer only their own earned commission and may transfer from **USD 10** to an active Coin Seller or Merchant.
