@@ -211,7 +211,7 @@ assert.match(
 );
 assert.match(
   directory,
-  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,1800}WHERE r\.owner_id = \?/[\s\S]{0,500}COALESCE\(r\.closed, 0\) = 0/,
+  /findOwnedRoomByUserId\(userIdValue\)[\s\S]{0,1800}WHERE r\.owner_id = \?[\s\S]{0,500}COALESCE\(r\.closed, 0\) = 0/,
   "Mine must be able to resolve the signed-in user's room even when it is locked",
 );
 assert.match(
