@@ -137,6 +137,34 @@ void main() {
     expect(presenceWorker.contains('chat_history'), false);
   });
 
+  test('empty seat invite is locked to in-room off-seat IDs', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    final presenceWorker =
+        File('../tinni_worker/src/room_presence.js').readAsStringSync();
+    final blueprint =
+        File('../../docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md')
+            .readAsStringSync();
+    final changeLock =
+        File('../../docs/TINNI_STAR_GLOBAL_CHANGE_LOCK.md').readAsStringSync();
+
+    expect(room.contains("key: const Key('seat-control-invite')"), true);
+    expect(room.contains('Future<void> _showSeatInvitePanel(int seatIndex)'), true);
+    expect(room.contains("key: const Key('seat-invite-id-search')"), true);
+    expect(room.contains('member.seatIndex == null'), true);
+    expect(room.contains('member.userId != currentUserId'), true);
+    expect(room.contains('member.userId.toLowerCase().contains(normalizedQuery)'), true);
+    expect(room.contains('seatIndex: seatIndex'), true);
+    expect(room.contains("' invites you to Seat No. '"), true);
+    expect(session.contains('inviteUserToSeat('), true);
+    expect(presenceWorker.contains('User is not in the room'), true);
+    expect(presenceWorker.contains('User is already on a seat'), true);
+    expect(presenceWorker.contains('Seat is already occupied'), true);
+    expect(blueprint.contains('## Empty-Seat Invite Flow — LOCKED'), true);
+    expect(changeLock.contains('Empty-seat invite lock:'), true);
+  });
+
   test('room action notification lasts one second', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     expect(room.contains('duration: const Duration(seconds: 1)'), true);
