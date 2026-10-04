@@ -54,6 +54,11 @@ This file defines features that must survive future updates. A feature may be ch
 - Seat layout maximum is locked to **6 seats per row × 7 rows** for 42 seats: 42 = 6+6+6+6+6+6+6.
 - Seat counts 37–42 use 7 rows and keep the same balanced final-two-row distribution rule; 31–36 use 6 rows.
 
+## Retired generic Feature Center
+- The generic **Feature Center** screen is permanently retired from the Android app and must not be re-added unless the Platform Owner explicitly requests it.
+- CP **Bind with CP** opens the dedicated CP flow only; it must never route to a generic feature menu.
+- Home/Event shortcuts must route to their dedicated destinations (CP Ranking, Family Ranking, Gifts, VIP, Discover/Rankings) and must never recreate a generic Feature Center.
+
 ## Mine / profile
 - Existing locked Mine menu/order and reference-video rules in TINNI_PRODUCT_BLUEPRINT.md remain authoritative.
 - **Personal information** and **Props** are retired from the Mine menu and must not be re-added unless the Platform Owner explicitly requests them again.
