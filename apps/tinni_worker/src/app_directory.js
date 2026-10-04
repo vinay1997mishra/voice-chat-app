@@ -10672,6 +10672,7 @@ export class AppDirectoryStore extends DurableObject {
 
     async listRooms() {
     this._pruneRoomThemes();
+    const onlineCutoff = Date.now() - 90000;
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
@@ -10684,7 +10685,16 @@ export class AppDirectoryStore extends DurableObject {
                 + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
-         LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
+         LEFT JOIN (
+           SELECT room_id, COUNT(*) AS member_count
+             FROM app_user_presence
+            WHERE room_id IS NOT NULL
+              AND (
+                COALESCE(room_socket_connected, 0) = 1
+                OR last_seen >= ?
+              )
+            GROUP BY room_id
+         ) pc ON pc.room_id = r.id
          LEFT JOIN (
            SELECT room_id, COALESCE(SUM(total_cost), 0) AS gift_coins
              FROM gift_transactions
@@ -10696,6 +10706,7 @@ export class AppDirectoryStore extends DurableObject {
                  COALESCE(pc.member_count, 0) DESC,
                  r.created_at DESC
         LIMIT 500`,
+      onlineCutoff,
     ).toArray().map(rowToRoom);
   }
 
