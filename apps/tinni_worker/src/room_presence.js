@@ -89,6 +89,7 @@ export class RoomPresenceStore extends DurableObject {
         mic_mode TEXT NOT NULL DEFAULT 'apply',
         public_screen_enabled INTEGER NOT NULL DEFAULT 0,
         comments_clear_version INTEGER NOT NULL DEFAULT 0,
+        owner_comments_clear_version INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
       INSERT OR IGNORE INTO room_runtime_settings (
@@ -96,9 +97,10 @@ export class RoomPresenceStore extends DurableObject {
         mic_mode,
         public_screen_enabled,
         comments_clear_version,
+        owner_comments_clear_version,
         updated_at
       )
-      VALUES (1, 'apply', 0, 0, 0);
+      VALUES (1, 'apply', 0, 0, 0, 0);
 
       CREATE TABLE IF NOT EXISTS room_lucky_numbers (
         id TEXT PRIMARY KEY,
@@ -135,6 +137,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
       "ALTER TABLE room_runtime_settings ADD COLUMN public_screen_enabled INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_runtime_settings ADD COLUMN comments_clear_version INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE room_runtime_settings ADD COLUMN owner_comments_clear_version INTEGER NOT NULL DEFAULT 0",
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -250,6 +253,13 @@ export class RoomPresenceStore extends DurableObject {
     return Math.max(0, Number(row?.comments_clear_version || 0));
   }
 
+  ownerCommentsClearVersion() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT owner_comments_clear_version FROM room_runtime_settings WHERE id = 1 LIMIT 1",
+    ).toArray()[0];
+    return Math.max(0, Number(row?.owner_comments_clear_version || 0));
+  }
+
   setPublicScreenEnabled(enabledValue) {
     const enabled = enabledValue === true;
     const now = Date.now();
@@ -264,27 +274,37 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       public_screen_enabled: enabled,
       comments_clear_version: this.commentsClearVersion(),
+      owner_comments_clear_version: this.ownerCommentsClearVersion(),
     };
     this._broadcastPresence("public_screen_changed");
     return result;
   }
 
-  clearComments(clearedByValue) {
+  clearComments(clearedByValue, ownerClearValue = false) {
     const clearedBy = String(clearedByValue || "").trim();
+    const ownerClear = ownerClearValue === true;
     const nextVersion = this.commentsClearVersion() + 1;
+    const nextOwnerVersion = ownerClear
+      ? this.ownerCommentsClearVersion() + 1
+      : this.ownerCommentsClearVersion();
     const now = Date.now();
     this.ctx.storage.sql.exec(
       `UPDATE room_runtime_settings
-          SET comments_clear_version = ?, updated_at = ?
+          SET comments_clear_version = ?,
+              owner_comments_clear_version = ?,
+              updated_at = ?
         WHERE id = 1`,
       nextVersion,
+      nextOwnerVersion,
       now,
     );
     const result = {
       ok: true,
       comments_clear_version: nextVersion,
+      owner_comments_clear_version: nextOwnerVersion,
       public_screen_enabled: this.publicScreenEnabled(),
       cleared_by: clearedBy,
+      clear_scope: ownerClear ? "all" : "non_owner",
     };
     this._broadcastPresence("comments_cleared");
     return result;
@@ -1448,6 +1468,7 @@ export class RoomPresenceStore extends DurableObject {
       mic_mode: this.micMode(),
       public_screen_enabled: this.publicScreenEnabled(),
       comments_clear_version: this.commentsClearVersion(),
+      owner_comments_clear_version: this.ownerCommentsClearVersion(),
       member_ttl_ms: MEMBER_TTL_MS,
       lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
@@ -1705,6 +1726,40 @@ export class RoomPresenceStore extends DurableObject {
           now,
         );
         if (changed) this._broadcastPresence("seat_changed", now);
+        return;
+      }
+      if (payload?.type === "chat_message") {
+        this._touchSocketMember(userId, now);
+        if (this.chatBanStatus(userId)) {
+          throw new Error("Room owner/admin has chat banned this ID.");
+        }
+        const canType =
+          this.publicScreenEnabled() ||
+          attachment.isOwner === true ||
+          this.isManager(userId);
+        if (!canType) {
+          throw new Error("Only Admin/Owner can type right now.");
+        }
+        const text = String(payload.text || "").trim();
+        if (!text) return;
+        if (text.length > 500) {
+          throw new Error("Comment is too long.");
+        }
+        const member = this.ctx.storage.sql.exec(
+          "SELECT display_name FROM room_members WHERE user_id = ? LIMIT 1",
+          userId,
+        ).toArray()[0];
+        const event = {
+          id: "room-chat-" + crypto.randomUUID(),
+          user_id: userId,
+          display_name: String(member?.display_name || "User"),
+          text,
+          created_at: now,
+        };
+        this._broadcastRoomEvent({
+          type: "chat_message",
+          message: event,
+        });
         return;
       }
       if (payload?.type === "presence_sync") {
