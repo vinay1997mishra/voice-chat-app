@@ -52,7 +52,7 @@ const hierarchyRules = [
   ["Host country", "Host can join only an Agency from the same country."],
   ["Settlement", "1–15 and 16–month end, using that country's local time."],
   ["Host target", "First target: 4,000,000 received coins = $1.60."],
-  ["Agency commission", "20% of achieved Host target payout; no target = no commission."],
+  ["Agency commission", "10% of achieved Host target payout; no target = no commission."],
   ["BD target 1", "$500 combined agency target = 7% commission."],
   ["BD target 2", "$1,000 combined agency target = 10% commission."],
   ["Host transfer minimum", "Host dollar transfer minimum is $2."],
