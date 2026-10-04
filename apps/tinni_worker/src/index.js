@@ -695,6 +695,18 @@ function getAppDirectoryStore(env) {
   return env.APP_DIRECTORY.get(id);
 }
 
+async function bestEffortRoomDirectoryTask(label, task) {
+  try {
+    return await task();
+  } catch (error) {
+    console.error("Tinni Star room directory side-effect failed", {
+      label,
+      error: String(error?.message || error || "unknown"),
+    });
+    return null;
+  }
+}
+
 async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
   const roomId = String(roomIdValue || "").trim();
   const user = appSession?.user;
@@ -721,7 +733,11 @@ async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
     return { store, directory, room, rejoined: false };
   }
 
-  const identityTags = await directory.listUserIdentityTags(userId);
+  const identityTags =
+    await bestEffortRoomDirectoryTask(
+      "ensure.identity_tags",
+      () => directory.listUserIdentityTags(userId),
+    ) || [];
   const result = await store.join({
     room_id: roomId,
     user_id: userId,
@@ -734,13 +750,19 @@ async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
     seat_index: null,
     mic_enabled: false,
   });
-  await directory.touchPresence(
-    userId,
-    roomId,
-    result.members?.length || 0,
-    false,
+  await bestEffortRoomDirectoryTask(
+    "ensure.touch_presence",
+    () => directory.touchPresence(
+      userId,
+      roomId,
+      result.members?.length || 0,
+      false,
+    ),
   );
-  await directory.markRecentRoom(userId, roomId);
+  await bestEffortRoomDirectoryTask(
+    "ensure.mark_recent_room",
+    () => directory.markRecentRoom(userId, roomId),
+  );
   return { store, directory, room, rejoined: true };
 }
 
@@ -4515,7 +4537,20 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
       const directory = getAppDirectoryStore(env);
-      const room = await directory.findRoomByExactId(roomId);
+      let room;
+      try {
+        room = await directory.findRoomByExactId(roomId);
+      } catch (error) {
+        console.error("Tinni Star room live directory lookup failed", {
+          room_id: roomId,
+          user_id: String(appSession.user.user_id || ""),
+          error: String(error?.message || error || "unknown"),
+        });
+        return json({
+          ok: false,
+          error: "Room connection is temporarily unavailable. Retrying.",
+        }, 503);
+      }
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       let store = getRoomPresenceStore(env, roomId);
       if (!(await store.isMember(appSession.user.user_id))) {
@@ -5318,17 +5353,40 @@ export default {
       const store = getRoomPresenceStore(env, roomId);
       const directory = getAppDirectoryStore(env);
       const user = appSession.user;
-      const identityTags = await directory.listUserIdentityTags(user.user_id);
+      const identityTags =
+        await bestEffortRoomDirectoryTask(
+          "presence.identity_tags",
+          () => directory.listUserIdentityTags(user.user_id),
+        ) || [];
       if (url.pathname.endsWith("/join")) {
-        const access = await directory.roomAccessState(
-          user.user_id,
-          roomId,
-        );
-        if (!access.allowed) {
+        let access;
+        try {
+          access = await directory.roomAccessState(
+            user.user_id,
+            roomId,
+          );
+        } catch (error) {
+          console.error("Tinni Star room access check failed", {
+            room_id: roomId,
+            user_id: String(user.user_id || ""),
+            error: String(error?.message || error || "unknown"),
+          });
           return json({
             ok: false,
-            error: "Room password is required.",
-            room_locked: true,
+            error: "Room access check temporarily unavailable. Retrying.",
+          }, 503);
+        }
+        if (!access.allowed) {
+          const reason = String(access.reason || "");
+          return json({
+            ok: false,
+            error:
+              reason === "blocked_by_room_owner"
+                ? "You cannot enter this user's room."
+                : reason === "invite_required"
+                  ? "Room invite is required."
+                  : "Room password is required.",
+            room_locked: reason !== "blocked_by_room_owner",
           }, 403);
         }
       }
@@ -5355,29 +5413,50 @@ export default {
       };
       try {
         if (url.pathname.endsWith("/join")) {
+          // Core room membership must succeed even if a secondary directory
+          // notification/history write is temporarily unavailable.
           const result = await store.join(presenceBody);
-          await directory.touchPresence(
-            user.user_id,
-            roomId,
-            result.members?.length || 0,
-            false,
+          await bestEffortRoomDirectoryTask(
+            "join.touch_presence",
+            () => directory.touchPresence(
+              user.user_id,
+              roomId,
+              result.members?.length || 0,
+              false,
+            ),
           );
-          await directory.markRecentRoom(user.user_id, roomId);
-          await directory.notifyFollowersOnline(user.user_id, roomId);
+          await bestEffortRoomDirectoryTask(
+            "join.mark_recent_room",
+            () => directory.markRecentRoom(user.user_id, roomId),
+          );
+          await bestEffortRoomDirectoryTask(
+            "join.notify_followers",
+            () => directory.notifyFollowersOnline(user.user_id, roomId),
+          );
           return json(result, 201);
         }
         if (url.pathname.endsWith("/heartbeat")) {
           const result = await store.heartbeat(presenceBody);
-          await directory.touchPresence(
-            user.user_id,
-            roomId,
-            result.members?.length || 0,
-            false,
+          await bestEffortRoomDirectoryTask(
+            "heartbeat.touch_presence",
+            () => directory.touchPresence(
+              user.user_id,
+              roomId,
+              result.members?.length || 0,
+              false,
+            ),
           );
           return json(result);
         }
         const result = await store.leave(presenceBody);
-        await directory.clearPresence(user.user_id, roomId, result.members?.length || 0);
+        await bestEffortRoomDirectoryTask(
+          "leave.clear_presence",
+          () => directory.clearPresence(
+            user.user_id,
+            roomId,
+            result.members?.length || 0,
+          ),
+        );
         return json(result);
       } catch (error) {
         const message = String(error?.message || "Room presence failed");
