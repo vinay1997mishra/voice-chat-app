@@ -159,6 +159,8 @@ class RoomPresenceService extends ChangeNotifier {
   bool _liveWanted = false;
   bool _liveConnecting = false;
   int _liveReconnectDelaySeconds = 2;
+  bool liveReconnecting = false;
+  void Function(String name, Map<String, Object?> properties)? diagnosticSink;
 
   final List<RoomPresenceMember> members = <RoomPresenceMember>[];
 
@@ -184,6 +186,17 @@ class RoomPresenceService extends ChangeNotifier {
 
   bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
 
+  void _diagnostic(String name, Map<String, Object?> properties) {
+    try {
+      diagnosticSink?.call(name, <String, Object?>{
+        'source': 'room_presence',
+        ...properties,
+      });
+    } catch (_) {
+      // Diagnostics must never break room behavior.
+    }
+  }
+
   Future<void> connectLive({
     required String roomId,
     required String authToken,
@@ -204,6 +217,7 @@ class RoomPresenceService extends ChangeNotifier {
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
     _liveReconnectDelaySeconds = 2;
+    liveReconnecting = false;
     final subscription = _liveSocketSubscription;
     _liveSocketSubscription = null;
     await subscription?.cancel();
@@ -223,6 +237,8 @@ class RoomPresenceService extends ChangeNotifier {
     if (existing != null && existing.readyState == WebSocket.open) return;
 
     _liveConnecting = true;
+    liveReconnecting = true;
+    notifyListeners();
     try {
       final socketUri = apiBase.replace(
         scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
@@ -243,6 +259,13 @@ class RoomPresenceService extends ChangeNotifier {
       }
       _liveSocket = socket;
       _liveReconnectDelaySeconds = 2;
+      liveReconnecting = false;
+      lastError = null;
+      _diagnostic('room_transport_recovered', <String, Object?>{
+        'room_id': roomId,
+        'transport': 'websocket',
+      });
+      notifyListeners();
       // Protocol-level ping keeps the transport healthy without waking the
       // application presence Durable Object for recurring app messages.
       socket.pingInterval = const Duration(seconds: 20);
@@ -252,7 +275,15 @@ class RoomPresenceService extends ChangeNotifier {
         onError: (_) => _handleLiveSocketClosed(),
         cancelOnError: true,
       );
-    } catch (_) {
+    } catch (error) {
+      liveReconnecting = true;
+      lastError = error.toString();
+      _diagnostic('room_transport_failure', <String, Object?>{
+        'room_id': roomId,
+        'transport': 'websocket',
+        'error': error.toString(),
+      });
+      notifyListeners();
       _scheduleLiveReconnect();
     } finally {
       _liveConnecting = false;
@@ -338,6 +369,7 @@ class RoomPresenceService extends ChangeNotifier {
       final before = _visibleStateSignature();
       _apply(Map<String, dynamic>.from(data));
       connected = true;
+      liveReconnecting = false;
       lastError = null;
       if (before != _visibleStateSignature()) {
         notifyListeners();
@@ -348,6 +380,14 @@ class RoomPresenceService extends ChangeNotifier {
   void _handleLiveSocketClosed() {
     _liveSocket = null;
     _liveSocketSubscription = null;
+    if (_liveWanted) {
+      liveReconnecting = true;
+      _diagnostic('room_transport_disconnected', <String, Object?>{
+        'room_id': _liveRoomId ?? '',
+        'transport': 'websocket',
+      });
+      notifyListeners();
+    }
     _scheduleLiveReconnect();
   }
 
@@ -967,8 +1007,15 @@ class RoomPresenceService extends ChangeNotifier {
       connected = true;
       lastError = null;
     } catch (error) {
-      connected = false;
+      // A failed HTTP refresh must not evict an otherwise-live room session.
+      // Keep the last known members/seat state while realtime reconnects.
+      connected = liveConnected || connected;
+      liveReconnecting = !liveConnected;
       lastError = error.toString();
+      _diagnostic('room_presence_refresh_failure', <String, Object?>{
+        'room_id': roomId,
+        'error': error.toString(),
+      });
     }
     notifyListeners();
   }
@@ -1062,7 +1109,14 @@ class RoomPresenceService extends ChangeNotifier {
         }
 
         connected = false;
+        liveReconnecting = true;
         lastError = error.toString();
+        _diagnostic('room_presence_request_failure', <String, Object?>{
+          'room_id': roomId,
+          'path': path,
+          'attempt': attempt + 1,
+          'error': error.toString(),
+        });
         notifyListeners();
         rethrow;
       }
