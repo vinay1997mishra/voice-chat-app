@@ -59,8 +59,8 @@ assert.match(
 );
 assert.match(
   mine,
-  /_role == 'host'[\s\S]{0,250}settlementTransfers/,
-  "Only Host panel should load Host settlement transfer history",
+  /settlementTransfers\([\s\S]{0,180}senderRole: _role/,
+  "Host, Agency and BD panels must load only their own role-scoped transfer history",
 );
 assert.match(
   mine,
