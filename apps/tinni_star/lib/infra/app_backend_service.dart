@@ -634,35 +634,12 @@ class AppBackendService {
     String token, {
     int limit = 100,
   }) async {
-    final base = apiBase.replace(path: '/family/list');
-    final uri = base.replace(
+    final data = await _request(
+      'GET',
+      '/family/list',
+      token,
       queryParameters: <String, String>{'limit': limit.toString()},
     );
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    Map<String, dynamic> data = <String, dynamic>{};
-    if (text.trim().isNotEmpty) {
-      try {
-        data = _map(jsonDecode(text));
-      } on FormatException {
-        final responseBody = text.trim();
-        if (responseBody.contains('error code: 1101')) {
-          throw StateError(
-            'Tinni Star server is temporarily unavailable (1101). Please pull to retry.',
-          );
-        }
-        throw StateError(
-          'Tinni Star server returned an invalid Family response.',
-        );
-      }
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load Families');
-    }
     final raw = data['families'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
@@ -906,20 +883,12 @@ class AppBackendService {
     String token, {
     int limit = 100,
   }) async {
-    final base = apiBase.replace(path: '/cp/ranking');
-    final uri = base.replace(
+    final data = await _request(
+      'GET',
+      '/cp/ranking',
+      token,
       queryParameters: <String, String>{'limit': limit.toString()},
     );
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load CP ranking');
-    }
     final raw = data['ranking'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
@@ -1276,34 +1245,22 @@ class AppBackendService {
     return _request('POST', '/unique-ids/purchase', token, body: {'public_id': publicId});
   }
 
-  Future<List<Map<String, dynamic>>> storeCatalog(String token, String kind, {String country = ''}) async {
-    final base = apiBase.replace(path: '/store/catalog');
-    final uri = base.replace(queryParameters: {'kind': kind, if (country.isNotEmpty) 'country': country});
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    Map<String, dynamic> data = <String, dynamic>{};
-    if (text.trim().isNotEmpty) {
-      try {
-        data = _map(jsonDecode(text));
-      } on FormatException {
-        final body = text.trim();
-        if (body.contains('error code: 1101')) {
-          throw StateError(
-            'Tinni Star server is temporarily unavailable (1101). Please retry.',
-          );
-        }
-        throw StateError('Store server returned an invalid response.');
-      }
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load store');
-    }
+  Future<List<Map<String, dynamic>>> storeCatalog(
+    String token,
+    String kind, {
+    String country = '',
+  }) async {
+    final data = await _request(
+      'GET',
+      '/store/catalog',
+      token,
+      queryParameters: <String, String>{
+        'kind': kind,
+        if (country.isNotEmpty) 'country': country,
+      },
+    );
     final raw = data['items'];
-    if (raw is! List) return const [];
+    if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
   }
 
@@ -1424,70 +1381,98 @@ class AppBackendService {
   }) async {
     if (token.trim().isEmpty) throw StateError('Login session is required');
 
-    try {
-      final uri = apiBase.replace(
-        path: path,
-        queryParameters: queryParameters,
-      );
-      final verb = method.trim().toUpperCase();
-      late final HttpClientRequest request;
-      switch (verb) {
-        case 'POST':
-          request = await _httpClient.postUrl(uri);
-          break;
-        case 'PATCH':
-          request = await _httpClient.patchUrl(uri);
-          break;
-        case 'PUT':
-          request = await _httpClient.putUrl(uri);
-          break;
-        case 'DELETE':
-          request = await _httpClient.deleteUrl(uri);
-          break;
-        default:
-          request = await _httpClient.getUrl(uri);
-      }
+    final uri = apiBase.replace(
+      path: path,
+      queryParameters: queryParameters,
+    );
+    final verb = method.trim().toUpperCase();
+    final maxAttempts = verb == 'GET' ? 3 : 1;
 
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (body != null) {
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode(body));
-      }
+    for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        late final HttpClientRequest request;
+        switch (verb) {
+          case 'POST':
+            request = await _httpClient.postUrl(uri);
+            break;
+          case 'PATCH':
+            request = await _httpClient.patchUrl(uri);
+            break;
+          case 'PUT':
+            request = await _httpClient.putUrl(uri);
+            break;
+          case 'DELETE':
+            request = await _httpClient.deleteUrl(uri);
+            break;
+          default:
+            request = await _httpClient.getUrl(uri);
+        }
 
-      final response = await request.close().timeout(
-        const Duration(seconds: 20),
-      );
-      final text = await utf8.decoder.bind(response).join();
-      Map<String, dynamic> data = <String, dynamic>{};
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+        request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        if (body != null) {
+          request.headers.contentType = ContentType.json;
+          request.write(jsonEncode(body));
+        }
 
-      if (text.trim().isNotEmpty) {
-        try {
-          data = _map(jsonDecode(text));
-        } on FormatException {
-          final rawBody = text.trim().toLowerCase();
-          if (rawBody.contains('error code: 1101')) {
+        final response = await request.close().timeout(
+          const Duration(seconds: 20),
+        );
+        final text = await utf8.decoder.bind(response).join();
+        Map<String, dynamic> data = <String, dynamic>{};
+
+        if (text.trim().isNotEmpty) {
+          try {
+            data = _map(jsonDecode(text));
+          } on FormatException {
+            final rawBody = text.trim().toLowerCase();
+            if (rawBody.contains('error code: 1101')) {
+              throw StateError(
+                'Tinni Star server is temporarily unavailable. Please retry.',
+              );
+            }
             throw StateError(
-              'Tinni Star server is temporarily unavailable. Please retry.',
+              'Tinni Star server returned an invalid response. Please retry.',
             );
           }
-          throw StateError(
-            'Tinni Star server returned an invalid response. Please retry.',
-          );
         }
-      }
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final message = data['error']?.toString() ?? 'Server request failed';
-        throw StateError(userSafeError(StateError(message)));
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          final message = data['error']?.toString() ?? 'Server request failed';
+          final safe = userSafeError(StateError(message));
+          final retryableStatus = response.statusCode >= 500;
+          if (retryableStatus && attempt + 1 < maxAttempts) {
+            await Future<void>.delayed(
+              Duration(milliseconds: attempt == 0 ? 300 : 900),
+            );
+            continue;
+          }
+          throw StateError(safe);
+        }
+        return data;
+      } catch (error) {
+        final safe = userSafeError(error);
+        final lower = safe.toLowerCase();
+        final retryableRead = verb == 'GET' &&
+            (lower.contains('temporarily unavailable') ||
+             lower.contains('invalid response') ||
+             lower.contains('network') ||
+             lower.contains('timed out') ||
+             lower.contains('connection'));
+        if (retryableRead && attempt + 1 < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 0 ? 300 : 900),
+          );
+          continue;
+        }
+        throw StateError(safe);
       }
-      return data;
-    } on StateError {
-      rethrow;
-    } catch (error) {
-      throw StateError(userSafeError(error));
     }
+
+    throw StateError(
+      'Tinni Star server is temporarily unavailable. Please retry.',
+    );
   }
 
   RemoteCp? _cp(dynamic value) {
