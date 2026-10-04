@@ -1360,7 +1360,8 @@ function publicLegalPage(title, bodyHtml) {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
 
     if (url.pathname === "/privacy" && request.method === "GET") {
@@ -1412,6 +1413,26 @@ export default {
         message: "Tinni Star API online",
         version: "1.6.0",
       });
+    }
+
+    if (url.pathname === "/health/deep" && request.method === "GET") {
+      try {
+        const rooms = await getAppDirectoryStore(env).listRooms();
+        return json({
+          ok: true,
+          service: "tinni-star-api",
+          app_directory: "ok",
+          room_count: Array.isArray(rooms) ? rooms.length : 0,
+        });
+      } catch (error) {
+        console.error("Tinni Star deep health failed", error);
+        return json({
+          ok: false,
+          service: "tinni-star-api",
+          app_directory: "unavailable",
+          error: "Backend storage is temporarily unavailable",
+        }, 503);
+      }
     }
 
     if (url.pathname === "/auth-config" && request.method === "GET") {
@@ -6340,5 +6361,12 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+    } catch (error) {
+      console.error("Tinni Star unhandled request error", error);
+      return json({
+        ok: false,
+        error: "Tinni Star server is temporarily unavailable. Please retry.",
+      }, 500);
+    }
   },
 };
