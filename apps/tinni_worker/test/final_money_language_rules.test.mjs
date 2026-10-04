@@ -64,7 +64,7 @@ assert.match(
 );
 assert.match(
   mine,
-  /Host sent \/ withdrawn dollars/,
+  /Host sent \/ withdrawn dollar history/,
   "Host Panel must label Host dollar history explicitly",
 );
 assert.match(
