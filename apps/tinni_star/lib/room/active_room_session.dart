@@ -602,6 +602,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
   void _schedulePresenceRecovery({bool immediate = false}) {
     if (_disposed ||
+        !enablePresenceFallbackTimer ||
         _presenceRecoveryTimer != null ||
         _presenceRecoveryRunning ||
         room == null ||
