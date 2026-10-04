@@ -13,6 +13,7 @@ void main() {
       runtime: FunctionPackRuntime(
         signatureVerifier: const DevelopmentSignatureVerifier(),
       ),
+      roomPresenceFallbackTimerEnabled: false,
     );
     final account = attachTestAccount(state);
     state.discovery.rooms.add(
