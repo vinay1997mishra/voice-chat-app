@@ -6,7 +6,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../app/tinni_state.dart';
 import '../i18n/tinni_localization.dart';
 import '../auth/app_auth_api.dart';
-import '../i18n/tinni_localization.dart';
 import 'login_screen.dart';
 
 const _mineBg = Color(0xFF030201);
