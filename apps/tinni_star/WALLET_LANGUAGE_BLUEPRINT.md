@@ -17,20 +17,23 @@ This file is a locked regression contract. Future updates must preserve these ru
 - Diamonds shows current diamonds, Convert and permanent conversion history.
 - Wallet histories are backend/database records, not temporary local-only lists.
 
-## Coin Seller / Merchant wallets
-- Zero Coin Seller balance displays as 00.
-- Role-wallet card opens a detailed wallet.
-- Detail page shows Total Coins and Total Dollars.
-- Total Dollars opens Received Dollars with sender name/ID, date/time, amount and total received.
-- Company credit/transfer and sent transactions remain permanently queryable.
+## Dollar wallets and role-wallet transfers
+- No Host, Agency, BD, Coin Seller or Merchant dollar balance is automatically converted into coins.
+- Host / Agency / BD keep earned dollars in a persistent Dollar Wallet. Tapping the dollar balance opens the Dollar Wallet with balance, transfer history and Send Dollars.
+- Host / Agency / BD Send Dollars lists active Coin Sellers and active Merchants in separate sections. Each row shows name and ID; only an active selected role-wallet can receive the transfer.
+- Host minimum dollar transfer is $2. Agency / BD minimum dollar transfer is $10.
+- Coin Seller / Merchant receive Host / Agency / BD transfers as USD in their own Dollar Wallet; receiving dollars must not change their coin balance.
+- Zero Coin Seller coin balance displays as 00.
+- Coin Seller / Merchant role-wallet detail keeps Total Coins and a separate Total Dollars / Dollar Wallet block.
+- Dollar Wallet shows current available USD, permanent received history and Send Dollars.
 - Coin Seller dollar-transfer minimum is $300.
 - Merchant dollar-transfer minimum is $1000.
-- Coin Seller may send dollars to an active Merchant or Company.
-- Merchant may send dollars to Company.
-- A successful dollar transfer immediately debits the sender so the same available dollars cannot be reused.
+- Coin Seller / Merchant may send their Dollar Wallet balance to Company or create a Cryptocurrency (USDT) payout request.
+- USDT flow stores the destination USDT address and payout status. Actual blockchain broadcast requires the configured crypto payout provider/wallet integration; the app must not falsely report an on-chain transfer before that provider confirms it.
+- A successful Company transfer immediately debits sender USD so the same dollars cannot be reused. A USDT payout request reserves/debits the requested USD and remains traceable by status.
 - Failed transfers do not debit.
-- Completed transfers are replay-safe through a unique request ID.
-- Fixed privileged-wallet value is 2,000,000 coins = $1.
+- Replay-safe transfer requests use a unique request ID.
+- Coin inventory valuation may still use 2,000,000 coins = $1 where applicable, but USD balances are independent and are never derived from or automatically converted into coin balances.
 
 ## Company dollars / Owner Master Panel
 - Company receives Coin Seller/Merchant dollar transfers into a permanent Company ledger.
