@@ -11,6 +11,7 @@ class RoomSummary {
     this.countryName,
     this.flagEmoji,
     this.locked = false,
+    this.closed = false,
     this.activity = false,
     this.seatCount = 12,
     this.partyMode = 'Friends-making Party',
@@ -43,6 +44,7 @@ class RoomSummary {
   final String? flagEmoji;
   final int online;
   final bool locked;
+  final bool closed;
   final bool activity;
   final int seatCount;
   final String partyMode;
@@ -82,6 +84,7 @@ class RoomSummary {
     String? flagEmoji,
     int? online,
     bool? locked,
+    bool? closed,
     bool? activity,
     int? seatCount,
     String? partyMode,
@@ -111,6 +114,7 @@ class RoomSummary {
         flagEmoji: flagEmoji ?? this.flagEmoji,
         online: online ?? this.online,
         locked: locked ?? this.locked,
+        closed: closed ?? this.closed,
         activity: activity ?? this.activity,
         seatCount: seatCount ?? this.seatCount,
         partyMode: partyMode ?? this.partyMode,
@@ -773,6 +777,7 @@ class DiscoveryService {
       flagEmoji: row['flag_emoji']?.toString(),
       online: _asInt(row['online'], fallback: _asInt(row['member_count'])),
       locked: row['locked'] == true,
+      closed: row['closed'] == true,
       seatCount: _asInt(row['seat_count'], fallback: 12),
       partyMode:
           row['party_mode']?.toString() ?? 'Friends-making Party',
