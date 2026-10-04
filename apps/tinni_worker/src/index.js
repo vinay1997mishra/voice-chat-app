@@ -4415,6 +4415,80 @@ export default {
       }
     }
 
+    if (url.pathname === "/room-presence/public-screen" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const actorIsOwner = String(room.owner_id) === actorId;
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      if (!actorIsOwner && !(actorIsManager && actorIsMember)) {
+        return json({
+          ok: false,
+          error: "Only room owner/admin can control Public Screen",
+        }, 403);
+      }
+
+      try {
+        return json(await store.setPublicScreenEnabled(body.enabled === true));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to update Public Screen"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/room-presence/clear-comments" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) {
+        return json({ ok: false, error: "room_id is required" }, 400);
+      }
+
+      const rooms = await getAppDirectoryStore(env).listRooms();
+      const room = rooms.find(
+        (item) => String(item.id || item.room_id || "") === roomId,
+      );
+      if (!room) return json({ ok: false, error: "Room not found" }, 404);
+
+      const store = getRoomPresenceStore(env, roomId);
+      const actorId = String(appSession.user.user_id);
+      const actorIsOwner = String(room.owner_id) === actorId;
+      const actorIsManager = await store.isManager(actorId);
+      const actorIsMember = await store.isMember(actorId);
+      if (!actorIsOwner && !(actorIsManager && actorIsMember)) {
+        return json({
+          ok: false,
+          error: "Only room owner/admin can clear comments",
+        }, 403);
+      }
+
+      try {
+        return json(await store.clearComments(actorId));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to clear comments"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/room-presence/admin" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
