@@ -1118,8 +1118,6 @@ export class AppDirectoryStore extends DurableObject {
         sender_balance_after INTEGER,
         recipient_balance_before INTEGER,
         recipient_balance_after INTEGER,
-        usdt_address TEXT,
-        status TEXT NOT NULL DEFAULT 'completed',
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_settlement_transfers_sender
@@ -1166,6 +1164,8 @@ export class AppDirectoryStore extends DurableObject {
         sender_balance_after INTEGER NOT NULL,
         recipient_balance_before INTEGER,
         recipient_balance_after INTEGER,
+        usdt_address TEXT,
+        status TEXT NOT NULL DEFAULT 'completed',
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_role_dollar_transfers_sender_time
