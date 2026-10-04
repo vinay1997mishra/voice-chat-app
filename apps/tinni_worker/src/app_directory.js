@@ -4055,6 +4055,7 @@ export class AppDirectoryStore extends DurableObject {
         };
         return this.ownerCatalogCreate(kindByAction[action], data.name, {
           asset_url: String(data.asset_url || ""),
+          vip_level: Math.max(0, Math.floor(Number(data.vip_level || 0))),
           price: Math.max(0, Number(data.price || data.coin_price || 0)),
           duration_days: Math.max(0, Number(data.duration_days || 0)),
           order: Number(data.order || 0),
@@ -10762,6 +10763,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     const now = Date.now();
     const permanent = input?.permanent === true;
+    const priceCoins = Math.max(0, Math.floor(Number(input?.price_coins || 0)));
     const rawStartsAt = input?.starts_at;
     const rawEndsAt = input?.ends_at;
     const startsAt =
@@ -10793,10 +10795,11 @@ export class AppDirectoryStore extends DurableObject {
       `INSERT INTO room_themes
         (id, name, asset, source, room_id, creator_user_id, price_coins,
          created_at, starts_at, expires_at, enabled)
-       VALUES (?, ?, ?, 'panel', NULL, NULL, 0, ?, ?, ?, 1)`,
+       VALUES (?, ?, ?, 'panel', NULL, NULL, ?, ?, ?, ?, 1)`,
       id,
       name,
       asset,
+      priceCoins,
       now,
       startsAt,
       expiresAt,
