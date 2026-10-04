@@ -753,7 +753,7 @@ Create global room theme with:
 - Add Treasury coins.
 - Send Treasury coins to Normal, Coin Seller or Merchant wallet.
 - Every movement is audit logged.
-- Base app value remains **2,000,000 coins = $1** except the locked Coin Seller settlement conversion below.
+- Base coin-inventory valuation may remain **2,000,000 coins = $1** where applicable, but USD wallets are independent and must never auto-convert to or be derived from coin balances.
 
 #### Company Dollars — Owner only
 - Persistent current Company USD balance.
@@ -771,12 +771,33 @@ Create global room theme with:
 
 Locked related rules:
 
+- **No automatic dollar-to-coin conversion for Host, Agency, BD, Coin Seller or Merchant.**
+- Host / Agency / BD earned dollars stay in their Dollar Wallet until manually sent.
+- Host / Agency / BD Dollar Wallet opens by tapping the displayed dollar balance and contains transfer history plus **Send Dollars**.
+- Host / Agency / BD recipient selector shows **Coin Sellers** and **Merchants** in separate active lists with name + ID.
+- Host / Agency / BD may send dollars only to the selected active Coin Seller or Merchant.
+- Host dollar transfer minimum: **$2**.
+- Agency / BD dollar transfer minimum: **$10**.
+- Coin Seller / Merchant receive these transfers as USD in their own Dollar Wallet; receiving dollars never credits coins automatically.
 - Coin Seller role-wallet dollar transfer minimum: **$300**.
 - Merchant role-wallet dollar transfer minimum: **$1000**.
-- Coin Seller settlement conversion: **$1 = 2,220,000 seller coins**.
-- Agency/BD earned commission remains dollars.
-- Agency/BD may transfer earned commission from **$10** to active Coin Seller/Merchant.
-- Host dollar transfer minimum: **$2**.
+- Coin Seller / Merchant may send Dollar Wallet funds to **Company** or **Cryptocurrency (USDT)**.
+- USDT records store destination address and payout status. Actual blockchain broadcast requires configured payout-provider/wallet integration and must not be represented as completed before provider confirmation.
+- Every transfer keeps sender/receiver identity and role where applicable, USD amount, exact time, transaction/reference ID and before/after balances.
+
+### Latest Dollar Wallet Flow — LOCKED
+
+This latest rule replaces every older note that automatically converted settlement dollars into Coin Seller coins.
+
+- Host, Agency, BD, Coin Seller and Merchant each keep dollars as dollars.
+- Host / Agency / BD: tap dollar balance → Dollar Wallet → Send Dollars.
+- Host / Agency / BD Dollar Wallet shows active **Coin Sellers** and **Merchants** separately, each with display name and ID.
+- Host / Agency / BD can send only to an active selected Coin Seller/Merchant.
+- Coin Seller / Merchant receives the amount into a separate USD balance, with no automatic coin credit.
+- Coin Seller / Merchant: tap Total Dollars → Dollar Wallet → Send Dollars.
+- Coin Seller / Merchant destinations: **Company** or **Cryptocurrency (USDT)**.
+- USDT screen/flow shows address input/scanner entry surface and records a payout request. On-chain execution remains pending until a configured crypto payout provider confirms it.
+- Permanent ledger fields include sender ID/type, recipient ID/type or USDT address, USD amount, timestamp, transaction/reference ID, sender balance before/after, recipient balance before/after where an internal recipient exists, and payout status for crypto.
 
 #### Wallet Security Freeze — Owner only
 - Unexpected coin credits may be quarantined and freeze affected wallet.
@@ -806,7 +827,7 @@ Current locked rules shown in panel:
 - BD target 2: **$1,000 combined agency target = 10%**.
 - Host transfer minimum: **$2**.
 - Agency/BD transfer minimum: **$10**.
-- Coin Seller settlement: **$1 = 2,220,000 seller coins**; Agency/BD commission remains dollars.
+- Coin Seller/Merchant settlement receipts remain **USD**; no automatic coin conversion occurs. Agency/BD commission also remains USD.
 - Manual Host removal/approval dates shown: **1st, 2nd, 16th, 17th**.
 - Complaint timer: **1 month**, then system auto-exit if unresolved.
 - After auto-exit: **48-hour** join-another-Agency window before configured diamond auto-exchange behavior.
