@@ -1091,7 +1091,11 @@ class AppBackendService {
     String token, {
     required String recipientUserId,
     required int usdCents,
+    String senderRole = 'host',
   }) async {
+    final role = const <String>{'host', 'agency', 'bd'}.contains(senderRole)
+        ? senderRole
+        : 'host';
     final data = await _request(
       'POST',
       '/wallet/settlement/transfer',
@@ -1099,6 +1103,7 @@ class AppBackendService {
       body: {
         'recipient_user_id': recipientUserId,
         'usd_cents': usdCents,
+        'sender_role': role,
       },
     );
     final row = _map(data['wallet']);
