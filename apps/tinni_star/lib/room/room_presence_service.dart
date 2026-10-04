@@ -164,6 +164,7 @@ class RoomPresenceService extends ChangeNotifier {
 
   bool connected = false;
   String micMode = 'apply';
+  int? seatCount;
   bool publicScreenEnabled = false;
   int commentsClearVersion = 0;
   int ownerCommentsClearVersion = 0;
@@ -462,6 +463,7 @@ class RoomPresenceService extends ChangeNotifier {
       members.clear();
       connected = false;
       micMode = 'apply';
+      seatCount = null;
       publicScreenEnabled = false;
       commentsClearVersion = 0;
       ownerCommentsClearVersion = 0;
@@ -1071,6 +1073,8 @@ class RoomPresenceService extends ChangeNotifier {
     final buffer = StringBuffer()
       ..write(micMode)
       ..write('|')
+      ..write(seatCount ?? 0)
+      ..write('|')
       ..write(publicScreenEnabled)
       ..write('|')
       ..write(commentsClearVersion)
@@ -1140,6 +1144,12 @@ class RoomPresenceService extends ChangeNotifier {
   void _apply(Map<String, dynamic> data) {
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
+    }
+    if (data.containsKey('seat_count')) {
+      final nextSeatCount = _asInt(data['seat_count']);
+      seatCount = nextSeatCount >= 8 && nextSeatCount <= 42
+          ? nextSeatCount
+          : null;
     }
     if (data.containsKey('public_screen_enabled')) {
       publicScreenEnabled = data['public_screen_enabled'] == true;
