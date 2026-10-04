@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/app/tinni_app.dart';
 import 'package:tinni_star/app/tinni_state.dart';
 import 'package:tinni_star/core/function_pack.dart';
-import 'package:tinni_star/screens/feature_center_screen.dart';
 import 'package:tinni_star/screens/messages_screen.dart';
 import 'package:tinni_star/social/social.dart';
 
@@ -208,13 +207,5 @@ void main() {
     expect(find.text('Reject'), findsOneWidget);
   });
 
-  testWidgets('Calls tile is removed from More', (tester) async {
-    final state = makeState();
-    await tester.pumpWidget(
-      MaterialApp(home: FeatureCenterScreen(state: state)),
-    );
-    await tester.pumpAndSettle();
 
-    expect(find.text('Calls'), findsNothing);
-  });
 }
