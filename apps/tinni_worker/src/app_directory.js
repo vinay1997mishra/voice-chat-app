@@ -1788,9 +1788,48 @@ export class AppDirectoryStore extends DurableObject {
       userId,
     ).toArray()[0];
 
+    const currentRoom = presence?.room_id
+      ? this.ctx.storage.sql.exec(
+          "SELECT * FROM app_rooms WHERE id = ? LIMIT 1",
+          String(presence.room_id),
+        ).toArray()[0]
+      : null;
+
+    const recentRooms = this.ctx.storage.sql.exec(
+      `SELECT rr.room_id, rr.last_entered_at,
+              r.title, r.owner_id, r.photo_data_url, r.theme_asset,
+              r.seat_count, r.party_mode, r.locked,
+              u.display_name AS owner_name
+         FROM app_recent_rooms rr
+         LEFT JOIN app_rooms r ON r.id = rr.room_id
+         LEFT JOIN app_users u ON u.user_id = r.owner_id
+        WHERE rr.user_id = ?
+        ORDER BY rr.last_entered_at DESC
+        LIMIT 50`,
+      userId,
+    ).toArray().map((item) => ({
+      room_id: String(item.room_id || ""),
+      room_name: String(item.title || item.room_id || ""),
+      owner_id: item.owner_id ? String(item.owner_id) : null,
+      owner_name: String(item.owner_name || item.owner_id || ""),
+      photo_data_url: item.photo_data_url ? String(item.photo_data_url) : null,
+      theme_asset: item.theme_asset ? String(item.theme_asset) : null,
+      seat_count: Number(item.seat_count || 0),
+      party_mode: Number(item.party_mode || 0) === 1,
+      locked: Number(item.locked || 0) === 1,
+      last_entered_at: Number(item.last_entered_at || 0),
+      is_current: Boolean(presence?.room_id) &&
+        String(presence.room_id) === String(item.room_id || ""),
+    }));
+
     return {
       user: rowToUser(row),
       owned_room: ownedRoom ? rowToRoom(ownedRoom) : null,
+      current_room: currentRoom ? {
+        ...rowToRoom(currentRoom),
+        room_id: String(currentRoom.id || presence?.room_id || ""),
+      } : null,
+      recent_rooms: recentRooms,
       controls: this._userControls(userId),
       wallet: this.getWallet(userId),
       tags: this.listUserTags(userId),
