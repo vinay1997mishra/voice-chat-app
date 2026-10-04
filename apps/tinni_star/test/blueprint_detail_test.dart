@@ -188,11 +188,13 @@ void main() {
   test('ktv detail service supports local scan and repeat', () {
     final ktv = KtvService();
     final features = KtvFeatureService(ktv);
-    features.scanLocalSongs(
-      const [Song(id: 'local1', title: 'Local', singer: 'Singer', local: true)],
+    final local = ktv.addLocalSong(
+      fileName: 'Local.mp3',
+      sourcePath: '/phone/Music/Local.mp3',
     );
+    features.scanLocalSongs([local]);
     expect(features.localSongs.length, 1);
-    ktv.addToQueue(ktv.library.first, '1');
+    ktv.addToQueue(local, '1');
     ktv.startNext();
     features.repeatMode = KtvRepeatMode.singleCycle;
     features.finishCurrent();
