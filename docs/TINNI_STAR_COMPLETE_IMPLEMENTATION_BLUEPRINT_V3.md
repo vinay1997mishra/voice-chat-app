@@ -367,3 +367,15 @@ For every future intentional feature/layout change:
 - User Wallet opens permanent **Coins History**, **Diamonds / conversion history**, **Coin Seller/Merchant wallet details**, **Received Dollars** and sent-dollar history through Worker APIs.
 - Dollar transfer ledger is replay-safe through unique request IDs. Coin Seller dollar-transfer minimum remains **$300** and Merchant remains **$1000** for their role-wallet transfer flow.
 - Latest settlement lock remains unchanged: Agency/BD transfer minimum **$10**; Coin Seller settlement receipts convert immediately at **$1 = 2,220,000 seller coins**; Agency/BD commission remains dollars.
+
+
+## Empty-Seat Invite Flow — LOCKED
+
+- Tapping an **empty seat** as Room Owner/Admin opens the seat controls and must include an **Invite** action in addition to the existing seat controls.
+- Tapping **Invite** opens a dedicated invite panel locked to the exact tapped seat number. The invite cannot silently move to or target a different seat.
+- The invite panel lists only users/admins who are **currently present inside that same room** and **not currently sitting on any seat**. Users outside the room and already-seated members must never appear in this panel.
+- The current Owner/Admin who opened the panel is excluded from the invite candidate list; their own seat action remains **Take Seat**.
+- The invite panel includes **ID-number search**. Search results are filtered only from the eligible in-room, off-seat candidate set; an ID that is not currently inside the room must not appear or become inviteable through search.
+- Selecting a candidate sends the seat invite for the **same tapped seat only**. The backend remains authoritative and must reject the invite if the target left the room, took another seat, the selected seat became occupied, or the selected seat became locked before acceptance.
+- The invited member receives an on-screen confirmation dialog identifying the inviter role and exact seat: **“Owner invites you to Seat No. X.”** or **“Admin invites you to Seat No. X.”**, with Accept and Decline actions.
+- Accept places that member on the invited seat only; Decline keeps them in the audience. This flow must not be replaced by a generic room-user search or by an invite that can target users outside the room.
