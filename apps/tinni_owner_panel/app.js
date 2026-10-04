@@ -392,6 +392,9 @@ const actionPermission = {
   "lucky-gift-config": "gifts.edit",
   "entry-new": "assets.entries",
   "profile-card-new": "assets.frames",
+  "ring-new": "assets.frames",
+  "bubble-new": "assets.frames",
+  "profile-background-new": "assets.frames",
   "frame-new": "assets.frames",
   "banner-new": "banners.create",
   "game-switch": "games.toggle",
@@ -414,7 +417,9 @@ function catalogPermission(item, operation) {
   const kind = String(item?.kind || "");
   if (kind === "vip") return operation === "toggle" ? "vip.toggle" : "vip.edit";
   if (kind === "gift") return operation === "remove" ? "gifts.remove" : "gifts.edit";
-  if (kind === "entry" || kind === "vehicle" || kind === "frame" || kind === "profile_card") return (kind === "entry" || kind === "vehicle") ? "assets.entries" : "assets.frames";
+  if (["entry", "vehicle", "frame", "profile_card", "ring", "bubble", "profile_background"].includes(kind)) {
+    return (kind === "entry" || kind === "vehicle") ? "assets.entries" : "assets.frames";
+  }
   if (kind === "banner") return operation === "remove" ? "banners.remove" : "banners.create";
   return "roles.manage";
 }
@@ -567,7 +572,7 @@ async function loadRoomThemes() {
       return `
         <button type="button" data-room-theme-remove="${escapeHtml(theme.id)}">
           <strong>${escapeHtml(theme.name)}</strong>
-          <span>Free global theme • ${escapeHtml(timing)} • tap to remove</span>
+          <span>${Number(theme.price_coins || 0) > 0 ? fmt(theme.price_coins) + " coins" : "Free"} global theme • ${escapeHtml(timing)} • tap to remove</span>
         </button>
       `;
     }).join('');
@@ -1239,6 +1244,113 @@ function ownerFullMessageRows(messages) {
     : '<div class="empty-state">No stored Tinni messages.</div>';
 }
 
+
+async function loadOwnerInbox(userId) {
+  const browser = document.getElementById("ownerInboxBrowser");
+  if (!browser || currentSession?.role !== "owner") return;
+  browser.hidden = false;
+  browser.innerHTML = '<div class="empty-state">Loading complete inbox…</div>';
+  browser.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  try {
+    const data = await api("/api/owner/user-inbox?user_id=" + encodeURIComponent(String(userId || "")));
+    const threads = Array.isArray(data.threads) ? data.threads : [];
+    const target = data.user || {};
+    browser.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h3>${escapeHtml(target.display_name || target.user_id || "User")} — Friend Inbox</h3>
+          <p>ID ${escapeHtml(target.user_id || userId)} • ${threads.length} conversations</p>
+        </div>
+        <button type="button" class="btn secondary" data-owner-close-inbox>Close Inbox</button>
+      </div>
+      <div class="owner-thread-list">
+        ${threads.length ? threads.map((thread) => `
+          <button type="button" class="owner-thread-row"
+            data-owner-open-thread
+            data-owner-user-id="${escapeHtml(target.user_id || userId)}"
+            data-peer-user-id="${escapeHtml(thread.user_id)}"
+            data-peer-name="${escapeHtml(thread.display_name || thread.user_id)}">
+            <div class="owner-thread-avatar">
+              ${thread.avatar_data_url
+                ? `<img src="${escapeHtml(thread.avatar_data_url)}" alt="">`
+                : '<span>◎</span>'}
+            </div>
+            <div class="owner-thread-copy">
+              <strong>${escapeHtml(thread.display_name || thread.user_id)}</strong>
+              <small>ID ${escapeHtml(thread.user_id)}${thread.is_friend ? " • Friend" : ""}</small>
+              <span>${escapeHtml(thread.last_message?.text || "No messages yet")}</span>
+            </div>
+            <div class="owner-thread-meta">
+              <b>${fmt(thread.message_count || 0)}</b>
+              <small>${thread.last_message?.created_at ? escapeHtml(formatFullTimestamp(thread.last_message.created_at)) : ""}</small>
+            </div>
+          </button>
+        `).join("") : '<div class="empty-state">No friend or message conversations found.</div>'}
+      </div>
+    `;
+  } catch (error) {
+    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load inbox.")}</div>`;
+  }
+}
+
+async function loadOwnerConversation(userId, peerUserId, peerName = "") {
+  const browser = document.getElementById("ownerInboxBrowser");
+  if (!browser || currentSession?.role !== "owner") return;
+  browser.hidden = false;
+  browser.innerHTML = '<div class="empty-state">Loading conversation…</div>';
+
+  try {
+    const data = await api(
+      "/api/owner/user-conversation?user_id=" + encodeURIComponent(String(userId || "")) +
+      "&peer_user_id=" + encodeURIComponent(String(peerUserId || "")) +
+      "&limit=1000"
+    );
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const target = data.user || {};
+    const peer = data.peer || {};
+    const targetId = String(target.user_id || userId);
+    const peerId = String(peer.user_id || peerUserId);
+    browser.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h3>${escapeHtml(target.display_name || targetId)} ↔ ${escapeHtml(peer.display_name || peerName || peerId)}</h3>
+          <p>ID ${escapeHtml(targetId)} ↔ ID ${escapeHtml(peerId)} • ${messages.length} messages</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn secondary" data-owner-back-inbox="${escapeHtml(targetId)}">Back to Inbox</button>
+          <button type="button" class="btn secondary" data-owner-close-inbox>Close</button>
+        </div>
+      </div>
+      <div class="owner-conversation-list">
+        ${messages.length ? messages.map((message) => {
+          const fromTarget = String(message.from) === targetId;
+          const senderName = fromTarget
+            ? (target.display_name || targetId)
+            : (peer.display_name || peerId);
+          return `
+            <div class="owner-message-row ${fromTarget ? "from-target" : "from-peer"}">
+              <strong>${escapeHtml(senderName)} <small>ID ${escapeHtml(message.from)}</small></strong>
+              <span>${escapeHtml(message.text)}</span>
+              <small>${escapeHtml(formatFullTimestamp(message.created_at))}${message.seen_at ? " • Seen" : ""}</small>
+            </div>
+          `;
+        }).join("") : '<div class="empty-state">No messages in this conversation.</div>'}
+      </div>
+      <div class="owner-full-message-box owner-thread-official-reply">
+        <textarea id="ownerConversationOfficialText" maxlength="2000" placeholder="Reply to this ID as Tinni Official…"></textarea>
+        <button type="button" class="btn primary"
+          data-owner-conversation-reply
+          data-owner-user-id="${escapeHtml(targetId)}"
+          data-peer-user-id="${escapeHtml(peerId)}"
+          data-peer-name="${escapeHtml(peer.display_name || peerName || peerId)}">Send Tinni Official Reply</button>
+      </div>
+    `;
+  } catch (error) {
+    browser.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load conversation.")}</div>`;
+  }
+}
+
 function hierarchyRangeBounds(keyValue, customFromValue = "", customToValue = "") {
   const key = String(keyValue || "15d");
   const now = new Date();
@@ -1735,7 +1847,12 @@ async function openOwnerFullDashboard(userId) {
             <textarea id="ownerFullMessageText" maxlength="2000" placeholder="Send as Tinni Official to this ID…"></textarea>
             <button type="button" class="btn primary" data-full-owner-message-send>Send Tinni Official Message</button>
           </div>` : ""}
+        ${currentSession?.role === "owner" ? `
+          <div class="button-row" style="margin-top:10px">
+            <button type="button" class="btn secondary" data-owner-open-inbox="${escapeHtml(ownerFullDashboardUserId)}">Open Friend Inbox / Conversations</button>
+          </div>` : ""}
         <div class="owner-history-list" style="margin-top:10px">${ownerFullMessageRows(messages)}</div>
+        <section id="ownerInboxBrowser" class="panel owner-inbox-browser" hidden></section>
       `,
       String(messages.length),
     );
@@ -2285,6 +2402,10 @@ function renderCatalogList(rootId, kind, emptyText) {
 function renderOwnerCatalogs() {
   renderCatalogList("giftCatalogList", "gift", "No gifts added from Owner Panel yet.");
   renderCatalogList("entryCatalogList", "entry", "No entry effects added yet.");
+  renderCatalogList("profileCardCatalogList", "profile_card", "No profile cards added yet.");
+  renderCatalogList("ringCatalogList", "ring", "No rings added yet.");
+  renderCatalogList("bubbleCatalogList", "bubble", "No chat bubbles added yet.");
+  renderCatalogList("profileBackgroundCatalogList", "profile_background", "No profile backgrounds added yet.");
   renderCatalogList("frameCatalogList", "frame", "No frames added yet.");
   renderCatalogList("bannerCatalogList", "banner", "No banners added yet.");
 }
@@ -2441,7 +2562,10 @@ function openAction(action, preset = {}) {
         }))
     ],
     "profile-card-new": ["Add Profile Card", field("name","Profile card name") + field("asset_url","Profile card asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
-    "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "entry-new": ["Add Entry Effect", field("name","Entry name") + field("asset_url","Vehicle/animal/3D asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level (0 = none)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "ring-new": ["Add Ring", field("name","Ring name") + field("asset_url","Ring asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "bubble-new": ["Add Chat Bubble", field("name","Bubble name") + field("asset_url","Bubble asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
+    "profile-background-new": ["Add Profile Background", field("name","Background name") + field("asset_url","Profile background asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
     "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
@@ -2748,9 +2872,10 @@ async function handleAction(action, data) {
       endsAt = endDate.getTime();
       if (endsAt <= startsAt) throw new Error("End date/time must be after start date/time.");
     }
+    const priceCoins = Math.max(0, Math.floor(Number(data.price_coins || 0)));
     await api("/api/room-themes", {
       method: "POST",
-      body: JSON.stringify({ name, asset, permanent, starts_at: startsAt, ends_at: endsAt }),
+      body: JSON.stringify({ name, asset, price_coins: priceCoins, permanent, starts_at: startsAt, ends_at: endsAt }),
     });
     toast(permanent ? "Permanent room theme added." : "Scheduled room theme added.");
     await loadRoomThemes();
@@ -2842,9 +2967,15 @@ async function handleAction(action, data) {
     delete payload.rank_share_2;
     delete payload.rank_share_3;
   }
-  if (["gift-new","entry-new","frame-new","banner-new"].includes(action)) {
+  if (["gift-new","entry-new","profile-card-new","ring-new","bubble-new","profile-background-new","frame-new","banner-new"].includes(action)) {
     payload.order = Number(data.order || 0);
-    if (action === "frame-new") payload.price = Math.max(0, Number(data.price || 0));
+    if (["entry-new","profile-card-new","ring-new","bubble-new","profile-background-new","frame-new"].includes(action)) {
+      payload.price = Math.max(0, Number(data.price || 0));
+      payload.duration_days = Math.max(0, Number(data.duration_days || 0));
+    }
+    if (action === "entry-new" || action === "frame-new") {
+      payload.vip_level = Math.max(0, Math.floor(Number(data.vip_level || 0)));
+    }
     if (action === "gift-new") {
       payload.coin_price = Math.max(0, Number(data.coin_price || 0));
       payload.lucky = String(data.lucky || "") === "true";
@@ -3249,6 +3380,70 @@ document.body.addEventListener("click", async e => {
       });
       toast("Agency removed from BD.");
       await openOwnerHierarchyDashboard(ownerHierarchyUserId, ownerHierarchyRole, ownerHierarchyRange);
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+
+
+  const openInboxButton = e.target.closest("[data-owner-open-inbox]");
+  if (openInboxButton) {
+    await loadOwnerInbox(openInboxButton.dataset.ownerOpenInbox);
+    return;
+  }
+
+  const closeInboxButton = e.target.closest("[data-owner-close-inbox]");
+  if (closeInboxButton) {
+    const browser = document.getElementById("ownerInboxBrowser");
+    if (browser) {
+      browser.hidden = true;
+      browser.innerHTML = "";
+    }
+    return;
+  }
+
+  const backInboxButton = e.target.closest("[data-owner-back-inbox]");
+  if (backInboxButton) {
+    await loadOwnerInbox(backInboxButton.dataset.ownerBackInbox);
+    return;
+  }
+
+  const threadButton = e.target.closest("[data-owner-open-thread]");
+  if (threadButton) {
+    await loadOwnerConversation(
+      threadButton.dataset.ownerUserId,
+      threadButton.dataset.peerUserId,
+      threadButton.dataset.peerName || "",
+    );
+    return;
+  }
+
+  const conversationReplyButton = e.target.closest("[data-owner-conversation-reply]");
+  if (conversationReplyButton) {
+    const textValue = String(document.getElementById("ownerConversationOfficialText")?.value || "").trim();
+    if (!textValue) {
+      toast("Write an Official reply first.");
+      return;
+    }
+    const targetId = String(conversationReplyButton.dataset.ownerUserId || "");
+    const peerId = String(conversationReplyButton.dataset.peerUserId || "");
+    try {
+      await api("/api/owner/official-message", {
+        method: "POST",
+        body: JSON.stringify({
+          target_user_id: targetId,
+          message: textValue,
+          recipient_kind: "friend_conversation_review",
+          context_peer_user_id: peerId,
+        }),
+      });
+      toast("Tinni Official reply sent.");
+      await loadOwnerConversation(
+        targetId,
+        peerId,
+        conversationReplyButton.dataset.peerName || "",
+      );
     } catch (error) {
       toast(error.message);
     }
