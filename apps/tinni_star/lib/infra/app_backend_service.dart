@@ -1019,6 +1019,7 @@ class AppBackendService {
     required String walletType,
     required String destinationType,
     String? recipientUserId,
+    String? usdtAddress,
     required int usdCents,
     required String password,
     required String requestId,
@@ -1031,6 +1032,7 @@ class AppBackendService {
         'wallet_type': walletType,
         'destination_type': destinationType,
         'recipient_user_id': recipientUserId,
+        'usdt_address': usdtAddress,
         'usd_cents': usdCents,
         'password': password,
         'request_id': requestId,
@@ -1046,12 +1048,46 @@ class AppBackendService {
     return raw.map(_map).toList(growable: false);
   }
 
+  Future<Map<String, List<SettlementRecipient>>> settlementRecipients(
+    String token, {
+    String query = '',
+  }) async {
+    final data = await _request(
+      'GET',
+      '/wallet/settlement/recipients',
+      token,
+      queryParameters: <String, String>{if (query.trim().isNotEmpty) 'q': query.trim()},
+    );
+
+    List<SettlementRecipient> parse(dynamic raw) {
+      if (raw is! List) return const <SettlementRecipient>[];
+      return raw.whereType<Map>().map((item) {
+        final row = _map(item);
+        return SettlementRecipient(
+          userId: row['user_id']?.toString() ?? '',
+          displayName: row['display_name']?.toString() ?? '',
+          role: row['role']?.toString() ?? '',
+          avatarDataUrl: row['avatar_data_url']?.toString(),
+        );
+      }).where((item) => item.userId.isNotEmpty).toList(growable: false);
+    }
+
+    return <String, List<SettlementRecipient>>{
+      'coin_sellers': parse(data['coin_sellers']),
+      'merchants': parse(data['merchants']),
+    };
+  }
+
   Future<SettlementRecipient> settlementRecipient(
     String token,
-    String userId,
-  ) async {
+    String userId, {
+    String role = '',
+  }) async {
     final base = apiBase.replace(path: '/wallet/settlement/recipient');
-    final uri = base.replace(queryParameters: {'user_id': userId});
+    final uri = base.replace(queryParameters: <String, String>{
+      'user_id': userId,
+      if (role.trim().isNotEmpty) 'role': role.trim(),
+    });
     if (token.trim().isEmpty) throw StateError('Login session is required');
     final request = await _httpClient.getUrl(uri);
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
@@ -1074,6 +1110,7 @@ class AppBackendService {
   Future<RemoteWallet> transferSettlement(
     String token, {
     required String recipientUserId,
+    required String recipientRole,
     required int usdCents,
     String senderRole = 'host',
   }) async {
@@ -1086,6 +1123,7 @@ class AppBackendService {
       token,
       body: {
         'recipient_user_id': recipientUserId,
+        'recipient_role': recipientRole,
         'usd_cents': usdCents,
         'sender_role': role,
       },
