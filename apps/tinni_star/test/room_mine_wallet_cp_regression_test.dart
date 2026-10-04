@@ -139,6 +139,8 @@ void main() {
 
   test('empty seat invite is locked to in-room off-seat IDs', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
     final session =
         File('lib/room/active_room_session.dart').readAsStringSync();
     final presenceWorker =
