@@ -148,6 +148,8 @@ class RoomPresenceService extends ChangeNotifier {
 
   bool connected = false;
   String micMode = 'apply';
+  bool publicScreenEnabled = false;
+  int commentsClearVersion = 0;
   bool selfMicMuted = false;
   bool selfChatBanned = false;
   bool selfSeatForced = false;
@@ -395,6 +397,8 @@ class RoomPresenceService extends ChangeNotifier {
       members.clear();
       connected = false;
       micMode = 'apply';
+      publicScreenEnabled = false;
+      commentsClearVersion = 0;
       selfMicMuted = false;
       selfChatBanned = false;
       selfSeatForced = false;
@@ -489,6 +493,46 @@ class RoomPresenceService extends ChangeNotifier {
       applyResponse: false,
     );
     this.micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
+    notifyListeners();
+  }
+
+  Future<void> setPublicScreenEnabled({
+    required String roomId,
+    required String authToken,
+    required bool enabled,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/public-screen',
+      authToken,
+      <String, Object>{
+        'room_id': roomId,
+        'enabled': enabled,
+      },
+      applyResponse: false,
+    );
+    publicScreenEnabled = data['public_screen_enabled'] == true;
+    if (data.containsKey('comments_clear_version')) {
+      commentsClearVersion = _asInt(data['comments_clear_version']);
+    }
+    notifyListeners();
+  }
+
+  Future<void> clearComments({
+    required String roomId,
+    required String authToken,
+  }) async {
+    final data = await _commandPost(
+      '/room-presence/clear-comments',
+      authToken,
+      <String, Object>{'room_id': roomId},
+      applyResponse: false,
+    );
+    if (data.containsKey('comments_clear_version')) {
+      commentsClearVersion = _asInt(data['comments_clear_version']);
+    }
+    if (data.containsKey('public_screen_enabled')) {
+      publicScreenEnabled = data['public_screen_enabled'] == true;
+    }
     notifyListeners();
   }
 
@@ -917,6 +961,10 @@ class RoomPresenceService extends ChangeNotifier {
     final buffer = StringBuffer()
       ..write(micMode)
       ..write('|')
+      ..write(publicScreenEnabled)
+      ..write('|')
+      ..write(commentsClearVersion)
+      ..write('|')
       ..write(selfMicMuted)
       ..write('|')
       ..write(selfChatBanned)
@@ -972,6 +1020,15 @@ class RoomPresenceService extends ChangeNotifier {
   void _apply(Map<String, dynamic> data) {
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
+    }
+    if (data.containsKey('public_screen_enabled')) {
+      publicScreenEnabled = data['public_screen_enabled'] == true;
+    }
+    if (data.containsKey('comments_clear_version')) {
+      commentsClearVersion = math.max(
+        0,
+        _asInt(data['comments_clear_version']),
+      );
     }
 
     if (data.containsKey('self_mic_muted')) {
