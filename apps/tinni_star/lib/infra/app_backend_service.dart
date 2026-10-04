@@ -1260,24 +1260,6 @@ class AppBackendService {
     return List.unmodifiable(items);
   }
 
-  Map<String, dynamic> _decodeJsonText(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return <String, dynamic>{};
-    try {
-      return _map(jsonDecode(trimmed));
-    } on FormatException {
-      final lower = trimmed.toLowerCase();
-      if (lower.contains('error code: 1101')) {
-        throw StateError(
-          'Tinni Star server is temporarily unavailable. Please retry.',
-        );
-      }
-      throw StateError(
-        'Tinni Star server returned an invalid response. Please retry.',
-      );
-    }
-  }
-
   Future<Map<String, dynamic>> _request(
     String method,
     String path,
