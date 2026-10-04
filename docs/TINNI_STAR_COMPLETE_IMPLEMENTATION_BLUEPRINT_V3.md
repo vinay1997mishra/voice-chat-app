@@ -380,3 +380,13 @@ For every future intentional feature/layout change:
 - Seat invites are delivered **immediately through the live room presence socket**. On Accept, the backend re-validates that the target is still inside the room, still off-seat, and that the exact invited seat is still unlocked, unoccupied and inside the room's current seat-count range; self-invites and out-of-range seat invites are rejected server-side.
 - The invited member receives an on-screen confirmation dialog identifying the inviter role and exact seat: **“Owner invites you to Seat No. X.”** or **“Admin invites you to Seat No. X.”**, with Accept and Decline actions.
 - Accept places that member on the invited seat only; Decline keeps them in the audience. This flow must not be replaced by a generic room-user search or by an invite that can target users outside the room.
+
+
+## Room Session Availability — LOCKED
+
+- Room backend/presence authentication is independent from microphone permission and LiveKit voice connectivity.
+- Entering a room must activate the server-authoritative room session first so seats, invites, chat, gifts, moderation, Public Screen and other non-voice room controls remain usable even when microphone permission is denied or LiveKit is temporarily unavailable.
+- A failed/partial room session must never be resumed as if healthy. Re-entering the same room must reconnect the backend session whenever its authenticated room session is inactive.
+- Microphone permission failure may disable voice only; it must not produce a dead room where non-voice actions return `Room session is not active`.
+- LiveKit failure may report voice unavailable, but must not tear down room presence/auth or disable the rest of the room.
+- All app built-in room themes, including the full `mood-*` set exposed by the client, are backend-recognized built-ins and must not be rejected as unavailable/expired.
