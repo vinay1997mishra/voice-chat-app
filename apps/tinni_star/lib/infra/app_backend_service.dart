@@ -226,20 +226,12 @@ class AppBackendService {
     String token, {
     int limit = 40,
   }) async {
-    final base = apiBase.replace(path: '/profile/trends');
-    final uri = base.replace(
+    final data = await _request(
+      'GET',
+      '/profile/trends',
+      token,
       queryParameters: <String, String>{'limit': limit.toString()},
     );
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load Trends');
-    }
     final raw = data['trends'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
@@ -312,24 +304,16 @@ class AppBackendService {
     required int fromMs,
     required int toMs,
   }) async {
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final uri = apiBase.replace(
-      path: '/hierarchy/portal',
+    final data = await _request(
+      'GET',
+      '/hierarchy/portal',
+      token,
       queryParameters: <String, String>{
         'role': role.toLowerCase(),
         'from': fromMs.toString(),
         'to': toMs.toString(),
       },
     );
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load role portal');
-    }
     return _map(data['portal']);
   }
 
@@ -337,22 +321,12 @@ class AppBackendService {
     String token, {
     int limit = 100,
   }) async {
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final uri = apiBase.replace(
-      path: '/hierarchy/invites',
+    final data = await _request(
+      'GET',
+      '/hierarchy/invites',
+      token,
       queryParameters: <String, String>{'limit': limit.toString()},
     );
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        data['error']?.toString() ?? 'Unable to load role invitations',
-      );
-    }
     final raw = data['invites'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.whereType<Map>().map(_map).toList(growable: false);
@@ -433,21 +407,12 @@ class AppBackendService {
     String token, {
     required String roomId,
   }) async {
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final uri = apiBase.replace(
-      path: '/ludo/state',
-      queryParameters: {'room_id': roomId},
+    return _request(
+      'GET',
+      '/ludo/state',
+      token,
+      queryParameters: <String, String>{'room_id': roomId},
     );
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load Ludo');
-    }
-    return data;
   }
 
   Future<Map<String, dynamic>> ludoRoll(
@@ -493,36 +458,12 @@ class AppBackendService {
   ) async {
     final id = userId.trim();
     if (id.isEmpty) return null;
-    if (token.trim().isEmpty) {
-      throw StateError('Login session is required');
-    }
-    final uri = apiBase.replace(
-      path: '/users/exact-id',
+    final data = await _request(
+      'GET',
+      '/users/exact-id',
+      token,
       queryParameters: <String, String>{'id': id},
     );
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(
-      HttpHeaders.authorizationHeader,
-      'Bearer $token',
-    );
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    Map<String, dynamic> data = <String, dynamic>{};
-    if (text.trim().isNotEmpty) {
-      try {
-        data = _map(jsonDecode(text));
-      } on FormatException {
-        throw StateError(
-          'Tinni Star server returned an invalid user search response.',
-        );
-      }
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        data['error']?.toString() ?? 'Unable to search user',
-      );
-    }
     final row = _map(data['user']);
     return row.isEmpty ? null : row;
   }
@@ -590,21 +531,12 @@ class AppBackendService {
     String token,
     String userId,
   ) async {
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final uri = apiBase.replace(
-      path: '/app-user/tags',
+    return _request(
+      'GET',
+      '/app-user/tags',
+      token,
       queryParameters: <String, String>{'user_id': userId},
     );
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Unable to load medals');
-    }
-    return data;
   }
 
   Future<List<Map<String, dynamic>>> tasks(String token) async {
@@ -758,22 +690,12 @@ class AppBackendService {
     String token, {
     int limit = 100,
   }) async {
-    final base = apiBase.replace(path: '/family/wallet/transfers');
-    final uri = base.replace(
+    final data = await _request(
+      'GET',
+      '/family/wallet/transfers',
+      token,
       queryParameters: <String, String>{'limit': limit.toString()},
     );
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        data['error']?.toString() ?? 'Unable to load Family Wallet',
-      );
-    }
     final raw = data['transfers'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return raw.map(_map).toList(growable: false);
@@ -1052,21 +974,15 @@ class AppBackendService {
     String userId, {
     String role = '',
   }) async {
-    final base = apiBase.replace(path: '/wallet/settlement/recipient');
-    final uri = base.replace(queryParameters: <String, String>{
-      'user_id': userId,
-      if (role.trim().isNotEmpty) 'role': role.trim(),
-    });
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(data['error']?.toString() ?? 'Recipient not found');
-    }
+    final data = await _request(
+      'GET',
+      '/wallet/settlement/recipient',
+      token,
+      queryParameters: <String, String>{
+        'user_id': userId,
+        if (role.trim().isNotEmpty) 'role': role.trim(),
+      },
+    );
     final row = _map(data['recipient']);
     return SettlementRecipient(
       userId: row['user_id']?.toString() ?? '',
@@ -1131,22 +1047,12 @@ class AppBackendService {
     String token, {
     required String walletType,
   }) async {
-    final base = apiBase.replace(path: '/wallet/role-password/status');
-    final uri = base.replace(
+    final data = await _request(
+      'GET',
+      '/wallet/role-password/status',
+      token,
       queryParameters: <String, String>{'wallet_type': walletType},
     );
-    if (token.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final data = _decodeJsonText(text);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        data['error']?.toString() ?? 'Unable to load wallet password status',
-      );
-    }
     return data['configured'] == true;
   }
 
