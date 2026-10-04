@@ -147,8 +147,13 @@ void main() {
     }
   });
 
-  test('locked blueprint files remain in repository', () {
-    expect(File('docs/TINNI_PRODUCT_BLUEPRINT.md').existsSync(), isTrue);
+  test('canonical and active locked blueprint files remain in repository', () {
+    expect(
+      File('../../docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md')
+          .existsSync(),
+      isTrue,
+    );
+    expect(File('../../docs/TINNI_STAR_GLOBAL_CHANGE_LOCK.md').existsSync(), isTrue);
     expect(File('docs/LOCKED_REGRESSION_CONTRACT.md').existsSync(), isTrue);
     expect(File('WALLET_LANGUAGE_BLUEPRINT.md').existsSync(), isTrue);
   });
