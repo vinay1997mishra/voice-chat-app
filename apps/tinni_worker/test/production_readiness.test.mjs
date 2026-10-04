@@ -199,6 +199,21 @@ assert.match(
   /requestSeat\(input\)[\s\S]{0,900}this\.micMode\(\) === "free"[\s\S]{0,500}return this\.takeSeat/,
   "A stale client calling seat-request in Free Mic mode must still join directly",
 );
+
+const roomPresenceClient = fs.readFileSync(
+  new URL("../../tinni_star/lib/room/room_presence_service.dart", import.meta.url),
+  "utf8",
+);
+assert.match(
+  roomPresenceClient,
+  /Future<void> takeSeat[\s\S]{0,1200}\/room-presence\/seat-take[\s\S]{0,700}applyResponse: true/,
+  "Seat take must apply the authoritative HTTP response even while realtime reconnects",
+);
+assert.match(
+  roomPresenceClient,
+  /Future<Map<String, dynamic>> _commandPost[\s\S]{0,3500}const maxAttempts = 3[\s\S]{0,3500}connected = true/,
+  "Room commands must retry transient failures and keep HTTP room state usable during WebSocket reconnects",
+);
 assert.match(
   roomPresence,
   /seat_count INTEGER NOT NULL DEFAULT 0/,
