@@ -187,7 +187,6 @@ function rowToRoom(row) {
     seat_row_sizes: seatLayout.row_sizes,
     party_mode: String(row.party_mode),
     locked: Number(row.locked) === 1,
-    closed: Number(row.closed || 0) === 1,
     photo_data_url: row.photo_data_url ? String(row.photo_data_url) : null,
     theme_id: row.theme_id ? String(row.theme_id) : "royal-dark",
     theme_asset: row.theme_asset ? String(row.theme_asset) : null,
