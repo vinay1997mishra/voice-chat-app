@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../i18n/tinni_localization.dart';
@@ -199,6 +201,33 @@ class _MiniRoomBar extends StatelessWidget {
     final session = state.roomSession;
     final room = session.room;
     if (room == null) return const SizedBox.shrink();
+
+    var displayRoom = room;
+    for (final candidate in state.discovery.rooms) {
+      if (candidate.id == room.id) {
+        displayRoom = candidate;
+        break;
+      }
+    }
+
+    final photoSource = displayRoom.photoDataUrl?.trim() ?? '';
+    ImageProvider? roomDp;
+    if (photoSource.startsWith('data:image/')) {
+      try {
+        roomDp = MemoryImage(base64Decode(photoSource.split(',').last));
+      } catch (_) {
+        roomDp = null;
+      }
+    } else if (photoSource.startsWith('https://') ||
+        photoSource.startsWith('http://')) {
+      roomDp = NetworkImage(photoSource);
+    }
+    final roomName = displayRoom.title.trim().isNotEmpty
+        ? displayRoom.title.trim()
+        : (displayRoom.ownerName?.trim().isNotEmpty == true
+            ? displayRoom.ownerName!.trim()
+            : 'Voice room');
+
     return Material(
       color: RoyalPalette.nearBlack,
       child: InkWell(
@@ -211,12 +240,33 @@ class _MiniRoomBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const ShiningIcon(
-                icon: Icons.graphic_eq_rounded,
-                color: FeaturePalette.family,
-                size: 21,
-                boxSize: 40,
-                glow: 0.36,
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: FeaturePalette.family.withValues(alpha: .72),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: FeaturePalette.family.withValues(alpha: .22),
+                      blurRadius: 12,
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: RoyalPalette.panel,
+                  backgroundImage: roomDp,
+                  child: roomDp == null
+                      ? const Icon(
+                          Icons.meeting_room_rounded,
+                          color: FeaturePalette.family,
+                          size: 20,
+                        )
+                      : null,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -225,7 +275,7 @@ class _MiniRoomBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      room.title,
+                      roomName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
