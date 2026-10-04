@@ -194,4 +194,21 @@ void main() {
     expect(File('docs/LOCKED_REGRESSION_CONTRACT.md').existsSync(), isTrue);
     expect(File('WALLET_LANGUAGE_BLUEPRINT.md').existsSync(), isTrue);
   });
+
+  test('room transient backend failures recover without raw server snackbar', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
+
+    expect(room, contains('_isTransientRoomServerError'));
+    expect(room, contains('_scheduleRoomRecovery'));
+    expect(room, contains('_recoverRoomConnection'));
+    expect(room, contains("lower.contains('temporarily unavailable')"));
+    expect(room, contains('session.presence.refresh('));
+    expect(room, contains('session.presence.connectLive('));
+    expect(presence, contains('const maxAttempts = 3;'));
+    expect(presence, contains("response.statusCode >= 500"));
+    expect(presence, contains("lower.contains('temporarily unavailable')"));
+  });
+
 }
