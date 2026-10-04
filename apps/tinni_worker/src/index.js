@@ -1468,6 +1468,9 @@ export default {
       try {
         const directory = getAppDirectoryStore(env);
         const rooms = await directory.listRooms();
+        const probeRoomId = Array.isArray(rooms) && rooms.length
+          ? String(rooms[0]?.id || rooms[0]?.room_id || "")
+          : "";
         const probeUserId = Array.isArray(rooms) && rooms.length
           ? String(rooms[0]?.owner_id || "")
           : "";
@@ -1475,6 +1478,7 @@ export default {
         let messagesOk = true;
         let walletOk = true;
         let recentRoomsOk = true;
+        let roomPresenceOk = true;
 
         if (probeUserId) {
           profileOk = Boolean(await directory.getUserById(probeUserId));
@@ -1487,8 +1491,19 @@ export default {
           );
         }
 
+        if (probeRoomId) {
+          const presenceState =
+            await getRoomPresenceStore(env, probeRoomId).state();
+          roomPresenceOk = Boolean(
+            presenceState &&
+            typeof presenceState === "object" &&
+            Array.isArray(presenceState.members),
+          );
+        }
+
         const checks = {
           rooms: Array.isArray(rooms),
+          room_presence: roomPresenceOk,
           profile: profileOk,
           messages: messagesOk,
           wallet: walletOk,
@@ -1499,6 +1514,7 @@ export default {
           ok,
           service: "tinni-star-api",
           app_directory: ok ? "ok" : "degraded",
+          room_presence: roomPresenceOk ? "ok" : "degraded",
           room_count: Array.isArray(rooms) ? rooms.length : 0,
           checks,
         }, ok ? 200 : 503);
@@ -1508,6 +1524,7 @@ export default {
           ok: false,
           service: "tinni-star-api",
           app_directory: "unavailable",
+          room_presence: "unavailable",
           error: "Backend storage is temporarily unavailable",
         }, 503);
       }
