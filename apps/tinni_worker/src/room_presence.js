@@ -87,6 +87,7 @@ export class RoomPresenceStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS room_runtime_settings (
         id INTEGER PRIMARY KEY,
         mic_mode TEXT NOT NULL DEFAULT 'apply',
+        seat_count INTEGER NOT NULL DEFAULT 0,
         public_screen_enabled INTEGER NOT NULL DEFAULT 0,
         comments_clear_version INTEGER NOT NULL DEFAULT 0,
         owner_comments_clear_version INTEGER NOT NULL DEFAULT 0,
@@ -95,12 +96,13 @@ export class RoomPresenceStore extends DurableObject {
       INSERT OR IGNORE INTO room_runtime_settings (
         id,
         mic_mode,
+        seat_count,
         public_screen_enabled,
         comments_clear_version,
         owner_comments_clear_version,
         updated_at
       )
-      VALUES (1, 'apply', 0, 0, 0, 0);
+      VALUES (1, 'apply', 0, 0, 0, 0, 0);
 
       CREATE TABLE IF NOT EXISTS room_lucky_numbers (
         id TEXT PRIMARY KEY,
@@ -135,6 +137,7 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
+      "ALTER TABLE room_runtime_settings ADD COLUMN seat_count INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_runtime_settings ADD COLUMN public_screen_enabled INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_runtime_settings ADD COLUMN comments_clear_version INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_runtime_settings ADD COLUMN owner_comments_clear_version INTEGER NOT NULL DEFAULT 0",
@@ -243,6 +246,14 @@ export class RoomPresenceStore extends DurableObject {
     return row?.mic_mode === "free" ? "free" : "apply";
   }
 
+  seatCount() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT seat_count FROM room_runtime_settings WHERE id = 1 LIMIT 1",
+    ).toArray()[0];
+    const value = Number(row?.seat_count || 0);
+    return Number.isInteger(value) && value >= 8 && value <= 42 ? value : null;
+  }
+
   publicScreenEnabled() {
     const row = this.ctx.storage.sql.exec(
       "SELECT public_screen_enabled FROM room_runtime_settings WHERE id = 1 LIMIT 1",
@@ -331,7 +342,64 @@ export class RoomPresenceStore extends DurableObject {
       mode,
       Date.now(),
     );
-    return { ok: true, mic_mode: mode };
+    const result = { ok: true, mic_mode: mode, seat_count: this.seatCount() };
+    this._broadcastPresence("mic_mode_changed");
+    return result;
+  }
+
+  setSeatCount(seatCountValue) {
+    const seatCount = Number(seatCountValue);
+    if (!Number.isInteger(seatCount) || seatCount < 8 || seatCount > 42) {
+      throw new Error("Room seat count must be 8-42");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE room_runtime_settings
+          SET seat_count = ?, updated_at = ?
+        WHERE id = 1`,
+      seatCount,
+      now,
+    );
+
+    // Anyone sitting outside the reduced layout is moved safely to audience.
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, last_seen = ? WHERE seat_index >= ?",
+      now,
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_mutes WHERE seat_index >= ?",
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_locks WHERE seat_index >= ?",
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_mutes WHERE seat_index >= ?",
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_requests WHERE seat_index >= ?",
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_invites WHERE seat_index >= ?",
+      seatCount,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM room_seat_forces WHERE seat_index IS NOT NULL AND seat_index >= ?",
+      seatCount,
+    );
+
+    const result = {
+      ok: true,
+      seat_count: seatCount,
+      mic_mode: this.micMode(),
+      members: this._members(now),
+    };
+    this._broadcastPresence("seat_count_changed", now);
+    return result;
   }
 
     isMember(userIdValue) {
@@ -552,8 +620,14 @@ export class RoomPresenceStore extends DurableObject {
       throw new Error("seat_index is required");
     }
     this._assertSeatAvailable(seatIndex, userId);
-    if (this.micMode() !== "apply") {
-      throw new Error("Seat requests are only used in invite mode");
+    if (this.micMode() === "free") {
+      // Server-authoritative fallback: stale clients that still call the
+      // request endpoint in Free Mic mode must join the seat directly.
+      return this.takeSeat({
+        user_id: userId,
+        seat_index: seatIndex,
+        privileged: false,
+      });
     }
 
     const member = this.ctx.storage.sql.exec(
@@ -1450,6 +1524,7 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       server_time: now,
       mic_mode: this.micMode(),
+      seat_count: this.seatCount(),
       public_screen_enabled: this.publicScreenEnabled(),
       comments_clear_version: this.commentsClearVersion(),
       self_mic_muted: this.muteStatus(userId, seatIndex),
@@ -1513,6 +1588,7 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       server_time: now,
       mic_mode: this.micMode(),
+      seat_count: this.seatCount(),
       public_screen_enabled: this.publicScreenEnabled(),
       comments_clear_version: this.commentsClearVersion(),
       owner_comments_clear_version: this.ownerCommentsClearVersion(),
