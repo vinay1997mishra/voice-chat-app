@@ -11,6 +11,7 @@ const walletScreens = fs.readFileSync(new URL("../../tinni_star/lib/screens/wall
 
 for (const table of [
   "privileged_wallet_transactions",
+  "role_dollar_balances",
   "role_dollar_transfers",
   "company_dollar_balance",
   "company_dollar_ledger",
@@ -29,8 +30,10 @@ assert.match(directory, /async transferRoleDollars\(/);
 assert.match(directory, /company_dollars: this\._companyDollarState\(500\)/);
 assert.match(directory, /case "company-dollar-deduct": return this\.ownerDeductCompanyDollars/);
 assert.match(directory, /data\.asset \|\| "coins"/);
-assert.match(directory, /const COIN_SELLER_SETTLEMENT_COINS_PER_USD = 2220000;/,
-  "Latest seller settlement conversion must remain $1 = 2,220,000 coins");
+assert.match(directory, /automatic_dollar_to_coin_conversion:\s*false/,
+  "Role dollars must never auto-convert to coins");
+assert.match(directory, /total_usd_cents: guard\.security_frozen \? 0 : Math\.max\(0, Number\(dollarRow\?\.usd_cents \|\| 0\)\)/,
+  "Coin Seller and Merchant Total Dollars must read the separate USD balance");
 
 for (const route of [
   "/wallet/coins/history",
@@ -38,6 +41,7 @@ for (const route of [
   "/wallet/diamonds/convert",
   "/wallet/role-detail",
   "/wallet/role-dollars/transfer",
+  "/wallet/settlement/recipients",
 ]) {
   assert.ok(index.includes(route), "Missing Worker route " + route);
 }
