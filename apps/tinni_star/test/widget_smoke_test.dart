@@ -209,6 +209,22 @@ void main() {
     expect(find.text('Add Music'), findsOneWidget);
     expect(find.byKey(const Key('room-music-count')), findsOneWidget);
     expect(
+      find.byKey(const Key('room-music-previous-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-music-play-pause-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-music-stop-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('room-music-next-button')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(Key('remove-music-' + removableSong.id)),
       findsOneWidget,
     );
