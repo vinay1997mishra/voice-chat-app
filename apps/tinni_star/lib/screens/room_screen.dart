@@ -1128,7 +1128,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Seat Invite'),
           content: Text(
-            'Owner/Admin invited you to Seat ' +
+            (invite.invitedBy ==
+                    (_roomSnapshot.ownerId ??
+                        widget.room.ownerId ??
+                        widget.room.id)
+                ? 'Owner'
+                : 'Admin') +
+                ' invites you to Seat No. ' +
                 (invite.seatIndex + 1).toString() +
                 '.',
           ),
@@ -7683,6 +7689,182 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
 
+  Future<void> _showSeatInvitePanel(int seatIndex) async {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can invite users to seats.');
+      return;
+    }
+    if (seatIndex < 0 || seatIndex >= controller.seats.length) return;
+
+    final seat = controller.seats[seatIndex];
+    if (seat.occupied) {
+      _snack('Seat ' + (seatIndex + 1).toString() + ' is already occupied.');
+      return;
+    }
+    if (seat.locked) {
+      _snack('Seat ' + (seatIndex + 1).toString() + ' is locked.');
+      return;
+    }
+
+    final searchController = TextEditingController();
+    var query = '';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final currentUserId = widget.state.auth.current?.userId;
+          final normalizedQuery = query.trim().toLowerCase();
+          final eligible = widget.state.roomSession.liveMembers
+              .where(
+                (member) =>
+                    member.seatIndex == null &&
+                    member.userId != currentUserId &&
+                    (normalizedQuery.isEmpty ||
+                        member.userId.toLowerCase().contains(normalizedQuery)),
+              )
+              .toList(growable: false)
+            ..sort(
+              (a, b) => a.displayName
+                  .toLowerCase()
+                  .compareTo(b.displayName.toLowerCase()),
+            );
+
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.62,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+                    child: Row(
+                      children: [
+                        const ShiningIcon(
+                          icon: Icons.person_add_alt_1_rounded,
+                          color: FeaturePalette.family,
+                          size: 19,
+                          boxSize: 36,
+                          glow: 0.30,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Invite to Seat No. ' +
+                                (seatIndex + 1).toString(),
+                            style: const TextStyle(
+                              color: RoyalPalette.cream,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                    child: TextField(
+                      key: const Key('seat-invite-id-search'),
+                      controller: searchController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search room user/admin by ID number',
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        setSheetState(() => query = value);
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: eligible.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No eligible user/admin is available in this room.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: RoyalPalette.muted),
+                            ),
+                          )
+                        : ListView.separated(
+                            key: const Key('seat-invite-eligible-list'),
+                            padding:
+                                const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                            itemCount: eligible.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, index) {
+                              final member = eligible[index];
+                              return ListTile(
+                                key: Key(
+                                  'seat-invite-user-' + member.userId,
+                                ),
+                                leading: CircleAvatar(
+                                  backgroundColor: RoyalPalette.panel2,
+                                  child: Text(
+                                    member.displayName.trim().isEmpty
+                                        ? '?'
+                                        : member.displayName.characters.first
+                                            .toUpperCase(),
+                                    style: const TextStyle(
+                                      color: FeaturePalette.social,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  member.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text('ID ' + member.userId),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: RoyalPalette.gold,
+                                ),
+                                onTap: () async {
+                                  try {
+                                    await widget.state.roomSession
+                                        .inviteUserToSeat(
+                                      member.userId,
+                                      seatIndex: seatIndex,
+                                    );
+                                    if (sheetContext.mounted) {
+                                      Navigator.pop(sheetContext);
+                                    }
+                                    _snack(
+                                      'Invite sent to ' +
+                                          member.displayName +
+                                          ' for Seat No. ' +
+                                          (seatIndex + 1).toString() +
+                                          '.',
+                                    );
+                                  } catch (error) {
+                                    _snack(
+                                      error
+                                          .toString()
+                                          .replaceFirst('Bad state: ', ''),
+                                    );
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    searchController.dispose();
+  }
+
   void _showSeatControls(int index) {
     if (index < 0 || index >= controller.seats.length) return;
     final seat = controller.seats[index];
@@ -7787,6 +7969,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 }
               },
             ),
+            if (!seat.occupied)
+              ListTile(
+                key: const Key('seat-control-invite'),
+                leading: const ShiningIcon(
+                  icon: Icons.person_add_alt_1_rounded,
+                  color: FeaturePalette.social,
+                  size: 18,
+                  boxSize: 34,
+                  glow: 0.30,
+                ),
+                title: const Text('Invite'),
+                subtitle: Text(
+                  'Invite an in-room user/admin to Seat No. ' +
+                      (index + 1).toString() +
+                      '.',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Future<void>.delayed(Duration.zero, () {
+                    if (mounted) _showSeatInvitePanel(index);
+                  });
+                },
+              ),
             if (!seat.occupied)
               ListTile(
                 key: const Key('seat-control-take'),
