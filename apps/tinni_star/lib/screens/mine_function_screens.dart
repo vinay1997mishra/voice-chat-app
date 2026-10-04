@@ -2305,9 +2305,96 @@ class _HostDataScreenState extends State<HostDataScreen> {
     );
   }
 
+  Future<void> _openDollarWallet() async {
+    final wallet = _map(portal['wallet']);
+    final available = _int(wallet['settlement_usd_cents']);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .72,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.attach_money_rounded),
+                ),
+                title: Text(widget.roleLabel + ' Dollar Wallet'),
+                subtitle: const Text(
+                  'Dollars stay as dollars until you send them.',
+                ),
+                trailing: Text(
+                  _usd(available),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: transfers.isEmpty
+                    ? const Center(child: Text('No dollar transfers yet.'))
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: transfers.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final row = transfers[index];
+                          final role = row['recipient_role']?.toString() ?? '';
+                          final target = role == 'coin_seller'
+                              ? 'Coin Seller'
+                              : role == 'merchant'
+                                  ? 'Merchant'
+                                  : role.replaceAll('_', ' ');
+                          final before = _int(row['sender_balance_before']);
+                          final after = _int(row['sender_balance_after']);
+                          return ListTile(
+                            leading: const Icon(Icons.swap_horiz_rounded),
+                            title: Text(
+                              _usd(_int(row['usd_cents'])) + ' → ' + target,
+                            ),
+                            subtitle: Text(
+                              'ID ' +
+                                  (row['recipient_user_id']?.toString() ?? '') +
+                                  '\n' +
+                                  _dateText(_int(row['created_at'])) +
+                                  ((before > 0 || after > 0)
+                                      ? ' • ' + _usd(before) + ' → ' + _usd(after)
+                                      : ''),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              if (widget.onTransfer != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      key: const Key('role-dollar-wallet-send'),
+                      onPressed: () async {
+                        Navigator.of(sheetContext).pop();
+                        await widget.onTransfer!();
+                        await _load();
+                      },
+                      icon: const Icon(Icons.attach_money_rounded),
+                      label: const Text('Send Dollars'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _walletCard() {
     final wallet = _map(portal['wallet']);
-    final canTransfer = wallet['can_transfer_settlement'] == true;
     return Card(
       color: _minePanel,
       shape: RoundedRectangleBorder(
@@ -2316,56 +2403,56 @@ class _HostDataScreenState extends State<HostDataScreen> {
       ),
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.diamond_rounded, color: _mineText),
-            title: Text(
-              _role == 'host' ? 'Diamond points' : 'Earned commission dollars',
-              style: const TextStyle(color: _mineText),
-            ),
-            trailing: Text(
-              _role == 'host'
-                  ? _compact(wallet['diamonds'])
-                  : _usd(_int(wallet['settlement_usd_cents'])),
-              style: const TextStyle(
-                color: _mineText,
-                fontWeight: FontWeight.w900,
+          if (_role == 'host') ...[
+            ListTile(
+              leading: const Icon(Icons.diamond_rounded, color: _mineText),
+              title: const Text(
+                'Diamond points',
+                style: TextStyle(color: _mineText),
               ),
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            title: const Text(
-              'Withdrawable / transferable',
-              style: TextStyle(color: _mineText),
-            ),
-            trailing: Text(
-              _usd(_int(wallet['withdrawable_usd_cents'])),
-              style: const TextStyle(
-                color: _mineText,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          if (canTransfer && widget.onTransfer != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  key: const Key('host-data-transfer'),
-                  onPressed: () async {
-                    await widget.onTransfer!();
-                    await _load();
-                  },
-                  icon: const Icon(Icons.currency_exchange_rounded),
-                  label: Text(
-                    _role == 'host'
-                        ? 'Exchange / Transfer'
-                        : 'Transfer settlement',
-                  ),
+              trailing: Text(
+                _compact(wallet['diamonds']),
+                style: const TextStyle(
+                  color: _mineText,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
+            const Divider(height: 1),
+          ],
+          ListTile(
+            key: const Key('role-dollar-wallet-open'),
+            onTap: _openDollarWallet,
+            leading: const Icon(
+              Icons.account_balance_wallet_rounded,
+              color: _mineText,
+            ),
+            title: const Text(
+              'Dollar Wallet',
+              style: TextStyle(
+                color: _mineText,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            subtitle: const Text(
+              'Tap to open balance, history and Send Dollars',
+              style: TextStyle(color: _mineMuted),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _usd(_int(wallet['settlement_usd_cents'])),
+                  style: const TextStyle(
+                    color: _mineText,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded, color: _mineMuted),
+              ],
+            ),
+          ),
         ],
       ),
     );
