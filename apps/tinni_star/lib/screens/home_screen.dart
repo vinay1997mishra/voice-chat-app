@@ -447,6 +447,28 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
+    if (account != null &&
+        targetRoom.ownerId == account.userId &&
+        targetRoom.closed) {
+      try {
+        targetRoom = await widget.state.discovery.updateRoomRemote(
+          authToken: account.authToken,
+          roomId: targetRoom.id,
+          closed: false,
+        );
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.toString().replaceFirst('Bad state: ', ''),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     if (!mounted) return;
     widget.state.discovery.visit(targetRoom.id);
     await Navigator.push(
