@@ -160,7 +160,7 @@ class CallService {
     Uri? apiBase,
     HttpClient? httpClient,
   })  : apiBase = apiBase ??
-            Uri.parse('https://tinnistar-api.tinnistarchat.workers.dev'),
+            Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
@@ -376,8 +376,23 @@ class CallService {
     }
     final response = await request.close();
     final raw = await utf8.decoder.bind(response).join();
-    final decoded = raw.trim().isEmpty ? <String, dynamic>{} : jsonDecode(raw);
-    final data = decoded is Map ? _stringMap(decoded) : <String, dynamic>{};
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        data = decoded is Map ? _stringMap(decoded) : <String, dynamic>{};
+      } on FormatException {
+        final lower = raw.trim().toLowerCase();
+        if (lower.contains('error code: 1101')) {
+          throw StateError(
+            'Tinni Star server is temporarily unavailable. Please retry.',
+          );
+        }
+        throw StateError(
+          'Tinni Star server returned an invalid response. Please retry.',
+        );
+      }
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Call request failed',
