@@ -1164,7 +1164,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _snack(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _toggleMic() async {
@@ -5851,6 +5858,77 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showPublicScreenMenu() async {
+    if (!_canModerateSeats) {
+      _snack('Only the room owner or room admin can control Public Screen.');
+      return;
+    }
+
+    final controls = widget.state.roomControls;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: RoyalPalette.nearBlack,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+          children: [
+            const ListTile(
+              title: Text(
+                'Public Screen',
+                style: TextStyle(
+                  color: FeaturePalette.message,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            ListTile(
+              key: const Key('public-screen-admin-owner-only'),
+              leading: const Icon(Icons.admin_panel_settings_rounded),
+              title: const Text('Only Admin/Owner can type'),
+              trailing: !controls.publicScreenEnabled
+                  ? const Icon(Icons.check_rounded, color: RoyalPalette.gold)
+                  : null,
+              onTap: () {
+                controls.setPublicScreenEnabled(false);
+                Navigator.pop(sheetContext);
+                if (mounted) setState(() {});
+                _snack('Public Screen: only Admin/Owner can type.');
+              },
+            ),
+            ListTile(
+              key: const Key('public-screen-everyone'),
+              leading: const Icon(Icons.forum_rounded),
+              title: const Text('Everyone can type'),
+              trailing: controls.publicScreenEnabled
+                  ? const Icon(Icons.check_rounded, color: RoyalPalette.gold)
+                  : null,
+              onTap: () {
+                controls.setPublicScreenEnabled(true);
+                Navigator.pop(sheetContext);
+                if (mounted) setState(() {});
+                _snack('Public Screen: everyone can type.');
+              },
+            ),
+            if (_canModerateSeats)
+              ListTile(
+                key: const Key('public-screen-clear-comments'),
+                leading: const Icon(Icons.cleaning_services_rounded),
+                title: const Text('Clear comments area'),
+                onTap: () {
+                  controller.clearRoomMessages();
+                  Navigator.pop(sheetContext);
+                  if (mounted) setState(() {});
+                  _snack('Comments area cleared.');
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showRoomTools() {
     final controls = widget.state.roomControls;
     final tools = <(String, IconData, VoidCallback)>[
@@ -5935,22 +6013,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
       (
-        controls.publicScreenEnabled ? 'Screen On' : 'Public Screen',
+        'Public Screen',
         Icons.tv_rounded,
         () {
-          if (!_isRoomOwner) {
-            _snack('Only the room owner can control public screen.');
-            return;
-          }
-          final enabled = controls.togglePublicScreen();
-          if (!enabled && !_canTypeInRoom) {
-            chat.clear();
-          }
-          _snack(
-            enabled
-                ? 'Public Screen on: everyone can type.'
-                : 'Public Screen off: only room owner/admin can type.',
-          );
+          Future<void>.delayed(Duration.zero, () {
+            if (mounted) _showPublicScreenMenu();
+          });
         },
       ),
       (
@@ -5980,10 +6048,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return false;
       }
       if (!_isRoomOwner &&
-          (label == 'Lock' ||
-              label == 'Unlock' ||
-              label == 'Public Screen' ||
-              label == 'Screen On')) {
+          (label == 'Lock' || label == 'Unlock')) {
+        return false;
+      }
+      if (!_canModerateSeats && label == 'Public Screen') {
         return false;
       }
       return true;
@@ -8301,9 +8369,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : heightSeatDiameter)
         .clamp(compactVertical ? 12.0 : 30.0, 68.0)
         .toDouble();
+
+    // The 42-seat (6 x 7) layout is the lowest seat boundary allowed.
+    // Smaller seat layouts may finish above it, but never extend below it.
+    final reference42SeatSpec = SeatLayoutSpec.forCount(42);
+    final reference42WidthDiameter =
+        reference42SeatSpec.seatDiameter(screenSize.width - 8);
+    final reference42LabelSpace = compactVertical
+        ? 30.0
+        : (reference42WidthDiameter < 48 ? 28.0 : 38.0);
+    final reference42HeightDiameter =
+        (maxSeatAreaHeight / reference42SeatSpec.rows) -
+            reference42LabelSpace;
+    final reference42SeatDiameter =
+        (reference42WidthDiameter < reference42HeightDiameter
+                ? reference42WidthDiameter
+                : reference42HeightDiameter)
+            .clamp(compactVertical ? 12.0 : 30.0, 68.0)
+            .toDouble();
+    final reference42SeatAreaHeight = reference42SeatSpec
+        .preferredHeight(reference42SeatDiameter)
+        .clamp(120.0, maxSeatAreaHeight)
+        .toDouble();
     final seatAreaHeight = seatSpec
         .preferredHeight(seatDiameter)
-        .clamp(120.0, maxSeatAreaHeight)
+        .clamp(
+          120.0,
+          math.min(maxSeatAreaHeight, reference42SeatAreaHeight),
+        )
         .toDouble();
 
     return PopScope(
