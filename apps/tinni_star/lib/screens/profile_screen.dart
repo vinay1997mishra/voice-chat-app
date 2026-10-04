@@ -12,6 +12,7 @@ import '../ui/animated_avatar_frame.dart';
 import '../ui/premium_effects.dart';
 import 'family_home_screen.dart';
 import 'family_ranking_screen.dart';
+import 'custom_center_screen.dart';
 import 'vip_screen.dart';
 import 'store_screen.dart';
 import 'recharge_screen.dart';
@@ -1125,6 +1126,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: tinniText(language, 'medal_of_honor'),
                   onTap: () => _openMineScreen(
                     MedalOfHonorScreen(state: widget.state),
+                  ),
+                ),
+                _mineMenuRow(
+                  key: const Key('mine-custom-center'),
+                  icon: Icons.design_services_rounded,
+                  label: tinniText(language, 'custom_center'),
+                  onTap: () => _openMineScreen(
+                    CustomCenterScreen(state: widget.state),
                   ),
                 ),
                 _mineMenuRow(
