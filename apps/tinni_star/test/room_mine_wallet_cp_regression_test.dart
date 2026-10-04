@@ -73,6 +73,37 @@ void main() {
     expect(worker.contains('owner_bypass: true'), true);
   });
 
+  test('Public Screen menu is moderator-only and can clear comments', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final controller =
+        File('lib/room/room_controller.dart').readAsStringSync();
+    final controls =
+        File('lib/room/room_control_service.dart').readAsStringSync();
+
+    expect(room.contains("title: const Text('Only Admin/Owner can type')"), true);
+    expect(room.contains("title: const Text('Everyone can type')"), true);
+    expect(room.contains("title: const Text('Clear comments area')"), true);
+    expect(room.contains("key: const Key('public-screen-clear-comments')"), true);
+    expect(room.contains("if (!_canModerateSeats && label == 'Public Screen')"), true);
+    expect(room.contains('controller.clearRoomMessages();'), true);
+    expect(controller.contains('void clearRoomMessages()'), true);
+    expect(controller.contains('messages.clear();'), true);
+    expect(controls.contains('setPublicScreenEnabled(bool enabled)'), true);
+  });
+
+  test('room action notification lasts one second', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room.contains('duration: const Duration(seconds: 1)'), true);
+    expect(room.contains('messenger.hideCurrentSnackBar();'), true);
+  });
+
+  test('seat area never extends below the 42-seat lower boundary', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    expect(room.contains('final reference42SeatSpec = SeatLayoutSpec.forCount(42);'), true);
+    expect(room.contains('reference42SeatAreaHeight'), true);
+    expect(room.contains('math.min(maxSeatAreaHeight, reference42SeatAreaHeight)'), true);
+  });
+
   test('CP economy and profile card stay scaled to Tinni', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     final cp = File('lib/screens/cp_screen.dart').readAsStringSync();
