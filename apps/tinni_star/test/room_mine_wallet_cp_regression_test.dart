@@ -185,6 +185,58 @@ void main() {
     expect(changeLock.contains('Empty-seat invite lock:'), true);
   });
 
+  test('room backend stays active even when voice is unavailable', () {
+    final session =
+        File('lib/room/active_room_session.dart').readAsStringSync();
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+
+    expect(session.contains('_activeAuthToken = authToken;'), true);
+    expect(session.contains('await _startPresence();'), true);
+    expect(
+      session.contains(
+        'Microphone permission is required for voice. Room controls remain active.',
+      ),
+      true,
+    );
+    expect(
+      session.contains('Voice unavailable: '),
+      true,
+    );
+    expect(session.contains('bool get backendSessionActive'), true);
+    expect(
+      room.contains(
+        "session.room?.id != widget.room.id || !session.backendSessionActive",
+      ),
+      true,
+    );
+  });
+
+  test('all built-in mood room themes are backend accepted', () {
+    final controls =
+        File('lib/room/room_control_service.dart').readAsStringSync();
+    final worker =
+        File('../tinni_worker/src/app_directory.js').readAsStringSync();
+
+    for (final id in <String>[
+      'royal-dark',
+      'night-blue',
+      'rose-gold',
+      'mood-happy',
+      'mood-sad',
+      'mood-boring',
+      'mood-love',
+      'mood-mountain-view',
+      'mood-alone',
+      'mood-with-her',
+      'mood-with-him',
+      'mood-love-scene',
+      'mood-rainy-love',
+    ]) {
+      expect(controls.contains("'$id'"), true);
+      expect(worker.contains('"$id"'), true);
+    }
+  });
+
   test('room action notification lasts one second', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     expect(room.contains('duration: const Duration(seconds: 1)'), true);
