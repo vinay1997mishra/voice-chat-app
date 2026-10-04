@@ -223,3 +223,41 @@ body.auth-ready .app-shell{visibility:visible}
 .owner-inline-user{border:0;background:transparent;color:#ffd76a;padding:0;font:inherit;font-weight:900;cursor:pointer;text-decoration:underline;text-decoration-color:#6d5521;text-underline-offset:3px}
 .owner-inline-user:hover,.owner-inline-user:focus-visible{color:#fff0a6;text-decoration-color:#ffd76a;outline:none}
 .owner-inline-user-name{text-align:left}
+
+
+/* Owner-only friend inbox / conversation inspector */
+.owner-inbox-browser{margin-top:14px}
+.owner-thread-list{display:grid;gap:8px;max-height:58vh;overflow:auto}
+.owner-thread-row{
+  width:100%;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:11px;
+  align-items:center;
+  text-align:left;
+  border:1px solid #3b321f;
+  border-radius:12px;
+  background:#100f0c;
+  padding:10px;
+  color:var(--cream);
+}
+.owner-thread-row:hover{border-color:#8f6f2c}
+.owner-thread-avatar{width:46px;height:46px;border-radius:50%;overflow:hidden;display:grid;place-items:center;border:1px solid #4d3d1c}
+.owner-thread-avatar img{width:100%;height:100%;object-fit:cover}
+.owner-thread-copy{display:grid;gap:3px;min-width:0}
+.owner-thread-copy strong,.owner-thread-copy span,.owner-thread-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.owner-thread-copy small,.owner-thread-meta small{color:var(--muted)}
+.owner-thread-meta{display:grid;gap:4px;justify-items:end;min-width:92px}
+.owner-conversation-list{display:grid;gap:8px;max-height:62vh;overflow:auto;padding:4px}
+.owner-message-row{display:grid;gap:4px;padding:10px 12px;border:1px solid #362f20;border-radius:11px;background:#11100d;max-width:82%}
+.owner-message-row.from-target{justify-self:start}
+.owner-message-row.from-peer{justify-self:end}
+.owner-message-row span{white-space:pre-wrap;word-break:break-word}
+.owner-message-row small{color:var(--muted)}
+.owner-message-row strong small{font-weight:500}
+.owner-thread-official-reply{margin-top:12px}
+@media(max-width:720px){
+  .owner-thread-row{grid-template-columns:auto minmax(0,1fr)}
+  .owner-thread-meta{grid-column:2;justify-items:start}
+  .owner-message-row{max-width:94%}
+}
