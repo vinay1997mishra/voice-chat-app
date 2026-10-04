@@ -148,6 +148,16 @@ jobs:
         working-directory: apps/tinni_star
         run: flutter test
 
+      - name: Verify live Tinni backend before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://tinni-star-api.mishrajii7991.workers.dev"
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health"
+          echo
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health/deep"
+          echo
+
       - name: Build installable APK
         working-directory: apps/tinni_star
         run: flutter build apk --release --split-per-abi
