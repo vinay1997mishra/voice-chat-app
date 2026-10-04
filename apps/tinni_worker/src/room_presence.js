@@ -87,10 +87,18 @@ export class RoomPresenceStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS room_runtime_settings (
         id INTEGER PRIMARY KEY,
         mic_mode TEXT NOT NULL DEFAULT 'apply',
+        public_screen_enabled INTEGER NOT NULL DEFAULT 0,
+        comments_clear_version INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
-      INSERT OR IGNORE INTO room_runtime_settings (id, mic_mode, updated_at)
-      VALUES (1, 'apply', 0);
+      INSERT OR IGNORE INTO room_runtime_settings (
+        id,
+        mic_mode,
+        public_screen_enabled,
+        comments_clear_version,
+        updated_at
+      )
+      VALUES (1, 'apply', 0, 0, 0);
 
       CREATE TABLE IF NOT EXISTS room_lucky_numbers (
         id TEXT PRIMARY KEY,
@@ -125,6 +133,8 @@ export class RoomPresenceStore extends DurableObject {
       "ALTER TABLE room_members ADD COLUMN seat_index INTEGER",
       "ALTER TABLE room_members ADD COLUMN seat_emote TEXT",
       "ALTER TABLE room_members ADD COLUMN seat_emote_until INTEGER",
+      "ALTER TABLE room_runtime_settings ADD COLUMN public_screen_enabled INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE room_runtime_settings ADD COLUMN comments_clear_version INTEGER NOT NULL DEFAULT 0",
     ]) {
       try {
         this.ctx.storage.sql.exec(migration);
@@ -224,6 +234,60 @@ export class RoomPresenceStore extends DurableObject {
       "SELECT mic_mode FROM room_runtime_settings WHERE id = 1 LIMIT 1",
     ).toArray()[0];
     return row?.mic_mode === "free" ? "free" : "apply";
+  }
+
+  publicScreenEnabled() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT public_screen_enabled FROM room_runtime_settings WHERE id = 1 LIMIT 1",
+    ).toArray()[0];
+    return Number(row?.public_screen_enabled || 0) === 1;
+  }
+
+  commentsClearVersion() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT comments_clear_version FROM room_runtime_settings WHERE id = 1 LIMIT 1",
+    ).toArray()[0];
+    return Math.max(0, Number(row?.comments_clear_version || 0));
+  }
+
+  setPublicScreenEnabled(enabledValue) {
+    const enabled = enabledValue === true;
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE room_runtime_settings
+          SET public_screen_enabled = ?, updated_at = ?
+        WHERE id = 1`,
+      enabled ? 1 : 0,
+      now,
+    );
+    const result = {
+      ok: true,
+      public_screen_enabled: enabled,
+      comments_clear_version: this.commentsClearVersion(),
+    };
+    this._broadcastPresence("public_screen_changed");
+    return result;
+  }
+
+  clearComments(clearedByValue) {
+    const clearedBy = String(clearedByValue || "").trim();
+    const nextVersion = this.commentsClearVersion() + 1;
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      `UPDATE room_runtime_settings
+          SET comments_clear_version = ?, updated_at = ?
+        WHERE id = 1`,
+      nextVersion,
+      now,
+    );
+    const result = {
+      ok: true,
+      comments_clear_version: nextVersion,
+      public_screen_enabled: this.publicScreenEnabled(),
+      cleared_by: clearedBy,
+    };
+    this._broadcastPresence("comments_cleared");
+    return result;
   }
 
   setMicMode(modeValue) {
@@ -1319,6 +1383,8 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       server_time: now,
       mic_mode: this.micMode(),
+      public_screen_enabled: this.publicScreenEnabled(),
+      comments_clear_version: this.commentsClearVersion(),
       self_mic_muted: this.muteStatus(userId, seatIndex),
       self_chat_banned: this.chatBanStatus(userId),
       self_seat_forced: seatForced,
@@ -1380,6 +1446,8 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       server_time: now,
       mic_mode: this.micMode(),
+      public_screen_enabled: this.publicScreenEnabled(),
+      comments_clear_version: this.commentsClearVersion(),
       member_ttl_ms: MEMBER_TTL_MS,
       lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
