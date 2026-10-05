@@ -259,10 +259,11 @@ void main() {
     final worker =
         File('../tinni_worker/src/app_directory.js').readAsStringSync();
 
-    expect(room.contains("id: 'cp-heart'"), true);
-    expect(room.contains('price: 44444'), true);
-    expect(room.contains("id: 'cp-invite'"), true);
-    expect(room.contains('price: 2222222'), true);
+    final gifts = File('lib/economy/premium_gift_catalog.dart').readAsStringSync();
+    expect(gifts.contains('id: "cp-heart"'), true);
+    expect(gifts.contains('price: 44444'), true);
+    expect(gifts.contains('id: "cp-invite"'), true);
+    expect(gifts.contains('price: 2222222'), true);
     expect(profile.contains("Key('profile-cp-card')"), true);
     expect(cp.contains('2,222,222 Tinni coins'), true);
     expect(cp.contains('5% per day'), true);
