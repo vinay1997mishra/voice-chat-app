@@ -13,7 +13,7 @@ class RocketPersonalReward {
   final String? frameId, medal;
 
   static RocketPersonalReward? fromResponse(
-    Map<String, dynamic> response, {required String viewerId, required int level},
+    Map<String, dynamic> response, {required String viewerId, required int level}
   ) {
     final raw = response['reward'];
     if (viewerId.isEmpty || response['ok'] != true ||
@@ -25,7 +25,9 @@ class RocketPersonalReward {
     final frame = raw['frame_id']?.toString();
     final medal = raw['medal']?.toString();
     if (coins <= 0 && (frame == null || frame.isEmpty) &&
-        (medal == null || medal.isEmpty)) return null;
+        (medal == null || medal.isEmpty)) {
+      return null;
+    }
     return RocketPersonalReward(
       userId: viewerId, level: level, coins: coins < 0 ? 0 : coins,
       credited: raw['credited'] == true, frameId: frame, medal: medal,

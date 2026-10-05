@@ -290,7 +290,9 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
       // Received notifications/inventory remain available if this read fails.
     }
     if (!mounted || token != _rewardGeneration || _level != level ||
-        !widget.enabled) return;
+        !widget.enabled) {
+      return;
+    }
     if (reward == null || reward.userId != widget.viewerId ||
         reward.level != level) {
       _finishLaunch();

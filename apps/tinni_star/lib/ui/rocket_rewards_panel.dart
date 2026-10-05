@@ -45,10 +45,6 @@ class RocketRewardsPanel extends StatelessWidget {
                 const Text('Room ranking',
                   style: TextStyle(color: Color(0xFF93A7CB), fontSize: 9)),
               ]),
-                Text('${coins ~/ 100000} L coins', style: const TextStyle(color: Color(0xFF8DF1CE), fontSize: 11, fontWeight: FontWeight.w800)),
-                Text(row?['awarded'] == true ? 'Received' : 'On launch',
-                  style: const TextStyle(color: Color(0xFF93A7CB), fontSize: 9)),
-              ]),
             ),
           );
         }),
