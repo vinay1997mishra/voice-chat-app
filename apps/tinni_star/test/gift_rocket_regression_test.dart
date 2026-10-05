@@ -95,6 +95,9 @@ void main() {
       );
     }
     expect(room.contains("Key('room-rocket-level-scroll')"), true);
+    expect(room.contains("room-rocket-large-preview-"), true);
+    expect(room.contains('_selectedRocketPreviewLevel'), true);
+    expect(room.contains('onTap: ()'), true);
     expect(room.contains('ListView.builder'), true);
     expect(room.contains('thumbVisibility: true'), true);
     expect(room.contains('_rocketProgressState'), true);
