@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'backend_http.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
 
@@ -230,7 +232,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
     required String roomId,
     required String authToken,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/livekit/token'),
     );
     request.headers.contentType = ContentType.json;
@@ -240,8 +242,8 @@ class LiveKitRtcAdapter implements RtcAdapter {
     );
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId}));
 
-    final response = await request.close();
-    final raw = await utf8.decoder.bind(response).join();
+    final response = await closeBackendRequest(request);
+    final raw = await readBackendResponse(response);
     Map<String, dynamic> data = <String, dynamic>{};
     if (raw.trim().isNotEmpty) {
       try {

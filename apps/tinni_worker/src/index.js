@@ -3522,7 +3522,8 @@ export default {
               .map((tx) => String(tx?.receiver_id || "").trim())
               .filter(Boolean),
           )];
-          await getRoomPresenceStore(env, roomId).recordGift({
+          await bestEffortRoomDirectoryTask("gifts.presence_delivery", () =>
+            getRoomPresenceStore(env, roomId).recordGift({
             receivers: [...receiverTotals.entries()].map(
               ([user_id, socialValue]) => ({ user_id, coins: socialValue }),
             ),
@@ -3548,7 +3549,7 @@ export default {
                 transactions[0]?.created_at || Date.now(),
               ),
             },
-          });
+          }));
         }
         return json(result, 201);
       } catch (error) {

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'backend_http.dart';
+
 abstract interface class PushAdapter {
   Future<void> register(String userId);
   Future<void> unregister();
@@ -94,7 +96,7 @@ class BackendAnalyticsAdapter implements AnalyticsAdapter {
     String token,
   ) async {
     try {
-      final request = await _httpClient.postUrl(
+      final request = await openBackendRequest(_httpClient, 'POST', 
         apiBase.replace(path: '/telemetry/analytics'),
       );
       request.headers.contentType = ContentType.json;
@@ -108,8 +110,8 @@ class BackendAnalyticsAdapter implements AnalyticsAdapter {
           'properties': properties,
         }),
       );
-      final response = await request.close();
-      await response.drain<void>();
+      final response = await closeBackendRequest(request);
+      await response.drain<void>().timeout(backendRequestTimeout);
     } catch (_) {
       // Telemetry must never break the user flow.
     }
@@ -146,7 +148,7 @@ class BackendCrashReporter implements CrashReporter {
     String token,
   ) async {
     try {
-      final request = await _httpClient.postUrl(
+      final request = await openBackendRequest(_httpClient, 'POST', 
         apiBase.replace(path: '/telemetry/crash'),
       );
       request.headers.contentType = ContentType.json;
@@ -163,8 +165,8 @@ class BackendCrashReporter implements CrashReporter {
           },
         }),
       );
-      final response = await request.close();
-      await response.drain<void>();
+      final response = await closeBackendRequest(request);
+      await response.drain<void>().timeout(backendRequestTimeout);
     } catch (_) {
       // Crash reporting must never trigger a second crash.
     }
@@ -188,12 +190,12 @@ class BackendRemoteConfigAdapter implements RemoteConfigAdapter {
 
   @override
   Future<Map<String, Object?>> fetch() async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/app-config'),
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
-    final raw = await utf8.decoder.bind(response).join();
+    final response = await closeBackendRequest(request);
+    final raw = await readBackendResponse(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Remote config HTTP ${response.statusCode}');
     }

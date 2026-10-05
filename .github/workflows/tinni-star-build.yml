@@ -153,9 +153,9 @@ jobs:
         run: |
           set -euo pipefail
           base="https://tinni-star-api.mishrajii7991.workers.dev"
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health"
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health"
           echo
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health/deep"
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health/deep"
           echo
 
       - name: Build installable APK

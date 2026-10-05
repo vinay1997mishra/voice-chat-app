@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 import 'package:flutter/foundation.dart';
 
 import 'fruit_party_game.dart';
@@ -90,7 +92,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
     try {
       final startedAt = DateTime.now().millisecondsSinceEpoch;
       final uri = apiBase.replace(path: '/fruit-party/state');
-      final request = await _httpClient.getUrl(uri).timeout(requestTimeout);
+      final request = await openBackendRequest(_httpClient, 'GET', uri).timeout(requestTimeout);
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
       request.headers.set(
         HttpHeaders.authorizationHeader,
@@ -129,7 +131,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
 
     try {
       final uri = apiBase.replace(path: '/fruit-party/bet');
-      final request = await _httpClient.postUrl(uri).timeout(requestTimeout);
+      final request = await openBackendRequest(_httpClient, 'POST', uri).timeout(requestTimeout);
       request.headers.contentType = ContentType.json;
       request.headers.set(
         HttpHeaders.authorizationHeader,
@@ -163,7 +165,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
     try {
-      final response = await request.close().timeout(requestTimeout);
+      final response = await closeBackendRequest(request).timeout(requestTimeout);
       final data = await _readJson(response).timeout(requestTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
@@ -247,7 +249,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
-    final body = await utf8.decoder.bind(response).join();
+    final body = await readBackendResponse(response);
     final trimmed = body.trim();
     if (trimmed.isEmpty) return <String, dynamic>{};
 

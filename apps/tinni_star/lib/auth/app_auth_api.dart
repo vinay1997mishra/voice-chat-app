@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 class AppAuthConfig {
   const AppAuthConfig({
     required this.googleServerClientId,
@@ -99,10 +101,10 @@ class AppAuthApi {
   final HttpClient _httpClient;
 
   Future<AppAuthConfig> loadConfig() async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/auth-config'),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -127,7 +129,7 @@ class AppAuthApi {
     required String idToken,
     Map<String, dynamic>? profile,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/google'),
     );
     request.headers.contentType = ContentType.json;
@@ -137,7 +139,7 @@ class AppAuthApi {
     }
     request.write(jsonEncode(payload));
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
 
     if (response.statusCode == 428 && data['profile_required'] == true) {
@@ -164,13 +166,13 @@ class AppAuthApi {
   }
 
   Future<FacebookStartResult> startFacebookLogin() async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/facebook/start'),
     );
     request.headers.contentType = ContentType.json;
     request.write('{}');
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -191,14 +193,14 @@ class AppAuthApi {
   }
 
   Future<FacebookPollResult> pollFacebookLogin(String requestId) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/app-auth/facebook/status',
         queryParameters: <String, String>{'request_id': requestId},
       ),
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -242,7 +244,7 @@ class AppAuthApi {
     required String requestId,
     required Map<String, dynamic> profile,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/facebook/complete'),
     );
     request.headers.contentType = ContentType.json;
@@ -253,7 +255,7 @@ class AppAuthApi {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -268,13 +270,13 @@ class AppAuthApi {
   }
 
   Future<EmailOtpStartResult> startEmailOtp(String email) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/email/start'),
     );
     request.headers.contentType = ContentType.json;
     request.write(jsonEncode(<String, dynamic>{'email': email.trim()}));
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -292,7 +294,7 @@ class AppAuthApi {
     required String requestId,
     required String otp,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/email/verify'),
     );
     request.headers.contentType = ContentType.json;
@@ -303,7 +305,7 @@ class AppAuthApi {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -323,7 +325,7 @@ class AppAuthApi {
     required String password,
     Map<String, dynamic>? profile,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/email/complete'),
     );
     request.headers.contentType = ContentType.json;
@@ -334,7 +336,7 @@ class AppAuthApi {
     if (profile != null) payload['profile'] = profile;
     request.write(jsonEncode(payload));
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -352,7 +354,7 @@ class AppAuthApi {
     required String email,
     required String password,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app-auth/email/login'),
     );
     request.headers.contentType = ContentType.json;
@@ -363,7 +365,7 @@ class AppAuthApi {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -378,9 +380,9 @@ class AppAuthApi {
   }
 
   Future<Map<String, dynamic>> me(String token) async {
-    final request = await _httpClient.getUrl(apiBase.replace(path: '/app/me'));
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(path: '/app/me'));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Session expired');
@@ -389,7 +391,7 @@ class AppAuthApi {
   }
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
-    final body = await utf8.decoder.bind(response).join();
+    final body = await readBackendResponse(response);
     final trimmed = body.trim();
     if (trimmed.isEmpty) return <String, dynamic>{};
 

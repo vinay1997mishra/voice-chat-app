@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../activities/activity_service.dart';
@@ -50,6 +52,7 @@ class TinniState {
   TinniState({
     required this.runtime,
     this.roomPresenceFallbackTimerEnabled = true,
+    AppBackendService? backendService,
   })  : connector = AnamikaConnector(runtime: runtime),
         wallet = WalletService(),
         auth = AuthService(),
@@ -82,7 +85,7 @@ class TinniState {
         cpFeatures = CpFeatureService(),
         parties = PartyService(),
         push = LocalPushAdapter(),
-        backend = AppBackendService(),
+        backend = backendService ?? AppBackendService(),
         realtime = RealtimeCoordinator(
           rtc: LiveKitRtcAdapter(),
           im: BackendImAdapter(),
@@ -92,6 +95,12 @@ class TinniState {
       tokenProvider: () => auth.current?.authToken,
     );
     backend.diagnosticSink = analytics.event;
+    backend.onSessionExpired = (token) {
+      if (auth.current?.authToken != token) return;
+      auth.forcedLogout();
+      profile.clear();
+      unawaited(_clearExpiredSession());
+    };
     roomPresence.diagnosticSink = analytics.event;
     crashReporter = BackendCrashReporter(
       tokenProvider: () => auth.current?.authToken,
@@ -148,6 +157,21 @@ class TinniState {
     );
   }
 
+  Future<void> _clearExpiredSession() async {
+    try {
+      await authPersistence?.clear();
+    } catch (_) {}
+    try {
+      await social.disconnectMessageEvents();
+    } catch (_) {}
+    try {
+      await roomSession.close();
+    } catch (_) {}
+    try {
+      await push.unregister();
+    } catch (_) {}
+  }
+
   final bool roomPresenceFallbackTimerEnabled;
 
   final ValueNotifier<String> languagePreference =
@@ -169,6 +193,7 @@ class TinniState {
     _refreshingAccountIdentity = true;
     try {
       final user = await backend.currentUser(account.authToken);
+      if (auth.current?.authToken != account.authToken) return false;
       final serverUserId = user['user_id']?.toString().trim() ?? '';
       if (serverUserId.isEmpty) return false;
 

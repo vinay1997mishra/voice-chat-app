@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 import 'package:flutter/foundation.dart';
 
 import '../identity/owner_tag.dart';
@@ -560,7 +562,7 @@ class RoomPresenceService extends ChangeNotifier {
     required String targetUserId,
     Duration? duration,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-presence/kick'),
     );
     request.headers.contentType = ContentType.json;
@@ -575,7 +577,7 @@ class RoomPresenceService extends ChangeNotifier {
         'duration_ms': duration?.inMilliseconds,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -854,7 +856,7 @@ class RoomPresenceService extends ChangeNotifier {
     required int seatIndex,
     required bool muted,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-presence/mute'),
     );
     request.headers.contentType = ContentType.json;
@@ -870,7 +872,7 @@ class RoomPresenceService extends ChangeNotifier {
         'muted': muted,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -887,7 +889,7 @@ class RoomPresenceService extends ChangeNotifier {
     required int seatIndex,
     required String emote,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-presence/emote'),
     );
     request.headers.contentType = ContentType.json;
@@ -902,7 +904,7 @@ class RoomPresenceService extends ChangeNotifier {
         'emote': emote,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -920,11 +922,17 @@ class RoomPresenceService extends ChangeNotifier {
     bool applyResponse = true,
   }) async {
     const maxAttempts = 3;
+    // Never replay transactions or random draws after an ambiguous response.
+    final attempts = path == '/gifts/send' ||
+            path == '/room-presence/lucky-number' ||
+            path == '/room-presence/clear-comments'
+        ? 1
+        : maxAttempts;
     Object? lastFailure;
 
-    for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+    for (var attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        final request = await _httpClient.postUrl(apiBase.replace(path: path));
+        final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: path));
         request.headers.contentType = ContentType.json;
         request.headers.set(
           HttpHeaders.authorizationHeader,
@@ -933,14 +941,14 @@ class RoomPresenceService extends ChangeNotifier {
         request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
         request.write(jsonEncode(payload));
 
-        final response = await request.close().timeout(
+        final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
         final data = await _readJson(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final message =
               data['error']?.toString() ?? 'Room action failed';
-          if (response.statusCode >= 500 && attempt + 1 < maxAttempts) {
+          if (response.statusCode >= 500 && attempt + 1 < attempts) {
             await Future<void>.delayed(
               Duration(milliseconds: attempt == 0 ? 250 : 700),
             );
@@ -968,7 +976,7 @@ class RoomPresenceService extends ChangeNotifier {
             lower.contains('connection closed') ||
             lower.contains('timed out') ||
             lower.contains('timeoutexception');
-        if (transient && attempt + 1 < maxAttempts) {
+        if (transient && attempt + 1 < attempts) {
           await Future<void>.delayed(
             Duration(milliseconds: attempt == 0 ? 250 : 700),
           );
@@ -1014,7 +1022,7 @@ class RoomPresenceService extends ChangeNotifier {
     required String roomId,
     required String authToken,
   }) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/gifts/room',
         queryParameters: <String, String>{'room_id': roomId},
@@ -1025,7 +1033,7 @@ class RoomPresenceService extends ChangeNotifier {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -1045,7 +1053,7 @@ class RoomPresenceService extends ChangeNotifier {
   Future<Map<String, dynamic>> luckyGiftState({
     required String authToken,
   }) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/gifts/lucky/state'),
     );
     request.headers.set(
@@ -1053,7 +1061,7 @@ class RoomPresenceService extends ChangeNotifier {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -1072,13 +1080,13 @@ class RoomPresenceService extends ChangeNotifier {
         path: '/room-presence/state',
         queryParameters: <String, String>{'room_id': roomId},
       );
-      final request = await _httpClient.getUrl(uri);
+      final request = await openBackendRequest(_httpClient, 'GET', uri);
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer $authToken',
       );
-      final response = await request.close();
+      final response = await closeBackendRequest(request);
       final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
@@ -1121,7 +1129,7 @@ class RoomPresenceService extends ChangeNotifier {
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         final request =
-            await _httpClient.postUrl(apiBase.replace(path: path));
+            await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: path));
         request.headers.contentType = ContentType.json;
         request.headers.set(
           HttpHeaders.authorizationHeader,
@@ -1142,7 +1150,7 @@ class RoomPresenceService extends ChangeNotifier {
           }),
         );
 
-        final response = await request.close().timeout(
+        final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
         final data = await _readJson(response);
@@ -1460,7 +1468,7 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
-    final body = await utf8.decoder.bind(response).join();
+    final body = await readBackendResponse(response);
     final trimmed = body.trim();
     if (trimmed.isEmpty) return <String, dynamic>{};
 
