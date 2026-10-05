@@ -21,6 +21,11 @@ for index, spec in enumerate(catalog.SPECS):
     if spec["builder"] == "rocket":
         hull = bpy.data.objects.get("Graphite pressure hull")
         assert hull and hull.parent and "Rocket level" in hull.parent.name
+        for frame in (1, 48, 120, 192, 193):
+            bpy.context.scene.frame_set(frame)
+            assert abs(hull.parent.location.z) < 1e-6, "Rocket lifts before countdown 1"
+        bpy.context.scene.frame_set(216)
+        assert hull.parent.location.z > 9, "Rocket never completes liftoff"
         for o in meshes:
             if "booster" in o.name.lower() or "mounting bracket" in o.name.lower():
                 assert o.parent == hull.parent, "Detached Rocket hardware"

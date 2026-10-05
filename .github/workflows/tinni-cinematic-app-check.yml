@@ -5,6 +5,10 @@ on:
     branches: [cinematic-apk-integration, tinnistar]
     paths:
       - 'apps/tinni_star/lib/effects/**'
+      - 'apps/tinni_star/lib/ui/rocket*'
+      - 'apps/tinni_star/lib/screens/room_screen.dart'
+      - 'apps/tinni_star/lib/economy/premium_gift_catalog.dart'
+      - 'apps/tinni_star/lib/discovery/discovery_service.dart'
       - 'apps/tinni_star/test/cinematic_playback_test.dart'
       - '.github/workflows/tinni-cinematic-app-check.yml'
   workflow_dispatch:

@@ -251,6 +251,7 @@ def rice(feast=False):
     bowl()
     saffron = material("Saffron grains", (.83, .49, .13), 0, .62)
     plain = material("Basmati grains", (.91, .84, .66), 0, .58)
+    sphere("Full rice mound", (0, 0, .59), (.96, .96, .22), saffron, root)
     # Shared geometry and materials keep CPU rendering bounded.
     prototype = sphere("Basmati grain", (0, 0, 0), (.055, .015, .013), plain, root, 8)
     for i in range(340):
@@ -570,6 +571,11 @@ def person(x, woman=False):
     skin = material("Warm ceramic skin", (.64, .35, .20), .12, .36)
     sphere("Partner face", (0, 0, 1.68), (.14, .12, .19), skin, p)
     sphere("Sculpted hair", (0, .035, 1.77), (.15, .12, .14), black, p)
+    for x_eye in [-.045, .045]:
+        sphere("Partner eye", (x_eye, -.113, 1.73), (.015, .012, .015), black, p, 8)
+    sphere("Partner nose", (0, -.127, 1.69), (.025, .028, .027), skin, p, 8)
+    tube("Partner smile", [(-.035, -.137, 1.645), (0, -.141, 1.637),
+                           (.035, -.137, 1.645)], .008, red, p)
     cone("Dress" if woman else "Tailored jacket", .32 if woman else .17, .13, .7,
          (0, 0, 1.03), ivory if spec["builder"] == "wedding" and woman else pink if woman else black, p)
     for side in [-1, 1]:
@@ -593,6 +599,12 @@ def romance(kind):
         key(p, round(scene.frame_end*.45), "location", (sign*.31, 0, 0))
         key(p, round(scene.frame_end*.80), "location", (sign*(.18 if kind in ("kiss", "hug") else .31), 0, 0))
         key(p, scene.frame_end, "location", (sign*(.18 if kind in ("kiss", "hug") else .31), 0, 0))
+    if kind in ("kiss", "hug"):
+        for p, sign in [(left, 1), (right, -1)]:
+            key(p, 1, "rotation_euler", (0, 0, 0))
+            key(p, round(scene.frame_end*.5), "rotation_euler", (0, 0, sign*math.pi*.35))
+            key(p, round(scene.frame_end*.8), "rotation_euler", (0, 0, sign*math.pi/2))
+            key(p, scene.frame_end, "rotation_euler", (0, 0, sign*math.pi/2))
     heart((0, .22, 2.3), .32)
     if kind == "wedding":
         tube("Wedding floral arch", [(-1.2, .45, .2), (-1.25, .45, 1.9), (0, .45, 2.65),
@@ -616,150 +628,6 @@ def opera():
         points = [(x-.14, -.17, 1.08), (x, -.18, 1.02 if x < 0 else 1.17), (x+.14, -.17, 1.08)]
         tube("Opera expression", points, .02, black, root)
 
-def national_monument(code):
-    """Small named landmark models below the flag, all attached to one plinth."""
-    named = {"ae", "au", "bd", "br", "ca", "cn", "eg", "fr", "gb", "in",
-             "it", "jp", "kr", "np", "pk", "ru", "sa", "tr", "us", "za"}
-    if code not in named:
-        return
-    p = empty("National landmark " + code.upper())
-    p.parent = root
-    p.scale = (.38, .38, .38)
-    p.location = (.05, -.64, .22)
-    if code in ("in", "pk", "sa", "kr"):
-        before = set(bpy.data.objects)
-        palace(temple=code == "kr")
-        for o in set(bpy.data.objects)-before:
-            if o.parent == root:
-                o.parent = p
-        if code == "pk":
-            for x in [-.48, .48]:
-                sphere("Mosque side dome", (x, -.05, 1.58), (.30, .30, .31), ivory, p)
-        elif code == "in":
-            for x in [-1, 1]:
-                for y in [-.6, .6]:
-                    cone("Taj minaret", .11, .08, 1.9, (x, y, 1.06), ivory, p)
-                    sphere("Minaret dome", (x, y, 2.07), (.14, .14, .12), gold, p)
-    elif code == "fr":
-        for side in [-1, 1]:
-            for depth in [-1, 1]:
-                tube("Eiffel lattice leg", [(side*.85, depth*.65, .1),
-                     (side*.43, depth*.34, 1.15), (side*.12, depth*.10, 2.5)], .075, gold, p)
-        for z, width in [(.65, 1.2), (1.15, .87), (1.9, .43)]:
-            box("Eiffel viewing deck", (0, 0, z), (width, width*.8, .12), gold, p)
-        for i in range(5):
-            z = .35+i*.32
-            w = .72-i*.11
-            tube("Eiffel cross brace", [(-w, -.36, z), (w, -.36, z+.32)], .026, gold, p)
-            tube("Eiffel cross brace", [(w, -.36, z), (-w, -.36, z+.32)], .026, gold, p)
-        cone("Eiffel antenna", .07, 0, .4, (0, 0, 2.65), gold, p)
-    elif code == "ae":
-        for i in range(8):
-            cone("Burj tier", .35-i*.037, .35-i*.037, .35,
-                 ((i%3-1)*.045, 0, .2+i*.3), silver, p, 6)
-        cone("Burj needle", .055, 0, .65, (0, 0, 2.73), silver, p)
-    elif code == "gb":
-        box("Elizabeth Tower", (0, 0, 1.1), (.72, .65, 2.1), gold, p)
-        face = sphere("Big Ben clock face", (0, -.34, 1.8), (.25, .025, .25), ivory, p)
-        for i in range(12):
-            a = i*TAU/12
-            sphere("Clock hour", (.20*math.sin(a), -.373, 1.8+.20*math.cos(a)),
-                   (.018, .012, .018), black, p, 8)
-        tube("Clock hands", [(0, -.38, 2), (0, -.38, 1.8), (.13, -.38, 1.8)], .016, black, p)
-        cone("Tower gothic spire", .5, 0, .6, (0, 0, 2.44), black, p, 4)
-    elif code == "bd":
-        for i in range(7):
-            x = (i-3)*.22
-            h = 2.1-abs(i-3)*.3
-            box("National memorial blade", (x, 0, h/2), (.09, .45, h), silver, p)
-    elif code == "eg":
-        for x, r in [(-.72, .70), (.50, .53), (1.24, .35)]:
-            cone("Giza pyramid", r, 0, r*1.6, (x, 0, r*.8), gold, p, 4).rotation_euler.z = math.pi/4
-    elif code == "it":
-        for layer in range(3):
-            z = .3+layer*.36
-            ring("Colosseum facade", 1.0, (0, 0, z), ivory, p, .07)
-            for i in range(24):
-                a = i*TAU/24
-                cone("Colosseum arch pier", .045, .045, .34,
-                     (math.cos(a), .75*math.sin(a), z+.18), ivory, p)
-                tube("Roman arch", [(math.cos(a)-.07, .75*math.sin(a), z+.2),
-                     (math.cos(a), .75*math.sin(a), z+.32),
-                     (math.cos(a)+.07, .75*math.sin(a), z+.2)], .022, ivory, p)
-        cone("Roman arena", .88, .88, .06, (0, 0, .12), gold, p)
-    elif code == "cn":
-        for i in range(11):
-            x = (i-5)*.25
-            y = .18*math.sin(i*.7)
-            box("Great Wall rampart", (x, y, .45), (.27, .35, .55), ivory, p)
-            box("Wall battlement", (x, y-.13, .81), (.15, .08, .17), gold, p)
-        for x in [-1, 0, 1]:
-            box("Great Wall watchtower", (x, 0, .7), (.45, .50, .9), ivory, p)
-            cone("Watchtower roof", .45, 0, .30, (x, 0, 1.31), gold, p, 4).rotation_euler.z = math.pi/4
-    elif code == "au":
-        box("Opera House platform", (0, 0, .18), (2.4, 1.1, .18), ivory, p)
-        for i in range(5):
-            x = (i-2)*.38
-            shell = sphere("Opera sail shell", (x, .04*(i%2), .67),
-                           (.25, .55, .63), ivory, p)
-            shell.rotation_euler.y = -.45+i*.13
-    elif code in ("jp", "np", "za"):
-        if code == "za":
-            box("Table Mountain plateau", (0, 0, .63), (2.4, .9, 1), green, p)
-            box("Flat mountain summit", (0, 0, 1.15), (2.3, .86, .08), ivory, p)
-        else:
-            for x, r in [(0, 1), (.85, .55), (-.85, .48)]:
-                cone("Mount Fuji" if code == "jp" else "Himalayan peak", r, 0, r*1.75,
-                     (x, .13*abs(x), r*.875), blue, p, 12 if code == "jp" else 5)
-                cone("Snow summit", r*.35, 0, r*.61,
-                     (x, .13*abs(x), r*1.45), ivory, p, 12 if code == "jp" else 5)
-    elif code == "ru":
-        for i in range(6):
-            a = i*TAU/6
-            x, y = .76*math.cos(a), .55*math.sin(a)
-            h = 1+(i%3)*.18
-            cone("Saint Basil tower", .22, .22, h, (x, y, h/2), red, p)
-            sphere("Colourful onion dome", (x, y, h+.18), (.28, .28, .32), palette[i%5], p)
-            cone("Onion dome tip", .15, 0, .3, (x, y, h+.50), gold, p)
-    elif code == "us":
-        box("Liberty pedestal", (0, 0, .28), (.65, .65, .5), ivory, p)
-        cone("Liberty robe", .30, .13, 1.1, (0, 0, 1.1), green, p)
-        sphere("Liberty head", (0, 0, 1.83), (.14, .12, .18), green, p)
-        tube("Raised torch arm", [(0, 0, 1.55), (-.28, 0, 1.85), (-.38, 0, 2.30)], .06, green, p)
-        cone("Liberty torch", .065, .12, .22, (-.38, 0, 2.40), gold, p)
-        sphere("Liberty torch flame", (-.38, 0, 2.6), (.075, .075, .16), hot, p)
-        box("Liberty tablet", (.19, -.04, 1.36), (.17, .08, .30), green, p)
-        for i in range(7):
-            a = math.pi*.1+i*math.pi*.8/6
-            tube("Liberty crown ray", [(.13*math.cos(a), 0, 1.91+.13*math.sin(a)),
-                 (.24*math.cos(a), 0, 1.91+.24*math.sin(a))], .018, green, p)
-    elif code == "tr":
-        for i in range(6):
-            x = (i-2.5)*.35
-            cone("Cappadocia fairy chimney", .18, .08, .8+(i%3)*.2,
-                 (x, .13*(i%2), .5), gold, p)
-            cone("Fairy chimney cap", .22, 0, .35, (x, .13*(i%2), 1+(i%3)*.15), ivory, p)
-            sphere("Cappadocia balloon", (x, .12, 1.9+(i%3)*.15), (.18, .18, .24), palette[i%5], p)
-            box("Balloon basket", (x, .12, 1.55+(i%3)*.15), (.1, .1, .08), gold, p)
-    elif code == "ca":
-        for i in range(6):
-            x = (i-2.5)*.23
-            tube("Maple Falls water", [(x, 0, 1.25), (x, -.1, .65), (x, -.35, .1)], .04, cyan, p)
-        for side in [-1, 1]:
-            cone("Maple tree trunk", .045, .03, .65, (side*.9, 0, .35), gold, p)
-            for i in range(5):
-                a = i*TAU/5
-                sphere("Autumn maple leaves", (side*.9+.15*math.cos(a), .05, .85+.15*math.sin(a)),
-                       (.18, .08, .18), red, p)
-    elif code == "br":
-        for i in range(13):
-            a = i*math.pi/12
-            tube("Carnival feather", [(0, .12, .5), (.9*math.cos(a), .12, .8+math.sin(a))], .035, palette[i%5], p)
-            sphere("Feather tip", (.9*math.cos(a), .12, .8+math.sin(a)), (.09, .045, .17), palette[i%5], p)
-        sphere("Carnival mask", (0, -.04, .8), (.45, .12, .24), gold, p)
-        for x in [-.18, .18]:
-            sphere("Mask eye", (x, -.16, .83), (.09, .02, .065), black, p)
-
 def country():
     code = args.scene[5:]
     texture = HERE / "flags" / (code + ".png")
@@ -773,9 +641,10 @@ def country():
     cloth.node_tree.links.new(image.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
     verts, faces = [], []
     nx, nz = 24, 12
+    height = 2.1*image.image.size[1]/image.image.size[0]
     for z in range(nz+1):
         for x in range(nx+1):
-            verts.append((-1+x/nx*2.1, 0, 1.1+z/nz*1.3))
+            verts.append((-1+x/nx*2.1, 0, 1.75+(z/nz-.5)*height))
     for z in range(nz):
         for x in range(nx):
             a = z*(nx+1)+x
@@ -793,7 +662,8 @@ def country():
         for vi, vertex in enumerate(shape.data):
             x = (vi%(nx+1))/nx
             z = (vi//(nx+1))/nz
-            vertex.co.y = .19*x*math.sin(x*8+z*2+phase*math.pi/2)
+            vertex.co.y = .28*x*math.sin(x*8+z*2+phase*math.pi/2)
+            vertex.co.z += .045*x*math.sin(x*8-z*3+phase*math.pi/2)
         states.append(shape)
     for f in range(1, scene.frame_end+1, 6):
         phase = ((f-1)//6)%4
@@ -802,8 +672,9 @@ def country():
             shape.keyframe_insert(data_path="value", frame=f)
     cone("Gold flag mast", .026, .026, 2.6, (-1.04, 0, 1.3), gold, root)
     sphere("Mast finial", (-1.04, 0, 2.64), (.07,)*3, gold, root)
-    cone("National monument plinth", 1.15, 1.05, .25, (0, 0, .15), ivory, root)
-    national_monument(code)
+    camera.location = (.05, -3.2, 1.75)
+    camera.data.lens = 52
+    camera.rotation_euler = aim(camera, (0, 0, 1.75))
 
 def exhaust(parent, x, y, z, radius):
     for mat, length, width in [(fire, 1.55, 1), (hot, .83, .47)]:
@@ -811,7 +682,7 @@ def exhaust(parent, x, y, z, radius):
         for v in flame.data.vertices:
             v.co.z -= length/2
         for f in range(1, scene.frame_end+1, 8):
-            strength = max(.001, min(1.4, (f-20)/24))*(.93+.09*math.sin(f*.7+x*10))
+            strength = (.10+1.05*min(1, (f-1)/192))*(.93+.09*math.sin(f*.7+x*10))
             key(flame, f, "scale", (1, 1, strength))
         linear(flame)
 
@@ -873,13 +744,15 @@ def rocket():
             ring("Command armour collar", .47, (0, 0, z), gold, root, .045)
     cone("Launch platform", 1.8, 1.8, .18, (0, 0, -.02), black)
     ring("Launch pad guidance ring", 1.68, (0, 0, .08), cyan, thickness=.025)
-    for f, z in [(1, 0), (24, 0), (44, .08), (68, .4), (100, 1.2), (140, 3.0), (180, 5.5), (216, 9.5)]:
+    for f, z in [(1, 0), (192, 0), (193, 0), (200, .65), (208, 3.4), (216, 9.5)]:
         key(root, f, "location", (0, 0, z))
     # Tracking includes the full model and attached boosters through liftoff.
     camera.location = (6, -11, 5.6)
     camera.data.lens = 43
-    for f, at in [(1, 2.15), (44, 2.15), (100, 3.1), (140, 5), (180, 7.4), (216, 11.4)]:
+    for f, at in [(1, 2.15), (192, 2.15), (193, 2.15), (200, 2.8), (208, 5.5), (216, 11.4)]:
         key(camera, f, "rotation_euler", aim(camera, (0, 0, at)))
+    linear(root)
+    linear(camera)
     smoke = material("Launch smoke", (.18, .22, .28), 0, 1)
     for i in range(16):
         a = i*2.4
@@ -888,7 +761,8 @@ def rocket():
         key(cloud, 24, "scale", (.001,)*3)
         key(cloud, 65, "scale", (.28, .28, .20))
         key(cloud, 125, "scale", (.58, .58, .32))
-        key(cloud, 216, "scale", (.015,)*3)
+        key(cloud, 192, "scale", (.72, .72, .40))
+        key(cloud, 216, "scale", (.92, .92, .50))
         for f, r in [(1, .1), (24, .1), (65, .9), (125, 2), (216, 3)]:
             key(cloud, f, "location", (r*math.cos(a), r*math.sin(a), .10+i%3*.08))
     for i in range(18+level):
@@ -897,7 +771,7 @@ def rocket():
         box("Gift box", (0, 0, 0), (.16, .16, .16), palette[i%5], gift, .01)
         box("Gift ribbon X", (0, 0, .085), (.17, .035, .012), gold, gift, 0)
         box("Gift ribbon Y", (0, 0, .086), (.035, .17, .012), gold, gift, 0)
-        for f, z in [(1, -4), (42+i*2, -4), (43+i*2, 7), (130+i*2, -.2), (216, -.25)]:
+        for f, z in [(1, -4), (192, -4), (193+i%8, 7), (216, 1+i*.06)]:
             key(gift, f, "location", (x, y, z))
             key(gift, f, "rotation_euler", (f*.023, f*.03, f*.021))
         linear(gift)
@@ -948,7 +822,9 @@ elif builder == "country":
 else:
     raise ValueError("Unimplemented catalog builder: " + builder)
 
-if builder != "rocket":
+if builder not in ("rocket", "country"):
+    if args.scene.startswith("cp-") and builder in ("cake", "carriage", "palace"):
+        heart((0, 0, 2.4), .28)
     sparkle()
     for f, angle in [(1, -.18), (scene.frame_end//2, .12), (scene.frame_end, .30)]:
         key(root, f, "rotation_euler", (0, 0, angle))
@@ -961,6 +837,7 @@ if builder == "country":
     # Flag films use real deformed textured geometry with studio lighting.
     # Workbench avoids hundreds of repeated expensive PBR shadow passes.
     scene.render.engine = "BLENDER_WORKBENCH"
+    scene.view_settings.view_transform = "Standard"
     scene.display.shading.light = "STUDIO"
     scene.display.shading.color_type = "TEXTURE"
     scene.display.shading.show_shadows = True

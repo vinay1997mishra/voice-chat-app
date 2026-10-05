@@ -15,6 +15,9 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(catalog.SPECS), 329)
         self.assertEqual(sum(s["builder"] == "country" for s in catalog.SPECS), 249)
 
+    def test_country_flags_have_exact_two_second_movies(self):
+        self.assertTrue(all(s["duration"] == 2 for s in catalog.SPECS if s["builder"] == "country"))
+
     def test_sharding_never_loses_or_duplicates_a_scene(self):
         shards = [catalog.ordered()[i::20] for i in range(20)]
         flattened = [s["id"] for shard in shards for s in shard]

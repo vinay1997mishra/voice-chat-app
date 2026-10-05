@@ -1310,3 +1310,15 @@ Unless explicitly changed by Platform Owner:
 - Preserve all gift prices, recipient eligibility, Lucky quantities/combo rules, Host-only Diamonds, Lucky 10% value, normal 100% value, room/game controls and unrelated locked behavior.
 - Publish review sheets and the immutable movie bundle from the same `tinnistar` workflow after every scene verifies; source changes are never evidence that movies rendered or played correctly on a real device.
 - Gift and Rocket cinematic movies share one fair foreground lane so neither movie hides the other. Gift scenes respect both the master Effects toggle and the Gift Effects toggle.
+
+
+### Cinematic Rocket and Country follow-up (2026-10-05)
+
+The user's latest timing and privacy instructions supersede earlier general cinematic gift holds for Country gifts:
+
+- Rocket's total sequence is nine foreground seconds. Show the screen countdown 9→1. During 9–2, the integrated Rocket stays on the launch pad while engine pressure, exhaust and smoke grow. Only at 1 (eight elapsed seconds) does it lift off; the nine-second sequence then ends.
+- After that sequence, request only the signed-in user's actual awarded Rocket reward. Coins, animated frame and medal come from the server; no other user's received gift/reward is shown. The authenticated personal-reward endpoint ignores client-supplied user IDs. Public room ranking retains sender names and rank but excludes received reward metadata. Private cards last six foreground seconds and can be closed immediately. Non-winners receive no fabricated card; historical launches do not replay.
+- Country gifts retain their ordinary national flag and its correct artwork/aspect ratio. Show that flag waving at the center for exactly two foreground seconds, then run the existing selected-recipient flight. Do not substitute landmarks or a generic flag. Other gift prices, durations, destinations and wallet rules remain unchanged.
+- Keep the locked seven-second server audience eligibility/payout window, ten incremental Rocket thresholds, Lucky 10%/normal 100%, and Host-only diamonds. These changes concern presentation and authenticated reward reads.
+
+- Country follow-up: show a large centered flag stage (96% screen width, 66% screen height), with natural wind ripples. After the two-second hold, shrink the flag during its flight to the exact selected receiver ID/DP.

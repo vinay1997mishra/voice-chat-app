@@ -31,6 +31,7 @@ import '../ui/royal_theme.dart';
 import '../ui/room_emotion_backdrop.dart';
 import '../ui/animated_avatar_frame.dart';
 import '../ui/rocket_rewards_panel.dart';
+import '../ui/rocket_personal_reward.dart';
 import '../ui/rocket_launch_banner.dart';
 import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
@@ -229,6 +230,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       // A failed read never clears a previously displayed rocket or ranking.
       return _lastRoomSendingSummary;
     }
+  }
+
+  Future<void> _refreshRocketRewardWallet() async {
+    try {
+      await widget.state.refreshAuthenticatedAccount(force: true);
+    } catch (_) {
+      // A display refresh never affects the already settled server reward.
+    }
+  }
+
+  Future<RocketPersonalReward?> _loadPersonalRocketReward(int level) async {
+    final account = widget.state.auth.current;
+    if (account == null) return null;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final response = await widget.state.discovery.personalRocketReward(
+        authToken: account.authToken, roomId: widget.room.id, level: level,
+      );
+      if (!mounted || widget.state.auth.current?.userId != account.userId) {
+        return null;
+      }
+      final reward = RocketPersonalReward.fromResponse(
+        response, viewerId: account.userId, level: level,
+      );
+      if (reward != null) {
+        unawaited(_refreshRocketRewardWallet());
+        return reward;
+      }
+      if (response['settled'] == true) return null;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return null;
   }
 
   void _primeRoomSendingSummary() {
@@ -3006,6 +3038,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     required GiftDefinition gift,
     required double seatDiameter,
   }) {
+    final countryFlag = gift.id.startsWith('flag-');
     return IgnorePointer(
       child: TweenAnimationBuilder<double>(
         key: ValueKey<String>('seat-gift-impact-$_seatGiftEffectSequence'),
@@ -3016,7 +3049,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final fade = value < 0.72
               ? 1.0
               : ((1 - value) / 0.28).clamp(0.0, 1.0).toDouble();
-          final scale = 0.38 + Curves.easeOutBack.transform(value) * 0.86;
+          final scale = countryFlag
+              ? .7 + (1 - value) * (MediaQuery.sizeOf(context).width * .88 /
+                  (seatDiameter * .76 * .62) - .7)
+              : 0.38 + Curves.easeOutBack.transform(value) * 0.86;
           final rise = math.sin(math.pi * value) * seatDiameter * 0.42;
           final origin = _giftFlightOriginOffset(context);
           return Transform.translate(
@@ -3029,8 +3065,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Opacity(
                 opacity: fade,
                 child: Container(
-                  padding: EdgeInsets.all(math.max(1.0, seatDiameter * 0.035)),
-                  decoration: BoxDecoration(
+                  padding: countryFlag ? EdgeInsets.zero : EdgeInsets.all(math.max(1.0, seatDiameter * 0.035)),
+                  decoration: countryFlag ? null : BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: const Color(0xFFFFD45A),
@@ -9600,6 +9636,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             Positioned.fill(child: RocketLaunchOverlay(
               completed: _rocketCompleted,
+              viewerId: widget.state.auth.current?.userId,
+              loadReward: _loadPersonalRocketReward,
               lane: _cinematicLane,
               enabled: widget.state.roomControls.effectsEnabled && widget.state.roomControls.rocketDrawNoticeEnabled,
             )),

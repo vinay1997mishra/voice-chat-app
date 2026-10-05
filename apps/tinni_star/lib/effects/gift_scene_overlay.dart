@@ -174,6 +174,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     final event = _event;
     if (event == null || !widget.enabled) return const SizedBox.shrink();
     final fullScreen = PremiumGiftCatalog.isFullScreen(event.gift.id);
+    final countryFlag = event.gift.id.startsWith('flag-');
     final reduced = MediaQuery.disableAnimationsOf(context);
     return IgnorePointer(
       child: RepaintBoundary(
@@ -185,16 +186,22 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
               animation: _motion,
               builder: (context, child) {
                 final fallback = CustomPaint(
-                  painter: _GiftScenePainter(
-                    gift: event.gift,
-                    t: reduced ? .6 : _motion.value,
-                  ),
+                  painter: event.gift.id.startsWith('flag-')
+                      ? _CountryFlagPainter(
+                          emoji: event.gift.emoji,
+                          t: reduced ? 0 : _motion.value,
+                        )
+                      : _GiftScenePainter(
+                          gift: event.gift,
+                          t: reduced ? .6 : _motion.value,
+                        ),
                   child: const SizedBox.expand(),
                 );
                 return Center(
                   child: FractionallySizedBox(
-                    widthFactor: fullScreen ? 1 : .72,
-                    heightFactor: fullScreen ? 1 : .62,
+                    key: countryFlag ? const Key('country-flag-large-center') : null,
+                    widthFactor: countryFlag ? .96 : fullScreen ? 1 : .72,
+                    heightFactor: countryFlag ? .66 : fullScreen ? 1 : .62,
                     child: CinematicVideo(
                       key: ObjectKey(event),
                       sceneId: event.gift.id,
@@ -241,6 +248,35 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     );
   }
 }
+/// The ordinary national flag stays recognizable while its cloth gently waves.
+class _CountryFlagPainter extends CustomPainter {
+  const _CountryFlagPainter({required this.emoji, required this.t});
+  final String emoji;
+  final double t;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final label = TextPainter(
+      text: TextSpan(text: emoji, style: TextStyle(
+        fontSize: math.min(size.width * .92, size.height * .78),
+        color: Colors.white,
+      )),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final origin = size.center(Offset.zero) - Offset(label.width / 2, label.height / 2);
+    for (var strip = 0; strip < 24; strip++) {
+      final x = label.width * strip / 24;
+      final wave = math.sin(strip / 24 * 7 - t * math.pi * 6) * 5 * strip / 24;
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(origin.dx + x, origin.dy - 6,
+        label.width / 24 + .5, label.height + 12));
+      label.paint(canvas, origin + Offset(0, wave));
+      canvas.restore();
+    }
+  }
+  @override
+  bool shouldRepaint(_CountryFlagPainter old) => old.emoji != emoji || old.t != t;
+}
+
 class _GiftScenePainter extends CustomPainter {
   const _GiftScenePainter({required this.gift,required this.t});
   final GiftDefinition gift;

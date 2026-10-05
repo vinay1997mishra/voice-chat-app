@@ -21,7 +21,7 @@ def read_catalog():
     gifts = {}
     for gift_id, name, price in re.findall(r'GiftDefinition\(id: "([^"]+)", name: "([^"]+)", price: (\d+)', source):
         price = int(price)
-        gifts[gift_id] = (name, 8 if price >= 5000000 else 7 if price >= 1000000 else 6 if price >= 200000 else 5)
+        gifts[gift_id] = (name, 2 if gift_id.startswith("flag-") else 8 if price >= 5000000 else 7 if price >= 1000000 else 6 if price >= 200000 else 5)
     return gifts
 
 def validate():
@@ -34,7 +34,7 @@ def validate():
         assert by_id[scene_id]["name"] == name, scene_id + ": wrong display name"
     for spec in SPECS:
         assert re.fullmatch(r"[a-z0-9-]+", spec["id"]), "Unsafe scene path"
-        assert spec["builder"] and spec["duration"] in (5, 6, 7, 8, 9)
+        assert spec["builder"] and spec["duration"] in (2, 5, 6, 7, 8, 9)
     assert [by_id["rocket-"+str(i)]["level"] for i in range(1, 11)] == list(range(1, 11))
     print("Verified 319 gift scenes and ten distinct nine-second Rocket stages")
 
@@ -119,7 +119,8 @@ def render_shard(opt):
             "ffmpeg", "-v", "error", "-y", "-framerate", str(FPS),
             "-i", str(folder / "frame-%04d.png"), "-an", "-c:v", "libx264",
             "-preset", "slow", "-crf", "27", "-maxrate", "150k", "-bufsize", "300k",
-            "-vf", f"fade=t=in:st=0:d=0.15,fade=t=out:st={spec['duration']-.35}:d=0.35",
+            "-vf", ("null" if spec["builder"] == "country" else
+                    f"fade=t=in:st=0:d=0.15,fade=t=out:st={spec['duration']-.35}:d=0.35"),
             "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(movie),
         ], check=True, timeout=180)
         verify_scene(folder, spec)

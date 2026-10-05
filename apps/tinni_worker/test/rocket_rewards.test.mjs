@@ -99,3 +99,42 @@ test('public ID change preserves rocket contribution, earned frame, medal and pa
  assert.ok(d.inventoryState('99999999').owned.some(x=>x.item_id==='rocket-l1-top1'));
  assert.equal(sql.exec('SELECT COUNT(*) AS n FROM rocket_rewards WHERE user_id=?',old).toArray()[0].n,0);
 });
+
+test('authenticated personal Rocket reward never exposes another recipient', async t => {
+ const r=runtime();t.after(r.close);
+ const a=await r.user(2101),b=await r.user(2102),c=await r.user(2103);
+ const d=r.directory,room=await d.createRoom(a.user_id,{title:'Private rewards',seat_count:12});
+ d._ensureRocketRoom(room.id);
+ const sql=d.ctx.storage.sql;
+ sql.exec('INSERT INTO rocket_completions(room_id,level,completed_at,historical,settled_at) VALUES(?,1,0,0,1)',room.id);
+ sql.exec('INSERT INTO rocket_rewards(room_id,level,user_id,rank,coins,frame_id,medal,credited,created_at) VALUES(?,1,?,1,400000,?,?,1,0)',
+   room.id,a.user_id,'rocket-l1-top1','Rocket 1');
+ sql.exec('INSERT INTO rocket_rewards(room_id,level,user_id,coins,frame_id,credited,created_at) VALUES(?,1,?,0,?,1,0)',
+   room.id,b.user_id,'rocket-l1-member7');
+ const path='/gifts/rocket-reward?room_id='+room.id+'&level=1';
+ const first=await r.request(path,a.token);
+ assert.equal(first.status,200);
+ assert.equal(first.data.reward.user_id,a.user_id);
+ assert.equal(first.data.reward.coins,400000);
+ assert.equal(first.data.reward.medal,'Rocket 1');
+ const second=await r.request(path+'&user_id='+a.user_id,b.token);
+ assert.equal(second.status,200);
+ assert.equal(second.data.reward.user_id,b.user_id);
+ assert.equal(second.data.reward.coins,0);
+ assert.equal(second.data.reward.frame_id,'rocket-l1-member7');
+ assert.equal(second.data.reward.medal,null);
+ const nonWinner=await r.request(path,c.token);
+ assert.equal(nonWinner.data.settled,true);
+ assert.equal(nonWinner.data.reward,null);
+ assert.equal((await r.request(path)).status,401);
+ for(const level of [0,11,1.5]){
+   assert.equal((await r.request('/gifts/rocket-reward?room_id='+room.id+'&level='+level,a.token)).status,400);
+ }
+ const publicState=await r.request('/gifts/ranking?room_id='+room.id,a.token);
+ const top=publicState.data.rocket_levels[0].top;
+ assert.equal(top[0].user_id,a.user_id);
+ for(const row of top) for(const field of ['coins','frame_id','medal','awarded']) {
+   assert.equal(Object.hasOwn(row,field),false);
+ }
+ assert.equal(sql.exec('SELECT COUNT(*) AS n FROM rocket_rewards WHERE room_id=?',room.id).toArray()[0].n,2);
+});

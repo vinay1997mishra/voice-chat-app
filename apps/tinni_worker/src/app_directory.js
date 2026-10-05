@@ -5845,9 +5845,38 @@ export class AppDirectoryStore extends DurableObject {
         reward_users:policy.winners,audience_coin_users:25,audience_coin_max:policy.normalCoinMax,
         top:top.map((row,index)=>({rank:index+1,user_id:String(row.user_id),
           name:String(row.display_name || row.user_id),avatar_data_url:row.avatar_data_url || null,
-          sending:Number(row.sending),coins:policy.topCoins[index],
-          frame_id:"rocket-l"+level+"-top"+(index+1),medal:"Rocket "+level,awarded:rewards.length > 0}))};
+          sending:Number(row.sending)}))};
     });
+  }
+
+  personalRocketReward(userIdValue, roomIdValue, levelValue) {
+    const userId = String(userIdValue || "").trim();
+    const roomId = String(roomIdValue || "").trim();
+    const level = Number(levelValue);
+    if (!userId || !roomId || !Number.isInteger(level) || level < 1 || level > 10) {
+      throw new Error("Valid room_id and Rocket level are required");
+    }
+    if (!this._roomRow(roomId)) throw new Error("Room not found");
+    this._ensureRocketRoom(roomId);
+    this.settleRocketLaunches();
+    this._settleRocketCoins(userId);
+    const completion = this.ctx.storage.sql.exec(
+      "SELECT historical,settled_at FROM rocket_completions WHERE room_id=? AND level=?",
+      roomId, level,
+    ).toArray()[0];
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM rocket_rewards WHERE room_id=? AND level=? AND user_id=?",
+      roomId, level, userId,
+    ).toArray()[0];
+    return {
+      ok: true, room_id: roomId, level,
+      settled: Boolean(completion && (completion.historical || completion.settled_at != null)),
+      reward: row ? {
+        user_id: userId, coins: Number(row.coins), credited: Boolean(row.credited),
+        frame_id: row.frame_id || null, medal: row.medal || null,
+        awarded: true,
+      } : null,
+    };
   }
 
   roomGiftRanking(roomIdValue, periodValue = "day") {

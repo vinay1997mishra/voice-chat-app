@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'cinematic_video.dart';
 import 'cinematic_lane.dart';
+import '../ui/rocket_personal_reward.dart';
 
 /// The ten server-backed gift milestones, expressed as incremental targets.
 const rocketStageTargets = <int>[
@@ -139,12 +140,18 @@ class RocketModelPainter extends CustomPainter {
 
 /// Each newly completed stage launches once; opening a room never replays history.
 class RocketLaunchOverlay extends StatefulWidget {
-  const RocketLaunchOverlay({super.key,required this.completed, this.enabled=true, this.lane});
+  const RocketLaunchOverlay({super.key,required this.completed, this.enabled=true,
+    this.lane, this.viewerId, this.loadReward});
   final ValueNotifier<int?> completed;
   final bool enabled;
   final CinematicLane? lane;
+  final String? viewerId;
+  final Future<RocketPersonalReward?> Function(int level)? loadReward;
   @override State<RocketLaunchOverlay> createState()=>_RocketLaunchOverlayState();
 }
+int rocketCountdown(double progress) => math.max(1, 9 - (progress * 9).floor());
+bool rocketHasLifted(double progress) => progress >= 8 / 9;
+
 class _RocketFlightMotion {
   const _RocketFlightMotion({
     required this.x,
@@ -162,7 +169,7 @@ class _RocketFlightMotion {
 }
 
 _RocketFlightMotion _rocketFlightMotion(int level,double t) {
-  final ascent=((t-.20)/.80).clamp(0.0,1.0);
+  final ascent=((t-8/9)*9).clamp(0.0,1.0);
   return _RocketFlightMotion(x:0,yFactor:ascent*ascent,rotation:0,scale:1,
     thrustBoost:1+level*.06);
 }
@@ -176,6 +183,9 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
   int? _level;
   int _generation = 0;
   bool _foreground = true;
+  bool _checkingReward = false;
+  RocketPersonalReward? _reward;
+  int _rewardGeneration = 0;
 
   @override
   void initState() {
@@ -208,6 +218,10 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
       _seen = widget.completed.value;
       _clear();
     }
+    if (oldWidget.viewerId != widget.viewerId) {
+      _clear();
+      _seen = widget.completed.value;
+    }
     if (!widget.enabled) {
       _clear();
       _seen = widget.completed.value;
@@ -220,6 +234,9 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     _flight.stop();
     _queue.clear();
     _level = null;
+    _reward = null;
+    _checkingReward = false;
+    _rewardGeneration++;
     widget.lane?.cancel(this);
   }
 
@@ -240,7 +257,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
   }
 
   void _resume() {
-    if (_level == null || !_foreground || !widget.enabled) return;
+    if (_level == null || !_foreground || !widget.enabled || _checkingReward) return;
     _launchTimer?.cancel();
     final token = ++_generation;
     final remaining = Duration(
@@ -255,8 +272,50 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
 
   void _completeLaunch() {
     if (!mounted) return;
+    if (_reward != null || widget.loadReward == null ||
+        widget.viewerId == null || widget.viewerId!.isEmpty) {
+      _finishLaunch();
+      return;
+    }
     _flight.stop();
-    setState(() => _level = null);
+    setState(() => _checkingReward = true);
+    unawaited(_loadPersonalReward(_level!, ++_rewardGeneration));
+  }
+
+  Future<void> _loadPersonalReward(int level, int token) async {
+    RocketPersonalReward? reward;
+    try {
+      reward = await widget.loadReward!(level).timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Received notifications/inventory remain available if this read fails.
+    }
+    if (!mounted || token != _rewardGeneration || _level != level ||
+        !widget.enabled) return;
+    if (reward == null || reward.userId != widget.viewerId ||
+        reward.level != level) {
+      _finishLaunch();
+      return;
+    }
+    setState(() {
+      _checkingReward = false;
+      _reward = reward;
+    });
+    _flight.duration = const Duration(seconds: 6);
+    _flight.value = 0;
+    _resume();
+  }
+
+  void _finishLaunch() {
+    if (!mounted) return;
+    _launchTimer?.cancel();
+    _generation++;
+    _rewardGeneration++;
+    _flight.stop();
+    setState(() {
+      _level = null;
+      _reward = null;
+      _checkingReward = false;
+    });
     widget.lane?.release(this);
     _next();
   }
@@ -267,6 +326,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     if (_queue.isNotEmpty) {
       if (!(widget.lane?.acquire(this) ?? true)) return;
       setState(() => _level = _queue.removeAt(0));
+      _flight.duration = const Duration(seconds: 9);
       _flight.value = 0;
       _resume();
     } else {
@@ -307,7 +367,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     final motion = _rocketFlightMotion(_level!, reduced ? 0 : t);
     final y = c.maxHeight * .60 -
         motion.yFactor * (c.maxHeight + width * 2);
-    final launchThrust = reduced ? 0.0 : (t / .18).clamp(0.0, 1.0) *
+    final launchThrust = reduced ? 0.0 : (.12 + .88 * (t / (8/9)).clamp(0.0, 1.0)) *
         (0.90 + 0.10 * math.sin(t * 180)) * motion.thrustBoost;
     return Stack(children: [
       Positioned.fill(
@@ -341,6 +401,19 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
   @override
   Widget build(BuildContext context) {
     if (_level == null || !widget.enabled) return const SizedBox.shrink();
+    final reward = _reward;
+    if (reward != null) {
+      return RepaintBoundary(child: ColoredBox(
+        color: const Color(0x99030914),
+        child: RocketPersonalRewardCard(reward: reward, onClose: _finishLaunch),
+      ));
+    }
+    if (_checkingReward) {
+      return const IgnorePointer(child: Center(
+        child: CircularProgressIndicator(key: Key('rocket-checking-own-reward'),
+          color: Color(0xFFFFD479)),
+      ));
+    }
     final reduced = MediaQuery.disableAnimationsOf(context);
     return IgnorePointer(
       child: RepaintBoundary(
@@ -373,6 +446,24 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
                     ),
                   ),
                 ),
+                Positioned(
+                  top: 82, left: 16, right: 16,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text('${rocketCountdown(_flight.value)}',
+                      key: const Key('rocket-launch-countdown'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 72, color: Color(0xFFFFD479),
+                        fontWeight: FontWeight.w900, shadows: [Shadow(blurRadius: 12)])),
+                    Text(rocketHasLifted(_flight.value) ? 'LIFTOFF' : 'BUILDING PRESSURE',
+                      key: const Key('rocket-launch-phase'),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    SizedBox(width: 180, child: LinearProgressIndicator(
+                      value: (_flight.value * 9 / 8).clamp(0.0, 1.0),
+                      color: const Color(0xFFFFD479), backgroundColor: Colors.white24,
+                    )),
+                  ]),
+                ),
               ],
             ),
           ),
@@ -386,7 +477,7 @@ class _LaunchAtmosphere extends CustomPainter {
   final double t,padY;
   final int level;
   @override void paint(Canvas canvas,Size size) {
-    final intensity=(1-t).clamp(0.0,1.0);
+    final intensity=rocketHasLifted(t) ? ((1-t)*9).clamp(0.0,1.0) : .65+t*.3;
     canvas.drawRect(Offset.zero&size,Paint()..color=Color.fromRGBO(3,9,20,.55*intensity));
     final cx=size.width/2;
     final plume=(t/.2).clamp(0.0,1.0);
@@ -403,7 +494,7 @@ class _LaunchAtmosphere extends CustomPainter {
       canvas.drawCircle(Offset(x,y),r,smoke);
     }
     const boxColors=<Color>[Color(0xFFEF5CAA),Color(0xFF69D5FF),Color(0xFFFFD569),Color(0xFF8CF4BD),Color(0xFFA691FF)];
-    for(var i=0;i<20+level*4;i++) {
+    for(var i=0;rocketHasLifted(t) && i<20+level*4;i++) {
       final phase=(t*1.8+i/(20+level*4))%1;
       final x=cx+math.sin(i*2.4)*size.width*.43;
       final y=-30+phase*(size.height+70);

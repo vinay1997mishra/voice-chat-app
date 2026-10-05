@@ -654,6 +654,7 @@ class PremiumGiftCatalog {
   }
   static String scene(String id)=>scenes[id]??'spectacle';
   static int holdSeconds(String id) {
+    if(id.startsWith('flag-') && find(id) != null) { return 2; }
     final gift=find(id);
     if(gift==null||gift.lucky) { return 5; }
     if(gift.price>=5000000) { return 8; }

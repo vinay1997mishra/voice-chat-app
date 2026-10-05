@@ -3570,6 +3570,21 @@ export default {
       catch (error) { return json({ ok:false,error:String(error?.message||"Unable to load sending ranking") },400); }
     }
 
+    if (url.pathname === "/gifts/rocket-reward" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const roomId = String(url.searchParams.get("room_id") || "").trim();
+      const level = Number(url.searchParams.get("level"));
+      try {
+        // Identity is always taken from the authenticated session.
+        return json(await getAppDirectoryStore(env).personalRocketReward(
+          appSession.user.user_id, roomId, level,
+        ));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to load your Rocket reward") }, 400);
+      }
+    }
+
     if (url.pathname === "/gifts/lucky/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);

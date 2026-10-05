@@ -1079,6 +1079,24 @@ class DiscoveryService {
     return data;
   }
 
+  Future<Map<String, dynamic>> personalRocketReward({
+    required String authToken,
+    required String roomId,
+    required int level,
+  }) async {
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(
+      path: '/gifts/rocket-reward',
+      queryParameters: <String, String>{'room_id': roomId, 'level': '$level'},
+    ));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    final response = await closeBackendRequest(request);
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to load your Rocket reward');
+    }
+    return data;
+  }
+
   Future<Map<String, dynamic>> luckyPouch({
     required String authToken,
     required String roomId,
