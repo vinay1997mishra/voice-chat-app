@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -55,6 +56,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.social.retainMessageEvents();
     widget.state.social.messageEvents.addListener(_handleMessageEvent);
     final account = widget.state.auth.current;
     if (account != null) {
@@ -66,6 +68,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void dispose() {
     widget.state.social.messageEvents.removeListener(_handleMessageEvent);
+    unawaited(widget.state.social.releaseMessageEvents());
     controller.dispose();
     super.dispose();
   }
