@@ -171,6 +171,12 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final pending = _refreshFuture;
     if (pending != null) { return pending; }
     if (!mounted || !_active) { return Future<void>.value(); }
+    // Do not race a wallet/state read against an in-flight transaction.
+    if (_pendingFruit != null) {
+      _poll?.cancel();
+      _poll = Timer(const Duration(seconds: 2), () => unawaited(_refresh()));
+      return Future<void>.value();
+    }
     final operation = _runRefresh();
     _refreshFuture = operation;
     return operation.whenComplete(() {
@@ -223,6 +229,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final amount = _selected;
     setState(() => _pendingFruit = fruit.key);
     try {
+      final reading = _refreshFuture;
+      if (reading != null) { await reading; }
+      if (!mounted || !_active) { return; }
       final error = await widget.bet(fruit.key, amount);
       if (!mounted) { return; }
       if (error != null) {

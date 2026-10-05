@@ -121,6 +121,28 @@ void main() {
     game.dispose();
   });
 
+  testWidgets('a cached board waits for pending state refresh before submitting a bet', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = _Game();
+    final refresh = Completer<void>();
+    var bets = 0;
+    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot',
+      refresh: () => refresh.future,
+      bet: (_, _) async { bets++; return null; }));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
+    await tester.pump();
+    expect(bets, 0);
+    refresh.complete();
+    await tester.pump();
+    expect(bets, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    game.dispose();
+  });
+
   testWidgets('round expiry refreshes immediately and game close stops polling', (tester) async {
     final game = _Game();
     var requests = 0;
