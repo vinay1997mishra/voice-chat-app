@@ -108,7 +108,7 @@ export function runtime() {
     });
     const token = await exports.createSession({
       role: 'user', userId: account.user_id, provider: 'google', subject,
-    }, env.SESSION_SECRET);
+    }, env.SESSION_SECRET, 30 * 24 * 60 * 60 * 1000);
     return { ...account, token };
   }
   async function request(path, token, body, method = body === undefined ? 'GET' : 'POST') {

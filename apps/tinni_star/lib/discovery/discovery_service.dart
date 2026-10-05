@@ -836,6 +836,8 @@ class DiscoveryService {
           final launchOrder = b.rocketLaunchedAt.compareTo(a.rocketLaunchedAt);
           if (launchOrder != 0) return launchOrder;
         }
+        final sendingOrder = b.sendingExp.compareTo(a.sendingExp);
+        if (sendingOrder != 0) return sendingOrder;
         final expOrder = b.roomExperience.compareTo(a.roomExperience);
         if (expOrder != 0) return expOrder;
         final onlineOrder = b.online.compareTo(a.online);
