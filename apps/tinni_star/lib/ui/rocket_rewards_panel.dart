@@ -1,6 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
+import 'stable_image_provider.dart';
 import 'animated_avatar_frame.dart';
 
 class RocketRewardsPanel extends StatelessWidget {
@@ -21,12 +20,12 @@ class RocketRewardsPanel extends StatelessWidget {
           final source = row?['avatar_data_url'] as String?;
           ImageProvider? image;
           if (source != null && source.startsWith('data:image/')) {
-            try { image = MemoryImage(base64Decode(source.split(',').last)); } catch (_) {}
+            try { image = stableImageProvider(source); } catch (_) {}
           } else if (source != null && source.startsWith('https://')) {
-            image = NetworkImage(source);
+            image = stableImageProvider(source);
           }
           final avatar = image != null
-              ? Image(image: image, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white))
+              ? Image(image: image, gaplessPlayback: true, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white))
               : const Icon(Icons.person, color: Colors.white);
           final rank = index + 1;
           final frame = row?['frame_id'] as String? ?? 'rocket-l$level-top$rank';

@@ -3539,6 +3539,7 @@ export default {
               ),
               receiver_ids: visualReceiverIds,
               quantity: Math.max(1, Number(body.quantity || 1)),
+              room_summary: result?.room_summary || null,
               lucky: Boolean(result?.lucky),
               multiplier: Math.max(
                 0,
@@ -4130,6 +4131,7 @@ export default {
       }
       const headers = new Headers(request.headers);
       headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      headers.set("x-tinni-country-code", String(appSession.user.country_code || "IN"));
       const forwarded = new Request(request.url, {
         method: "GET",
         headers,

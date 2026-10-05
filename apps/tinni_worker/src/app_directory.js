@@ -722,6 +722,11 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_country_ribbons_country_queue
         ON country_ribbons(country_code, priority DESC, created_at ASC);
 
+      CREATE TABLE IF NOT EXISTS ribbon_live_delivery (
+        id TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
@@ -5764,7 +5769,7 @@ export class AppDirectoryStore extends DurableObject {
         "rocket-launch:" + roomId + ":" + slice.level,10 + slice.level,roomId,senderId,
         String(room?.title || roomId),slice.level,"Rocket " + slice.level,now,now+9000);
       this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO rocket_audience(room_id,level,user_id,entered_at)
-        SELECT ?,?,user_id,? FROM app_user_presence WHERE room_id=? AND last_seen>=?`,
+        SELECT ?,?,user_id,? FROM app_user_presence WHERE room_id=? AND (room_socket_connected=1 OR last_seen>=?)`,
         roomId,slice.level,now,roomId,now-120000);
 
     }
@@ -5929,6 +5934,7 @@ export class AppDirectoryStore extends DurableObject {
         String(user?.display_name || userId), user?.avatar_data_url || null, totalCoins, null, now, now + 120000,
       );
     }
+    this._publishCountryRibbons();
     return { ok: true, pouch: this.luckyPouchState(roomId, userId), wallet: this.getWallet(userId) };
   }
 
@@ -5979,6 +5985,49 @@ export class AppDirectoryStore extends DurableObject {
     return { ok:true, coins, finished:complete, remaining_slots:nextSlots, wallet:this.getWallet(userId) };
   }
 
+  _ribbonLivePayload(row) {
+    const ribbon = { ...row, priority:Number(row.priority), amount:Number(row.amount),
+      created_at:Number(row.created_at), expires_at:Number(row.expires_at) };
+    if (row.kind === "rocket_launch") {
+      const boost = this.ctx.storage.sql.exec(
+        "SELECT level,launched_at,expires_at FROM rocket_room_boosts WHERE room_id=?",
+        row.room_id).toArray()[0];
+      if (boost) ribbon.room_priority = { room_id:row.room_id, level:Number(boost.level),
+        launched_at:Number(boost.launched_at), expires_at:Number(boost.expires_at) };
+    }
+    return ribbon;
+  }
+
+  _publishCountryRibbons() {
+    // Best effort after the financial transaction has committed. No fanout RPC
+    // or per-user unread-count query: reuse the existing hibernating sockets.
+    if (typeof this.ctx.getWebSockets !== "function") return;
+    try {
+      const now = Date.now();
+      this.ctx.storage.sql.exec("DELETE FROM ribbon_live_delivery WHERE expires_at<=?",now);
+      const rows = this.ctx.storage.sql.exec(
+        `SELECT r.* FROM country_ribbons r LEFT JOIN ribbon_live_delivery d ON d.id=r.id
+         WHERE r.expires_at>? AND d.id IS NULL ORDER BY r.priority DESC,r.created_at ASC LIMIT 50`,
+        now).toArray();
+      const sockets = this.ctx.getWebSockets();
+      for (const row of rows) {
+        const payload = JSON.stringify({type:"country_ribbon",ribbon:this._ribbonLivePayload(row)});
+        for (const socket of sockets) {
+          try {
+            const country = socket.deserializeAttachment()?.countryCode || "";
+            if (row.country_code !== country &&
+                !(row.country_code === "*" && row.kind === "rocket_launch")) continue;
+            socket.send(payload);
+          } catch (_) {}
+        }
+        this.ctx.storage.sql.exec("INSERT OR IGNORE INTO ribbon_live_delivery(id,expires_at) VALUES(?,?)",
+          row.id,row.expires_at);
+      }
+    } catch (error) {
+      console.warn("ribbon_live_delivery_failed",String(error?.message || error));
+    }
+  }
+
   countryRibbons(countryCodeValue) {
     const countryCode = String(countryCodeValue || "").trim().toUpperCase();
     if (!countryCode) return [];
@@ -6001,6 +6050,7 @@ export class AppDirectoryStore extends DurableObject {
       "INSERT INTO country_ribbons (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
       id,String(room.country_code||""),"game",1,roomId,userId,String(user?.display_name||userId),user?.avatar_data_url||null,amount,gameKey,now,now+120000,
     );
+    this._publishCountryRibbons();
     return { id, kind:"game", room_id:roomId, amount, game_key:gameKey };
   }
 
@@ -6538,7 +6588,18 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   sendGift(senderIdValue, input) {
-    return this.ctx.storage.transactionSync(() => this._sendGiftWithRocket(senderIdValue,input));
+    const result = this.ctx.storage.transactionSync(() => this._sendGiftWithRocket(senderIdValue,input));
+    this._publishCountryRibbons();
+    // Optional visual enrichment must never turn a committed payment into an error.
+    try {
+      const roomId = String(input?.room_id || "").trim();
+      result.room_summary = {
+        room_id: roomId,
+        lifetime_total: Number(this.ctx.storage.sql.exec(
+          "SELECT total FROM rocket_rooms WHERE room_id=?",roomId).toArray()[0]?.total || 0),
+      };
+    } catch (_) {}
+    return result;
   }
 
   _sendGiftWithRocket(senderIdValue, input) {
@@ -9873,10 +9934,16 @@ export class AppDirectoryStore extends DurableObject {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
+    const countryCode = String(request.headers.get("x-tinni-country-code") || "IN").trim().toUpperCase();
     this.ctx.acceptWebSocket(server, ["message-user:" + userId]);
+    server.serializeAttachment({ userId, countryCode });
     server.send(JSON.stringify({
       type: "inbox_state",
       unread_count: this.unreadMessageCount(userId),
+    }));
+    server.send(JSON.stringify({
+      type: "ribbons_snapshot",
+      ribbons: this.countryRibbons(countryCode).map(row => this._ribbonLivePayload(row)),
     }));
     return new Response(null, { status: 101, webSocket: client });
   }

@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'stable_image_provider.dart';
 
 import '../discovery/discovery_service.dart';
 import 'royal_theme.dart';
@@ -48,8 +48,8 @@ class RoomDp extends StatelessWidget {
     Widget image;
     if (hasData) {
       try {
-        image = Image.memory(
-          base64Decode(source.split(',').last),
+        image = Image(
+          image: stableImageProvider(source)!,
           fit: fit,
           alignment: Alignment.center,
           filterQuality: FilterQuality.medium,

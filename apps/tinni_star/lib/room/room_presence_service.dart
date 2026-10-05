@@ -55,6 +55,7 @@ class RoomGiftVisualEvent {
     required this.senderId,
     required this.giftId,
     required this.giftName,
+    this.roomSummary,
     required this.receiverIds,
     required this.quantity,
     required this.lucky,
@@ -67,6 +68,7 @@ class RoomGiftVisualEvent {
   final String senderId;
   final String giftId;
   final String giftName;
+  final Map<String, dynamic>? roomSummary;
   final List<String> receiverIds;
   final int quantity;
   final bool lucky;
@@ -401,6 +403,8 @@ class RoomPresenceService extends ChangeNotifier {
               senderId: gift['sender_id']?.toString() ?? '',
               giftId: gift['gift_id']?.toString() ?? '',
               giftName: gift['gift_name']?.toString() ?? 'Gift',
+              roomSummary: gift['room_summary'] is Map
+                  ? Map<String, dynamic>.from(gift['room_summary'] as Map) : null,
               receiverIds: receiverIds,
               quantity: math.max(1, _asInt(gift['quantity'])),
               lucky: gift['lucky'] == true,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../infra/request_budget.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -83,6 +84,10 @@ class SocialService {
   final ValueNotifier<int> unreadMessages = ValueNotifier<int>(0);
   final ValueNotifier<Map<String, dynamic>?> messageEvents =
       ValueNotifier<Map<String, dynamic>?>(null);
+  final ValueNotifier<Map<String, dynamic>?> roomEvents =
+      ValueNotifier<Map<String, dynamic>?>(null);
+  bool get messageEventsConnected => _messageSocket?.readyState == WebSocket.open;
+  int _messageReconnectFailures = 0;
   WebSocket? _messageSocket;
   StreamSubscription<dynamic>? _messageSocketSubscription;
   Timer? _messageReconnectTimer;
@@ -135,16 +140,26 @@ class SocialService {
         path: '/messages/live',
         query: null,
       );
-      final socket = await WebSocket.connect(
+      var connectExpired = false;
+      final connection = WebSocket.connect(
         socketUri.toString(),
         headers: <String, dynamic>{
           HttpHeaders.authorizationHeader: 'Bearer $token',
         },
       );
+      unawaited(connection.then<void>((lateSocket) {
+        if (connectExpired) unawaited(lateSocket.close());
+      }, onError: (Object error, StackTrace stack) {}));
+      final socket = await connection.timeout(const Duration(seconds: 15),
+        onTimeout: () {
+          connectExpired = true;
+          throw TimeoutException('Message connection timed out');
+        });
       if (!_messageEventsWanted || token != _messageAuthToken) {
         await socket.close();
         return;
       }
+      socket.pingInterval = const Duration(seconds: 60);
       _messageSocket = socket;
       _messageSocketSubscription = socket.listen(
         _handleMessageSocketData,
@@ -167,6 +182,11 @@ class SocialService {
       final event = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
+      _messageReconnectFailures = 0;
+      if (event['type'] == 'country_ribbon' || event['type'] == 'ribbons_snapshot') {
+        roomEvents.value = Map<String, dynamic>.from(event);
+        return;
+      }
       final count = event['unread_count'];
       if (count is num) {
         _setUnreadMessages(count.toInt());
@@ -185,7 +205,7 @@ class SocialService {
 
   void _scheduleMessageSocketReconnect() {
     if (!_messageEventsWanted || _messageReconnectTimer != null) return;
-    _messageReconnectTimer = Timer(const Duration(seconds: 2), () {
+    _messageReconnectTimer = Timer(RequestBudget.reconnectDelay(_messageReconnectFailures++), () {
       _messageReconnectTimer = null;
       _openMessageSocket();
     });
@@ -713,8 +733,14 @@ class SocialService {
   }
 
   void dispose() {
+    _messageEventsWanted = false;
+    _messageAuthToken = null;
+    unawaited(_messageSocketSubscription?.cancel());
+    unawaited(_messageSocket?.close());
+    _messageSocket = null;
     unreadMessages.dispose();
     messageEvents.dispose();
+    roomEvents.dispose();
     _messageReconnectTimer?.cancel();
     _httpClient.close(force: true);
   }

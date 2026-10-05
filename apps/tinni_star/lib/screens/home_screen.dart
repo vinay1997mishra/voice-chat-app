@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../infra/request_budget.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -6,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
+import '../ui/stable_image_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -70,13 +72,13 @@ ImageProvider? _homeAvatarProvider(String? value) {
   if (source.isEmpty) return null;
   if (source.startsWith('data:image/')) {
     try {
-      return MemoryImage(base64Decode(source.split(',').last));
+      return stableImageProvider(source);
     } catch (_) {
       return null;
     }
   }
   if (source.startsWith('https://') || source.startsWith('http://')) {
-    return NetworkImage(source);
+    return stableImageProvider(source);
   }
   return null;
 }
@@ -117,8 +119,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
-    _rocketRoomRefresh = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) _syncRooms();
+    widget.state.social.roomEvents.addListener(_onRoomEvent);
+    _rocketRoomRefresh = Timer.periodic(RequestBudget.homeRefresh, (_) {
+      if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        _syncRooms(refreshAccount: false);
+      }
     });
     _syncPartyRankPreviews();
     _syncNotifications();
@@ -127,11 +133,34 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _syncRooms() async {
+  void _onRoomEvent() {
+    if (!mounted) return;
+    final event = widget.state.social.roomEvents.value;
+    final rows = event?['ribbons'];
+    final ribbons = rows is List ? rows.whereType<Map>() :
+        [if (event?['ribbon'] is Map) event!['ribbon'] as Map];
+    var changed = false;
+    var missingRoom = false;
+    for (final ribbon in ribbons) {
+      final priority = ribbon['room_priority'];
+      if (priority is! Map) continue;
+      if (widget.state.discovery.applyRocketPriority(Map<String, dynamic>.from(priority))) {
+        changed = true;
+      } else {
+        missingRoom = true;
+      }
+    }
+    if (changed) setState(() {});
+    if (missingRoom && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      _syncRooms(refreshAccount: false);
+    }
+  }
+
+  Future<void> _syncRooms({bool refreshAccount = true}) async {
     if (_roomsSyncRunning || !mounted) return;
     _roomsSyncRunning = true;
     try {
-    await widget.state.refreshAuthenticatedAccount();
+    if (refreshAccount) await widget.state.refreshAuthenticatedAccount();
     final account = widget.state.auth.current;
     if (account == null) return;
     try {
@@ -343,6 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _rocketRoomRefresh?.cancel();
+    widget.state.social.roomEvents.removeListener(_onRoomEvent);
     _pageController.dispose();
     super.dispose();
   }
@@ -1263,15 +1293,17 @@ class _RoomArtwork extends StatelessWidget {
         ),
         child: hasRemotePhoto
             ? SizedBox.expand(
-                child: Image.memory(
-                  base64Decode(remotePhoto.split(',').last),
+                child: Image(
+                  image: stableImageProvider(remotePhoto)!,
+                  gaplessPlayback: true,
                   fit: BoxFit.cover,
                 ),
               )
             : hasNetworkPhoto
                 ? SizedBox.expand(
-                    child: Image.network(
-                      remotePhoto,
+                    child: Image(
+                      image: stableImageProvider(remotePhoto)!,
+                      gaplessPlayback: true,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Center(
                         child: Text(

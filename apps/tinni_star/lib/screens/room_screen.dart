@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'dart:async';
+import '../infra/request_budget.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../ui/stable_image_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -92,6 +94,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Map<String, ImageProvider> _avatarProviderCache =
       <String, ImageProvider>{};
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
+  Map<String, dynamic> _lastRoomSendingSummary = <String, dynamic>{
+    'lifetime_total': 0, 'ranking': const <Map<String, dynamic>>[],
+  };
+  bool _roomSendingRefreshRunning = false;
   final _rocketCompleted = ValueNotifier<int?>(null);
   int? _selectedRocketPreviewLevel;
   Timer? _rocketBannerPoll;
@@ -145,12 +151,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     ImageProvider? provider;
     if (value.startsWith('data:image/')) {
       try {
-        provider = MemoryImage(base64Decode(value.split(',').last));
+        provider = stableImageProvider(value);
       } catch (_) {
         provider = null;
       }
     } else if (value.startsWith('https://') || value.startsWith('http://')) {
-      provider = NetworkImage(value);
+      provider = stableImageProvider(value);
     }
 
     _cachedRoomPhotoSource = value;
@@ -163,9 +169,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
+    widget.state.social.roomEvents.addListener(_onCountryRibbonEvent);
     _primeRoomSendingSummary();
-    _rocketBannerPoll = Timer.periodic(const Duration(seconds: 1), (_) => _refreshCountryRibbons());
+    _rocketBannerPoll = Timer.periodic(RequestBudget.ribbonFallback, (_) {
+      if (!widget.state.social.messageEventsConnected &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refreshCountryRibbons();
+      }
+    });
     widget.state.social.unreadMessages.addListener(_refresh);
     final account = widget.state.auth.current;
     if (account != null) {
@@ -205,14 +216,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final previous = _rocketCompleted.value;
         if (previous == null || completed > previous) _rocketCompleted.value = completed;
       }
-      return summary;
+      if (_giftInt(summary['lifetime_total']) >=
+          _giftInt(_lastRoomSendingSummary['lifetime_total'])) {
+        _lastRoomSendingSummary = summary;
+      }
+      return _lastRoomSendingSummary;
     } catch (_) {
-      // Keep the room UI usable if the ranking endpoint is temporarily
-      // unavailable. The next scheduled refresh will try again.
-      return <String, dynamic>{
-        'lifetime_total': 0,
-        'ranking': const <Map<String, dynamic>>[],
-      };
+      // A failed read never clears a previously displayed rocket or ranking.
+      return _lastRoomSendingSummary;
     }
   }
 
@@ -220,12 +231,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _roomSendingSummaryFuture = _loadRoomSendingSummary();
   }
 
-  void _refreshRoomSendingSummary() {
-    final next = _loadRoomSendingSummary();
-    if (!mounted) {
-      _roomSendingSummaryFuture = next;
-      return;
+  bool _applyRoomSendingSummary(dynamic raw) {
+    if (raw is! Map || !mounted) return false;
+    final summary = Map<String, dynamic>.from(raw);
+    if (summary['room_id']?.toString() != widget.room.id) return false;
+    if (_giftInt(summary['lifetime_total']) <
+        _giftInt(_lastRoomSendingSummary['lifetime_total'])) return true;
+    _lastRoomSendingSummary = {..._lastRoomSendingSummary, ...summary};
+    final completed = completedRocketStages(_giftInt(summary['lifetime_total']));
+    if (_rocketCompleted.value == null || completed > _rocketCompleted.value!) {
+      _rocketCompleted.value = completed;
     }
+    setState(() {
+      _roomSendingSummaryFuture = Future.value(_lastRoomSendingSummary);
+    });
+    return true;
+  }
+
+  void _refreshRoomSendingSummary() {
+    if (!mounted || _roomSendingRefreshRunning) return;
+    _roomSendingRefreshRunning = true;
+    final next = _loadRoomSendingSummary().whenComplete(() {
+      _roomSendingRefreshRunning = false;
+    });
     setState(() => _roomSendingSummaryFuture = next);
   }
 
@@ -699,13 +727,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     ImageProvider? provider;
     if (source.startsWith('data:image/')) {
       try {
-        provider = MemoryImage(base64Decode(source.split(',').last));
+        provider = stableImageProvider(source);
       } catch (_) {
         provider = null;
       }
     } else if (source.startsWith('https://') ||
         source.startsWith('http://')) {
-      provider = NetworkImage(source);
+      provider = stableImageProvider(source);
     }
 
     _cachedThemeSource = source;
@@ -783,7 +811,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _roomRecoveryTimer?.cancel();
     _rocketBannerPoll?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
-    widget.state.social.disconnectMessageEvents();
+    widget.state.social.roomEvents.removeListener(_onCountryRibbonEvent);
     chat.dispose();
     _roomMessageScrollController.dispose();
     super.dispose();
@@ -796,24 +824,46 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _ribbonFetchRunning = true;
     try {
       final rows = await widget.state.discovery.countryRibbons(account.authToken);
-      var changed = false;
-      for (final row in rows) {
-        final id = row['id']?.toString() ?? '';
-        if (id.isEmpty || !_seenRibbonIds.add(id)) continue;
-        _ribbonQueue.add(row);
-        changed = true;
-      }
-      _ribbonQueue.sort((a, b) {
-        final priority = ((b['priority'] as num?)?.toInt() ?? 0)
-            .compareTo((a['priority'] as num?)?.toInt() ?? 0);
-        if (priority != 0) return priority;
-        return ((a['created_at'] as num?)?.toInt() ?? 0)
-            .compareTo((b['created_at'] as num?)?.toInt() ?? 0);
-      });
-      if (changed && mounted) setState(() {});
+      _acceptCountryRibbons(rows);
     } catch (_) {} finally {
       _ribbonFetchRunning = false;
     }
+  }
+
+  void _onCountryRibbonEvent() {
+    if (!mounted) return;
+    final event = widget.state.social.roomEvents.value;
+    final rows = event?['ribbons'];
+    if (rows is List) {
+      _acceptCountryRibbons(rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)));
+    } else if (event?['ribbon'] is Map) {
+      _acceptCountryRibbons([Map<String, dynamic>.from(event!['ribbon'] as Map)]);
+    }
+  }
+
+  void _acceptCountryRibbons(Iterable<Map<String, dynamic>> rows) {
+    if (!mounted) return;
+    var changed = false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final row in rows) {
+      final id = row['id']?.toString() ?? '';
+      final expiry = (row['expires_at'] as num?)?.toInt() ?? 0;
+      if (id.isEmpty || expiry <= now || !_seenRibbonIds.add(id)) continue;
+      _ribbonQueue.add(row);
+      changed = true;
+    }
+    // Bounded deduplication history: only live/recent ribbons need remembering.
+    if (_seenRibbonIds.length > 256) {
+      _seenRibbonIds.remove(_seenRibbonIds.first);
+    }
+    _ribbonQueue.sort((a, b) {
+      final priority = ((b['priority'] as num?)?.toInt() ?? 0)
+          .compareTo((a['priority'] as num?)?.toInt() ?? 0);
+      if (priority != 0) return priority;
+      return ((a['created_at'] as num?)?.toInt() ?? 0)
+          .compareTo((b['created_at'] as num?)?.toInt() ?? 0);
+    });
+    if (changed) setState(() {});
   }
 
   void _finishRibbon(String id) {
@@ -1065,7 +1115,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final event = widget.state.roomSession.latestGiftVisualEvent;
     if (event == null || event.id == _lastHandledGiftVisualEventId) return;
     _lastHandledGiftVisualEventId = event.id;
-    _refreshRoomSendingSummary();
+    if (!_applyRoomSendingSummary(event.roomSummary)) _refreshRoomSendingSummary();
     if (event.senderId == widget.state.auth.current?.userId) return;
 
     final gift = _giftDefinitionForVisualEvent(event);
@@ -1853,9 +1903,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ImageProvider? preview;
                   if (theme.asset?.startsWith('data:image/') == true) {
                     try {
-                      preview = MemoryImage(
-                        base64Decode(theme.asset!.split(',').last),
-                      );
+                      preview = stableImageProvider(theme.asset!);
                     } catch (_) {
                       preview = null;
                     }
@@ -2069,13 +2117,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     ImageProvider? provider;
     if (source.startsWith('data:image/')) {
       try {
-        provider = MemoryImage(base64Decode(source.split(',').last));
+        provider = stableImageProvider(source);
       } catch (_) {
         provider = null;
       }
     } else if (source.startsWith('https://') ||
         source.startsWith('http://')) {
-      provider = NetworkImage(source);
+      provider = stableImageProvider(source);
     }
 
     if (provider != null) {
@@ -2373,7 +2421,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final avatarData = currentMember.avatarDataUrl;
           if (avatarData != null && avatarData.startsWith('data:image/')) {
             try {
-              avatar = MemoryImage(base64Decode(avatarData.split(',').last));
+              avatar = stableImageProvider(avatarData);
             } catch (_) {
               avatar = null;
             }
@@ -2815,7 +2863,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         luckySessionId: sessionId,
       );
       _applyGiftServerWallet(response);
-      _refreshRoomSendingSummary();
+      if (!_applyRoomSendingSummary(response['room_summary'])) _refreshRoomSendingSummary();
 
       final rawLucky = response['lucky'];
       final lucky = rawLucky is Map
@@ -6527,7 +6575,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (avatarData != null && avatarData.startsWith('data:image/')) {
             try {
               currentAvatar =
-                  MemoryImage(base64Decode(avatarData.split(',').last));
+                  stableImageProvider(avatarData);
             } catch (_) {
               currentAvatar = null;
             }
@@ -6843,9 +6891,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (ownerAvatarValue != null &&
         ownerAvatarValue.startsWith('data:image/')) {
       try {
-        ownerAvatar = MemoryImage(
-          base64Decode(ownerAvatarValue.split(',').last),
-        );
+        ownerAvatar = stableImageProvider(ownerAvatarValue);
       } catch (_) {
         ownerAvatar = null;
       }
@@ -7101,7 +7147,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 return null;
               }
               try {
-                return MemoryImage(base64Decode(data.split(',').last));
+                return stableImageProvider(data);
               } catch (_) {
                 return null;
               }
@@ -7538,9 +7584,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             if (pendingPhoto != null &&
                 pendingPhoto!.startsWith('data:image/')) {
               try {
-                pendingPhotoProvider = MemoryImage(
-                  base64Decode(pendingPhoto!.split(',').last),
-                );
+                pendingPhotoProvider = stableImageProvider(pendingPhoto);
               } catch (_) {
                 pendingPhotoProvider = null;
               }
@@ -9124,9 +9168,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           return null;
                         }
                         try {
-                          return MemoryImage(
-                            base64Decode(data.split(',').last),
-                          );
+                          return stableImageProvider(data);
                         } catch (_) {
                           return null;
                         }
@@ -10130,7 +10172,7 @@ class _RoomMemberProfilePage extends StatelessWidget {
     final value = member.avatarDataUrl;
     if (value == null || !value.startsWith('data:image/')) return null;
     try {
-      return MemoryImage(base64Decode(value.split(',').last));
+      return stableImageProvider(value);
     } catch (_) {
       return null;
     }

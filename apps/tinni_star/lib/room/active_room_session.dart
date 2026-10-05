@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../infra/request_budget.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -65,6 +66,8 @@ class ActiveRoomSession extends ChangeNotifier {
   Timer? _presenceRecoveryTimer;
   bool _presenceRecoveryRunning = false;
   bool _fallbackRefreshRunning = false;
+  DateTime? _nextFallbackPoll;
+  int _fallbackFailures = 0;
   int _presenceRecoveryDelaySeconds = 2;
   String? _activeAuthToken;
   String? _activeUserId;
@@ -277,14 +280,23 @@ class ActiveRoomSession extends ChangeNotifier {
           (_nextVoiceAttempt?.isAfter(nowProvider()) ?? false)) { return; }
       await retryVoice(requestPermission: false);
     });
-    _fallbackStateTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+    _fallbackStateTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (_disposed || presence.liveConnected || _presenceRecoveryRunning || _fallbackRefreshRunning) return;
       final roomId = room?.id;
       final token = _activeAuthToken;
-      if (roomId == null || token == null) return;
-       _fallbackRefreshRunning = true;
-      try { await presence.refresh(roomId: roomId, authToken: token); }
-      finally { _fallbackRefreshRunning = false; }
+      if (roomId == null || token == null ||
+          (_nextFallbackPoll?.isAfter(nowProvider()) ?? false)) return;
+      _fallbackRefreshRunning = true;
+      try {
+        await presence.refresh(roomId: roomId, authToken: token);
+        _fallbackFailures = presence.lastError == null ? 0 : _fallbackFailures + 1;
+      } catch (_) {
+        _fallbackFailures++;
+      } finally {
+        _nextFallbackPoll = nowProvider().add(RequestBudget.presenceFallback(
+          seated: controller?.mySeat != null, failures: _fallbackFailures));
+        _fallbackRefreshRunning = false;
+      }
     });
   }
 

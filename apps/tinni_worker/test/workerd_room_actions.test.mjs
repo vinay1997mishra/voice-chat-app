@@ -53,6 +53,19 @@ test('real Workers RPC: '+(legacy ? 'legacy settings migration, ' : '')+'room en
   }
   const owner=await seed(1,true), guest=await seed(2);
   const roomId=owner.room.id;
+  const messageResponse=await mf.dispatchFetch('https://test.local/messages/live',{
+    headers:{Upgrade:'websocket',authorization:'Bearer '+guest.token,'x-tinni-country-code':'US'},
+  });
+  assert.equal(messageResponse.status,101);
+  const messageSocket=messageResponse.webSocket;
+  const inboxEvents=[];
+  messageSocket.addEventListener('message',event=>inboxEvents.push(JSON.parse(event.data)));
+  messageSocket.accept();
+  t.after(()=>{try {messageSocket.close();} catch (_) {}});
+  await new Promise(resolve=>setTimeout(resolve,50));
+  assert.ok(inboxEvents.some(event=>event.type==='inbox_state'));
+  assert.ok(inboxEvents.some(event=>event.type==='ribbons_snapshot' && Array.isArray(event.ribbons)));
+
   await action('/room-presence/join',owner,{room_id:roomId});
   const joinedGuest = await action('/room-presence/join',guest,{room_id:roomId});
   assert.equal(joinedGuest.seat_count,12);

@@ -223,6 +223,21 @@ class DiscoveryService {
   final Set<String> favorites = <String>{};
   final Set<String> followingRoomIds = <String>{};
 
+  bool applyRocketPriority(Map<String, dynamic> priority) {
+    final id = priority['room_id']?.toString() ?? '';
+    final index = rooms.indexWhere((room) => room.id == id);
+    if (index < 0) return false;
+    final incoming = (priority['launched_at'] as num?)?.toInt() ?? 0;
+    final current = rooms[index];
+    if (incoming < current.rocketLaunchedAt) return true;
+    rooms[index] = current.copyWith(
+      rocketLaunchLevel: (priority['level'] as num?)?.toInt() ?? 0,
+      rocketLaunchedAt: incoming,
+      rocketPriorityUntil: (priority['expires_at'] as num?)?.toInt() ?? 0,
+    );
+    return true;
+  }
+
   Future<void> syncRooms(String authToken) async {
     if (authToken.trim().isEmpty) {
       rooms.clear();
