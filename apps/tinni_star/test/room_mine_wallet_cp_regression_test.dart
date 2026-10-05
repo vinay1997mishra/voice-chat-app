@@ -252,7 +252,6 @@ void main() {
   });
 
   test('CP economy and profile card stay scaled to Tinni', () {
-    final room = File('lib/screens/room_screen.dart').readAsStringSync();
     final cp = File('lib/screens/cp_screen.dart').readAsStringSync();
     final profile =
         File('lib/screens/public_profile_screen.dart').readAsStringSync();
