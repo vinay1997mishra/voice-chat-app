@@ -74,6 +74,7 @@ jobs:
           s = s.replace(marker, setup + marker, 1)
           s = s.replace('buildTypes {\n        release {', '''signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }\n    buildTypes {\n        release {''', 1)
           s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          s += '\ndependencies {\n    implementation("com.google.android.gms:play-services-auth:21.3.0")\n}\n'
           p.write_text(s)
           PY
 

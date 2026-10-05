@@ -1,5 +1,11 @@
 package com.tinnistar.tinni_star
 
+import android.app.Activity
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.api.ApiException
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,6 +20,8 @@ class MainActivity : FlutterActivity() {
     private val permissionChannel = "tinni.star/permissions"
     private val privacyChannel = "tinni.star/privacy"
     private val voicePermissionRequest = 744
+    private val googleSignInRequest = 745
+    private var pendingGoogleResult: MethodChannel.Result? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var privacyMethodChannel: MethodChannel? = null
     private var captureCallback: android.app.Activity.ScreenCaptureCallback? = null
@@ -44,6 +52,17 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "tinni.star/google_sign_in"
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "authenticate") {
+                startClassicGoogleSignIn(call.argument<String>("server_client_id") ?: "", result)
+            } else {
+                result.notImplemented()
+            }
+        }
 
         privacyMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -80,6 +99,81 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+
+    @Suppress("DEPRECATION")
+    private fun startClassicGoogleSignIn(serverClientId: String, result: MethodChannel.Result) {
+        if (pendingGoogleResult != null) {
+            result.error("google_busy", "Google login is already open.", null)
+            return
+        }
+        if (serverClientId.isBlank()) {
+            result.error("google_setup", "Google login setup is unavailable.", null)
+            return
+        }
+        val availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this)
+        if (availability != ConnectionResult.SUCCESS) {
+            result.error("google_play_services", "Please update Google Play services and try again.", availability)
+            return
+        }
+        pendingGoogleResult = result
+        try {
+            val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestIdToken(serverClientId)
+                .build()
+            val client = GoogleSignIn.getClient(this, options)
+            // Explicit user action: let them choose an account again instead of
+            // silently retrying a cancelled Credential Manager dialog.
+            client.signOut().addOnCompleteListener {
+                if (pendingGoogleResult == null || isFinishing || isDestroyed) return@addOnCompleteListener
+                try {
+                    startActivityForResult(client.signInIntent, googleSignInRequest)
+                } catch (error: Exception) {
+                    pendingGoogleResult?.error("google_unavailable", "Unable to open Google account picker.", null)
+                    pendingGoogleResult = null
+                }
+            }
+        } catch (error: Exception) {
+            pendingGoogleResult = null
+            result.error("google_unavailable", "Unable to open Google account picker.", null)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != googleSignInRequest) return
+        val result = pendingGoogleResult ?: return
+        pendingGoogleResult = null
+        if (data == null && resultCode == Activity.RESULT_CANCELED) {
+            result.error("google_canceled", "Google login cancelled.", null)
+            return
+        }
+        try {
+            val account = GoogleSignIn.getSignedInAccountFromIntent(data).getResult(ApiException::class.java)
+            val token = account.idToken
+            if (token.isNullOrBlank() || account.email.isNullOrBlank()) {
+                result.error("google_token_missing", "Google did not return a valid account. Please try again.", null)
+                return
+            }
+            result.success(mapOf("id_token" to token, "email" to account.email,
+                "display_name" to (account.displayName ?: "")))
+        } catch (error: ApiException) {
+            when (error.statusCode) {
+                12501, 16 -> result.error("google_canceled", "Google login cancelled.", null)
+                10 -> result.error("google_setup", "Google login setup does not match this app. Reference: 10", 10)
+                else -> result.error("google_failed", "Google login failed. Reference: " + error.statusCode, error.statusCode)
+            }
+        } catch (error: Exception) {
+            result.error("google_failed", "Unable to complete Google login. Please try again.", null)
+        }
+    }
+
+    override fun onDestroy() {
+        pendingGoogleResult?.error("google_canceled", "Google login screen closed.", null)
+        pendingGoogleResult = null
+        super.onDestroy()
+    }
 
     private fun registerPrivacyDetection() {
         if (Build.VERSION.SDK_INT >= 34 && captureCallback == null) {

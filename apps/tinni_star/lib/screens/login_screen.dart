@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:app_links/app_links.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app/tinni_app.dart';
 import '../app/tinni_state.dart';
 import '../auth/app_auth_api.dart';
+import '../auth/classic_google_sign_in.dart';
 import '../auth/auth_service.dart';
 import '../i18n/tinni_localization.dart';
 import '../ui/royal_theme.dart';
@@ -47,6 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool facebookReady = true;
   bool emailReady = true;
   bool _authConfigLoaded = false;
+  bool _googlePickerFallbackAvailable = false;
+  String? _googleServerClientId;
   bool waitingFacebook = false;
   bool emailMode = false;
 
@@ -158,6 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_authConfigLoaded) {
       try {
         final config = await _api.loadConfig();
+        _googleServerClientId = config.googleServerClientId;
         String? googleError;
         if (config.googleServerClientId != null) {
           try {
@@ -222,25 +227,56 @@ class _LoginScreenState extends State<LoginScreen> {
         throw StateError('Google did not return a valid ID token.');
       }
 
-      final result = await _api.googleLogin(idToken: token);
+      await _finishGoogleToken(token, googleAccount.displayName ?? '', googleAccount.email);
+    } on GoogleSignInException catch (error) {
       if (!mounted) return;
-
-      if (!result.profileRequired) {
-        await _finishLogin(result);
-        return;
+      if (error.code == GoogleSignInExceptionCode.canceled ||
+          error.code == GoogleSignInExceptionCode.interrupted) {
+        setState(() {
+          _googlePickerFallbackAvailable = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+        });
+        _snack('Google account picker closed. Try again or use the alternative picker below.');
+      } else {
+        _snack(error.toString());
       }
-
-      pendingProvider = 'google';
-      pendingGoogleIdToken = token;
-      pendingFacebookRequestId = null;
-      _applyDraft(
-        result.draft,
-        fallbackName: googleAccount.displayName ?? '',
-        fallbackLabel: googleAccount.email,
-      );
     } catch (error) {
       if (!mounted) return;
       _snack(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _finishGoogleToken(String token, String name, String email) async {
+    final result = await _api.googleLogin(idToken: token);
+    if (!mounted) return;
+    if (!result.profileRequired) {
+      await _finishLogin(result);
+      return;
+    }
+    pendingProvider = 'google';
+    pendingGoogleIdToken = token;
+    pendingFacebookRequestId = null;
+    _applyDraft(result.draft, fallbackName: name, fallbackLabel: email);
+  }
+
+  Future<void> _googleAlternativeLogin() async {
+    if (busy || waitingFacebook) return;
+    setState(() => busy = true);
+    try {
+      if (_googleServerClientId == null) await _ensureAuthProviderReady('google');
+      final account = await const ClassicGoogleSignIn().authenticate(
+        serverClientId: _googleServerClientId ?? '');
+      await _finishGoogleToken(account.idToken, account.displayName, account.email);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      if (error.code == 'google_canceled') {
+        _snack('Google login cancelled. You can try again when ready.');
+      } else {
+        _snack(error.message ?? 'Unable to open Google login. Please update Google Play services.');
+      }
+    } catch (error) {
+      if (mounted) _snack(error.toString().replaceFirst('Bad state: ', ''));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -985,6 +1021,15 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+          if (_googlePickerFallbackAvailable) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('google-alternative-login-button'),
+              onPressed: !busy && !waitingFacebook ? _googleAlternativeLogin : null,
+              icon: const Icon(Icons.account_circle_outlined),
+              label: const Text('Try another Google account picker'),
+            ),
+          ],
           if (googleSetupError != null) ...[
             const SizedBox(height: 7),
             Text(

@@ -7,5 +7,5 @@ abstract final class RequestBudget {
   static Duration reconnectDelay(int failures) =>
       Duration(seconds: math.min(120, 2 * (1 << math.min(failures, 6))));
   static Duration presenceFallback({required bool seated, required int failures}) =>
-      Duration(seconds: math.min(120, (seated ? 5 : 30) * (1 << math.min(failures, 4))));
+      Duration(seconds: math.min(120, (seated ? 5 : 30) * (1 << math.min(failures, 6))));
 }
