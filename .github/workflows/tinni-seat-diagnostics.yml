@@ -1,0 +1,59 @@
+name: Tinni Seat Diagnostics
+on:
+  push:
+    branches: [tinnistar]
+    paths: ['.github/workflows/tinni-seat-diagnostics.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install diagnostics client
+        working-directory: apps/tinni_worker
+        run: npm install --no-audit --no-fund
+      - name: Capture bounded seat failure diagnostics
+        working-directory: apps/tinni_worker
+        shell: bash
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=5s 180s npx wrangler tail --format=json > /tmp/tinni-seat-tail.json 2>/tmp/tinni-seat-tail-status.txt
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          raw=Path('/tmp/tinni-seat-tail.json').read_text()
+          decoder=json.JSONDecoder()
+          events=[]
+          while raw.strip():
+              raw=raw.lstrip()
+              try:
+                  value,end=decoder.raw_decode(raw)
+                  raw=raw[end:]
+              except json.JSONDecodeError:
+                  raw=raw[raw.find('\n')+1:] if '\n' in raw else ''
+                  continue
+              request=value.get('event',{}).get('request',{})
+              url=str(request.get('url',''))
+              if '/room-presence/' not in url: continue
+              messages=[]
+              for item in value.get('exceptions',[]):
+                  messages.append({'name':item.get('name'),'message':item.get('message')})
+              for item in value.get('logs',[]):
+                  if item.get('level')=='error':
+                      messages.append({'message':item.get('message')})
+              if messages:
+                  events.append({'outcome':value.get('outcome'),'path':url.split('?')[0].split('.dev')[-1],'errors':messages})
+          output=json.dumps(events,indent=2)
+          output=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [redacted]',output)
+          print('Room failure diagnostics: '+output)
+          if not events: print('No room failure was captured during this window.')
+          PY
