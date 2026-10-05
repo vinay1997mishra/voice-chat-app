@@ -1275,3 +1275,5 @@ Unless explicitly changed by Platform Owner:
 - Gifts and random room draws are not automatically retried after an ambiguous response. A successful gift transaction remains successful when secondary room visual delivery fails.
 - Retrying acquisition of the same occupied seat returns authoritative state without resetting that user's microphone.
 - Successful Unique ID purchases immediately synchronize the authenticated account, profile and persisted identity. Purchase controls reject concurrent submissions.
+
+- Unique ID and store catalogs use asynchronous Durable Object RPC methods; routes must await catalog/purchase results and must never access remote private storage.

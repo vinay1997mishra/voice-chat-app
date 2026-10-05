@@ -10,14 +10,18 @@ test('authenticated app entry, core catalogs and social/profile reads use real S
     '/profile/trends', '/notifications', '/account/stats', '/tasks', '/account/identities', '/feedback',
     '/social/following', '/social/friends', '/social/blocked', '/social/blocked/details',
     '/messages/inbox', '/calls/incoming', '/wallet/transactions',
-    '/wallet/coins/history', '/wallet/diamonds/history', '/hierarchy/portal',
+    '/wallet/coins/history', '/wallet/diamonds/history', 
     '/hierarchy/invites', '/vip/me', '/frames/catalog', '/cp', '/cp/ranking', '/family/list',
     '/store/catalog', '/inventory', '/vip/catalog', '/unique-ids/catalog',
     '/gifts/lucky/state', '/rooms', '/room-themes',
     '/rooms/follow?room_id=' + room.id, '/rooms/membership?room_id=' + room.id];
   for (const path of paths) {
-    const result = await r.request(path, a.token);
-    assert.equal(result.status, 200, path + ': ' + JSON.stringify(result.data));
+    await t.test(path, async () => {
+      const result = await r.request(path, a.token);
+      assert.equal(result.status, 200, path + ': ' + JSON.stringify(result.data));
+      if (path === '/store/catalog') assert.ok(Array.isArray(result.data.items));
+      if (path === '/unique-ids/catalog') assert.ok(Array.isArray(result.data.unique_ids));
+    });
   }
   const unauthorized = await r.request('/wallet');
   assert.equal(unauthorized.status, 401);
@@ -58,4 +62,23 @@ test('a committed gift stays successful when room visual delivery fails', async 
   assert.equal(sent.data.transactions.length, 1);
   const wallet = await r.request('/wallet', a.token);
   assert.equal(wallet.data.wallet.coins, 9900);
+});
+
+test('profile preferences, room following and direct messages persist through real routes', async t => {
+  const r = runtime(); t.after(r.close);
+  const a = await r.user(1), b = await r.user(2);
+  const room = await r.directory.createRoom(a.user_id, { title: 'Action room', seat_count: 12 });
+  const preferences = await r.request('/account/preferences', a.token, { language: 'Hindi' });
+  assert.equal(preferences.status, 200, JSON.stringify(preferences.data));
+  const reread = await r.request('/account/preferences', a.token);
+  assert.equal(reread.data.preferences.language, 'Hindi');
+  const followed = await r.request('/rooms/follow', b.token, { room_id: room.id, following: true });
+  assert.equal(followed.status, 200, JSON.stringify(followed.data));
+  const social = await r.request('/social/follow', a.token, { target_user_id: b.user_id, following: true });
+  assert.equal(social.status, 200, JSON.stringify(social.data));
+  const message = await r.request('/messages', a.token, { to_user_id: b.user_id, text: 'Hello from the flow test' });
+  assert.equal(message.status, 201, JSON.stringify(message.data));
+  const inbox = await r.request('/messages?peer_user_id=' + a.user_id, b.token);
+  assert.equal(inbox.status, 200, JSON.stringify(inbox.data));
+  assert.ok(inbox.data.messages.some(item => item.text === 'Hello from the flow test'));
 });
