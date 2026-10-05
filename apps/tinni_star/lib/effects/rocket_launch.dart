@@ -80,8 +80,10 @@ class RocketModelPainter extends CustomPainter {
         ..moveTo(64,80)..lineTo(80,111)..lineTo(63,103);
       canvas.drawPath(fins,Paint()..color=accent);
     }
-    if(tier>=4) for(final y in [66.0,92.0]) {
-      canvas.drawRect(Rect.fromLTWH(35,y,30,3),Paint()..color=accent);
+    if(tier>=4) {
+      for(final y in [66.0,92.0]) {
+        canvas.drawRect(Rect.fromLTWH(35,y,30,3),Paint()..color=accent);
+      }
     }
     if(tier>=5) {
       metal(const Rect.fromLTWH(40,58,20,9),radius:2);
@@ -131,28 +133,46 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     super.initState();
     _seen=widget.completed.value;
     _flight=AnimationController(vsync:this,duration:const Duration(seconds:9))
-      ..addStatusListener((status){if(status==AnimationStatus.completed) _next();});
+      ..addStatusListener((status) {
+        if(status==AnimationStatus.completed) {
+          _next();
+        }
+      });
     widget.completed.addListener(_changed);
   }
   void _changed() {
     final next=widget.completed.value;
-    if(next==null) return;
+    if(next==null) {
+      return;
+    }
     final previous=_seen;
     _seen=next;
-    if(previous==null||next<=previous||!widget.enabled) return;
-    for(var level=previous+1;level<=next&&level<=10;level++) _queue.add(level);
-    if(_level==null) _next();
+    if(previous==null||next<=previous||!widget.enabled) {
+      return;
+    }
+    for(var level=previous+1;level<=next&&level<=10;level++) {
+      _queue.add(level);
+    }
+    if(_level==null) {
+      _next();
+    }
   }
   void _next() {
-    if(!mounted) return;
+    if(!mounted) {
+      return;
+    }
     setState(()=>_level=_queue.isEmpty?null:_queue.removeAt(0));
-    if(_level!=null) _flight.forward(from:0);
+    if(_level!=null) {
+      _flight.forward(from:0);
+    }
   }
   @override void dispose() {
     widget.completed.removeListener(_changed);_flight.dispose();super.dispose();
   }
   @override Widget build(BuildContext context) {
-    if(_level==null) return const SizedBox.shrink();
+    if(_level==null) {
+      return const SizedBox.shrink();
+    }
     return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
       animation:_flight,builder:(context,child)=>LayoutBuilder(builder:(context,c) {
         final t=_flight.value;
