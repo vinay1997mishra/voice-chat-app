@@ -76,6 +76,14 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   const state=await action('/room-presence/state?room_id='+roomId,guest);
   assert.equal(state.members.find(x=>x.user_id===guest.user.user_id).seat_index,1);
   assert.equal(state.members.find(x=>x.user_id===guest.user.user_id).mic_enabled,true);
+  // Delayed audience heartbeat and socket state cannot evict a seated user.
+  for (let i=0;i<2;i++) {
+    const stale=await action('/room-presence/heartbeat',guest,{room_id:roomId,seat_index:null,mic_enabled:false});
+    assert.equal(stale.members.find(x=>x.user_id===guest.user.user_id).seat_index,1);
+  }
+  socket.send(JSON.stringify({type:'seat_state',seat_index:null,mic_enabled:false}));
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal((await action('/room-presence/state?room_id='+roomId,guest)).members.find(x=>x.user_id===guest.user.user_id).seat_index,1);
   socket.close();
   await action('/room-presence/seat-lock',owner,{room_id:roomId,seat_index:2,locked:true});
   assert.ok((await action('/room-presence/state?room_id='+roomId,guest)).locked_seats.includes(2));

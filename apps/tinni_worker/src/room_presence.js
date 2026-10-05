@@ -1431,6 +1431,16 @@ export class RoomPresenceStore extends DurableObject {
           ? null
           : Number(forceRow.seat_index);
     }
+    // Cached audience state from heartbeat/reconnect must not undo seat-take.
+    // Explicit seat-leave and moderation are the audience transitions.
+    if (!forceRow && seatIndex === null) {
+      const current = this.ctx.storage.sql.exec(
+        "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1", userId,
+      ).toArray()[0];
+      if (current?.seat_index !== null && current?.seat_index !== undefined) {
+        seatIndex = Number(current.seat_index);
+      }
+    }
     const micEnabled = seatIndex !== null && input?.mic_enabled === true;
 
     if (!userId) throw new Error("user_id is required");
@@ -1524,7 +1534,7 @@ export class RoomPresenceStore extends DurableObject {
       now,
     );
 
-    if (forceRow) {
+    if (forceRow && requestedSeat === targetSeat) {
       this.ctx.storage.sql.exec(
         "DELETE FROM room_seat_forces WHERE user_id = ?",
         userId,
@@ -1778,8 +1788,9 @@ export class RoomPresenceStore extends DurableObject {
     ).toArray()[0];
     if (!current) throw new Error("User is not in the room");
 
+    // Delayed audience sync cannot undo seat-take; use seat-leave to exit.
     const nextSeat = rawSeatIndex === null || rawSeatIndex === undefined
-      ? null
+      ? (current.seat_index == null ? null : Number(current.seat_index))
       : Number(rawSeatIndex);
     if (nextSeat !== null && (!Number.isInteger(nextSeat) || nextSeat < 0)) {
       throw new Error("seat_index is invalid");
