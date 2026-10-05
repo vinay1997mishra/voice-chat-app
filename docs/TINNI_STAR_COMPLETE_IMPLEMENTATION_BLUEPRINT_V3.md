@@ -1287,3 +1287,11 @@ Unless explicitly changed by Platform Owner:
 - Only one bet submission may be pending per panel. Disable fruit/chip submissions during that request, keep the chosen amount fixed and never replay an ambiguous bet automatically.
 - Reflect wallet/bet/result changes only after server confirmation. History displays real settled server rounds.
 - Respect reduced-motion preferences. On short displays scroll the board while preserving access to chips, balance, history, retry and close controls.
+
+
+## 2026-10-05 — Room reliability, Fruit Party Lucky and live Ludo
+- Room seat/mic actions use authoritative server responses even when WebSocket is unavailable. Same-seat acknowledgements preserve microphone intent; leaving a seat commits immediately. HTTP fallback includes personal invites and mute/seat force state.
+- Retry status reflects failed room contact. A healthy HTTP fallback does not show a permanent reconnect warning. Voice failures show an actionable microphone message and recover automatically; notification/Bluetooth permissions remain optional for phone microphone audio.
+- Fruit Party now has Lucky 11: 3–4 server-selected rounds per two-hour window, three distinct random winning fruits with their existing Party multipliers. Existing round timings, bet denominations, balances and normal weighted outcomes remain unchanged. Settlement and all payouts are atomic and cannot be repeated by failed secondary notices.
+- Room Game Center exposes Ludo. Ludo opens at the bottom in half the screen, shows four matching colour positions with actual player DP/name and room microphone state, polls live turns, and releases players when the panel closes. Mic buttons use the existing real room seat admission, approval and audio publishing rules.
+- Music playback start/resume returns immediately so pause, previous, next, stop and seat-down/exit controls stay responsive.

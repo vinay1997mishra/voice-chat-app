@@ -26,11 +26,22 @@ class LiveKitRtcAdapter implements RtcAdapter {
   bool _publishingCamera = false;
   bool _remoteAudioEnabled = true;
   Timer? _speakingTimer;
+  int _generation = 0;
+  bool _applyingAudioPreference = false;
   final ValueNotifier<Map<String, double>> _speakingLevels =
       ValueNotifier<Map<String, double>>(const <String, double>{});
 
   @override
-  RtcConnectionState get state => _state;
+  RtcConnectionState get state {
+    final current = _room;
+    if (current == null) return _state;
+    switch (current.connectionState.name) {
+      case 'connected': return RtcConnectionState.joined;
+      case 'reconnecting': return RtcConnectionState.reconnecting;
+      case 'disconnected': return RtcConnectionState.failed;
+      default: return _state;
+    }
+  }
 
   @override
   bool get publishingMic => _publishing;
@@ -59,6 +70,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
     }
 
     await leave();
+    final generation = ++_generation;
     _state = RtcConnectionState.joining;
 
     Room? nextRoom;
@@ -73,14 +85,16 @@ class LiveKitRtcAdapter implements RtcAdapter {
         throw StateError('LiveKit credentials are incomplete');
       }
 
+      if (generation != _generation) throw StateError('Voice join was cancelled');
       nextRoom = Room(
         roomOptions: const RoomOptions(
           adaptiveStream: true,
           dynacast: true,
         ),
       );
-      await nextRoom.prepareConnection(serverUrl, token);
-      await nextRoom.connect(serverUrl, token);
+      await nextRoom.prepareConnection(serverUrl, token).timeout(const Duration(seconds: 10));
+      await nextRoom.connect(serverUrl, token).timeout(const Duration(seconds: 25));
+      if (generation != _generation) throw StateError('Voice join was cancelled');
       _room = nextRoom;
       _publishing = false;
       _publishingCamera = false;
@@ -88,9 +102,11 @@ class LiveKitRtcAdapter implements RtcAdapter {
       await _applyRemoteAudioPreference();
       _startSpeakingMonitor();
     } catch (error) {
-      _stopSpeakingMonitor();
-      _state = RtcConnectionState.failed;
-      _publishing = false;
+      if (generation == _generation) {
+        _stopSpeakingMonitor();
+        _state = RtcConnectionState.failed;
+        _publishing = false;
+      }
       if (nextRoom != null) {
         try {
           await nextRoom.disconnect();
@@ -99,13 +115,14 @@ class LiveKitRtcAdapter implements RtcAdapter {
           await nextRoom.dispose();
         } catch (_) {}
       }
-      _room = null;
+      if (generation == _generation) _room = null;
       rethrow;
     }
   }
 
   @override
   Future<void> leave() async {
+    _generation++;
     _stopSpeakingMonitor();
     final oldRoom = _room;
     _room = null;
@@ -128,7 +145,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
   @override
   Future<void> setMicPublished(bool enabled) async {
-    if (_state != RtcConnectionState.joined || _room == null) {
+    if (state != RtcConnectionState.joined || _room == null) {
       throw StateError('RTC room is not joined');
     }
     final participant = _room!.localParticipant;
@@ -165,13 +182,16 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
   void _sampleSpeakingLevels() {
     final currentRoom = _room;
-    if (currentRoom == null || _state != RtcConnectionState.joined) {
+    if (currentRoom == null || state != RtcConnectionState.joined) {
       if (_speakingLevels.value.isNotEmpty) {
         _speakingLevels.value = const <String, double>{};
       }
       return;
     }
 
+    if (!_remoteAudioEnabled && !_applyingAudioPreference) {
+      unawaited(_applyRemoteAudioPreference().catchError((Object _) {}));
+    }
     final next = <String, double>{};
     for (final participant in currentRoom.activeSpeakers) {
       final identity = participant.identity.trim();
@@ -204,7 +224,9 @@ class LiveKitRtcAdapter implements RtcAdapter {
 
   Future<void> _applyRemoteAudioPreference() async {
     final room = _room;
-    if (room == null || _state != RtcConnectionState.joined) return;
+    if (room == null || state != RtcConnectionState.joined || _applyingAudioPreference) return;
+    _applyingAudioPreference = true;
+    try {
     for (final participant in room.remoteParticipants.values) {
       for (final publication in participant.audioTrackPublications) {
         if (_remoteAudioEnabled) {
@@ -214,10 +236,11 @@ class LiveKitRtcAdapter implements RtcAdapter {
         }
       }
     }
+    } finally { _applyingAudioPreference = false; }
   }
 
   Future<void> setCameraPublished(bool enabled) async {
-    if (_state != RtcConnectionState.joined || _room == null) {
+    if (state != RtcConnectionState.joined || _room == null) {
       throw StateError('RTC room is not joined');
     }
     final participant = _room!.localParticipant;

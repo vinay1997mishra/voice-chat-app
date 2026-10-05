@@ -363,6 +363,7 @@ export class FruitGameStore extends DurableObject {
       );
     }
 
+    this.ctx.storage.transactionSync(() => {
     const settledAt = Date.now();
     for (const [userId, payout] of payoutsByUser) {
       this._ensureWallet(userId, settledAt);
@@ -379,14 +380,6 @@ export class FruitGameStore extends DurableObject {
       );
     }
 
-    if (this.env?.APP_DIRECTORY) {
-      const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
-      for (const [userId, payout] of payoutsByUser) {
-        if (payout < 1000000) continue;
-        const roomId = bets.find((bet) => bet.user_id === userId && bet.room_id)?.room_id;
-        if (roomId) await directory.recordGameWinning(userId, roomId, "fruit_jackpot", payout);
-      }
-    }
 
     let totalPayout = 0;
     for (const bet of bets) {
@@ -417,6 +410,16 @@ export class FruitGameStore extends DurableObject {
       0,
       0,
     );
+    });
+    if (this.env?.APP_DIRECTORY) {
+      const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
+      for (const [userId, payout] of payoutsByUser) {
+        if (payout < 1000000) continue;
+        const roomId = bets.find((bet) => bet.user_id === userId && bet.room_id)?.room_id;
+        if (roomId) try { await directory.recordGameWinning(userId, roomId, "fruit_jackpot", payout); } catch (error) { console.error("Game winning notice failed", String(error?.message || error)); }
+      }
+    }
+
   }
 
   ownerStats(userIdValue = "") {
@@ -453,9 +456,9 @@ export class FruitGameStore extends DurableObject {
         user_id: userId,
         bet_count: Number(userBet.bet_count || 0),
         total_bet: Number(userBet.total_bet || 0),
-        balance: Number(wallet?.balance || START_BALANCE),
+        balance: Number(wallet?.balance ?? START_BALANCE),
         today_winnings: Number(wallet?.today_winnings || 0),
-        net_profit: Number(wallet?.balance || START_BALANCE) - START_BALANCE,
+        net_profit: Number(wallet?.balance ?? START_BALANCE) - START_BALANCE,
       };
     }
 

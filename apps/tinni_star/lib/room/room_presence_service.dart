@@ -189,6 +189,19 @@ class RoomPresenceService extends ChangeNotifier {
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
+  DateTime? lastSuccessfulContact;
+  bool _httpFailed = false;
+  int _latestSnapshotTime = 0;
+
+  bool get hasConnectionProblem => !liveConnected &&
+      (_httpFailed || !connected);
+
+  void _markHttpHealthy() {
+    connected = true;
+    _httpFailed = false;
+    lastSuccessfulContact = DateTime.now();
+    lastError = null;
+  }
 
   bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
 
@@ -227,6 +240,7 @@ class RoomPresenceService extends ChangeNotifier {
     _liveWanted = false;
     _liveRoomId = null;
     _liveAuthToken = null;
+    _latestSnapshotTime = 0;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
     _liveReconnectDelaySeconds = 2;
@@ -742,6 +756,11 @@ class RoomPresenceService extends ChangeNotifier {
     );
   }
 
+  Future<void> leaveSeat({required String roomId, required String authToken}) async {
+    await _commandPost('/room-presence/seat-leave', authToken,
+      <String, Object>{'room_id': roomId});
+  }
+
   Future<void> takeSeat({
     required String roomId,
     required String authToken,
@@ -756,10 +775,13 @@ class RoomPresenceService extends ChangeNotifier {
       // reconnecting or blocked by the carrier/OEM.
       applyResponse: true,
     );
-    selfSeatForced = true;
-    selfForcedSeatIndex =
-        data['seat_index'] == null ? seatIndex : _asInt(data['seat_index']);
-    notifyListeners();
+    // The response already contains the authoritative member and force state.
+    // Older servers lack self fields; the member reconciliation still seats us.
+    if (!data.containsKey('members')) {
+      selfSeatForced = true;
+      selfForcedSeatIndex = seatIndex;
+      notifyListeners();
+    }
   }
 
     Future<void> requestSeat({
@@ -957,8 +979,7 @@ class RoomPresenceService extends ChangeNotifier {
           throw StateError(message);
         }
 
-        connected = true;
-        lastError = null;
+        _markHttpHealthy();
         if (applyResponse) {
           _apply(data);
         }
@@ -982,6 +1003,7 @@ class RoomPresenceService extends ChangeNotifier {
           );
           continue;
         }
+        _httpFailed = transient;
         lastError = error.toString();
         liveReconnecting = !liveConnected;
         notifyListeners();
@@ -1094,9 +1116,9 @@ class RoomPresenceService extends ChangeNotifier {
         );
       }
       _apply(data);
-      connected = true;
-      lastError = null;
+      _markHttpHealthy();
     } catch (error) {
+      _httpFailed = true;
       // A failed HTTP refresh must not evict an otherwise-live room session.
       // Keep the last known members/seat state while realtime reconnects.
       connected = liveConnected || connected;
@@ -1171,8 +1193,7 @@ class RoomPresenceService extends ChangeNotifier {
             : null;
         final wasConnected = connected;
         _apply(data);
-        connected = true;
-        lastError = null;
+        _markHttpHealthy();
         if (!notifyOnlyOnVisibleChange ||
             !wasConnected ||
             before != _visibleStateSignature()) {
@@ -1286,6 +1307,9 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   void _apply(Map<String, dynamic> data) {
+    final snapshotTime = _asInt(data['server_time']);
+    if (snapshotTime > 0 && snapshotTime < _latestSnapshotTime) return;
+    if (snapshotTime > 0) _latestSnapshotTime = snapshotTime;
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     }

@@ -32,6 +32,18 @@ export function runtime() {
     let alarm = null;
     return {
       storage: {
+        transactionSync(fn) {
+          db.exec('SAVEPOINT fixture_transaction');
+          try {
+            const value = fn();
+            db.exec('RELEASE SAVEPOINT fixture_transaction');
+            return value;
+          } catch (error) {
+            db.exec('ROLLBACK TO SAVEPOINT fixture_transaction');
+            db.exec('RELEASE SAVEPOINT fixture_transaction');
+            throw error;
+          }
+        },
         sql: {
           exec(query, ...bindings) {
             let rows = [];

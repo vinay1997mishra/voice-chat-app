@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -34,6 +35,8 @@ class KtvQueueEntry {
 }
 
 class KtvService {
+  KtvService({AudioPlayer? audioPlayer}) : _player = audioPlayer;
+  String? playbackError;
   static const int maxLocalSongs = 300;
   static const String _prefsKey = 'tinni_ktv_local_songs_v1';
   bool _localLibraryLoaded = false;
@@ -81,8 +84,14 @@ class KtvService {
     if (song == null || !song.local || path == null || path.isEmpty) return;
     await _audio.setFilePath(path);
     await _audio.setVolume(_outputMuted ? 0.0 : 1.0);
-    await _audio.play();
     _paused = false;
+    playbackError = null;
+    // just_audio's play Future completes at the end of the song. Starting
+    // playback must return immediately so pause/next/stop stay responsive.
+    unawaited(_audio.play().catchError((Object error) {
+      playbackError = error.toString();
+      _paused = true;
+    }));
   }
 
   Future<void> pause() async {
@@ -95,8 +104,11 @@ class KtvService {
   Future<void> resume() async {
     if (current == null) return;
     if (_paused && _player != null) {
-      await _audio.play();
       _paused = false;
+      unawaited(_audio.play().catchError((Object error) {
+        playbackError = error.toString();
+        _paused = true;
+      }));
       return;
     }
     await playCurrent();

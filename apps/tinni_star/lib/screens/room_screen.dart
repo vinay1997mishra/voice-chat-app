@@ -27,6 +27,7 @@ import '../ui/animated_avatar_frame.dart';
 import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
+import 'ludo_screen.dart';
 import 'messages_screen.dart';
 import 'recharge_screen.dart';
 
@@ -1277,8 +1278,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildRoomConnectionStatus() {
     final presence = widget.state.roomSession.presence;
-    final shouldShow = presence.liveReconnecting ||
-        (!presence.liveConnected && presence.lastError != null);
+    final shouldShow = presence.hasConnectionProblem;
     if (!shouldShow) return const SizedBox.shrink();
 
     final text = presence.connected
@@ -1331,16 +1331,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _toggleMic() async {
-    controller.toggleMic();
-    await widget.state.roomSession.setMicFromController();
-    setState(() {});
+    try {
+      await widget.state.roomSession.toggleMyMic();
+    } catch (error) { _snack(error.toString()); }
+    if (mounted) setState(() {});
   }
 
   Future<void> _leaveSeatAndMute() async {
     final userId = widget.state.auth.current?.userId ?? '';
     await widget.state.ktv.stopForSeatDown(userId);
-    controller.leaveSeat();
-    await widget.state.roomSession.setMicFromController();
+    try {
+      await widget.state.roomSession.leaveMySeat();
+    } catch (error) { _snack(error.toString()); }
     if (mounted) setState(() {});
   }
 
@@ -5198,9 +5200,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           });
                         },
                       ),
-                      const _ReferenceGameTile(
-                        label: 'New Game',
-                        icon: Icons.auto_awesome_rounded,
+                      _ReferenceGameTile(
+                        key: const Key('game-center-ludo'),
+                        label: 'Ludo',
+                        icon: Icons.grid_view_rounded,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          showModalBottomSheet<void>(
+                            context: context, isScrollControlled: true,
+                            useSafeArea: false,
+                            constraints: BoxConstraints.tightFor(
+                              height: MediaQuery.sizeOf(context).height * 0.50),
+                            builder: (_) => LudoScreen(
+                              state: widget.state, roomId: widget.room.id),
+                          );
+                        },
                       ),
                       const _ReferenceGameTile(
                         label: 'Coming Soon',
@@ -9578,9 +9592,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-            if (widget.state.roomSession.presence.liveReconnecting ||
-                (!widget.state.roomSession.presence.liveConnected &&
-                    widget.state.roomSession.presence.lastError != null))
+            if (widget.state.roomSession.presence.hasConnectionProblem)
               Positioned(
                 left: 20,
                 right: 20,

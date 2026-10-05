@@ -52,6 +52,14 @@ class ActiveRoomSession extends ChangeNotifier {
   String? connectionError;
 
   Timer? _presenceTimer;
+  Timer? _voiceTimer;
+  Timer? _fallbackStateTimer;
+  bool _voicePermissionGranted = false;
+  bool _voiceAttemptRunning = false;
+  bool _micActionRunning = false;
+  int _voiceEpoch = 0;
+  int _voiceRetrySeconds = 2;
+  DateTime? _nextVoiceAttempt;
   Timer? _presenceRecoveryTimer;
   bool _presenceRecoveryRunning = false;
   int _presenceRecoveryDelaySeconds = 2;
@@ -129,7 +137,8 @@ class ActiveRoomSession extends ChangeNotifier {
     final seatMuted = seatIndex >= 0 &&
         seatIndex < roomController.seats.length &&
         roomController.seats[seatIndex].roomMuted;
-    return roomController.micState == MicState.live &&
+    return connected && realtime.rtc.publishingMic &&
+        roomController.micState == MicState.live &&
         !roomController.selfMuted &&
         !presence.selfMicMuted &&
         !seatMuted;
@@ -146,6 +155,7 @@ class ActiveRoomSession extends ChangeNotifier {
     // that only resumes a controller with no authenticated backend session.
     if (sameRoom && _activeAuthToken != null && _activeUserId != null) {
       minimized = false;
+      if (!connected) await retryVoice();
       notifyListeners();
       return;
     }
@@ -177,49 +187,151 @@ class ActiveRoomSession extends ChangeNotifier {
     _activeUserId = userId;
     notifyListeners();
 
-    // Start server-authoritative room presence first. _startPresence keeps its
-    // own reconnect fallback, so a temporary network error does not destroy
-    // the authenticated room session.
-    await _startPresence();
-    await _applyForcedSeatChange();
-    await _enforceModerationMute();
+    // Presence and voice use separate transports and recover independently.
+    final presenceStart = _startPresence();
+    _startRecoveryMonitors();
+    await retryVoice();
+    await presenceStart;
+  }
 
-    final granted = await permissions.requestVoiceRoomPermissions();
-    if (!granted) {
-      connecting = false;
-      connected = false;
-      connectionError =
-          'Microphone permission is required for voice. Room controls remain active.';
-      notifyListeners();
-      return;
-    }
-
+  Future<void> retryVoice({bool requestPermission = true}) async {
+    if (_disposed || _voiceAttemptRunning) return;
+    final roomId = room?.id;
+    final userId = _activeUserId;
+    final token = _activeAuthToken;
+    if (roomId == null || userId == null || token == null) return;
+    final epoch = ++_voiceEpoch;
+    _voiceAttemptRunning = true;
+    connecting = true;
+    notifyListeners();
     try {
-      await foregroundService.start();
-      await realtime.enterRoom(
-        nextRoom.id,
-        userId,
-        authToken: authToken,
-      );
+      _voicePermissionGranted = requestPermission
+          ? await permissions.requestVoiceRoomPermissions()
+          : await permissions.hasVoiceRoomPermissions();
+      if (epoch != _voiceEpoch || room?.id != roomId) return;
+      if (!_voicePermissionGranted) {
+        connected = false;
+        connectionError = 'Allow microphone access to use voice.';
+        return;
+      }
+      // Notification/Bluetooth refusal and foreground-service errors must not
+      // prevent ordinary foreground microphone audio.
+      try { await foregroundService.start(); } catch (_) {}
+      await realtime.enterRoom(roomId, userId, authToken: token);
+      if (epoch != _voiceEpoch || room?.id != roomId) {
+        await realtime.exitRoom();
+        return;
+      }
       connected = true;
       connectionError = null;
+      _voiceRetrySeconds = 2;
+      _nextVoiceAttempt = null;
+      await realtime.setRemoteAudioEnabled(_roomSoundEnabled);
+      await setMicFromController();
     } catch (error) {
-      // Voice must never tear down the room backend session. Keep presence,
-      // auth and all non-voice room functions alive when LiveKit is missing,
-      // unavailable or reconnecting.
+      if (epoch != _voiceEpoch) return;
       connected = false;
-      connectionError = 'Voice unavailable: ' + error.toString();
-      try {
-        await realtime.exitRoom();
-      } catch (_) {}
-      try {
-        await foregroundService.stop();
-      } catch (_) {}
+      connectionError = 'Voice connection failed: ' +
+          error.toString().replaceFirst('Bad state: ', '');
+      _nextVoiceAttempt = DateTime.now().add(Duration(seconds: _voiceRetrySeconds));
+      _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 30).toInt();
     } finally {
-      connecting = false;
+      _voiceAttemptRunning = false;
+      if (epoch == _voiceEpoch) {
+        connecting = false;
+        notifyListeners();
+      }
     }
+  }
 
-    notifyListeners();
+  void _startRecoveryMonitors() {
+    _voiceTimer?.cancel();
+    _fallbackStateTimer?.cancel();
+    _voiceTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (_disposed || room == null || connecting) return;
+      final voiceState = realtime.rtc.state;
+      if (voiceState == RtcConnectionState.joined) {
+        if (!connected) {
+          connected = true;
+          connectionError = null;
+          try {
+            await realtime.setRemoteAudioEnabled(_roomSoundEnabled);
+            await setMicFromController();
+          } catch (error) { connectionError = error.toString(); }
+          notifyListeners();
+        }
+        return;
+      }
+      if (connected) {
+        connected = false;
+        connectionError = 'Voice connection lost. Retrying…';
+        _syncLiveState(force: true);
+        notifyListeners();
+      }
+      if (voiceState == RtcConnectionState.reconnecting ||
+          !_voicePermissionGranted ||
+          (_nextVoiceAttempt?.isAfter(DateTime.now()) ?? false)) return;
+      await retryVoice(requestPermission: false);
+    });
+    _fallbackStateTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_disposed || presence.liveConnected || _presenceRecoveryRunning) return;
+      final roomId = room?.id;
+      final token = _activeAuthToken;
+      if (roomId == null || token == null) return;
+      await presence.refresh(roomId: roomId, authToken: token);
+    });
+  }
+
+  Future<void> syncCurrentPresence() async {
+    final roomId = room?.id;
+    final token = _activeAuthToken;
+    if (roomId == null || token == null) return;
+    if (presence.liveConnected) {
+      _syncLiveState(force: true);
+      return;
+    }
+    await presence.heartbeat(
+      roomId: roomId, authToken: token, seatIndex: controller?.mySeat,
+      micEnabled: _micEnabledForPresence, familyTag: _familyTag,
+      hostTag: _hostTag, agencyName: _agencyName,
+      equippedFrameId: _equippedFrameId, equippedEntryId: _equippedEntryId,
+      equippedProfileCardId: _equippedProfileCardId,
+    );
+  }
+
+  Future<void> toggleMyMic() async {
+    if (_micActionRunning) return;
+    final current = controller;
+    if (current?.mySeat == null) throw StateError('Join a seat before using the microphone.');
+    final seat = current!.seats[current.mySeat!];
+    if (presence.selfMicMuted || seat.roomMuted) {
+      throw StateError('The room owner/admin has muted this seat.');
+    }
+    _micActionRunning = true;
+    try {
+      if (!connected && current.micState != MicState.live) {
+        await retryVoice();
+        if (!connected) throw StateError(connectionError ?? 'Voice is unavailable.');
+      }
+      current.toggleMic();
+      await setMicFromController();
+    } catch (_) {
+      current.forceMicMuted();
+      rethrow;
+    } finally { _micActionRunning = false; }
+  }
+
+  Future<void> leaveMySeat() async {
+    final current = controller;
+    if (current == null || current.mySeat == null) return;
+    // Commit the leave before changing the local seat, including HTTP-only rooms.
+    final roomId = room?.id;
+    final token = _activeAuthToken;
+    if (roomId == null || token == null) throw StateError('Room session is not active.');
+    if (realtime.rtc.publishingMic && connected) await realtime.setMic(false);
+    await presence.leaveSeat(roomId: roomId, authToken: token);
+    current.leaveSeat();
+    _syncLiveState(force: true);
   }
 
   bool get backendSessionActive =>
@@ -264,7 +376,14 @@ class ActiveRoomSession extends ChangeNotifier {
 
   Future<void> setMicFromController() async {
     final roomController = controller;
-    if (roomController == null || !connected) return;
+    if (roomController == null) return;
+    if (!connected) {
+      if (roomController.micState == MicState.live) {
+        throw StateError(connectionError ?? 'Voice is reconnecting. Please retry.');
+      }
+      await syncCurrentPresence();
+      return;
+    }
     final mySeat = roomController.mySeat;
     final seatMuted = mySeat != null &&
         mySeat >= 0 &&
@@ -280,6 +399,7 @@ class ActiveRoomSession extends ChangeNotifier {
           !roomController.selfMuted &&
           roomController.micState == MicState.live,
     );
+    await syncCurrentPresence();
   }
 
   Future<void> setSelfMute(bool muted) async {
@@ -287,12 +407,12 @@ class ActiveRoomSession extends ChangeNotifier {
     if (roomController == null || roomController.mySeat == null) {
       throw StateError('You must be on a seat to use self mute.');
     }
-    roomController.setSelfMuted(muted);
-    if (connected) {
-      await realtime.setMic(
-        !muted && !presence.selfMicMuted && roomController.micState == MicState.live,
-      );
+    if (!muted && !connected) {
+      await retryVoice();
+      if (!connected) throw StateError(connectionError ?? 'Voice is unavailable.');
     }
+    roomController.setSelfMuted(muted);
+    await setMicFromController();
   }
 
   Future<void> kickUser(
@@ -523,6 +643,7 @@ class ActiveRoomSession extends ChangeNotifier {
       roomId: roomId,
       authToken: authToken,
       seatIndex: seatIndex,
+      micEnabled: _micEnabledForPresence,
       familyTag: _familyTag,
       hostTag: _hostTag,
       agencyName: _agencyName,
@@ -563,7 +684,10 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   Future<void> close() async {
-    await onRoomClosed?.call();
+    try { await onRoomClosed?.call(); } catch (_) {}
+    _voiceEpoch++;
+    _voiceTimer?.cancel();
+    _fallbackStateTimer?.cancel();
     final oldRoomId = room?.id;
     final oldAuthToken = _activeAuthToken;
     final oldController = controller;
@@ -587,8 +711,8 @@ class ActiveRoomSession extends ChangeNotifier {
       roomId: oldRoomId,
       authToken: oldAuthToken,
     );
-    await realtime.exitRoom();
-    await foregroundService.stop();
+    try { await realtime.exitRoom(); } catch (_) {}
+    try { await foregroundService.stop(); } catch (_) {}
     notifyListeners();
   }
 
@@ -771,31 +895,34 @@ class ActiveRoomSession extends ChangeNotifier {
 
     final previousSeat = roomController.mySeat;
     final forcedSeat = presence.selfForcedSeatIndex;
-    roomController.forceMySeat(forcedSeat);
+    // Consume before controller notifications can send an acknowledgement.
     presence.selfSeatForced = false;
     presence.selfForcedSeatIndex = null;
+    roomController.forceMySeat(forcedSeat);
 
-    if (previousSeat != null && forcedSeat == null) {
-      _moderationForcedMicOff = false;
-      await onSeatForcedDown?.call();
+    if (previousSeat != forcedSeat) {
+      if (previousSeat != null && forcedSeat == null) {
+        _moderationForcedMicOff = false;
+        await onSeatForcedDown?.call();
+      }
+      if (connected && realtime.rtc.publishingMic) await realtime.setMic(false);
     }
-
-    if (connected) {
-      await realtime.setMic(false);
-    }
+    await syncCurrentPresence();
   }
 
   Future<void> _enforceModerationMute() async {
     final roomController = controller;
-    if (roomController == null || !connected) return;
+    if (roomController == null) return;
+    final seat = roomController.mySeat;
+    final seatMuted = seat != null && roomController.seats[seat].roomMuted;
 
-    if (presence.selfMicMuted) {
+    if (presence.selfMicMuted || seatMuted) {
       if (roomController.micState == MicState.live &&
           !roomController.selfMuted) {
         _moderationForcedMicOff = true;
       }
       roomController.forceMicMuted();
-      if (realtime.rtc.publishingMic) {
+      if (connected && realtime.rtc.publishingMic) {
         await realtime.setMic(false);
       }
       return;
@@ -809,7 +936,7 @@ class ActiveRoomSession extends ChangeNotifier {
     }
 
     roomController.restoreMicAfterModeration();
-    await realtime.setMic(roomController.micState == MicState.live);
+    if (connected) await setMicFromController();
   }
 
     Future<void> _stopPresence({
@@ -869,11 +996,15 @@ class ActiveRoomSession extends ChangeNotifier {
       }
     }
     if (presence.selfSeatForced) {
-      unawaited(_applyForcedSeatChange());
+      unawaited(_applyForcedSeatChange().catchError((Object error) {
+        connectionError = error.toString();
+      }));
     } else {
       _reconcileMySeatFromPresence();
     }
-    unawaited(_enforceModerationMute());
+    unawaited(_enforceModerationMute().catchError((Object error) {
+      connectionError = error.toString();
+    }));
     notifyListeners();
   }
 
@@ -890,6 +1021,9 @@ class ActiveRoomSession extends ChangeNotifier {
     }
     if (me == null || roomController.mySeat == me.seatIndex) return;
     roomController.forceMySeat(me.seatIndex);
+    if (connected && realtime.rtc.publishingMic) {
+      unawaited(realtime.setMic(false).catchError((Object _) {}));
+    }
   }
 
   void _syncLiveState({bool force = false}) {
@@ -980,6 +1114,9 @@ class ActiveRoomSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _voiceEpoch++;
+    _voiceTimer?.cancel();
+    _fallbackStateTimer?.cancel();
     _activeAuthToken = null;
     _activeUserId = null;
     _presenceTimer?.cancel();

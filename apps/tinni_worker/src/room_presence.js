@@ -679,6 +679,8 @@ export class RoomPresenceStore extends DurableObject {
 
     const seatIndex = Number(request.seat_index);
     if (approved) {
+      if (!this.isMember(targetUserId)) throw new Error("User is no longer in the room");
+      this._assertSeatAvailable(seatIndex, targetUserId);
       const occupied = this.ctx.storage.sql.exec(
         "SELECT user_id FROM room_members WHERE seat_index = ? AND user_id != ? LIMIT 1",
         seatIndex,
@@ -826,7 +828,13 @@ export class RoomPresenceStore extends DurableObject {
       "SELECT seat_index FROM room_seat_invites WHERE target_user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
-    if (!invite) throw new Error("Seat invite is no longer available");
+    if (!invite) {
+      const current = this.ctx.storage.sql.exec("SELECT seat_index FROM room_members WHERE user_id=? LIMIT 1",userId).toArray()[0];
+      if (!accepted || current?.seat_index != null) {
+        return { ...this._presenceStateFor(userId), accepted, seat_index: current?.seat_index ?? null };
+      }
+      throw new Error("Seat invite is no longer available");
+    }
 
     const seatIndex = Number(invite.seat_index);
     if (accepted) {
@@ -1406,7 +1414,9 @@ export class RoomPresenceStore extends DurableObject {
       "SELECT seat_index FROM room_seat_forces WHERE user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
-    const seatForced = Boolean(forceRow);
+    const requestedSeat = rawSeatIndex === null || rawSeatIndex === undefined ? null : Number(rawSeatIndex);
+    const targetSeat = forceRow?.seat_index === null || forceRow?.seat_index === undefined ? null : Number(forceRow.seat_index);
+    const seatForced = Boolean(forceRow) && requestedSeat !== targetSeat;
     if (forceRow) {
       seatIndex =
         forceRow.seat_index === null || forceRow.seat_index === undefined
@@ -1506,7 +1516,7 @@ export class RoomPresenceStore extends DurableObject {
       now,
     );
 
-    if (seatForced) {
+    if (forceRow) {
       this.ctx.storage.sql.exec(
         "DELETE FROM room_seat_forces WHERE user_id = ?",
         userId,
@@ -1537,6 +1547,13 @@ export class RoomPresenceStore extends DurableObject {
       muted_seats: this.mutedSeats(),
       members: this._members(now),
     };
+  }
+
+  leaveSeat(userId) {
+    if (!this.isMember(userId)) throw new Error("User is not in the room");
+    this.removeFromSeat({ target_user_id: userId });
+    this.ctx.storage.sql.exec("DELETE FROM room_seat_forces WHERE user_id = ?", userId);
+    return this._presenceStateFor(userId);
   }
 
   takeSeat(input) {
@@ -1577,10 +1594,8 @@ export class RoomPresenceStore extends DurableObject {
       userId,
     );
     const result = {
-      ok: true,
+      ...this._presenceStateFor(userId, now),
       seat_index: seatIndex,
-      mic_mode: this.micMode(),
-      members: this._members(now),
     };
     this._broadcastPresence("seat_changed");
     return result;
@@ -2002,7 +2017,7 @@ export class RoomPresenceStore extends DurableObject {
     return result;
   }
 
-  async state() {
-    return this._presenceState();
+  async state(userId = '') {
+    return userId ? this._presenceStateFor(userId) : this._presenceState();
   }
 }

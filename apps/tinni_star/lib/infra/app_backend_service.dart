@@ -480,6 +480,9 @@ class AppBackendService {
     );
   }
 
+  Future<Map<String, dynamic>> ludoLeave(String token, {required String roomId}) =>
+      _request('POST', '/ludo/leave', token, body: {'room_id': roomId});
+
   Future<Map<String, dynamic>> ludoReset(
     String token, {
     required String roomId,

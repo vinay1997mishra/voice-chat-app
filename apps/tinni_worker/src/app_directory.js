@@ -6783,6 +6783,10 @@ export class AppDirectoryStore extends DurableObject {
 
   _ensureLudoPlayer(userIdValue, roomIdValue) {
     const { userId, roomId } = this._requireActiveRoomUser(userIdValue, roomIdValue);
+    const expired = this.ctx.storage.sql.exec(
+      "SELECT l.user_id FROM ludo_room_players l LEFT JOIN app_user_presence p ON p.user_id=l.user_id WHERE l.room_id=? AND (p.user_id IS NULL OR p.room_id IS NOT ? OR (COALESCE(p.room_socket_connected,0)!=1 AND p.last_seen<?))",
+      roomId, roomId, Date.now()-120000).toArray();
+    for (const row of expired) this.ludoLeave(String(row.user_id), roomId);
     let player = this.ctx.storage.sql.exec(
       "SELECT color,joined_at FROM ludo_room_players WHERE room_id=? AND user_id=? LIMIT 1",
       roomId, userId,
@@ -6856,11 +6860,13 @@ export class AppDirectoryStore extends DurableObject {
     const roomId = String(roomIdValue || "").trim();
     const loaded = loadedValue || this._loadLudoState(roomId);
     const players = this.ctx.storage.sql.exec(
-      "SELECT user_id,color,joined_at FROM ludo_room_players WHERE room_id=? ORDER BY joined_at ASC",
+      "SELECT p.user_id,p.color,p.joined_at,u.display_name,u.avatar_data_url FROM ludo_room_players p LEFT JOIN app_users u ON u.user_id=p.user_id WHERE p.room_id=? ORDER BY p.joined_at ASC",
       roomId,
     ).toArray().map((row) => ({
       user_id: String(row.user_id),
       color: String(row.color),
+      display_name: String(row.display_name || row.user_id),
+      avatar_data_url: row.avatar_data_url || null,
       joined_at: Number(row.joined_at || 0),
     }));
     const mine = players.find((row) => row.user_id === userId) || null;
@@ -6959,6 +6965,27 @@ export class AppDirectoryStore extends DurableObject {
     return this._publicLudoState(userId, roomId, {
       state, version, updated_at: Date.now(),
     });
+  }
+
+  ludoLeave(userIdValue, roomIdValue) {
+    const userId = this._resolveOwnerUserId(userIdValue);
+    const roomId = String(roomIdValue || "").trim();
+    const row = this.ctx.storage.sql.exec(
+      "SELECT color FROM ludo_room_players WHERE room_id=? AND user_id=? LIMIT 1",
+      roomId, userId).toArray()[0];
+    if (!row) return { ok: true };
+    this.ctx.storage.sql.exec("DELETE FROM ludo_room_players WHERE room_id=? AND user_id=?", roomId, userId);
+    const loaded = this._loadLudoState(roomId);
+    loaded.state.tokens[String(row.color)] = [-1,-1,-1,-1];
+    if (loaded.state.current_player === String(row.color)) {
+      loaded.state.rolled = null;
+      this._ludoAdvancePlayer(roomId, loaded.state);
+    }
+    if (!this.ctx.storage.sql.exec("SELECT user_id FROM ludo_room_players WHERE room_id=? LIMIT 1", roomId).toArray().length) {
+      loaded.state = this._ludoInitialState();
+    }
+    this._saveLudoState(roomId, loaded.state, loaded.version);
+    return { ok: true };
   }
 
   ludoReset(userIdValue, roomIdValue) {

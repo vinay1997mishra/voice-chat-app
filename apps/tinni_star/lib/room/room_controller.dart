@@ -114,6 +114,8 @@ class RoomController extends ChangeNotifier {
   }
 
   void forceMySeat(int? index) {
+    if (index == mySeat) return;
+    if (index != null && (index < 0 || index >= seats.length)) return;
     final oldSeat = mySeat;
     if (oldSeat != null && oldSeat >= 0 && oldSeat < seats.length) {
       seats[oldSeat] = seats[oldSeat].copyWith(clearUser: true);
@@ -159,6 +161,7 @@ class RoomController extends ChangeNotifier {
   }
 
   void setInviteMode(bool enabled) {
+    if (inviteModeOverride == enabled) return;
     inviteModeOverride = enabled;
     notifyListeners();
   }
@@ -217,10 +220,8 @@ class RoomController extends ChangeNotifier {
   void setSeatRoomMuted(int index, bool muted) {
     if (index < 0 || index >= seats.length) return;
     final seat = seats[index];
+    if (seat.roomMuted == muted) return;
     seats[index] = seat.copyWith(roomMuted: muted);
-    if (mySeat == index && muted) {
-      micState = MicState.muted;
-    }
     notifyListeners();
   }
 

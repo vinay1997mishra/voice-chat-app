@@ -238,6 +238,10 @@ class FruitPartyRemoteService extends ChangeNotifier {
     return FruitPartyRoundResult(
       roundId: _asInt(row['round_id']),
       fruit: fruit,
+      lucky11: row['special_kind'] == 'lucky11',
+      bonusFruits: [for (final item in _asList(row['bonus_fruits']))
+        for (final candidate in FruitPartyKind.values)
+          if (candidate.name == _asMap(item)['key']) candidate],
       totalBet: _asInt(row['total_bet']),
       totalPayout: _asInt(row['total_payout']),
       activePlayers: _asInt(row['active_players']),

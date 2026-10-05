@@ -2772,6 +2772,14 @@ export default {
       }
     }
 
+    if (url.pathname === "/ludo/leave" && request.method === "POST") {
+      const session = await verifyAppSession(request, env);
+      if (!session) return json({ok:false,error:"Unauthorized"},401);
+      const body = await request.json().catch(()=>({}));
+      try { return json(await getAppDirectoryStore(env).ludoLeave(session.user.user_id, body.room_id)); }
+      catch (error) { return json({ok:false,error:String(error?.message || "Unable to leave Ludo")},400); }
+    }
+
     if (url.pathname === "/ludo/reset" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -4521,7 +4529,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
-      return json(await getRoomPresenceStore(env, roomId).state());
+      return json(await getRoomPresenceStore(env, roomId).state(appSession.user.user_id));
     }
 
     if (url.pathname === "/room-presence/live" && request.method === "GET") {
@@ -4836,6 +4844,19 @@ export default {
         }));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to update seat mute") }, 400);
+      }
+    }
+
+    if (url.pathname === "/room-presence/seat-leave" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      try {
+        return json(await getRoomPresenceStore(env, roomId).leaveSeat(appSession.user.user_id));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to leave seat") }, 400);
       }
     }
 
@@ -5414,6 +5435,10 @@ export default {
         if (url.pathname.endsWith("/join")) {
           // Core room membership must succeed even if a secondary directory
           // notification/history write is temporarily unavailable.
+          const joinedRoom = await directory.findRoomByExactId(roomId);
+          if (!joinedRoom) return json({ ok: false, error: "Room not found" }, 404);
+          const configuredSeats = Number(joinedRoom.seat_count || 8);
+          if (await store.seatCount() !== configuredSeats) await store.setSeatCount(configuredSeats);
           const result = await store.join(presenceBody);
           await bestEffortRoomDirectoryTask(
             "join.touch_presence",
