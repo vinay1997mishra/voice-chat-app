@@ -5168,7 +5168,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => FractionallySizedBox(
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setRocketSheetState) => FractionallySizedBox(
         heightFactor: 0.76,
         child: Container(
           key: const Key('room-rocket-panel'),
@@ -5287,7 +5288,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     'room-rocket-stage-' + level.toString(),
                                   ),
                                   onTap: () {
-                                    setState(() {
+                                    setRocketSheetState(() {
                                       _selectedRocketPreviewLevel=level;
                                     });
                                   },
@@ -5434,6 +5435,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             },
           ),
         ),
+      ),
       ),
     );
   }
