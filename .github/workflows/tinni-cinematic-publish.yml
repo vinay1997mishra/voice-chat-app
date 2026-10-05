@@ -1,0 +1,41 @@
+name: Publish Tinni movie previews
+on:
+  workflow_run:
+    workflows: [Tinni cinematic 3D prototypes]
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'tinnistar'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          pattern: cinematic-*
+          path: /tmp/tinni-cinematic
+      - name: Publish direct MP4 previews and inspectable frames
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          PREVIEW_TAG="cinematic-preview-${SOURCE_RUN}"
+          mkdir -p tools/cinematic/previews
+          find /tmp/tinni-cinematic -name poster.png -print0 | while IFS= read -r -d '' POSTER; do
+            SCENE_NAME="$(basename "$(dirname "$POSTER")")"
+            if [[ "$SCENE_NAME" == cinematic-* ]]; then SCENE_NAME="${SCENE_NAME#cinematic-}"; fi
+            cp "$POSTER" "tools/cinematic/previews/${SCENE_NAME}.png"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/cinematic/previews
+          git commit -m "Rendered cinematic movie review frames"
+          git push origin "HEAD:refs/heads/${PREVIEW_TAG}"
+          mapfile -d '' MOVIES < <(find /tmp/tinni-cinematic -name '*.mp4' -print0)
+          gh release create "$PREVIEW_TAG" "${MOVIES[@]}" --target "${{ github.event.workflow_run.head_sha }}" --prerelease --title "3D movie review prototypes" --notes "Original 3D render previews, not an APK release. Rocket 5: 9-second staged vertical launch. Rose bouquet and steaming food: 5 seconds each. Complete catalog and APK integration are pending visual verification."
