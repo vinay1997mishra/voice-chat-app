@@ -186,9 +186,27 @@ class RoomPresenceService extends ChangeNotifier {
       <RoomLuckyNumberEvent>[];
   RoomGiftVisualEvent? latestGiftVisualEvent;
   RoomChatEvent? latestChatEvent;
+  final List<RoomChatEvent> chatEvents = <RoomChatEvent>[];
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
+  void Function(String token)? onSessionExpired;
+  DateTime? lastSuccessfulContact;
+  bool _httpFailed = false;
+  int _latestSnapshotTime = 0;
+  int _roomGeneration = 0;
+  String? _httpRoomId;
+  int _roomJoinedServerAt = 0;
+
+  bool get hasConnectionProblem => !liveConnected &&
+      (_httpFailed || (!connected && lastError != null));
+
+  void _markHttpHealthy() {
+    connected = true;
+    _httpFailed = false;
+    lastSuccessfulContact = DateTime.now();
+    lastError = null;
+  }
 
   bool get liveConnected => _liveSocket?.readyState == WebSocket.open;
 
@@ -227,6 +245,10 @@ class RoomPresenceService extends ChangeNotifier {
     _liveWanted = false;
     _liveRoomId = null;
     _liveAuthToken = null;
+    _latestSnapshotTime = 0;
+    _roomGeneration++;
+    _httpRoomId = null;
+    _roomJoinedServerAt = 0;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
     _liveReconnectDelaySeconds = 2;
@@ -445,7 +467,7 @@ class RoomPresenceService extends ChangeNotifier {
     });
   }
 
-  Future<void> sendChatMessage(String text) async {
+  Future<void> sendChatMessage(String text, {String? roomId, String? authToken}) async {
     final value = text.trim();
     if (value.isEmpty) return;
     if (value.length > 500) {
@@ -453,7 +475,14 @@ class RoomPresenceService extends ChangeNotifier {
     }
     final socket = _liveSocket;
     if (socket == null || socket.readyState != WebSocket.open) {
-      throw StateError('Room chat is reconnecting.');
+      final id = roomId ?? _liveRoomId;
+      final token = authToken ?? _liveAuthToken;
+      if (id == null || token == null) throw StateError('Room session is not active.');
+      await _commandPost('/room-presence/comment', token, <String,Object>{
+        'room_id': id, 'text': value,
+        'client_event_id': DateTime.now().microsecondsSinceEpoch.toString(),
+      });
+      return;
     }
     socket.add(
       jsonEncode(<String, Object?>{
@@ -578,7 +607,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to kick room user',
@@ -742,6 +772,11 @@ class RoomPresenceService extends ChangeNotifier {
     );
   }
 
+  Future<void> leaveSeat({required String roomId, required String authToken}) async {
+    await _commandPost('/room-presence/seat-leave', authToken,
+      <String, Object>{'room_id': roomId});
+  }
+
   Future<void> takeSeat({
     required String roomId,
     required String authToken,
@@ -756,10 +791,13 @@ class RoomPresenceService extends ChangeNotifier {
       // reconnecting or blocked by the carrier/OEM.
       applyResponse: true,
     );
-    selfSeatForced = true;
-    selfForcedSeatIndex =
-        data['seat_index'] == null ? seatIndex : _asInt(data['seat_index']);
-    notifyListeners();
+    // The response already contains the authoritative member and force state.
+    // Older servers lack self fields; the member reconciliation still seats us.
+    if (!data.containsKey('members')) {
+      selfSeatForced = true;
+      selfForcedSeatIndex = seatIndex;
+      notifyListeners();
+    }
   }
 
     Future<void> requestSeat({
@@ -873,7 +911,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to update room mute',
@@ -905,7 +944,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to send room emote',
@@ -921,6 +961,7 @@ class RoomPresenceService extends ChangeNotifier {
     Map<String, Object> payload, {
     bool applyResponse = true,
   }) async {
+    final generation = _roomGeneration;
     const maxAttempts = 3;
     // Never replay transactions or random draws after an ambiguous response.
     final attempts = path == '/gifts/send' ||
@@ -944,6 +985,7 @@ class RoomPresenceService extends ChangeNotifier {
         final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
+        if (response.statusCode == 401) onSessionExpired?.call(authToken);
         final data = await _readJson(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final message =
@@ -957,14 +999,15 @@ class RoomPresenceService extends ChangeNotifier {
           throw StateError(message);
         }
 
-        connected = true;
-        lastError = null;
+        if (generation != _roomGeneration) return data;
+        _markHttpHealthy();
         if (applyResponse) {
           _apply(data);
         }
         notifyListeners();
         return data;
       } catch (error) {
+        if (generation != _roomGeneration) rethrow;
         lastFailure = error;
         final lower = error.toString().toLowerCase();
         final transient = lower.contains('temporarily unavailable') ||
@@ -982,6 +1025,7 @@ class RoomPresenceService extends ChangeNotifier {
           );
           continue;
         }
+        _httpFailed = transient;
         lastError = error.toString();
         liveReconnecting = !liveConnected;
         notifyListeners();
@@ -1034,7 +1078,8 @@ class RoomPresenceService extends ChangeNotifier {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load room gift feed',
@@ -1062,7 +1107,8 @@ class RoomPresenceService extends ChangeNotifier {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load Lucky Gift state',
@@ -1075,6 +1121,7 @@ class RoomPresenceService extends ChangeNotifier {
     required String roomId,
     required String authToken,
   }) async {
+    final generation = _roomGeneration;
     try {
       final uri = apiBase.replace(
         path: '/room-presence/state',
@@ -1087,16 +1134,19 @@ class RoomPresenceService extends ChangeNotifier {
         'Bearer $authToken',
       );
       final response = await closeBackendRequest(request);
-      final data = await _readJson(response);
+      if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
           data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
         );
       }
+      if (generation != _roomGeneration) return;
       _apply(data);
-      connected = true;
-      lastError = null;
+      _markHttpHealthy();
     } catch (error) {
+      if (generation != _roomGeneration) return;
+      _httpFailed = true;
       // A failed HTTP refresh must not evict an otherwise-live room session.
       // Keep the last known members/seat state while realtime reconnects.
       connected = liveConnected || connected;
@@ -1124,6 +1174,13 @@ class RoomPresenceService extends ChangeNotifier {
     String? equippedProfileCardId,
     bool notifyOnlyOnVisibleChange = false,
   }) async {
+    if (path == '/room-presence/join' && _httpRoomId != roomId) {
+      _httpRoomId = roomId;
+      _roomGeneration++;
+      _latestSnapshotTime = 0;
+      _roomJoinedServerAt = 0;
+    }
+    final generation = _roomGeneration;
     const maxAttempts = 3;
 
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1153,6 +1210,7 @@ class RoomPresenceService extends ChangeNotifier {
         final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
+        if (response.statusCode == 401) onSessionExpired?.call(authToken);
         final data = await _readJson(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final message =
@@ -1166,13 +1224,16 @@ class RoomPresenceService extends ChangeNotifier {
           throw StateError(message);
         }
 
+        if (generation != _roomGeneration) return;
+        if (path == '/room-presence/join' && _roomJoinedServerAt == 0) {
+          _roomJoinedServerAt = _asInt(data['server_time']);
+        }
         final before = notifyOnlyOnVisibleChange
             ? _visibleStateSignature()
             : null;
         final wasConnected = connected;
         _apply(data);
-        connected = true;
-        lastError = null;
+        _markHttpHealthy();
         if (!notifyOnlyOnVisibleChange ||
             !wasConnected ||
             before != _visibleStateSignature()) {
@@ -1180,6 +1241,7 @@ class RoomPresenceService extends ChangeNotifier {
         }
         return;
       } catch (error) {
+        if (generation != _roomGeneration) return;
         final lower = error.toString().toLowerCase();
         final transient = lower.contains('temporarily unavailable') ||
             lower.contains('invalid response') ||
@@ -1286,6 +1348,9 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   void _apply(Map<String, dynamic> data) {
+    final snapshotTime = _asInt(data['server_time']);
+    if (snapshotTime > 0 && snapshotTime < _latestSnapshotTime) return;
+    if (snapshotTime > 0) _latestSnapshotTime = snapshotTime;
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     }
@@ -1401,6 +1466,17 @@ class RoomPresenceService extends ChangeNotifier {
         );
     }
 
+    if (data['chat_messages'] is List) {
+      chatEvents
+        ..clear()
+        ..addAll((data['chat_messages'] as List).whereType<Map>().map((row) =>
+          RoomChatEvent(id: row['id']?.toString() ?? '',
+            userId: row['user_id']?.toString() ?? '',
+            displayName: row['display_name']?.toString() ?? 'User',
+            text: row['text']?.toString() ?? '',
+            createdAt: DateTime.fromMillisecondsSinceEpoch(_asInt(row['created_at']))))
+          .where((event) => event.createdAt.millisecondsSinceEpoch >= _roomJoinedServerAt));
+    }
     final rawMembers = data['members'];
     if (rawMembers is! List) return;
 

@@ -32,6 +32,7 @@ class FruitPartyPanel extends StatelessWidget {
         )],
         history: [for (final result in game.history) CasinoResult(
           round: result.roundId, fruit: result.fruit.name,
+          lucky: result.lucky11, bonus: result.bonusFruits.map((fruit) => fruit.name).toList(),
           
           settledAt: result.settledAt,
         )],

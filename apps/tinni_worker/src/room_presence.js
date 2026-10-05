@@ -27,6 +27,11 @@ export class RoomPresenceStore extends DurableObject {
         last_seen INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_chat_messages (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, display_name TEXT NOT NULL,
+        text TEXT NOT NULL, is_owner INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_kicks (
         user_id TEXT PRIMARY KEY,
         expires_at INTEGER,
@@ -297,6 +302,9 @@ export class RoomPresenceStore extends DurableObject {
   clearComments(clearedByValue, ownerClearValue = false) {
     const clearedBy = String(clearedByValue || "").trim();
     const ownerClear = ownerClearValue === true;
+    this.ctx.storage.sql.exec(ownerClear
+      ? "DELETE FROM room_chat_messages"
+      : "DELETE FROM room_chat_messages WHERE is_owner=0");
     const nextVersion = this.commentsClearVersion() + 1;
     const nextOwnerVersion = ownerClear
       ? this.ownerCommentsClearVersion() + 1
@@ -679,6 +687,8 @@ export class RoomPresenceStore extends DurableObject {
 
     const seatIndex = Number(request.seat_index);
     if (approved) {
+      if (!this.isMember(targetUserId)) throw new Error("User is no longer in the room");
+      this._assertSeatAvailable(seatIndex, targetUserId);
       const occupied = this.ctx.storage.sql.exec(
         "SELECT user_id FROM room_members WHERE seat_index = ? AND user_id != ? LIMIT 1",
         seatIndex,
@@ -826,7 +836,13 @@ export class RoomPresenceStore extends DurableObject {
       "SELECT seat_index FROM room_seat_invites WHERE target_user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
-    if (!invite) throw new Error("Seat invite is no longer available");
+    if (!invite) {
+      const current = this.ctx.storage.sql.exec("SELECT seat_index FROM room_members WHERE user_id=? LIMIT 1",userId).toArray()[0];
+      if (!accepted || current?.seat_index != null) {
+        return { ...this._presenceStateFor(userId), accepted, seat_index: current?.seat_index ?? null };
+      }
+      throw new Error("Seat invite is no longer available");
+    }
 
     const seatIndex = Number(invite.seat_index);
     if (accepted) {
@@ -1406,7 +1422,9 @@ export class RoomPresenceStore extends DurableObject {
       "SELECT seat_index FROM room_seat_forces WHERE user_id = ? LIMIT 1",
       userId,
     ).toArray()[0];
-    const seatForced = Boolean(forceRow);
+    const requestedSeat = rawSeatIndex === null || rawSeatIndex === undefined ? null : Number(rawSeatIndex);
+    const targetSeat = forceRow?.seat_index === null || forceRow?.seat_index === undefined ? null : Number(forceRow.seat_index);
+    const seatForced = Boolean(forceRow) && requestedSeat !== targetSeat;
     if (forceRow) {
       seatIndex =
         forceRow.seat_index === null || forceRow.seat_index === undefined
@@ -1506,7 +1524,7 @@ export class RoomPresenceStore extends DurableObject {
       now,
     );
 
-    if (seatForced) {
+    if (forceRow) {
       this.ctx.storage.sql.exec(
         "DELETE FROM room_seat_forces WHERE user_id = ?",
         userId,
@@ -1537,6 +1555,13 @@ export class RoomPresenceStore extends DurableObject {
       muted_seats: this.mutedSeats(),
       members: this._members(now),
     };
+  }
+
+  leaveSeat(userId) {
+    if (!this.isMember(userId)) throw new Error("User is not in the room");
+    this.removeFromSeat({ target_user_id: userId });
+    this.ctx.storage.sql.exec("DELETE FROM room_seat_forces WHERE user_id = ?", userId);
+    return this._presenceStateFor(userId);
   }
 
   takeSeat(input) {
@@ -1577,13 +1602,39 @@ export class RoomPresenceStore extends DurableObject {
       userId,
     );
     const result = {
-      ok: true,
+      ...this._presenceStateFor(userId, now),
       seat_index: seatIndex,
-      mic_mode: this.micMode(),
-      members: this._members(now),
     };
     this._broadcastPresence("seat_changed");
     return result;
+  }
+
+  chatMessages(since = 0) {
+    return this.ctx.storage.sql.exec(
+      "SELECT id,user_id,display_name,text,created_at FROM (SELECT * FROM room_chat_messages WHERE created_at>=? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC", Number(since) || 0
+    ).toArray();
+  }
+
+  postComment(userId, textValue, isOwner = false, requestId = '') {
+    if (!this.isMember(userId)) throw new Error("User is not in the room");
+    if (this.chatBanStatus(userId)) throw new Error("Room owner/admin has chat banned this ID.");
+    if (!this.publicScreenEnabled() && !isOwner && !this.isManager(userId)) {
+      throw new Error("Only Admin/Owner can type right now.");
+    }
+    const text = String(textValue || "").trim();
+    if (!text || text.length > 500) throw new Error("Comment must contain 1-500 characters.");
+    const id = requestId ? "chat-" + userId + "-" + String(requestId).slice(0,80) : "room-chat-" + crypto.randomUUID();
+    const existing = this.ctx.storage.sql.exec("SELECT id,user_id,display_name,text,created_at FROM room_chat_messages WHERE id=? LIMIT 1",id).toArray()[0];
+    if (existing) return existing;
+    const now = Date.now();
+    const member = this.ctx.storage.sql.exec("SELECT display_name FROM room_members WHERE user_id=? LIMIT 1",userId).toArray()[0];
+    const event = { id,user_id:userId,display_name:String(member?.display_name || "User"),text,created_at:now };
+    this.ctx.storage.sql.exec("INSERT INTO room_chat_messages(id,user_id,display_name,text,is_owner,created_at) VALUES(?,?,?,?,?,?)",
+      id,userId,event.display_name,text,isOwner?1:0,now);
+    this.ctx.storage.sql.exec("DELETE FROM room_chat_messages WHERE id NOT IN (SELECT id FROM room_chat_messages ORDER BY created_at DESC LIMIT 50)");
+    this._touchSocketMember(userId,now);
+    this._broadcastRoomEvent({type: "chat_message",message:event});
+    return event;
   }
 
   _presenceState(now = Date.now()) {
@@ -1596,6 +1647,7 @@ export class RoomPresenceStore extends DurableObject {
       comments_clear_version: this.commentsClearVersion(),
       owner_comments_clear_version: this.ownerCommentsClearVersion(),
       member_ttl_ms: MEMBER_TTL_MS,
+      chat_messages: this.chatMessages(),
       lucky_number_events: this.luckyNumberEvents(),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
@@ -1608,7 +1660,7 @@ export class RoomPresenceStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     const member = userId
       ? this.ctx.storage.sql.exec(
-          "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1",
+          "SELECT seat_index,joined_at FROM room_members WHERE user_id = ? LIMIT 1",
           userId,
         ).toArray()[0]
       : null;
@@ -1631,6 +1683,7 @@ export class RoomPresenceStore extends DurableObject {
 
     return {
       ...this._presenceState(now),
+      chat_messages: member ? this.chatMessages(Number(member.joined_at)) : [],
       self_mic_muted: userId ? this.muteStatus(userId, seatIndex) : false,
       self_chat_banned: userId ? this.chatBanStatus(userId) : false,
       self_seat_forced: seatForced,
@@ -1859,37 +1912,7 @@ export class RoomPresenceStore extends DurableObject {
         return;
       }
       if (payload?.type === "chat_message") {
-        this._touchSocketMember(userId, now);
-        if (this.chatBanStatus(userId)) {
-          throw new Error("Room owner/admin has chat banned this ID.");
-        }
-        const canType =
-          this.publicScreenEnabled() ||
-          attachment.isOwner === true ||
-          this.isManager(userId);
-        if (!canType) {
-          throw new Error("Only Admin/Owner can type right now.");
-        }
-        const text = String(payload.text || "").trim();
-        if (!text) return;
-        if (text.length > 500) {
-          throw new Error("Comment is too long.");
-        }
-        const member = this.ctx.storage.sql.exec(
-          "SELECT display_name FROM room_members WHERE user_id = ? LIMIT 1",
-          userId,
-        ).toArray()[0];
-        const event = {
-          id: "room-chat-" + crypto.randomUUID(),
-          user_id: userId,
-          display_name: String(member?.display_name || "User"),
-          text,
-          created_at: now,
-        };
-        this._broadcastRoomEvent({
-          type: "chat_message",
-          message: event,
-        });
+        this.postComment(userId,payload.text,attachment.isOwner === true,payload.client_event_id || '');
         return;
       }
       if (payload?.type === "presence_sync") {
@@ -2002,7 +2025,7 @@ export class RoomPresenceStore extends DurableObject {
     return result;
   }
 
-  async state() {
-    return this._presenceState();
+  async state(userId = '') {
+    return userId ? this._presenceStateFor(userId) : this._presenceState();
   }
 }

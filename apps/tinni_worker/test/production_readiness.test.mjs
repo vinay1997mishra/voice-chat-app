@@ -211,7 +211,7 @@ assert.match(
 );
 assert.match(
   roomPresenceClient,
-  /Future<Map<String, dynamic>> _commandPost[\s\S]{0,3500}const maxAttempts = 3[\s\S]{0,3500}connected = true/,
+  /Future<Map<String, dynamic>> _commandPost[\s\S]{0,3500}const maxAttempts = 3[\s\S]{0,3500}(?:connected = true|_markHttpHealthy\(\))/,
   "Room commands must retry transient failures and keep HTTP room state usable during WebSocket reconnects",
 );
 assert.match(

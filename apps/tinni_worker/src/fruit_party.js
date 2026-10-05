@@ -5,7 +5,8 @@ export const PARTY_RESULT_SPIN_MS = 5000;
 export const PARTY_ROUND_CYCLE_MS =
   PARTY_ROUND_MS + PARTY_RESULT_SPIN_MS;
 export const PARTY_BET_LOCK_MS = 0;
-export const PARTY_PARTY_START_BALANCE = 10000000;
+export const PARTY_LUCKY_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const PARTY_START_BALANCE = 10000000;
 export const PARTY_BET_AMOUNTS = Object.freeze([
   5000,
   25000,
@@ -54,6 +55,15 @@ function weightedFruit() {
   if (roll < 75) return X5[randomIndex(X5.length)];
   if (roll < 95) return MID[randomIndex(MID.length)];
   return HIGH[randomIndex(HIGH.length)];
+}
+
+function randomDistinctFruits(count) {
+  const pool = [...PARTY_FRUITS];
+  const picked = [];
+  while (pool.length > 0 && picked.length < count) {
+    picked.push(pool.splice(randomIndex(pool.length), 1)[0]);
+  }
+  return picked;
 }
 
 function roundIdAt(ms) {
@@ -161,7 +171,7 @@ export class FruitPartyStore extends DurableObject {
        VALUES (?, ?, 0, ?, ?)
        ON CONFLICT(user_id) DO NOTHING`,
       userId,
-      PARTY_PARTY_START_BALANCE,
+      PARTY_START_BALANCE,
       today,
       now,
     );
@@ -197,6 +207,44 @@ export class FruitPartyStore extends DurableObject {
     };
   }
 
+
+  _luckySchedule(roundId) {
+    const windowId = Math.floor(roundStartAt(roundId) / PARTY_LUCKY_WINDOW_MS);
+    const storedWindowId = this._meta("lucky_window_id");
+    let rounds = [];
+
+    if (storedWindowId === String(windowId)) {
+      try {
+        rounds = JSON.parse(this._meta("lucky_rounds_json", "[]"));
+      } catch {
+        rounds = [];
+      }
+    }
+
+    if (storedWindowId !== String(windowId) || !Array.isArray(rounds)) {
+      const windowStart = windowId * PARTY_LUCKY_WINDOW_MS;
+      const windowEnd = windowStart + PARTY_LUCKY_WINDOW_MS;
+      const firstRound = Math.ceil(windowStart / PARTY_ROUND_CYCLE_MS);
+      const lastRound = Math.floor((windowEnd - 1) / PARTY_ROUND_CYCLE_MS);
+      const totalRounds = Math.max(1, lastRound - firstRound + 1);
+      const count = 3 + randomIndex(2);
+      const selected = new Set();
+
+      while (selected.size < Math.min(count, totalRounds)) {
+        selected.add(firstRound + randomIndex(totalRounds));
+      }
+
+      rounds = [...selected].sort((a, b) => a - b);
+      this._setMeta("lucky_window_id", windowId);
+      this._setMeta("lucky_rounds_json", JSON.stringify(rounds));
+    }
+
+    return rounds;
+  }
+
+  _isLuckyRound(roundId) {
+    return this._luckySchedule(roundId).includes(roundId);
+  }
 
   async _ensureStarted(now = Date.now()) {
     const currentRound = roundIdAt(now);
@@ -253,9 +301,10 @@ export class FruitPartyStore extends DurableObject {
     const bets = this._bets(roundId);
     const players = new Set(bets.map((bet) => bet.user_id));
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
-    const bonusFruits = [];
-    const winner = weightedFruit();
-    const winningKeys = new Set([winner.key]);
+    const lucky11 = this._isLuckyRound(roundId);
+    const bonusFruits = lucky11 ? randomDistinctFruits(3) : [];
+    const winner = lucky11 ? bonusFruits[0] : weightedFruit();
+    const winningKeys = new Set(lucky11 ? bonusFruits.map(fruit => fruit.key) : [winner.key]);
 
     const payouts = new Map();
     let totalPayout = 0;
@@ -271,6 +320,7 @@ export class FruitPartyStore extends DurableObject {
       );
     }
 
+    this.ctx.storage.transactionSync(() => {
     const settledAt = Date.now();
     for (const [userId, payout] of payouts) {
       this._ensureWallet(userId, settledAt);
@@ -287,14 +337,6 @@ export class FruitPartyStore extends DurableObject {
       );
     }
 
-    if (this.env?.APP_DIRECTORY) {
-      const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
-      for (const [userId, payout] of payouts) {
-        if (payout < 1000000) continue;
-        const roomId = bets.find((bet) => bet.user_id === userId && bet.room_id)?.room_id;
-        if (roomId) await directory.recordGameWinning(userId, roomId, "fruit_party", payout);
-      }
-    }
 
     this.ctx.storage.sql.exec(
       `INSERT INTO party_results
@@ -303,13 +345,23 @@ export class FruitPartyStore extends DurableObject {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       roundId,
       winner.key,
-      "weighted_random",
+      lucky11 ? "lucky_11_random_3" : "weighted_random",
       JSON.stringify(bonusFruits.map((fruit) => fruit.key)),
       totalBet,
       totalPayout,
       players.size,
       settledAt,
     );
+    });
+    if (this.env?.APP_DIRECTORY) {
+      const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
+      for (const [userId, payout] of payouts) {
+        if (payout < 1000000) continue;
+        const roomId = bets.find((bet) => bet.user_id === userId && bet.room_id)?.room_id;
+        if (roomId) try { await directory.recordGameWinning(userId, roomId, "fruit_party", payout); } catch (error) { console.error("Game winning notice failed", String(error?.message || error)); }
+      }
+    }
+
   }
 
   ownerStats(userIdValue = "") {
@@ -346,9 +398,9 @@ export class FruitPartyStore extends DurableObject {
         user_id: userId,
         bet_count: Number(userBet.bet_count || 0),
         total_bet: Number(userBet.total_bet || 0),
-        balance: Number(wallet?.balance || PARTY_START_BALANCE),
+        balance: Number(wallet?.balance ?? PARTY_START_BALANCE),
         today_winnings: Number(wallet?.today_winnings || 0),
-        net_profit: Number(wallet?.balance || PARTY_START_BALANCE) - PARTY_START_BALANCE,
+        net_profit: Number(wallet?.balance ?? PARTY_START_BALANCE) - PARTY_START_BALANCE,
       };
     }
 
@@ -404,7 +456,7 @@ export class FruitPartyStore extends DurableObject {
         round_id: Number(row.round_id),
         fruit: FRUIT_BY_KEY.get(String(row.fruit_key)),
         mode: String(row.mode),
-        special_kind: null,
+        special_kind: String(row.mode) === "lucky_11_random_3" ? "lucky11" : null,
         bonus_fruits: Array.isArray(bonusKeys)
           ? bonusKeys
               .map((key) => FRUIT_BY_KEY.get(String(key)))
@@ -440,6 +492,9 @@ export class FruitPartyStore extends DurableObject {
       },
       config: {
         bet_amounts: PARTY_BET_AMOUNTS,
+        lucky_window_ms: PARTY_LUCKY_WINDOW_MS,
+        lucky_rounds_min: 3, lucky_rounds_max: 4,
+        lucky_fruit_count: 3,
         fruits: PARTY_FRUITS,
       },
       wallet_balance: wallet.balance,

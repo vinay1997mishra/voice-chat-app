@@ -2657,10 +2657,7 @@ export default {
       );
 
       if (!callAccess.allowed) {
-        const rooms = await directory.listRooms();
-        const room = rooms.find(
-          (item) => String(item.id || item.room_id || "") === roomId,
-        );
+        const room = await directory.findRoomByExactId(roomId);
         if (!room) {
           return json({ ok: false, error: "Room not found" }, 404);
         }
@@ -2770,6 +2767,14 @@ export default {
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to move Ludo token") }, 400);
       }
+    }
+
+    if (url.pathname === "/ludo/leave" && request.method === "POST") {
+      const session = await verifyAppSession(request, env);
+      if (!session) return json({ok:false,error:"Unauthorized"},401);
+      const body = await request.json().catch(()=>({}));
+      try { return json(await getAppDirectoryStore(env).ludoLeave(session.user.user_id, body.room_id)); }
+      catch (error) { return json({ok:false,error:String(error?.message || "Unable to leave Ludo")},400); }
     }
 
     if (url.pathname === "/ludo/reset" && request.method === "POST") {
@@ -3762,8 +3767,7 @@ export default {
       const targetUserId = String(body.target_user_id || "").trim();
       if (!roomId || !targetUserId) return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       const directory = getAppDirectoryStore(env);
-      const rooms = await directory.listRooms();
-      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      const room = await directory.findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const actorId = String(appSession.user.user_id);
       const store = getRoomPresenceStore(env, roomId);
@@ -4516,12 +4520,30 @@ export default {
       }
     }
 
+    if (url.pathname === "/room-presence/comment" && request.method === "POST") {
+      const session = await verifyAppSession(request, env);
+      if (!session) return json({ok:false,error:"Unauthorized"},401);
+      const body = await request.json().catch(()=>({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ok:false,error:"room_id is required"},400);
+      try {
+        const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
+        if (!room) return json({ok:false,error:"Room not found"},404);
+        const store = getRoomPresenceStore(env,roomId);
+        const event = await store.postComment(session.user.user_id,body.text,
+          String(room.owner_id)===String(session.user.user_id),body.client_event_id);
+        return json({...await store.state(session.user.user_id),message:event},201);
+      } catch (error) {
+        return json({ok:false,error:String(error?.message || "Unable to send comment")},400);
+      }
+    }
+
     if (url.pathname === "/room-presence/state" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
-      return json(await getRoomPresenceStore(env, roomId).state());
+      return json(await getRoomPresenceStore(env, roomId).state(appSession.user.user_id));
     }
 
     if (url.pathname === "/room-presence/live" && request.method === "GET") {
@@ -4619,10 +4641,7 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -4656,10 +4675,7 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -4694,10 +4710,7 @@ export default {
         return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
@@ -4732,10 +4745,7 @@ export default {
         return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       if (String(room.owner_id) === targetUserId) {
         return json({ ok: false, error: "Room owner cannot be chat banned" }, 400);
@@ -4777,8 +4787,7 @@ export default {
       const roomId = String(body.room_id || "").trim();
       const seatIndex = Number(body.seat_index);
       if (!roomId || !Number.isInteger(seatIndex) || seatIndex < 0) return json({ ok: false, error: "room_id and seat_index are required" }, 400);
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
@@ -4808,8 +4817,7 @@ export default {
       if (!roomId || !Number.isInteger(seatIndex) || seatIndex < 0) {
         return json({ ok: false, error: "room_id and seat_index are required" }, 400);
       }
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const store = getRoomPresenceStore(env, roomId);
       const actorId = String(appSession.user.user_id);
@@ -4836,6 +4844,19 @@ export default {
         }));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to update seat mute") }, 400);
+      }
+    }
+
+    if (url.pathname === "/room-presence/seat-leave" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const roomId = String(body.room_id || "").trim();
+      if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
+      try {
+        return json(await getRoomPresenceStore(env, roomId).leaveSeat(appSession.user.user_id));
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || "Unable to leave seat") }, 400);
       }
     }
 
@@ -4964,10 +4985,7 @@ export default {
         }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5012,10 +5030,7 @@ export default {
         }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5070,10 +5085,7 @@ export default {
         return json({ ok: false, error: "room_id is required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5110,10 +5122,7 @@ export default {
         return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5189,10 +5198,7 @@ export default {
         }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5238,10 +5244,7 @@ export default {
         return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       }
 
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find(
-        (item) => String(item.id || item.room_id || "") === roomId,
-      );
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
 
       const store = getRoomPresenceStore(env, roomId);
@@ -5289,8 +5292,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       if (String(room.owner_id) !== String(appSession.user.user_id)) {
         return json({ ok: false, error: "Only room owner can view Kickout List" }, 403);
@@ -5307,8 +5309,7 @@ export default {
       if (!roomId || !targetUserId) {
         return json({ ok: false, error: "room_id and target_user_id are required" }, 400);
       }
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find((item) => String(item.id || item.room_id || "") === roomId);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       if (String(room.owner_id) !== String(appSession.user.user_id)) {
         return json({ ok: false, error: "Only room owner can unkick users" }, 403);
@@ -5414,6 +5415,10 @@ export default {
         if (url.pathname.endsWith("/join")) {
           // Core room membership must succeed even if a secondary directory
           // notification/history write is temporarily unavailable.
+          const joinedRoom = await directory.findRoomByExactId(roomId);
+          if (!joinedRoom) return json({ ok: false, error: "Room not found" }, 404);
+          const configuredSeats = Number(joinedRoom.seat_count || 8);
+          if (await store.seatCount() !== configuredSeats) await store.setSeatCount(configuredSeats);
           const result = await store.join(presenceBody);
           await bestEffortRoomDirectoryTask(
             "join.touch_presence",
@@ -6203,8 +6208,7 @@ export default {
       }
       const roomId = String(url.searchParams.get("room_id") || "").trim();
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
-      const rooms = await getAppDirectoryStore(env).listRooms();
-      const room = rooms.find((item) => String(item.id || "") === roomId);
+      const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
       const presence = await getRoomPresenceStore(env, roomId).state();
       return json({ ok: true, room, presence });

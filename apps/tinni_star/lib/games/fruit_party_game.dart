@@ -23,6 +23,8 @@ class FruitPartyRoundResult {
     required this.totalPayout,
     required this.activePlayers,
     required this.settledAt,
+    this.lucky11 = false,
+    this.bonusFruits = const <FruitPartyKind>[],
   });
 
   final int roundId;
@@ -31,4 +33,6 @@ class FruitPartyRoundResult {
   final int totalPayout;
   final int activePlayers;
   final DateTime settledAt;
+  final bool lucky11;
+  final List<FruitPartyKind> bonusFruits;
 }

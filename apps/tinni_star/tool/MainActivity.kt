@@ -122,9 +122,9 @@ class MainActivity : FlutterActivity() {
 
     private fun hasVoiceRoomPermissions(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
-        return voiceRoomPermissions().all {
-            checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
-        }
+        // Bluetooth and notification access are optional. Phone microphone
+        // audio must work when the user declines either optional permission.
+        return checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestVoiceRoomPermissions(result: MethodChannel.Result) {
@@ -151,8 +151,7 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != voicePermissionRequest) return
-        val granted = grantResults.isNotEmpty() &&
-            grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        val granted = hasVoiceRoomPermissions()
         pendingPermissionResult?.success(granted)
         pendingPermissionResult = null
     }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -238,11 +239,11 @@ class RealtimeCoordinator {
     final roomId = activeRoomId;
     if (roomId == null) throw StateError('No active room');
     await rtc.setMicPublished(enabled);
-    await im.sendRoomEvent(roomId, {
-      'type': 'mic_state',
-      'enabled': enabled,
-      'userId': userId,
-    });
+    // Audio publication is authoritative; optional event logging must not
+    // turn a successful microphone action into a reported failure.
+    unawaited(im.sendRoomEvent(roomId, {
+      'type': 'mic_state', 'enabled': enabled, 'userId': userId,
+    }).catchError((Object _) {}));
   }
 
   Future<void> setRemoteAudioEnabled(bool enabled) async {

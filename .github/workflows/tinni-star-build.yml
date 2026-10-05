@@ -13,6 +13,10 @@ on:
       - '.github/workflows/tinni-star-build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: tinni-star-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -146,7 +150,7 @@ jobs:
 
       - name: Test
         working-directory: apps/tinni_star
-        run: flutter test
+        run: timeout --signal=TERM --kill-after=10s 180s flutter test --reporter expanded --timeout 45s --fail-fast
 
       - name: Upload game layout previews
         if: always()

@@ -191,15 +191,16 @@ void main() {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
 
     expect(session.contains('_activeAuthToken = authToken;'), true);
-    expect(session.contains('await _startPresence();'), true);
+    expect(session.contains('final presenceStart = _startPresence();'), true);
+    expect(session.contains('await presenceStart;'), true);
     expect(
       session.contains(
-        'Microphone permission is required for voice. Room controls remain active.',
+        'Allow microphone access to use voice.',
       ),
       true,
     );
     expect(
-      session.contains('Voice unavailable: '),
+      session.contains('Voice connection failed: '),
       true,
     );
     expect(session.contains('bool get backendSessionActive'), true);

@@ -102,6 +102,7 @@ class TinniState {
       unawaited(_clearExpiredSession());
     };
     roomPresence.diagnosticSink = analytics.event;
+    roomPresence.onSessionExpired = (token) => backend.onSessionExpired?.call(token);
     crashReporter = BackendCrashReporter(
       tokenProvider: () => auth.current?.authToken,
     );
