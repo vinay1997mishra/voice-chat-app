@@ -26,7 +26,7 @@ test('authenticated app entry, core catalogs and social/profile reads use real S
 test('seat acquisition retries preserve the same seat and microphone state', async t => {
   const r = runtime(); t.after(r.close);
   const a = await r.user(1);
-  const presence = r.env.ROOM_PRESENCE.get('seat-test');
+  const presence = r.direct('ROOM_PRESENCE', 'seat-test');
   await presence.join({ user_id: a.user_id, room_id: 'seat-test', display_name: a.display_name });
   const first = await presence.takeSeat({ user_id: a.user_id, seat_index: 1, privileged: true });
   assert.equal(first.seat_index, 1);

@@ -18,7 +18,8 @@ function storeClass(file, name) {
 export function runtime() {
   const databases = [];
   const objects = new Map();
-  const env = { SESSION_SECRET: 'isolated-test-session-secret' };
+  const env = { SESSION_SECRET: 'isolated-test-session-secret',
+    EFFECT_MEDIA: { head: async () => null } };
   const classes = {
     AppDirectoryStore: storeClass('app_directory.js', 'AppDirectoryStore'),
     RoomPresenceStore: storeClass('room_presence.js', 'RoomPresenceStore'),
@@ -66,14 +67,22 @@ export function runtime() {
       get(id) {
         const key = binding + ':' + id;
         if (!objects.has(key)) objects.set(key, new classes[name](context(), env));
-        return objects.get(key);
+        const target = objects.get(key);
+        return new Proxy(target, {
+          get(object, property) {
+            const value = object[property];
+            if (typeof value !== 'function') return undefined;
+            return async (...args) => value.apply(object, args);
+          },
+        });
       },
     };
   }
   const exports = new Function('DurableObject', ...Object.keys(classes),
     source('index.js').replace('export default', 'const worker =') +
     '\nreturn { worker, createSession };')(DurableObject, ...Object.values(classes));
-  const directory = env.APP_DIRECTORY.get('tinni-app-directory');
+  env.APP_DIRECTORY.get('tinni-app-directory');
+  const directory = objects.get('APP_DIRECTORY:tinni-app-directory');
   async function user(index) {
     const subject = 'test-subject-' + index;
     const account = await directory.createUser({
@@ -99,5 +108,6 @@ export function runtime() {
     return { status: response.status, data };
   }
   return { env, directory, user, request, objects,
+    direct: (binding, id) => { env[binding].get(id); return objects.get(binding + ':' + id); },
     close: () => databases.forEach(db => db.close()) };
 }

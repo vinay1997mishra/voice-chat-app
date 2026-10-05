@@ -3343,9 +3343,7 @@ export default {
     if (url.pathname === "/unique-ids/catalog" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const rows = getAppDirectoryStore(env).ctx.storage.sql.exec(
-        "SELECT public_id,price_coins,duration_days,assigned_user_id,enabled,updated_at FROM owner_unique_ids WHERE enabled = 1 ORDER BY LENGTH(public_id), public_id"
-      ).toArray();
+      const rows = await getAppDirectoryStore(env).uniqueIdCatalog();
       return json({
         ok: true,
         unique_ids: rows
@@ -3376,13 +3374,13 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const kind = String(url.searchParams.get("kind") || "");
-      return json({ ok: true, items: getAppDirectoryStore(env).purchasableCatalog(kind, url.searchParams.get("country") || "") });
+      return json({ ok: true, items: await getAppDirectoryStore(env).purchasableCatalog(kind, url.searchParams.get("country") || "") });
     }
     if (url.pathname === "/store/purchase" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      try { return json(getAppDirectoryStore(env).purchaseCatalogItem(appSession.user.user_id, body.kind, body.item_id, body.country || "")); }
+      try { return json(await getAppDirectoryStore(env).purchaseCatalogItem(appSession.user.user_id, body.kind, body.item_id, body.country || "")); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to purchase item") }, 400); }
     }
 
