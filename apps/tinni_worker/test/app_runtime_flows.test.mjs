@@ -84,3 +84,42 @@ test('profile preferences, room following and direct messages persist through re
   assert.equal(inbox.status, 200, JSON.stringify(inbox.data));
   assert.ok(inbox.data.messages.some(item => item.text === 'Hello from the flow test'));
 });
+
+test('store purchases return real inventory and do not charge twice for an owned item', async t => {
+  const r = runtime(); t.after(r.close);
+  const a = await r.user(1);
+  const sql = r.directory.ctx.storage.sql;
+  sql.exec('UPDATE app_wallets SET coins = 10000 WHERE user_id = ?', a.user_id);
+  const now = Date.now();
+  sql.exec('INSERT INTO owner_catalog (id,kind,name,data_json,enabled,created_at,updated_at) VALUES (?,?,?,?,1,?,?)',
+    'test-entry', 'entry', 'Test Entry', JSON.stringify({ coin_price: 100 }), now, now);
+  const catalog = await r.request('/store/catalog?kind=entry', a.token);
+  assert.ok(catalog.data.items.some(item => item.id === 'test-entry'));
+  const first = await r.request('/store/purchase', a.token, { kind: 'entry', item_id: 'test-entry' });
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.wallet.coins, 9900);
+  const retry = await r.request('/store/purchase', a.token, { kind: 'entry', item_id: 'test-entry' });
+  assert.equal(retry.status, 200, JSON.stringify(retry.data));
+  assert.equal(retry.data.wallet.coins, 9900);
+  assert.equal(retry.data.duplicate, true);
+});
+
+test('Unique ID purchase keeps the current login usable and preserves the owned room', async t => {
+  const r = runtime(); t.after(r.close);
+  const a = await r.user(1);
+  const room = await r.directory.createRoom(a.user_id, { title: 'Identity room', seat_count: 12 });
+  const sql = r.directory.ctx.storage.sql, now = Date.now();
+  sql.exec('UPDATE app_wallets SET coins = 10000 WHERE user_id = ?', a.user_id);
+  sql.exec('INSERT INTO owner_unique_ids (public_id,price_coins,enabled,created_at,updated_at) VALUES (?,100,1,?,?)',
+    '8888', now, now);
+  const purchase = await r.request('/unique-ids/purchase', a.token, { public_id: '8888' });
+  assert.equal(purchase.status, 200, JSON.stringify(purchase.data));
+  assert.equal(purchase.data.user.user_id, '8888');
+  assert.equal(purchase.data.wallet.coins, 9900);
+  const me = await r.request('/app/me', a.token);
+  assert.equal(me.status, 200, JSON.stringify(me.data));
+  assert.equal(me.data.user.user_id, '8888');
+  const owned = await r.directory.findRoomByExactId(room.id);
+  assert.equal(owned.id, room.id);
+  assert.equal(owned.owner_id, '8888');
+});
