@@ -27,7 +27,7 @@ class _Game extends ChangeNotifier {
   void change() => notifyListeners();
 }
 
-Widget harness(_Game game, {required String id, bool party = false,
+Widget _harness(_Game game, {required String id, bool party = false,
   Future<void> Function()? refresh, Future<String?> Function(String, int)? bet,
   VoidCallback? close}) => RepaintBoundary(
     key: const Key('casino-preview-root'),
@@ -54,7 +54,7 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         final game = _Game();
         final id = party ? 'fruit-party' : 'fruit-jackpot';
-        await tester.pumpWidget(harness(game, id: id, party: party));
+        await tester.pumpWidget(_harness(game, id: id, party: party));
         await tester.pump(const Duration(milliseconds: 180));
         final surface = find.byKey(Key(id + '-casino-surface'));
         expect(tester.getSize(surface).height, closeTo(size.height / 2, .01));
@@ -94,7 +94,7 @@ void main() {
     final game = _Game();
     final pending = Completer<String?>();
     var calls = 0, amount = 0;
-    await tester.pumpWidget(harness(game, id: 'fruit-jackpot', bet: (fruit, value) {
+    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot', bet: (fruit, value) {
       calls++; amount = value;
       return pending.future;
     }));
@@ -124,7 +124,7 @@ void main() {
   testWidgets('round expiry refreshes immediately and game close stops polling', (tester) async {
     final game = _Game();
     var requests = 0;
-    await tester.pumpWidget(harness(game, id: 'fruit-party', refresh: () async {
+    await tester.pumpWidget(_harness(game, id: 'fruit-party', refresh: () async {
       requests++;
       if (game.remaining == Duration.zero) {
         game.round++;

@@ -238,7 +238,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
         );
       }
     } finally {
-      if (mounted) setState(() { => _pendingFruit = null); }
+      if (mounted) { setState(() => _pendingFruit = null); }
     }
   }
 
