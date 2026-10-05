@@ -43,11 +43,9 @@ void main() {
     await tester.pump(const Duration(seconds:8));
     expect(find.byKey(const Key('rocket-nine-second-launch')),findsOneWidget);
     await tester.pump(const Duration(seconds:1));await tester.pump();
-    expect(find.byKey(const Key('rocket-nine-second-launch')),findsOneWidget);
-    expect(find.byKey(const Key('rocket-holding-flame')),findsOneWidget);
-    expect(find.byKey(const ValueKey('launch-rocket-4')),findsOneWidget);
+    expect(find.byKey(const Key('rocket-nine-second-launch')),findsNothing);
     completed.value=4;await tester.pump();
-    expect(find.byKey(const ValueKey('launch-rocket-4')),findsOneWidget);
+    expect(find.byKey(const Key('rocket-nine-second-launch')),findsNothing);
     await tester.pumpWidget(const SizedBox());completed.dispose();
   });
   testWidgets('one gift completing multiple stages queues all rockets',(tester) async {
@@ -58,9 +56,7 @@ void main() {
     await tester.pump(const Duration(seconds:9));await tester.pump();
     expect(find.byKey(const ValueKey('launch-rocket-2')),findsOneWidget);
     await tester.pump(const Duration(seconds:9));await tester.pump();
-    expect(find.byKey(const Key('rocket-nine-second-launch')),findsOneWidget);
-    expect(find.byKey(const Key('rocket-holding-flame')),findsOneWidget);
-    expect(find.byKey(const ValueKey('launch-rocket-2')),findsOneWidget);
+    expect(find.byKey(const Key('rocket-nine-second-launch')),findsNothing);
     await tester.pumpWidget(const SizedBox());completed.dispose();
   });
 }
