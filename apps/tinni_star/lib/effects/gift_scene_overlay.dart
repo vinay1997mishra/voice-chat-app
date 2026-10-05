@@ -74,7 +74,8 @@ class _GiftScenePainter extends CustomPainter {
     final entrance=(t/.14).clamp(0.0,1.0);
     final fade=t>.94?((1-t)/.06).clamp(0.0,1.0):1.0;
     final center=Offset(size.width/2,size.height*.46);
-    final radius=math.min(size.width*.40,180.0);
+    final fullScreen=PremiumGiftCatalog.isFullScreen(gift.id);
+    final radius=math.min(size.width*(fullScreen ? .48 : .30),fullScreen?310.0:140.0);
     canvas.drawRect(Offset.zero&size,Paint()..color=Color.fromRGBO(2,8,20,.55*entrance*fade));
     final glow=Rect.fromCircle(center:center,radius:radius*1.5);
     canvas.drawOval(glow,Paint()..shader=RadialGradient(colors:[

@@ -653,5 +653,13 @@ class PremiumGiftCatalog {
     return null;
   }
   static String scene(String id)=>scenes[id]??'spectacle';
-  static int holdSeconds(String id)=>id.startsWith('cp-')?7:5;
+  static int holdSeconds(String id) {
+    final gift=find(id);
+    if(gift==null||gift.lucky) { return 5; }
+    if(gift.price>=5000000) { return 8; }
+    if(gift.price>=1000000) { return 7; }
+    if(gift.price>=200000) { return 6; }
+    return 5;
+  }
+  static bool isFullScreen(String id)=>(find(id)?.price??0)>=200000;
 }

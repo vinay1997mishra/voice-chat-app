@@ -15,7 +15,8 @@ void main() {
     expect(PremiumGiftCatalog.countries.map((g)=>g.id).toSet().length,249);
     for(final gift in [...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,...PremiumGiftCatalog.countries]) {
       expect(PremiumGiftCatalog.scenes.containsKey(gift.id),true);
-      expect(PremiumGiftCatalog.holdSeconds(gift.id),gift.id.startsWith('cp-')?7:5);
+      expect(PremiumGiftCatalog.isFullScreen(gift.id),gift.price>=200000);
+      expect(PremiumGiftCatalog.holdSeconds(gift.id),gift.price>=5000000?8:gift.price>=1000000?7:gift.price>=200000?6:5);
     }
   });
 }

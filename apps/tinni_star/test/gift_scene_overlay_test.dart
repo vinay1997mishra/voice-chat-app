@@ -21,12 +21,12 @@ void main() {
     final queue=GiftSceneQueue();
     final delivered=<GiftSceneEvent>[];
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:GiftSceneOverlay(queue:queue,onDelivered:delivered.add))));
-    queue.add(GiftSceneEvent(gift:PremiumGiftCatalog.cp.first,recipients:['a']));
+    queue.add(GiftSceneEvent(gift:PremiumGiftCatalog.cp[1],recipients:['a']));
     queue.add(GiftSceneEvent(gift:PremiumGiftCatalog.normal.first,recipients:['b']));
     await tester.pump();
     await tester.pump(const Duration(seconds:6));expect(delivered,isEmpty);
     await tester.pump(const Duration(seconds:1));await tester.pump();
-    expect(delivered.single.gift.id,'cp-heart');
+    expect(delivered.single.gift.id,'cp-invite');
     expect(find.byKey(const ValueKey('gift-scene-rose')),findsOneWidget);
     await tester.pump(const Duration(seconds:5));await tester.pump();
     expect(delivered.length,2);
