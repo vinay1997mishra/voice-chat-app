@@ -18,6 +18,7 @@ import '../economy/premium_gift_catalog.dart';
 import '../effects/gift_scene_overlay.dart';
 import '../effects/effect_overlay.dart';
 import '../effects/rocket_launch.dart';
+import '../effects/cinematic_lane.dart';
 import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
@@ -50,6 +51,7 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final _giftScenes = GiftSceneQueue();
+  final _cinematicLane = CinematicLane();
   final ScrollController _roomMessageScrollController = ScrollController();
   final ScrollController _rocketLevelScrollController = ScrollController();
   int _lastRoomMessageCount = 0;
@@ -803,6 +805,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _rocketCompleted.dispose();
     _rocketLevelScrollController.dispose();
     _giftScenes.dispose();
+    _cinematicLane.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
@@ -2784,7 +2787,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     GiftDefinition gift,
     List<String> receiverIds,
   ) {
-    if (widget.state.roomControls.effectsEnabled) {
+    if (widget.state.roomControls.effectsEnabled &&
+        widget.state.roomControls.giftEffectsEnabled) {
       _giftScenes.add(GiftSceneEvent(gift:gift,recipients:receiverIds));
     }
   }
@@ -9596,12 +9600,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
             Positioned.fill(child: RocketLaunchOverlay(
               completed: _rocketCompleted,
+              lane: _cinematicLane,
               enabled: widget.state.roomControls.effectsEnabled && widget.state.roomControls.rocketDrawNoticeEnabled,
             )),
             Positioned.fill(child:GiftSceneOverlay(
               queue:_giftScenes,
+              lane:_cinematicLane,
               onDelivered:_deliverGiftScene,
-              enabled:widget.state.roomControls.effectsEnabled,
+              enabled:widget.state.roomControls.effectsEnabled &&
+                  widget.state.roomControls.giftEffectsEnabled,
             )),
             for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
               _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),

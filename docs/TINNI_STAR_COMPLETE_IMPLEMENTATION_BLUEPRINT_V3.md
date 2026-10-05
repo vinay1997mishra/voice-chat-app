@@ -1309,3 +1309,4 @@ Unless explicitly changed by Platform Owner:
 - Respect effects toggles, screen disposal and app background lifecycle; stop/dispose video controllers and prevent stale completion callbacks from delivering a later gift.
 - Preserve all gift prices, recipient eligibility, Lucky quantities/combo rules, Host-only Diamonds, Lucky 10% value, normal 100% value, room/game controls and unrelated locked behavior.
 - Publish review sheets and the immutable movie bundle from the same `tinnistar` workflow after every scene verifies; source changes are never evidence that movies rendered or played correctly on a real device.
+- Gift and Rocket cinematic movies share one fair foreground lane so neither movie hides the other. Gift scenes respect both the master Effects toggle and the Gift Effects toggle.

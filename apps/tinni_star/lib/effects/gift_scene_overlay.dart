@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../economy/economy.dart';
 import '../economy/premium_gift_catalog.dart';
 import 'cinematic_video.dart';
+import 'cinematic_lane.dart';
 
 class GiftSceneEvent {
   GiftSceneEvent({required this.gift, required List<String> recipients})
@@ -24,6 +25,8 @@ class GiftSceneQueue extends ChangeNotifier {
   GiftSceneEvent? take() =>
       _pending.isEmpty ? null : _pending.removeAt(0);
 
+  bool get hasPending => _pending.isNotEmpty;
+
   void clear() => _pending.clear();
 }
 
@@ -33,11 +36,13 @@ class GiftSceneOverlay extends StatefulWidget {
     required this.queue,
     required this.onDelivered,
     this.enabled = true,
+    this.lane,
   });
 
   final GiftSceneQueue queue;
   final void Function(GiftSceneEvent) onDelivered;
   final bool enabled;
+  final CinematicLane? lane;
 
   @override
   State<GiftSceneOverlay> createState() => _GiftSceneOverlayState();
@@ -62,12 +67,19 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     final state = WidgetsBinding.instance.lifecycleState;
     _foreground = state == null || state == AppLifecycleState.resumed;
     widget.queue.addListener(_next);
+    widget.lane?.addListener(_next);
     _next();
   }
 
   @override
   void didUpdateWidget(covariant GiftSceneOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.lane != widget.lane) {
+      oldWidget.lane?.removeListener(_next);
+      oldWidget.lane?.cancel(this);
+      _cancel(releaseLane: false);
+      widget.lane?.addListener(_next);
+    }
     if (oldWidget.queue != widget.queue) {
       oldWidget.queue.removeListener(_next);
       _cancel();
@@ -87,6 +99,8 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
       widget.queue.clear();
       return;
     }
+    if (!widget.queue.hasPending) return;
+    if (!(widget.lane?.acquire(this) ?? true)) return;
     final event = widget.queue.take();
     if (event == null) return;
     setState(() => _event = event);
@@ -110,20 +124,22 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     });
   }
 
-  void _cancel() {
+  void _cancel({bool releaseLane = true}) {
     _hold?.cancel();
     _hold = null;
     _generation++;
     _motion.stop();
     _event = null;
+    if (releaseLane) widget.lane?.cancel(this);
   }
 
   void _finish() {
     final event = _event;
     if (!mounted || event == null) return;
-    _cancel();
+    _cancel(releaseLane: false);
     setState(() {});
     widget.onDelivered(event);
+    widget.lane?.release(this);
     if (mounted) _next();
   }
 
@@ -146,8 +162,9 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cancel();
     widget.queue.removeListener(_next);
+    widget.lane?.removeListener(_next);
+    _cancel();
     _motion.dispose();
     super.dispose();
   }

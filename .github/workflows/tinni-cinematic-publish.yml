@@ -18,7 +18,7 @@ permissions:
 jobs:
   publish:
     if: github.ref == 'refs/heads/tinnistar'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       apk_source_sha: ${{ steps.pin.outputs.sha }}
     steps:

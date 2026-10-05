@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'cinematic_video.dart';
+import 'cinematic_lane.dart';
 
 /// The ten server-backed gift milestones, expressed as incremental targets.
 const rocketStageTargets = <int>[
@@ -138,9 +139,10 @@ class RocketModelPainter extends CustomPainter {
 
 /// Each newly completed stage launches once; opening a room never replays history.
 class RocketLaunchOverlay extends StatefulWidget {
-  const RocketLaunchOverlay({super.key,required this.completed, this.enabled=true});
+  const RocketLaunchOverlay({super.key,required this.completed, this.enabled=true, this.lane});
   final ValueNotifier<int?> completed;
   final bool enabled;
+  final CinematicLane? lane;
   @override State<RocketLaunchOverlay> createState()=>_RocketLaunchOverlayState();
 }
 class _RocketFlightMotion {
@@ -188,11 +190,18 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     final state = WidgetsBinding.instance.lifecycleState;
     _foreground = state == null || state == AppLifecycleState.resumed;
     widget.completed.addListener(_changed);
+    widget.lane?.addListener(_next);
   }
 
   @override
   void didUpdateWidget(covariant RocketLaunchOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.lane != widget.lane) {
+      oldWidget.lane?.removeListener(_next);
+      oldWidget.lane?.cancel(this);
+      _clear();
+      widget.lane?.addListener(_next);
+    }
     if (oldWidget.completed != widget.completed) {
       oldWidget.completed.removeListener(_changed);
       widget.completed.addListener(_changed);
@@ -211,6 +220,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     _flight.stop();
     _queue.clear();
     _level = null;
+    widget.lane?.cancel(this);
   }
 
   void _changed() {
@@ -239,14 +249,23 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
     );
     _flight.forward();
     _launchTimer = Timer(remaining, () {
-      if (mounted && token == _generation) _next();
+      if (mounted && token == _generation) _completeLaunch();
     });
   }
 
+  void _completeLaunch() {
+    if (!mounted) return;
+    _flight.stop();
+    setState(() => _level = null);
+    widget.lane?.release(this);
+    _next();
+  }
+
   void _next() {
-    if (!mounted || !_foreground || !widget.enabled) return;
+    if (!mounted || !_foreground || !widget.enabled || _level != null) return;
     _launchTimer?.cancel();
     if (_queue.isNotEmpty) {
+      if (!(widget.lane?.acquire(this) ?? true)) return;
       setState(() => _level = _queue.removeAt(0));
       _flight.value = 0;
       _resume();
@@ -276,8 +295,9 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _clear();
     widget.completed.removeListener(_changed);
+    widget.lane?.removeListener(_next);
+    _clear();
     _flight.dispose();
     super.dispose();
   }

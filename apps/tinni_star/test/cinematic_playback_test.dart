@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/economy/premium_gift_catalog.dart';
 import 'package:tinni_star/effects/cinematic_video.dart';
+import 'package:tinni_star/effects/cinematic_lane.dart';
 import 'package:tinni_star/effects/gift_scene_overlay.dart';
 import 'package:tinni_star/effects/rocket_launch.dart';
 
@@ -176,5 +177,47 @@ void main() {
     expect(delivered, isEmpty);
     expect(tester.takeException(), isNull);
     queue.dispose();
+  });
+
+  testWidgets('gift and Rocket movies share one fair lane without overlap',
+      (tester) async {
+    final queue = GiftSceneQueue();
+    final lane = CinematicLane();
+    final completed = ValueNotifier<int?>(0);
+    final delivered = <GiftSceneEvent>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Stack(
+      fit: StackFit.expand,
+      children: [
+        GiftSceneOverlay(queue: queue, lane: lane, onDelivered: delivered.add),
+        RocketLaunchOverlay(completed: completed, lane: lane),
+      ],
+    ))));
+    queue.add(GiftSceneEvent(
+      gift: PremiumGiftCatalog.normal.first, recipients: ['first'],
+    ));
+    await tester.pump();
+    completed.value = 1;
+    queue.add(GiftSceneEvent(
+      gift: PremiumGiftCatalog.normal.first, recipients: ['second'],
+    ));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('gift-scene-rose')), findsOneWidget);
+    expect(find.byKey(const Key('rocket-nine-second-launch')), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(delivered.single.recipients, ['first']);
+    expect(find.byKey(const ValueKey('gift-scene-rose')), findsNothing);
+    expect(find.byKey(const ValueKey('launch-rocket-1')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pump();
+    expect(find.byKey(const Key('rocket-nine-second-launch')), findsNothing);
+    expect(find.byKey(const ValueKey('gift-scene-rose')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(delivered.map((e) => e.recipients.single), ['first', 'second']);
+    await tester.pumpWidget(const SizedBox());
+    completed.dispose();
+    queue.dispose();
+    lane.dispose();
   });
 }
