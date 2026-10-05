@@ -396,7 +396,7 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _validity(item) + ' • ' + item.id.startsWith('rocket-l') ? 'Rocket reward' : item.price.toString() + ' coins',
+                _validity(item) + ' • ' + (item.id.startsWith('rocket-l') ? 'Rocket reward' : item.price.toString() + ' coins'),
                 style: const TextStyle(color: RoyalPalette.muted),
               ),
               const SizedBox(height: 16),
