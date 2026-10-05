@@ -52,6 +52,7 @@ test('daily room EXP uses 2000 per present user, sending uses normal 100% and Lu
  let summary=(await r.directory.listRooms()).find(x=>x.id===room.id);
  const expected=102; // Rose 100 + Lucky Colorful Rose 20 * 10%.
  assert.equal(summary.sending_exp,Number(expected));
+ assert.equal(r.directory.roomGiftRanking(room.id,'day').ranking[0].sending,102);
  assert.equal(summary.active_user_exp,4000);
  assert.equal(summary.room_experience,4000+Number(expected));
  r.directory.clearPresence(visitor.user_id,room.id,1);
@@ -60,6 +61,7 @@ test('daily room EXP uses 2000 per present user, sending uses normal 100% and Lu
  now=Date.parse('2026-10-05T18:30:00Z');
  summary=(await r.directory.listRooms()).find(x=>x.id===room.id);
  assert.equal(summary.sending_exp,0);assert.equal(summary.room_experience,2000);
+ assert.deepEqual(r.directory.roomGiftRanking(room.id,'day').ranking,[]);
 });
 
 test('seat-take infrastructure error returns a diagnostic reference and a retry never silently loses the seat',async t=>{

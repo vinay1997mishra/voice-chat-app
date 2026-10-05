@@ -5849,9 +5849,12 @@ export class AppDirectoryStore extends DurableObject {
     const roomId = String(roomIdValue || "").trim();
     const period = ["day","week","month"].includes(String(periodValue)) ? String(periodValue) : "day";
     if (!roomId) throw new Error("room_id is required");
-    const now = new Date();
+    const now = new Date(Date.now());
+    const room = this._roomRow(roomId);
+    if (!room) throw new Error('Room not found');
+    const day = this._roomCountryDay(room, now.getTime());
     let start;
-    if (period === "day") start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (period === "day") start = day.starts_at;
     else if (period === "week") {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const delta = (d.getDay() + 6) % 7;
@@ -5877,6 +5880,7 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     return {
       ok: true, room_id: roomId, period,
+      day_key: day.day_key, time_zone: day.time_zone, resets_at: day.resets_at,
       lifetime_total: Math.max(0, Number(lifetimeRow?.total || 0)),
       rocket_levels: this.rocketRewardState(roomId),
       ranking: rows.map((row, index) => ({
