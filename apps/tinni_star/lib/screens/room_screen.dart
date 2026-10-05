@@ -1263,7 +1263,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final clean = text.replaceFirst('Bad state: ', '').trim();
     if (_isTransientRoomServerError(clean)) {
       _scheduleRoomRecovery();
-      return;
     }
 
     final messenger = ScaffoldMessenger.of(context);
@@ -1271,7 +1270,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     messenger.showSnackBar(
       SnackBar(
         content: Text(clean),
-        duration: const Duration(seconds: 1),
+        duration: const Duration(seconds: 5),
       ),
     );
   }
