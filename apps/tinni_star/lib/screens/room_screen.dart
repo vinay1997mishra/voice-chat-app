@@ -4138,19 +4138,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             size: 50,
                                           ),
                                         )
-                                      : ShiningIcon(
-                                          icon: Icons.card_giftcard_rounded,
-                                          color: gift.id.contains('heart') ||
-                                                  gift.id.contains('ring')
-                                              ? FeaturePalette.cp
-                                              : gift.id.contains('dragon') ||
-                                                      gift.id.contains('crown')
-                                                  ? FeaturePalette.rank
-                                                  : FeaturePalette.gift,
-                                          size: 30,
-                                          boxSize: 50,
-                                          glow: 0.38,
-                                        ),
+                                      : _luckyArtwork(gift,size:54),
                                 ),
                               ),
                               Row(
@@ -4180,9 +4168,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 ],
                               ),
                               Text(
-                                gift.lucky
-                                    ? '🪙 ${gift.price} • up to ${gift.maxMultiplier}×'
-                                    : '🪙 ${gift.price}',
+                                '${gift.price}',
                                 style: const TextStyle(
                                   color: RoyalPalette.gold,
                                   fontSize: 10,
