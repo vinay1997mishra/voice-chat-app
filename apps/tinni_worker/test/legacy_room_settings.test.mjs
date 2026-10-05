@@ -30,9 +30,9 @@ test('original room settings migrate before new-column INSERT and all controls w
  assert.ok(!presence.lockedSeats().includes(2));
  await act('/room-presence/seat-take',guest,{room_id:room.id,seat_index:1});
  await act('/room-presence/seat-mute',owner,{room_id:room.id,seat_index:1,muted:true});
- assert.equal(presence.state(guest.user_id).self_mic_muted,true);
+ assert.equal((await presence.state(guest.user_id)).self_mic_muted,true);
  await act('/room-presence/seat-mute',owner,{room_id:room.id,seat_index:1,muted:false});
- assert.equal(presence.state(guest.user_id).self_mic_muted,false);
+ assert.equal((await presence.state(guest.user_id)).self_mic_muted,false);
  await act('/room-presence/public-screen',owner,{room_id:room.id,enabled:true});
  assert.equal(presence.publicScreenEnabled(),true);
  await act('/room-presence/clear-comments',owner,{room_id:room.id});
