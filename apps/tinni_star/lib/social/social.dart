@@ -95,6 +95,15 @@ class SocialService {
   Completer<WebSocket>? _pendingMessageConnection;
   String? _messageAuthToken;
   bool _messageEventsWanted = false;
+  int _messageEventConsumers = 0;
+
+  void retainMessageEvents() => _messageEventConsumers++;
+
+  Future<void> releaseMessageEvents() async {
+    if (_messageEventConsumers > 0) _messageEventConsumers--;
+    if (_messageEventConsumers == 0) await disconnectMessageEvents();
+  }
+
   bool _messageSocketConnecting = false;
 
   int get totalUnreadMessages => unreadMessages.value;

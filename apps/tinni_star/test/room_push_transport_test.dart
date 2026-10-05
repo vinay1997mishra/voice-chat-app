@@ -38,8 +38,14 @@ void main() {
       expect(messageUpdates,0);
       expect(unreadUpdates,0);
       expect(social.messageEventsConnected,isTrue);
+      social.retainMessageEvents();
+      social.retainMessageEvents();
       await social.connectMessageEvents('test-session');
       expect(requests,1);
+      await social.releaseMessageEvents();
+      expect(social.messageEventsConnected,isTrue);
+      await social.releaseMessageEvents();
+      expect(social.messageEventsConnected,isFalse);
       await social.disconnectMessageEvents();
       await socket.close();
     } finally {

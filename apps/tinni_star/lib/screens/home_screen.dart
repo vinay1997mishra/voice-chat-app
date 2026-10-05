@@ -119,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
+    widget.state.social.retainMessageEvents();
     widget.state.social.roomEvents.addListener(_onRoomEvent);
     _rocketRoomRefresh = Timer.periodic(RequestBudget.homeRefresh, (_) {
       if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
@@ -373,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _rocketRoomRefresh?.cancel();
     widget.state.social.roomEvents.removeListener(_onRoomEvent);
-    unawaited(widget.state.social.disconnectMessageEvents());
+    unawaited(widget.state.social.releaseMessageEvents());
     _pageController.dispose();
     super.dispose();
   }

@@ -170,6 +170,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
+    widget.state.social.retainMessageEvents();
     widget.state.social.roomEvents.addListener(_onCountryRibbonEvent);
     _primeRoomSendingSummary();
     _rocketBannerPoll = Timer.periodic(RequestBudget.ribbonFallback, (_) {
@@ -813,6 +814,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _rocketBannerPoll?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.roomEvents.removeListener(_onCountryRibbonEvent);
+    unawaited(widget.state.social.releaseMessageEvents());
     chat.dispose();
     _roomMessageScrollController.dispose();
     super.dispose();
