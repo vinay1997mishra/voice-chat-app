@@ -9,6 +9,8 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.135.0"
+    "wrangler": "^4.135.0",
+    "miniflare": "4.20250829.0",
+    "esbuild": "^0.25.0"
   }
 }

@@ -16,8 +16,8 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
     external: ['cloudflare:workers'],
   });
   const secret = 'isolated-workerd-secret';
-  const mf = new Miniflare({ workers: [{ name: 'tinni-action-test',
-    modules: true, scriptPath, compatibilityDate: '2026-09-23',
+  const mf = new Miniflare({
+    modules: true, scriptPath, compatibilityDate: '2025-08-29',
     bindings: { SESSION_SECRET: secret },
     r2Buckets: ['EFFECT_MEDIA'],
     durableObjects: Object.fromEntries([
@@ -25,7 +25,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
       ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
-  }] });
+  });
   t.after(async () => { await mf.dispose(); rmSync(folder,{recursive:true,force:true}); });
   async function seed(index,createRoom=false) {
     const response = await mf.dispatchFetch('https://test.local/__fixture/user', {
