@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
@@ -127,17 +128,13 @@ class RocketLaunchOverlay extends StatefulWidget {
 class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTickerProviderStateMixin {
   late final AnimationController _flight;
   final _queue=<int>[];
+  Timer? _launchTimer;
   int? _seen;
   int? _level;
   @override void initState() {
     super.initState();
     _seen=widget.completed.value;
-    _flight=AnimationController(vsync:this,duration:const Duration(seconds:9))
-      ..addStatusListener((status) {
-        if(status==AnimationStatus.completed) {
-          _next();
-        }
-      });
+    _flight=AnimationController(vsync:this,duration:const Duration(seconds:9));
     widget.completed.addListener(_changed);
   }
   void _changed() {
@@ -161,12 +158,17 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     if(!mounted) {
       return;
     }
+    _launchTimer?.cancel();
     setState(()=>_level=_queue.isEmpty?null:_queue.removeAt(0));
     if(_level!=null) {
       _flight.forward(from:0);
+      _launchTimer=Timer(const Duration(seconds:9),_next);
+    } else {
+      _flight.stop();
     }
   }
   @override void dispose() {
+    _launchTimer?.cancel();
     widget.completed.removeListener(_changed);_flight.dispose();super.dispose();
   }
   @override Widget build(BuildContext context) {
