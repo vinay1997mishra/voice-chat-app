@@ -50,7 +50,7 @@ test('owner actions persist through real SQLite/RPC and require the owner sessio
     return result.data;
   }
   const seed = await mf.dispatchFetch('https://test.local/__fixture/user', {
-    method:'POST',body:JSON.stringify({index:101,createRoom:true}),
+    method:'POST',body:JSON.stringify({index:101,createRoom:true,markRecent:true}),
   });
   const {user,room} = await seed.json();
   const uid = user.user_id;
@@ -100,6 +100,45 @@ test('owner actions persist through real SQLite/RPC and require the owner sessio
     await action(name,{user_id:uid,operation:'ban',amount:0});
     await action(name,{user_id:uid,operation:'unban',amount:0});
   }
+  await action('treasury-add',{amount:5000});
+  const beforeTreasury = (await request('/api/owner/state')).data.state.treasury.balance;
+  const failedSend = await request('/api/owner/action', {
+    action:'treasury-send',data:{user_id:'no-such-user',wallet_type:'normal',amount:100},
+  });
+  assert.equal(failedSend.status,400);
+  assert.equal((await request('/api/owner/state')).data.state.treasury.balance,beforeTreasury,
+    'A rejected recipient must not debit treasury');
+  const sent=await action('treasury-send',{user_id:uid,wallet_type:'normal',amount:100});
+  assert.equal(sent.result.treasury.balance,beforeTreasury-100);
+  assert.equal(sent.result.wallet.coins,1090);
+
+  const hierarchyUsers=[];
+  for (const index of [102,103,104]) {
+    const response=await mf.dispatchFetch('https://test.local/__fixture/user',{
+      method:'POST',body:JSON.stringify({index}),
+    });
+    hierarchyUsers.push((await response.json()).user.user_id);
+  }
+  const [bd,agency,host]=hierarchyUsers;
+  await action('bd-activate',{user_id:bd,operation:'activate'});
+  await action('agency-activate',{user_id:agency,operation:'activate'});
+  await action('agency-to-bd',{agency_owner_id:agency,bd_user_id:bd});
+  await action('host-add',{host_user_id:host,agency_owner_id:agency});
+  await action('host-remove',{host_user_id:host,agency_owner_id:agency});
+  await action('agency-from-bd',{agency_owner_id:agency});
+  await action('agency-activate',{user_id:agency,operation:'remove'});
+  await action('bd-activate',{user_id:bd,operation:'remove'});
+
+  for (const kind of ['vip','entry','vehicle','frame','ring','bubble','profile-background','profile-card','banner','role']) {
+    const created=await action(kind+'-new',{
+      name:'Final '+kind,title:'Final '+kind,level:1,asset_url:'https://example.test/asset.png',
+    });
+    assert.ok(created.result.id,kind);
+    await action('catalog-remove',{id:created.result.id});
+  }
+  await action('lucky-gift-config',{enabled:true});
+  await action('user-price-override-set',{user_id:uid,price_key:'cp_connect_coins',price_coins:500,duration_days:7});
+  await action('user-price-override-remove',{user_id:uid,price_key:'cp_connect_coins'});
   await action('feature-set',{key:'final_verified_feature',enabled:true});
   await action('policy-set',{key:'final_verified_policy',value:123});
   await action('game-switch',{enabled:true});
@@ -119,4 +158,6 @@ test('owner actions persist through real SQLite/RPC and require the owner sessio
   const detail=await request('/api/owner/user-detail?user_id='+encodeURIComponent(uid));
   assert.equal(detail.status,200,JSON.stringify(detail.data));
   assert.equal(detail.data.detail.user.display_name,'Final Player');
+  assert.equal(detail.data.detail.recent_rooms[0].room_id,rid);
+  assert.ok(detail.data.detail.recent_rooms[0].last_entered_at>0);
 });

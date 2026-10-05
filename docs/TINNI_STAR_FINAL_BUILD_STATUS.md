@@ -26,4 +26,7 @@ Two-device LiveKit voice/audio, Bluetooth routing, reconnecting on real mobile n
 ## Feature inventory retained
 
 Authentication/profile/privacy and ID, home/discovery/rooms, room presence/seats/moderation/voice/music/video, messages/social/friends/moments, CP/rings/memories/ranking, gifts/Lucky/Combo/rocket/effects/inventory/VIP/store, wallets/coin-seller/merchant/hierarchy/host/agency/BD, Fruit Jackpot/Fruit Party/Ludo, and existing Anamika/function-pack interfaces. Runtime tests and configured-provider checks run in CI; incomplete integrations remain reported as such.
-\nOwner runtime audit also caught a Full ID dashboard failure: its recent-room query used a non-existent last_entered_at SQL column. Read visited_at with a compatible last_entered_at response alias.\n
+
+Owner runtime audit also caught a Full ID dashboard failure: its recent-room query used a non-existent last_entered_at SQL column. Read visited_at with a compatible last_entered_at response alias.
+
+Owner Treasury sends now roll back the debit when the recipient cannot be credited. The real Worker test also checks treasury rollback, hierarchy changes, ten catalog types, Lucky configuration and per-user pricing.

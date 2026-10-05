@@ -2920,7 +2920,8 @@ export class AppDirectoryStore extends DurableObject {
 
   _ownerTreasurySend(userIdValue, walletTypeValue, amountValue) {
     const amount = Math.floor(Number(amountValue || 0));
-    if (amount <= 0) throw new Error("Enter a valid coin amount");
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    return this.ctx.storage.transactionSync(() => {
     const treasury = this.ownerState().treasury;
     if (treasury.balance < amount) throw new Error("Owner Treasury balance is not enough");
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
@@ -2937,6 +2938,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     const wallet = this._manageWallet(userIdValue, walletType, "credit", amount);
     return { treasury: this.ownerState().treasury, wallet };
+    });
   }
 
   _setHierarchy(userIdValue, roleValue, parentValue, activeValue, dataValue = {}) {
