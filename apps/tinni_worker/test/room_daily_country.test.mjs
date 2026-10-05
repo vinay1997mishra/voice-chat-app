@@ -55,6 +55,11 @@ test('daily room EXP uses 2000 per present user, sending uses normal 100% and Lu
  assert.equal(r.directory.roomGiftRanking(room.id,'day').ranking[0].sending,102);
  assert.equal(summary.active_user_exp,4000);
  assert.equal(summary.room_experience,4000+Number(expected));
+ r.directory.markRecentRoom(owner.user_id,room.id);
+ for(const entry of [r.directory.findRoomByExactId(room.id),r.directory.findOwnedRoomByUserId(owner.user_id),r.directory.listRecentRooms(owner.user_id)[0]]){
+  assert.equal(entry.sending_exp,102);assert.equal(entry.active_user_exp,4000);
+  assert.equal(entry.room_experience,4102);
+ }
  r.directory.clearPresence(visitor.user_id,room.id,1);
  summary=(await r.directory.listRooms()).find(x=>x.id===room.id);
  assert.equal(summary.room_experience,2000+Number(expected));

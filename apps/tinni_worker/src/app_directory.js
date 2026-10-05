@@ -4097,7 +4097,7 @@ export class AppDirectoryStore extends DurableObject {
           "SELECT * FROM app_rooms WHERE id = ? LIMIT 1", roomId,
         ).toArray()[0];
         if (!row) throw new Error("Room not found");
-        return { room: rowToRoom(row) };
+        return { room: rowToRoom(this._roomDailyExperience(row)) };
       }
       case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount, data.asset || "coins");
       case "wallet-seller": return this._manageWallet(data.user_id, "coin_seller", data.operation, data.amount);
@@ -4985,7 +4985,7 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       roomId,
     ).toArray()[0];
-    return row ? rowToRoom(row) : null;
+    return row ? rowToRoom(this._roomDailyExperience(row)) : null;
   }
 
   findOwnedRoomByUserId(userIdValue) {
@@ -5331,7 +5331,7 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 100`,
       userId,
       cutoff,
-    ).toArray().map(rowToRoom);
+    ).toArray().map(row => rowToRoom(this._roomDailyExperience(row)));
   }
 
   listRecentRooms(userIdValue) {
@@ -5350,7 +5350,7 @@ export class AppDirectoryStore extends DurableObject {
         ORDER BY rr.visited_at DESC
         LIMIT 25`,
       userId,
-    ).toArray().map(rowToRoom);
+    ).toArray().map(row => rowToRoom(this._roomDailyExperience(row)));
   }
 
   listFollowing(userIdValue) {
@@ -12399,6 +12399,6 @@ export class AppDirectoryStore extends DurableObject {
         WHERE r.id = ?
         LIMIT 1`,
       ownerId,
-    ).toArray().map(rowToRoom)[0];
+    ).toArray().map(row => rowToRoom(this._roomDailyExperience(row)))[0];
   }
 }
