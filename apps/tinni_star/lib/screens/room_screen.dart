@@ -5334,71 +5334,109 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                  const Expanded(
+                  Expanded(
                     flex: 3,
-                    child: Center(
-                      child: RocketModel(level: currentIndex + 1, size: 70),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: GridView.builder(
-                      key: const Key('room-rocket-ten-stages'),
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 5,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 0.92,
-                      ),
-                      itemCount: _rocketStageTargets.length,
-                      itemBuilder: (context, index) {
-                        final done = index < completed;
-                        final current = !allComplete && index == currentIndex;
-                        final target = _rocketStageTargets[index];
-                        final color = done
-                            ? const Color(0xFFFFD45A)
-                            : current
-                                ? const Color(0xFF61D9FF)
-                                : const Color(0xFF56627E);
-                        return Container(
-                          key: Key(
-                            'room-rocket-stage-' + (index + 1).toString(),
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF071B4D),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: color.withValues(alpha: 0.9),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 86,
+                          child: Scrollbar(
+                            thumbVisibility: true,
+                            child: ListView.builder(
+                              key: const Key('room-rocket-level-scroll'),
+                              primary: false,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                                horizontal: 4,
+                              ),
+                              itemCount: _rocketStageTargets.length,
+                              itemBuilder: (context, index) {
+                                final done = index < completed;
+                                final current =
+                                    !allComplete && index == currentIndex;
+                                final target = _rocketStageTargets[index];
+                                final color = done
+                                    ? const Color(0xFFFFD45A)
+                                    : current
+                                        ? const Color(0xFF61D9FF)
+                                        : const Color(0xFF56627E);
+                                return Container(
+                                  key: Key(
+                                    'room-rocket-stage-' +
+                                        (index + 1).toString(),
+                                  ),
+                                  margin: const EdgeInsets.only(bottom: 7),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: current
+                                        ? const Color(0xFF0D2D72)
+                                        : const Color(0xFF071B4D),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: color.withValues(alpha: 0.95),
+                                      width: current ? 1.6 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 22,
+                                        child: Text(
+                                          (index + 1).toString(),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: color,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            RocketModel(
+                                              level: index + 1,
+                                              size: 20,
+                                            ),
+                                            Text(
+                                              _compactRoomSending(target),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: RoyalPalette.cream,
+                                                fontSize: 7.5,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              RocketModel(level: index + 1, size: 24),
-                              const SizedBox(height: 4),
-                              Text(
-                                (index + 1).toString(),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              Text(
-                                _compactRoomSending(target),
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Center(
+                            child: RocketModel(
+                              level: allComplete ? 10 : currentIndex + 1,
+                              size: 92,
+                            ),
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(width: 10),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),
