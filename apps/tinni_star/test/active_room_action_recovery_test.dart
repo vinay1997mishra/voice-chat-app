@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/background/room_foreground_service.dart';
 import 'package:tinni_star/background/room_permission_bridge.dart';
@@ -61,34 +60,37 @@ class _Presence extends RoomPresenceService {
   @override Future<void> leaveSeat({required String roomId,required String authToken}) async {snapshot(null,false);}
   @override Future<void> leave({required String roomId,required String authToken}) async {}
 }
+class _Permissions extends RoomPermissionBridge {
+  bool granted = true;
+  @override Future<bool> requestVoiceRoomPermissions() async => granted;
+  @override Future<bool> hasVoiceRoomPermissions() async => granted;
+}
+class _Foreground extends RoomForegroundServiceBridge {
+  @override Future<bool> start() async => true;
+  @override Future<bool> stop() async => true;
+}
+late _Permissions _permissions;
 const _room=RoomSummary(id:'room',title:'Test',country:'IN',online:1,ownerId:'me');
 ActiveRoomSession _session(_Rtc rtc,_Presence presence,{DateTime Function()? now})=>ActiveRoomSession(
   runtime:FunctionPackRuntime(signatureVerifier:const DevelopmentSignatureVerifier()),
   realtime:RealtimeCoordinator(rtc:rtc,im:LocalImAdapter()),
-  foregroundService:const RoomForegroundServiceBridge(),
-  permissions:const RoomPermissionBridge(),presence:presence,nowProvider:now??DateTime.now);
+  foregroundService:_Foreground(),
+  permissions:_permissions,presence:presence,nowProvider:now??DateTime.now);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/room_service'), (_) async => true);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/permissions'),(_) async=>true);
-  });
-  tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/room_service'), null);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/permissions'),null);
-  });
+  setUp(() { _permissions = _Permissions(); });
   testWidgets('HTTP-only seat and mic work, repeated force preserves mic, leave allows rejoin',(tester) async {
     final rtc=_Rtc(), presence=_Presence(), session=_session(rtc,presence);
+    print('Recovery test: opening room');
     await session.open(_room,userId:'me',authToken:'token');
+    print('Recovery test: room opened');
     expect(presence.hasConnectionProblem,false);
     await session.takeMySeat(0);
+    print('Recovery test: seat confirmed');
     expect(session.controller!.mySeat,0);
     await session.toggleMyMic();
+    print('Recovery test: microphone published');
     expect(rtc.publishingMic,true);
     expect(presence.members.single.micMuted,false);
     presence.selfSeatForced=true;presence.selfForcedSeatIndex=0;presence.notifyListeners();
@@ -125,13 +127,11 @@ void main() {
     await session.close();session.dispose();presence.dispose();
   });
   testWidgets('permission-denied room can retry voice when reopened after permission grant',(tester) async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/permissions'),(_) async=>false);
+    _permissions.granted = false;
     final rtc=_Rtc(),presence=_Presence(),session=_session(rtc,presence);
     await session.open(_room,userId:'me',authToken:'token');
     expect(session.connected,false);expect(presence.connected,true);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('tinni.star/permissions'),(_) async=>true);
+    _permissions.granted = true;
     await session.open(_room,userId:'me',authToken:'token');
     expect(session.connected,true);expect(rtc.joins,1);
     await session.close();session.dispose();presence.dispose();
