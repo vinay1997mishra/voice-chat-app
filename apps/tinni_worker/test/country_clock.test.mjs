@@ -24,3 +24,11 @@ test('every configured country has a valid primary IANA zone',()=>{
  assert.ok(Object.keys(countryTimeZones).length>=247);
  for(const code of Object.keys(countryTimeZones)) assert.doesNotThrow(()=>countryTimeZone(code),code);
 });
+
+test('multi-zone countries default to capital-region time and allow explicit overrides',()=>{
+ assert.equal(countryTimeZone('AU'),'Australia/Sydney');
+ assert.equal(countryTimeZone('RU'),'Europe/Moscow');
+ assert.equal(countryTimeZone('CA'),'America/Toronto');
+ assert.equal(countryTimeZone('BR'),'America/Sao_Paulo');
+ assert.equal(countryTimeZone('AU','Australia/Perth'),'Australia/Perth');
+});
