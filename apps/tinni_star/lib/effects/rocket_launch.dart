@@ -46,7 +46,7 @@ class RocketModelPainter extends CustomPainter {
     }
     void engine(double x,double y,double width) {
       metal(Rect.fromLTWH(x-width/2,y,width,8),radius:2);
-      if(thrust<=0) return;
+      if(thrust<=0) { return; }
       final flame=Path()..moveTo(x-width/2,y+7)..quadraticBezierTo(x-width,y+20,x,y+22+42*thrust)
         ..quadraticBezierTo(x+width,y+20,x+width/2,y+7)..close();
       canvas.drawPath(flame,Paint()..shader=LinearGradient(
@@ -57,7 +57,8 @@ class RocketModelPainter extends CustomPainter {
     // Every new tier adds distinct hardware to the preceding design.
     if(tier>=3) {
       for(final x in [25.0,75.0]) {
-        metal(Rect.fromLTWH(x-7,49,14,61));
+        final boosterWidth=tier>=4?20.0:16.0;
+        metal(Rect.fromLTWH(x-boosterWidth/2,38,boosterWidth,72));
         final nose=Path()..moveTo(x-7,50)..quadraticBezierTo(x-5,35,x,28)..quadraticBezierTo(x+5,35,x+7,50)..close();
         canvas.drawPath(nose,Paint()..color=accent);
         engine(x,107,12);
@@ -69,7 +70,7 @@ class RocketModelPainter extends CustomPainter {
         engine(x,109,9);
       }
     }
-    metal(const Rect.fromLTWH(36,31,28,77),radius:10);
+    metal(tier>=4?const Rect.fromLTWH(32,28,36,80):const Rect.fromLTWH(36,31,28,77),radius:10);
     final nose=Path()..moveTo(36,40)..quadraticBezierTo(36,22,50,5)..quadraticBezierTo(64,22,64,40)..close();
     canvas.drawPath(nose,Paint()..shader=LinearGradient(colors:[
       const Color(0xFF010205),const Color(0xFF283446),const Color(0xFF03060A),
@@ -87,9 +88,25 @@ class RocketModelPainter extends CustomPainter {
       }
     }
     if(tier>=5) {
+      // Reinforced shoulder fuel pods and attached swept wings.
+      for(final x in [13.0,87.0]) {
+        metal(Rect.fromLTWH(x-6,54,12,48),radius:6);
+        engine(x,100,11);
+      }
+      final wings=Path()..moveTo(33,61)..lineTo(4,98)..lineTo(31,89)
+        ..moveTo(67,61)..lineTo(96,98)..lineTo(69,89);
+      canvas.drawPath(wings,Paint()..color=const Color(0xFF0A111D));
+      canvas.drawPath(wings,Paint()..style=PaintingStyle.stroke..strokeWidth=2..color=accent);
       metal(const Rect.fromLTWH(40,58,20,9),radius:2);
     }
     if(tier>=6) {
+      // A wide heavy engine deck, armour skirt and five main exhausts.
+      metal(const Rect.fromLTWH(24,94,52,17),radius:3);
+      for(final x in [32.0,41.0,50.0,59.0,68.0]) {
+        engine(x,110,9);
+      }
+      metal(const Rect.fromLTWH(28,66,9,27),radius:2);
+      metal(const Rect.fromLTWH(63,66,9,27),radius:2);
       for(final x in [40.0,60.0]) {
         canvas.drawLine(Offset(x,70),Offset(x,90),Paint()..color=accent..strokeWidth=2);
       }

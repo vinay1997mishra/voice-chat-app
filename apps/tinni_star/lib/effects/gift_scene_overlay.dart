@@ -140,7 +140,7 @@ class _GiftScenePainter extends CustomPainter {
       final pos=Offset(math.cos(a)*rr,math.sin(a)*rr*.6-r*.15);
       for(var petal=0;petal<9;petal++) {
         final angle=petal*2.4;
-        final p=pos+Offset(math.cos(angle),math.sin(angle))*petal*1.4;
+        final p=pos+Offset(math.cos(angle),math.sin(angle))*(petal*1.4);
         c.drawOval(Rect.fromCenter(center:p,width:r*.24-petal,height:r*.20-petal),
           Paint()..shader=RadialGradient(colors:[
             Color.lerp(const Color(0xFFFFB8C9),const Color(0xFFFF174C),petal/9)!,
@@ -174,7 +174,8 @@ class _GiftScenePainter extends CustomPainter {
   }
   void _couple(Canvas c,double r,bool wedding) {
     final meet=(t/.45).clamp(0.0,1.0);
-    final gap=r*(1-meet)*1.5+r*.22;
+    final kiss=((t-.6)/.25).clamp(0.0,1.0);
+    final gap=r*(1-meet)*1.5+r*(.22-.10*kiss);
     if(wedding) {
       c.drawArc(Rect.fromCircle(center:Offset.zero,radius:r*.95),math.pi,math.pi,false,
         Paint()..style=PaintingStyle.stroke..strokeWidth=8..color=const Color(0xFFE7C78B));
