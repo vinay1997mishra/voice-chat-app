@@ -1827,7 +1827,7 @@ export class AppDirectoryStore extends DurableObject {
       : null;
 
     const recentRooms = this.ctx.storage.sql.exec(
-      `SELECT rr.room_id, rr.last_entered_at,
+      `SELECT rr.room_id, rr.visited_at AS last_entered_at,
               r.title, r.owner_id, r.photo_data_url, r.theme_asset,
               r.seat_count, r.party_mode, r.locked,
               u.display_name AS owner_name
@@ -1835,7 +1835,7 @@ export class AppDirectoryStore extends DurableObject {
          LEFT JOIN app_rooms r ON r.id = rr.room_id
          LEFT JOIN app_users u ON u.user_id = r.owner_id
         WHERE rr.user_id = ?
-        ORDER BY rr.last_entered_at DESC
+        ORDER BY rr.visited_at DESC
         LIMIT 50`,
       userId,
     ).toArray().map((item) => ({
