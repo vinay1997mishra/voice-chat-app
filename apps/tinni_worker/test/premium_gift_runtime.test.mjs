@@ -10,6 +10,9 @@ test('all premium gifts charge authoritative prices and preserve exact recipient
  let balance=2000000000;
  for(const [id,gift] of Object.entries(premiumGiftCatalog)) {
   const ids=id==='cp-invite'?[b.user_id]:[b.user_id,c.user_id];
+  // Each case models a separate allowed send window, rather than a burst
+  // of 319 gifts that intentionally hits production anti-spam protection.
+  r.directory.ctx.storage.sql.exec('DELETE FROM security_action_windows WHERE user_id = ?',a.user_id);
   const result=await r.request('/gifts/send',a.token,{
    room_id:room.id,gift_id:id,gift_name:'client tampered name',quantity:1,
    unit_price:1,receiver_ids:ids,
