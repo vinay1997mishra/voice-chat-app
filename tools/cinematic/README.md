@@ -1,7 +1,20 @@
 # Original cinematic gift assets
 
-This pipeline renders animated 3D geometry with Blender and encodes silent H.264 movies for Android hardware playback. It does not animate flattened pictures or stream videos from Cloudflare.
+The `tinnistar` pipeline renders original animated 3D mesh geometry with Blender 4.5.2. Its catalog covers all 50 Normal, 20 CP and 249 Country gifts, plus the ten locked Rocket stages. Gift durations match the existing 5/6/7/8-second delivery policy; each Rocket launches vertically for nine seconds.
 
-The first three scenes are review prototypes, not a complete gift catalog or a released APK feature. Existing payments, recipient routing, Rocket rewards and room logic remain unchanged. Review the rendered movies before bundling them. Every catalog gift needs its own verified movie and poster before declaring the cinematic catalog complete.
+Rocket hardware stays integrated: graphite body, glossy nose, red-accented fins, blue glass, steel nozzles, white-hot/amber exhaust, attached tier-specific boosters and armour, launch smoke and falling wrapped gifts. Other scenes model curved rose petals, food, steam, jewels, architecture, creatures, vehicles, romantic couples and deformed textured flags. Country textures are downloaded from FlagCDN at build time; a missing texture fails its scene. Blender and source frames are not shipped in the APK.
 
-Initial scenes: integrated heavy black level-5 Rocket with staged 9-second vertical liftoff, individually modelled rose bouquet, and basmati bowl with moving volume steam. Geometry and materials are original project assets. Blender is a build tool and is not shipped in the APK.
+## Build and review
+
+```sh
+python3 tools/cinematic/catalog.py validate
+python3 -m unittest discover -s tools/cinematic -p 'test_*.py'
+python3 tools/cinematic/catalog.py render --shard 0 --shards 20
+python3 tools/cinematic/catalog.py pack --source FULL_COMMIT_SHA
+```
+
+The render workflow has 20 bounded shards. A reusable publish job runs in the same workflow on `tinnistar`, so publishing does not depend on a `workflow_run` file on `main`. It publishes an immutable `cinematic-<source SHA prefix>` prerelease containing the ZIP, SHA-256, manifest and contact sheets showing every poster. The preview branch contains the review sheets and manifest. Movies are silent H.264/yuv420p, 360×640 at 24 fps, capped to a total media budget of 38 MiB.
+
+Packaging fails for missing scenes, truncated movies, audio tracks, wrong codec/dimensions/frame count/duration, invalid posters or excessive size. APK installation verifies the pinned ZIP, every movie/poster hash, source fingerprint and all catalog IDs/durations before bundling. Runtime playback uses local hardware-decoded movies and retains the existing painted scene as a fallback.
+
+A successful encode proves media structure. Contact sheets and real Android playback still require visual/device review; never claim photorealism or device approval from codec checks alone. Gift recipients, Lucky Combo, economy, Rocket thresholds and server rewards remain authoritative.

@@ -1,41 +1,63 @@
-name: Publish Tinni movie previews
+name: Publish Tinni cinematic catalog
+
 on:
-  workflow_run:
-    workflows: [Tinni cinematic 3D prototypes]
-    types: [completed]
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+
 permissions:
   actions: read
   contents: write
+
 jobs:
   publish:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'tinnistar'
+    if: github.ref == 'refs/heads/tinnistar'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.source_sha }}
       - uses: actions/download-artifact@v4
         with:
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-          pattern: cinematic-*
-          path: /tmp/tinni-cinematic
-      - name: Publish direct MP4 previews and inspectable frames
+          pattern: cinematic-shard-*
+          merge-multiple: true
+          path: cinematic-preview
+      - name: Install media verification tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg python3-pil
+      - name: Verify every movie and package the complete catalog
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: python3 tools/cinematic/catalog.py pack --source "$SOURCE_SHA"
+      - name: Publish immutable movies and visual review sheets
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          PREVIEW_TAG="cinematic-preview-${SOURCE_RUN}"
+          set -euo pipefail
+          tag="cinematic-${SOURCE_SHA:0:12}"
+          branch="cinematic-review-${SOURCE_SHA:0:12}"
           mkdir -p tools/cinematic/previews
-          find /tmp/tinni-cinematic -name poster.png -print0 | while IFS= read -r -d '' POSTER; do
-            SCENE_NAME="$(basename "$(dirname "$POSTER")")"
-            if [[ "$SCENE_NAME" == cinematic-* ]]; then SCENE_NAME="${SCENE_NAME#cinematic-}"; fi
-            cp "$POSTER" "tools/cinematic/previews/${SCENE_NAME}.png"
-          done
+          cp cinematic-package/reviews/*.jpg tools/cinematic/previews/
+          cp cinematic-package/assets/manifest.json tools/cinematic/previews/manifest.json
+          cp cinematic-package/cinematic-assets.sha256 tools/cinematic/previews/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tools/cinematic/previews
-          git commit -m "Rendered cinematic movie review frames"
-          git push origin "HEAD:refs/heads/${PREVIEW_TAG}"
-          mapfile -d '' MOVIES < <(find /tmp/tinni-cinematic -name '*.mp4' -print0)
-          gh release create "$PREVIEW_TAG" "${MOVIES[@]}" --target "${{ github.event.workflow_run.head_sha }}" --prerelease --title "3D movie review prototypes" --notes "Original 3D render previews, not an APK release. Rocket 5: 9-second staged vertical launch. Rose bouquet and steaming food: 5 seconds each. Complete catalog and APK integration are pending visual verification."
+          if ! git diff --cached --quiet; then
+            git commit -m "Verified cinematic catalog review sheets"
+            if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git push origin "HEAD:refs/heads/$branch"
+            fi
+          fi
+          cat > /tmp/cinematic-notes.md <<'EOF'
+          Complete original 3D movie catalog: 50 Normal, 20 CP, 249 Country gifts and ten nine-second stealth-black Rocket stages. Silent H.264/yuv420p, 360x640 at 24 fps; original animated mesh geometry, true waving flag textures, staged launches and attached boosters. Every movie is checked for duration, frame count, codec, dimensions and SHA-256. Contact sheets show all 329 posters.
+          APK integration uses the pinned, verified bundle; this asset release is not itself an APK.
+          EOF
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" cinematic-package/cinematic-assets.zip cinematic-package/cinematic-assets.sha256 cinematic-package/assets/manifest.json cinematic-package/reviews/*.jpg --target "$SOURCE_SHA" --prerelease --title "Tinni cinematic catalog ${SOURCE_SHA:0:12}" --notes-file /tmp/cinematic-notes.md
+          fi
+          echo "Cinematic bundle: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"

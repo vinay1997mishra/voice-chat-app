@@ -1299,3 +1299,13 @@ Unless explicitly changed by Platform Owner:
 - Room comments use a bounded server history and idempotent HTTP fallback when WebSocket is unavailable; owner/admin clear scope is preserved. Room controls and voice credentials look up authorized locked/empty rooms directly instead of using public discovery filters.
 
 - The comment fallback only delivers comments created after the current room entry; past comments are not shown to new entrants. Late responses from a previous room cannot overwrite the current room's seat/member state.
+
+## Cinematic gift movies — October 5, 2026
+
+- The canonical cinematic source is `tools/cinematic` on `tinnistar`. Model all 50 Normal, 20 CP and 249 Country catalog entries, plus all ten Rocket stages, as original animated 3D geometry with individually identified movie/poster assets.
+- Preserve the stealth-black integrated Rocket, attached level-specific hardware, staged vertical nine-second liftoff, white-hot/amber flames, smoke and wrapped gift celebration. Preserve all ten server milestones, reward routing and historical-stage suppression.
+- Keep existing price-based gift hold durations: 5 seconds below 200K, 6 at 200K, 7 at 1M and 8 at 5M. Display one scene for the confirmed gift event, then deliver from screen center to each selected recipient exactly once.
+- Bundle verified silent H.264 movies for local Android playback. Pin source/ZIP/media hashes, validate complete catalog coverage before APK packaging, cap movie size, and keep a painted fallback for decoder failure or absent assets.
+- Respect effects toggles, screen disposal and app background lifecycle; stop/dispose video controllers and prevent stale completion callbacks from delivering a later gift.
+- Preserve all gift prices, recipient eligibility, Lucky quantities/combo rules, Host-only Diamonds, Lucky 10% value, normal 100% value, room/game controls and unrelated locked behavior.
+- Publish review sheets and the immutable movie bundle from the same `tinnistar` workflow after every scene verifies; source changes are never evidence that movies rendered or played correctly on a real device.
