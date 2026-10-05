@@ -13,6 +13,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
 import '../effects/effect_overlay.dart';
+import '../effects/rocket_launch.dart';
 import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
@@ -85,6 +86,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Map<String, ImageProvider> _avatarProviderCache =
       <String, ImageProvider>{};
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
+  final _rocketCompleted = ValueNotifier<int?>(null);
   Timer? _roomRecoveryTimer;
   bool _roomRecoveryRunning = false;
   static const List<int> _rocketStageTargets = <int>[
@@ -183,11 +185,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       };
     }
     try {
-      return await widget.state.discovery.roomGiftRanking(
+      final summary = await widget.state.discovery.roomGiftRanking(
         authToken: account.authToken,
         roomId: widget.room.id,
         period: 'day',
       );
+      if (mounted) {
+        final completed = completedRocketStages((summary['lifetime_total'] as num? ?? 0).toInt());
+        final previous = _rocketCompleted.value;
+        if (previous == null || completed > previous) _rocketCompleted.value = completed;
+      }
+      return summary;
     } catch (_) {
       // Keep the room UI usable if the ranking endpoint is temporarily
       // unavailable. The next scheduled refresh will try again.
@@ -752,6 +760,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _rocketCompleted.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
@@ -1016,6 +1025,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final event = widget.state.roomSession.latestGiftVisualEvent;
     if (event == null || event.id == _lastHandledGiftVisualEventId) return;
     _lastHandledGiftVisualEventId = event.id;
+    _refreshRoomSendingSummary();
     if (event.senderId == widget.state.auth.current?.userId) return;
 
     final gift = _giftDefinitionForVisualEvent(event);
@@ -5327,7 +5337,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   const Expanded(
                     flex: 3,
                     child: Center(
-                      child: _ReferenceRocketLogo(size: 110),
+                      child: RocketModel(level: currentIndex + 1, size: 70),
                     ),
                   ),
                   Padding(
@@ -5367,13 +5377,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                done
-                                    ? Icons.rocket_launch_rounded
-                                    : Icons.rocket_rounded,
-                                color: color,
-                                size: 26,
-                              ),
+                              RocketModel(level: index + 1, size: 24),
                               const SizedBox(height: 4),
                               Text(
                                 (index + 1).toString(),
@@ -9523,6 +9527,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
       ),
             ),
+            Positioned.fill(child: RocketLaunchOverlay(
+              completed: _rocketCompleted,
+              enabled: widget.state.roomControls.effectsEnabled && widget.state.roomControls.rocketDrawNoticeEnabled,
+            )),
             for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
               _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             Positioned.fill(
