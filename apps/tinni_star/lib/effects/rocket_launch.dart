@@ -131,6 +131,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
   Timer? _launchTimer;
   int? _seen;
   int? _level;
+  bool _holding=false;
   @override void initState() {
     super.initState();
     _seen=widget.completed.value;
@@ -150,7 +151,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     for(var level=previous+1;level<=next&&level<=10;level++) {
       _queue.add(level);
     }
-    if(_level==null) {
+    if(_level==null||_holding) {
       _next();
     }
   }
@@ -159,12 +160,18 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
       return;
     }
     _launchTimer?.cancel();
-    setState(()=>_level=_queue.isEmpty?null:_queue.removeAt(0));
-    if(_level!=null) {
+    if(_queue.isNotEmpty) {
+      setState(() {
+        _level=_queue.removeAt(0);
+        _holding=false;
+      });
       _flight.forward(from:0);
       _launchTimer=Timer(const Duration(seconds:9),_next);
-    } else {
-      _flight.stop();
+      return;
+    }
+    if(_level!=null) {
+      setState(()=>_holding=true);
+      _flight.repeat(period:const Duration(milliseconds:900));
     }
   }
   @override void dispose() {
@@ -178,22 +185,39 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
       animation:_flight,builder:(context,child)=>LayoutBuilder(builder:(context,c) {
         final t=_flight.value;
-        // Ignition 0-1.8s, slow liftoff to 4.5s, accelerating vertical ascent to 9s.
+        // The first nine seconds are the launch. After that the unlocked
+        // Rocket remains visible and keeps a live flame/hover animation.
         final ascent=((t-.20)/.80).clamp(0.0,1.0);
         final rise=ascent*ascent;
         final width=math.min(c.maxWidth*.30,140.0);
-        final y=c.maxHeight*.60-rise*(c.maxHeight+width*2);
-        final thrust=(t/.18).clamp(0.0,1.0)*(0.90+0.10*math.sin(t*180));
+        final launchY=c.maxHeight*.60-rise*(c.maxHeight*.48);
+        final holdY=c.maxHeight*.10+math.sin(t*math.pi*2)*4;
+        final y=_holding?holdY:launchY;
+        final launchThrust=(t/.18).clamp(0.0,1.0)*
+            (0.90+0.10*math.sin(t*180));
+        final holdThrust=0.92+0.08*math.sin(t*math.pi*2);
+        final thrust=_holding?holdThrust:launchThrust;
+        final atmosphereT=_holding?1.0:t;
         return Stack(key:const Key('rocket-nine-second-launch'),children:[
           Positioned.fill(child:CustomPaint(painter:_LaunchAtmosphere(
-            t:t,level:_level!,padY:c.maxHeight*.60+width*1.18))),
-          Positioned(top:36,left:16,right:16,child:Opacity(
-            opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
-              Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
-              const Text('100% • LAUNCH',style:TextStyle(color:Colors.white,fontSize:13,letterSpacing:4)),
-            ]))),
-          Positioned(top:y,left:(c.maxWidth-width)/2,child:RocketModel(
-            key:ValueKey('launch-rocket-$_level'),level:_level!,size:width,thrust:thrust)),
+            t:atmosphereT,level:_level!,padY:c.maxHeight*.60+width*1.18))),
+          if(!_holding)
+            Positioned(top:36,left:16,right:16,child:Opacity(
+              opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
+                Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
+                const Text('100% • LAUNCH',style:TextStyle(color:Colors.white,fontSize:13,letterSpacing:4)),
+              ]))),
+          Positioned(
+            key:_holding?const Key('rocket-holding-flame'):null,
+            top:y,
+            left:(c.maxWidth-width)/2,
+            child:RocketModel(
+              key:ValueKey('launch-rocket-$_level'),
+              level:_level!,
+              size:width,
+              thrust:thrust,
+            ),
+          ),
         ]);
       }),
     )));
