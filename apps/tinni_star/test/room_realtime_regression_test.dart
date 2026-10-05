@@ -72,12 +72,13 @@ void main() {
     expect(mini, contains('roomName,'));
   });
 
-  test('room presence retries immediately instead of waiting one minute', () {
+  test('room presence retries immediately and backs off prolonged outages to protect quota', () {
     final session =
         File('lib/room/active_room_session.dart').readAsStringSync();
     expect(session, contains('_presenceRecoveryTimer'));
+    expect(session, contains('int _presenceRecoveryDelaySeconds = 2;'));
     expect(session, contains('_schedulePresenceRecovery(immediate: true)'));
-    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 30)'));
+    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 120)'));
     expect(session, contains('await presence.join('));
     expect(session, contains("throw StateError('Room presence reconnect pending')"));
   });
