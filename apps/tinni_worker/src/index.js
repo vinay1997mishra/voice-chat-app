@@ -4869,6 +4869,7 @@ export default {
       if (!roomId || !Number.isInteger(seatIndex) || seatIndex < 0) {
         return json({ ok: false, error: "room_id and seat_index are required" }, 400);
       }
+      try {
       const directory = getAppDirectoryStore(env);
       const room = await directory.findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
@@ -4904,6 +4905,17 @@ export default {
         }));
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to take seat") }, 400);
+      }
+      } catch (error) {
+        const incidentId = crypto.randomUUID();
+        console.error("Tinni Star seat-take infrastructure failure", {
+          incident_id: incidentId, room_id: roomId,
+          user_id: String(appSession.user.user_id || ""),
+          error: String(error?.message || error || "unknown"),
+          stack: String(error?.stack || "").slice(0,2000),
+        });
+        return json({ ok: false, error: "Seat service is temporarily unavailable. Retry. Reference: " + incidentId,
+          incident_id: incidentId, retryable: true }, 503);
       }
     }
 

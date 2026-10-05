@@ -207,7 +207,7 @@ function rowToRoom(row) {
     online: Number(row.member_count || 0),
     active_user_exp: Math.max(
       0,
-      Number(row.active_user_exp ?? (Number(row.member_count || 0) * 500)),
+      Number(row.active_user_exp ?? (Number(row.member_count || 0) * 2000)),
     ),
     sending_exp: Math.max(0, Number(row.sending_exp || 0)),
     receiving_exp: Math.max(0, Number(row.receiving_exp || 0)),
@@ -215,11 +215,14 @@ function rowToRoom(row) {
       0,
       Number(
         row.room_experience ??
-          (Number(row.member_count || 0) * 500) +
+          (Number(row.member_count || 0) * 2000) +
             Number(row.sending_exp || 0) +
-            Number(row.receiving_exp || 0),
+            0,
       ),
     ),
+    sending_day_key: row.sending_day_key || null,
+    sending_time_zone: row.sending_time_zone || null,
+    sending_resets_at: Number(row.sending_resets_at || 0),
     rocket_launch_level: Number(row.rocket_launch_level || 0),
     rocket_launched_at: Number(row.rocket_launched_at || 0),
     rocket_priority_until: Number(row.rocket_priority_until || 0),
@@ -653,6 +656,10 @@ export class AppDirectoryStore extends DurableObject {
         owner_share_coins INTEGER NOT NULL DEFAULT 0,
         settled_at INTEGER,
         PRIMARY KEY(room_id, day_key)
+      );
+      CREATE TABLE IF NOT EXISTS room_gift_daily_clock (
+        room_id TEXT NOT NULL, day_key TEXT NOT NULL, time_zone TEXT NOT NULL,
+        resets_at INTEGER NOT NULL, PRIMARY KEY(room_id,day_key)
       );
       CREATE INDEX IF NOT EXISTS idx_room_gift_owner_daily_unsettled
         ON room_gift_owner_daily(settled_at, day_key);
@@ -5007,7 +5014,7 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       userId,
     ).toArray()[0];
-    return row ? rowToRoom(row) : null;
+    return row ? rowToRoom(this._roomDailyExperience(row)) : null;
   }
 
   findUserByExactPublicId(publicIdValue) {
@@ -5778,7 +5785,13 @@ export class AppDirectoryStore extends DurableObject {
     this._ensureRocketTables();
     const next=this.ctx.storage.sql.exec(
       "SELECT MIN(completed_at+7000) AS deadline FROM rocket_completions WHERE historical=0 AND settled_at IS NULL").toArray()[0]?.deadline;
-    this.ctx.storage.setAlarm(Math.min(this._nextIndiaMidnightUtc(now),next == null ? Infinity : Math.max(now+1,Number(next))));
+    const daily = this.ctx.storage.sql.exec(
+      `SELECT MIN(c.resets_at) AS deadline FROM room_gift_daily_clock c
+        JOIN room_gift_owner_daily d ON d.room_id=c.room_id AND d.day_key=c.day_key
+       WHERE d.settled_at IS NULL`).toArray()[0]?.deadline;
+    this.ctx.storage.setAlarm(Math.min(this._nextIndiaMidnightUtc(now),
+      next == null ? Infinity : Math.max(now+1,Number(next)),
+      daily == null ? Infinity : Math.max(now+1,Number(daily))));
   }
 
   settleRocketLaunches(now=Date.now()) {
@@ -6000,13 +6013,45 @@ export class AppDirectoryStore extends DurableObject {
     return nextShiftedMidnight - 19800000;
   }
 
+  _roomCountryDay(room, timestamp = Date.now()) {
+    const code = String(room?.country_code || "IN").toUpperCase();
+    const overrides = this._ownerSetting("country_time_zones", {}) || {};
+    return countryDay(code, timestamp, String(overrides[code] || ""));
+  }
+
+  _roomDailyExperience(row, timestamp = Date.now()) {
+    const day = this._roomCountryDay(row, timestamp);
+    const sending = Number(this.ctx.storage.sql.exec(
+      `SELECT COALESCE(SUM(COALESCE(l.social_value_coins,g.total_cost)),0) AS total
+         FROM gift_transactions g
+         LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+        WHERE g.room_id=? AND g.created_at>=? AND g.created_at<?`,
+      String(row.id),day.starts_at,day.resets_at,
+    ).toArray()[0]?.total || 0);
+    const memberCount = Number(this.ctx.storage.sql.exec(
+      `SELECT COUNT(*) AS total FROM app_user_presence WHERE room_id=?
+        AND (COALESCE(room_socket_connected,0)=1 OR last_seen>=?)`,
+      String(row.id),timestamp-90000,
+    ).toArray()[0]?.total || 0);
+    const active = memberCount * 2000;
+    return { ...row, member_count: memberCount, active_user_exp: active, sending_exp: sending,
+      receiving_exp: 0, room_experience: active + sending,
+      sending_day_key: day.day_key, sending_time_zone: day.time_zone,
+      sending_resets_at: day.resets_at };
+  }
+
   _recordRoomGiftSending(room, totalCoins, timestamp = Date.now()) {
     const coins = Math.max(0, Math.floor(Number(totalCoins || 0)));
     if (!room || coins <= 0) return;
     const roomId = String(room.id || "").trim();
     const ownerId = String(room.owner_id || "").trim();
     if (!roomId || !ownerId) return;
-    const dayKey = this._indiaGiftDayKey(timestamp);
+    const day = this._roomCountryDay(room, timestamp);
+    const dayKey = day.day_key;
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO room_gift_daily_clock(room_id,day_key,time_zone,resets_at) VALUES(?,?,?,?)",
+      roomId, dayKey, day.time_zone, day.resets_at,
+    );
     this.ctx.storage.sql.exec(
       `INSERT INTO room_gift_owner_daily
         (room_id,owner_id,day_key,gift_coins,owner_share_coins,settled_at)
@@ -6020,11 +6065,18 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   settleRoomGiftOwnerShares(timestamp = Date.now()) {
-    const today = this._indiaGiftDayKey(timestamp);
+    return this.ctx.storage.transactionSync(() => this._settleRoomGiftOwnerShares(timestamp));
+  }
+
+  _settleRoomGiftOwnerShares(timestamp) {
+    // Rows created before country clocks were installed retain their original
+    // India settlement boundary; new rows store the exact local deadline.
     const rows = this.ctx.storage.sql.exec(
-      "SELECT room_id,owner_id,day_key,gift_coins FROM room_gift_owner_daily WHERE settled_at IS NULL AND day_key < ? ORDER BY day_key ASC",
-      today,
-    ).toArray();
+      `SELECT d.room_id,d.owner_id,d.day_key,d.gift_coins,c.resets_at
+         FROM room_gift_owner_daily d
+         LEFT JOIN room_gift_daily_clock c ON c.room_id=d.room_id AND c.day_key=d.day_key
+        WHERE d.settled_at IS NULL ORDER BY d.day_key ASC`,
+    ).toArray().filter(row => Number(row.resets_at ?? (Date.parse(row.day_key+"T00:00:00Z")+86400000-19800000)) <= timestamp);
     let settled = 0;
     let credited = 0;
     for (const row of rows) {
@@ -10949,7 +11001,8 @@ export class AppDirectoryStore extends DurableObject {
     this._ensureRocketTables();
     this._pruneRoomThemes();
     const onlineCutoff = Date.now() - 90000;
-    return this.ctx.storage.sql.exec(
+    const now = Date.now();
+    const rows = this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
@@ -10988,7 +11041,11 @@ export class AppDirectoryStore extends DurableObject {
                  r.created_at DESC
         LIMIT 500`,
       Date.now(),onlineCutoff,
-    ).toArray().map(rowToRoom);
+    ).toArray().map(row => rowToRoom(this._roomDailyExperience(row, now)));
+    return rows.sort((a,b) => b.rocket_launch_level-a.rocket_launch_level
+      || (a.rocket_launch_level > 0 && b.rocket_launch_level > 0 ? b.rocket_launched_at-a.rocket_launched_at : 0)
+      || b.sending_exp-a.sending_exp || b.member_count-a.member_count
+      || b.created_at-a.created_at);
   }
 
   _pruneRoomThemes(now = Date.now()) {
