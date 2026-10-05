@@ -39,7 +39,7 @@ class RocketModelPainter extends CustomPainter {
     void metal(Rect r,{double radius=4}) {
       canvas.drawRRect(RRect.fromRectAndRadius(r,Radius.circular(radius)),
         Paint()..shader=const LinearGradient(colors:[
-          Color(0xFF28354A),Color(0xFFEDF6FF),Color(0xFF768AA6),Color(0xFF142033),
+          Color(0xFF010205),Color(0xFF303946),Color(0xFF080C12),Color(0xFF000103),
         ],stops:[0,.35,.62,1]).createShader(r));
       canvas.drawRRect(RRect.fromRectAndRadius(r,Radius.circular(radius)),
         Paint()..style=PaintingStyle.stroke..strokeWidth=.8..color=accent);
@@ -47,12 +47,12 @@ class RocketModelPainter extends CustomPainter {
     void engine(double x,double y,double width) {
       metal(Rect.fromLTWH(x-width/2,y,width,8),radius:2);
       if(thrust<=0) return;
-      final flame=Path()..moveTo(x-width/2,y+7)..quadraticBezierTo(x-width,y+20,x,y+22+26*thrust)
+      final flame=Path()..moveTo(x-width/2,y+7)..quadraticBezierTo(x-width,y+20,x,y+22+42*thrust)
         ..quadraticBezierTo(x+width,y+20,x+width/2,y+7)..close();
       canvas.drawPath(flame,Paint()..shader=LinearGradient(
         begin:Alignment.topCenter,end:Alignment.bottomCenter,
         colors:[Colors.white,accent,const Color(0xFFFFA02F),const Color(0x00FF4920)],
-      ).createShader(Rect.fromLTWH(x-width,y,2*width,55)));
+      ).createShader(Rect.fromLTWH(x-width,y,2*width,78)));
     }
     // Every new tier adds distinct hardware to the preceding design.
     if(tier>=3) {
@@ -72,7 +72,7 @@ class RocketModelPainter extends CustomPainter {
     metal(const Rect.fromLTWH(36,31,28,77),radius:10);
     final nose=Path()..moveTo(36,40)..quadraticBezierTo(36,22,50,5)..quadraticBezierTo(64,22,64,40)..close();
     canvas.drawPath(nose,Paint()..shader=LinearGradient(colors:[
-      const Color(0xFF17283E),accent,const Color(0xFF40546F),
+      const Color(0xFF010205),const Color(0xFF283446),const Color(0xFF03060A),
     ]).createShader(const Rect.fromLTWH(36,5,28,35)));
     canvas.drawCircle(const Offset(50,48),6,Paint()..color=const Color(0xFF092840));
     canvas.drawCircle(const Offset(49,46),3,Paint()..color=accent);
@@ -110,7 +110,7 @@ class RocketModelPainter extends CustomPainter {
       metal(const Rect.fromLTWH(43,99,14,8),radius:1);
     }
     final label=TextPainter(text:TextSpan(text:'$tier',style:const TextStyle(
-      fontSize:12,color:Color(0xFF091525),fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
+      fontSize:12,color:Color(0xFFFFD479),fontWeight:FontWeight.w900)),textDirection:TextDirection.ltr)..layout();
     label.paint(canvas,Offset(50-label.width/2,76));
     engine(50,106,22);
     canvas.restore();
@@ -142,91 +142,9 @@ class _RocketFlightMotion {
 }
 
 _RocketFlightMotion _rocketFlightMotion(int level,double t) {
-  final tier=level.clamp(1,10);
-  final wave=math.sin(t*math.pi*2);
-  final wave2=math.sin(t*math.pi*4);
-  switch(tier) {
-    case 1:
-      return _RocketFlightMotion(
-        x:0,
-        yFactor:t,
-        rotation:0,
-        scale:1,
-        thrustBoost:1,
-      );
-    case 2:
-      return _RocketFlightMotion(
-        x:wave*8,
-        yFactor:Curves.easeIn.transform(t),
-        rotation:wave*.015,
-        scale:1+.02*math.sin(t*math.pi),
-        thrustBoost:1.04,
-      );
-    case 3:
-      return _RocketFlightMotion(
-        x:wave*16,
-        yFactor:Curves.easeInCubic.transform(t),
-        rotation:wave*.035,
-        scale:1+.03*math.sin(t*math.pi*2),
-        thrustBoost:1.08,
-      );
-    case 4:
-      return _RocketFlightMotion(
-        x:wave2*12,
-        yFactor:Curves.fastOutSlowIn.transform(t),
-        rotation:wave2*.045,
-        scale:1+.04*math.sin(t*math.pi*3),
-        thrustBoost:1.12,
-      );
-    case 5:
-      return _RocketFlightMotion(
-        x:(wave+wave2*.45)*22,
-        yFactor:Curves.easeInExpo.transform(t),
-        rotation:wave*.07,
-        scale:1+.05*math.sin(t*math.pi*4),
-        thrustBoost:1.18,
-      );
-    case 6:
-      return _RocketFlightMotion(
-        x:wave*25,
-        yFactor:Curves.easeInQuint.transform(t),
-        rotation:t*math.pi*.45,
-        scale:1+.04*wave.abs(),
-        thrustBoost:1.24,
-      );
-    case 7:
-      return _RocketFlightMotion(
-        x:wave2*18+math.sin(t*math.pi*8)*5,
-        yFactor:Curves.easeInCirc.transform(t),
-        rotation:wave2*.09,
-        scale:1+.06*math.sin(t*math.pi).abs(),
-        thrustBoost:1.30,
-      );
-    case 8:
-      return _RocketFlightMotion(
-        x:math.sin(t*math.pi*3)*32,
-        yFactor:Curves.easeInOutCubicEmphasized.transform(t),
-        rotation:math.sin(t*math.pi*3)*.11,
-        scale:1+.07*math.sin(t*math.pi*2).abs(),
-        thrustBoost:1.38,
-      );
-    case 9:
-      return _RocketFlightMotion(
-        x:(wave*28)+(wave2*14),
-        yFactor:Curves.easeInExpo.transform(t),
-        rotation:(wave+wave2*.4)*.13,
-        scale:1+.08*math.sin(t*math.pi*3).abs(),
-        thrustBoost:1.48,
-      );
-    default:
-      return _RocketFlightMotion(
-        x:math.sin(t*math.pi*4)*36*(1-t*.45),
-        yFactor:Curves.easeInQuint.transform(t),
-        rotation:t*math.pi*2+wave*.12,
-        scale:1+.10*math.sin(t*math.pi*4).abs(),
-        thrustBoost:1.60,
-      );
-  }
+  final ascent=((t-.20)/.80).clamp(0.0,1.0);
+  return _RocketFlightMotion(x:0,yFactor:ascent*ascent,rotation:0,scale:1,
+    thrustBoost:1+level*.06);
 }
 
 class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTickerProviderStateMixin {
@@ -288,7 +206,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
         final width=math.min(c.maxWidth*.30,140.0);
         final motion=_rocketFlightMotion(_level!,t);
         final y=c.maxHeight*.60-
-            motion.yFactor*(c.maxHeight*.48);
+            motion.yFactor*(c.maxHeight+width*2);
         final baseLeft=(c.maxWidth-width)/2;
         final launchThrust=(t/.18).clamp(0.0,1.0)*
             (0.90+0.10*math.sin(t*180))*motion.thrustBoost;
@@ -298,7 +216,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
           Positioned(top:36,left:16,right:16,child:Opacity(
             opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
               Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
-              Text('LEVEL $_level • UNIQUE LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
+              Text('100% • VERTICAL LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
             ]))),
           Positioned(
             top:y,
@@ -341,6 +259,18 @@ class _LaunchAtmosphere extends CustomPainter {
         Color.fromRGBO(223,233,246,.40*intensity),const Color(0x008899AA),
       ]).createShader(Rect.fromCircle(center:Offset(x,y),radius:r));
       canvas.drawCircle(Offset(x,y),r,smoke);
+    }
+    const boxColors=<Color>[Color(0xFFEF5CAA),Color(0xFF69D5FF),Color(0xFFFFD569),Color(0xFF8CF4BD),Color(0xFFA691FF)];
+    for(var i=0;i<20+level*4;i++) {
+      final phase=(t*1.8+i/(20+level*4))%1;
+      final x=cx+math.sin(i*2.4)*size.width*.43;
+      final y=-30+phase*(size.height+70);
+      canvas.save();canvas.translate(x,y);canvas.rotate(t*8+i);
+      final rect=Rect.fromCenter(center:Offset.zero,width:10.0+i%5,height:10.0+i%5);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect,const Radius.circular(2)),Paint()..color=boxColors[i%boxColors.length].withValues(alpha:intensity));
+      canvas.drawLine(Offset(0,rect.top),Offset(0,rect.bottom),Paint()..color=Colors.white.withValues(alpha:intensity)..strokeWidth=2);
+      canvas.drawLine(Offset(rect.left,0),Offset(rect.right,0),Paint()..color=Colors.white.withValues(alpha:intensity)..strokeWidth=2);
+      canvas.restore();
     }
     final glow=Rect.fromCenter(center:Offset(cx,padY),width:160+level*8,height:85);
     canvas.drawOval(glow,Paint()..shader=RadialGradient(colors:[

@@ -12,6 +12,8 @@ import 'package:share_plus/share_plus.dart';
 import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../economy/economy.dart';
+import '../economy/premium_gift_catalog.dart';
+import '../effects/gift_scene_overlay.dart';
 import '../effects/effect_overlay.dart';
 import '../effects/rocket_launch.dart';
 import '../identity/owner_tag.dart';
@@ -43,6 +45,7 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
+  final _giftScenes = GiftSceneQueue();
   final ScrollController _roomMessageScrollController = ScrollController();
   final ScrollController _rocketLevelScrollController = ScrollController();
   int _lastRoomMessageCount = 0;
@@ -764,6 +767,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void dispose() {
     _rocketCompleted.dispose();
     _rocketLevelScrollController.dispose();
+    _giftScenes.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
@@ -1010,6 +1014,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     RoomGiftVisualEvent event,
   ) {
     for (final gift in <GiftDefinition>[
+      ...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,...PremiumGiftCatalog.countries,
       ...GiftService.catalog,
       ...GiftService.luckyCatalog,
     ]) {
@@ -1051,19 +1056,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
 
-    _seatGiftEffectTimer?.cancel();
-    _seatGiftEffect = gift;
-    _seatGiftEffectReceiverIds
-      ..clear()
-      ..addAll(event.receiverIds);
-    _seatGiftEffectSequence++;
-    _seatGiftEffectTimer = Timer(const Duration(milliseconds: 2100), () {
-      if (!mounted) return;
-      setState(() {
-        _seatGiftEffect = null;
-        _seatGiftEffectReceiverIds.clear();
-      });
-    });
+    _triggerSeatGiftEffect(gift, event.receiverIds);
   }
 
   void _syncEntranceQueue() {
@@ -2707,6 +2700,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     GiftDefinition gift,
     List<String> receiverIds,
   ) {
+    if (widget.state.roomControls.effectsEnabled) {
+      _giftScenes.add(GiftSceneEvent(gift:gift,recipients:receiverIds));
+    }
+  }
+
+  void _deliverGiftScene(GiftSceneEvent event) {
+    final gift=event.gift;
+    final receiverIds=event.recipients;
     _seatGiftEffectTimer?.cancel();
     setState(() {
       _seatGiftEffect = gift;
@@ -3549,87 +3550,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     ];
 
     final roomGifts = <GiftDefinition>[
-      const GiftDefinition(
-        id: 'gold-dragon',
-        name: 'Golden Dragon',
-        price: 5000,
-        effectKind: 'mp4',
-      ),
-      const GiftDefinition(
-        id: 'royal-crown',
-        name: 'Royal Crown',
-        price: 2500,
-        effectKind: 'pag',
-      ),
-      const GiftDefinition(
-        id: 'star-castle',
-        name: 'Star Castle',
-        price: 12000,
-        effectKind: 'mp4',
-      ),
-      const GiftDefinition(
-        id: 'cp-heart',
-        name: 'My Heart',
-        price: 44444,
-        effectKind: 'svga',
-        emoji: '💗',
-      ),
-      const GiftDefinition(
-        id: 'cp-invite',
-        name: 'CP Invite',
-        price: 2222222,
-        effectKind: 'svga',
-        emoji: '💌',
-      ),
-      GiftDefinition(
-        id: 'country-pride',
-        name: 'Country Pride',
-        price: 100,
-        effectKind: 'svga',
-        emoji: (widget.state.auth.current?.flagEmoji.trim().isNotEmpty ?? false)
-            ? widget.state.auth.current!.flagEmoji
-            : '🏳️',
-      ),
-      ...GiftService.catalog,
-      ...GiftService.luckyCatalog,
+      ...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,
+      ...PremiumGiftCatalog.countries,...GiftService.luckyCatalog,
     ];
-
     List<GiftDefinition> visibleGifts() {
-      switch (giftCategory) {
-        case 'Lucky':
-          return roomGifts.where((gift) => gift.lucky).toList();
-        case 'Normal':
-          return roomGifts
-              .where((gift) => gift.id == 'rose' || gift.id == 'crystal')
-              .toList();
-        case 'Luxury':
-          return roomGifts
-              .where(
-                (gift) =>
-                    gift.id == 'gold-dragon' ||
-                    gift.id == 'royal-crown' ||
-                    gift.id == 'star-castle' ||
-                    gift.id == 'crown',
-              )
-              .toList();
-        case 'CP':
-          return roomGifts
-              .where(
-                (gift) =>
-                    gift.id == 'cp-heart' ||
-                    gift.id == 'cp-invite',
-              )
-              .toList();
-        case 'Country':
-          return roomGifts
-              .where((gift) => gift.id == 'country-pride')
-              .toList();
-        default:
-          return roomGifts
-              .where((gift) =>
-                  gift.id == 'rose' ||
-                  gift.id == 'crystal')
-              .toList();
+      switch(giftCategory) {
+        case 'Lucky': return GiftService.luckyCatalog;
+        case 'CP': return PremiumGiftCatalog.cp;
+        case 'Country': return PremiumGiftCatalog.countries;
+        case 'Luxury': return PremiumGiftCatalog.normal.where((gift)=>gift.price>=1000000).toList();
+        default: return PremiumGiftCatalog.normal;
       }
     }
 
@@ -9601,6 +9531,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               completed: _rocketCompleted,
               enabled: widget.state.roomControls.effectsEnabled && widget.state.roomControls.rocketDrawNoticeEnabled,
             )),
+            Positioned.fill(child:GiftSceneOverlay(queue:_giftScenes,onDelivered:_deliverGiftScene)),
             for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
               _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             Positioned.fill(

@@ -1,3 +1,4 @@
+import { premiumGiftCatalog } from './premium_gift_catalog.js';
 import { DurableObject } from "cloudflare:workers";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
@@ -6271,7 +6272,7 @@ export class AppDirectoryStore extends DurableObject {
       giftName = cleanText(catalogRow.name, 80);
       unitPrice = Number(giftData.coin_price ?? giftData.price ?? 0);
     } else {
-      const builtIn = {
+      const builtIn = premiumGiftCatalog[giftId] || {
         rose: { name: "Rose", price: 100, category: "normal" },
         crystal: { name: "Crystal", price: 500, category: "normal" },
         crown: { name: "Crown", price: 1000, category: "luxury" },
