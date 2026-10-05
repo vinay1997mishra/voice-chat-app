@@ -1589,6 +1589,41 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
 
+    const animatedShopFrames = [
+      ['shop-frame-mint-orbit','Mint Orbit',10000,'simple'],
+      ['shop-frame-sky-halo','Sky Halo',20000,'simple'],
+      ['shop-frame-pearl-glow','Pearl Glow',30000,'simple'],
+      ['shop-frame-neon-pulse','Neon Pulse',50000,'simple'],
+      ['shop-frame-mono-arc','Mono Arc',75000,'simple'],
+      ['shop-frame-laughing-smile','Laughing Smile',100000,'funny'],
+      ['shop-frame-cool-glasses','Cool Glasses',150000,'funny'],
+      ['shop-frame-cheeky-monkey','Cheeky Monkey',200000,'funny'],
+      ['shop-frame-party-panda','Party Panda',250000,'funny'],
+      ['shop-frame-confetti-pop','Confetti Pop',300000,'funny'],
+      ['shop-frame-blush-heart','Blush Heart',400000,'love'],
+      ['shop-frame-scarlet-rose','Scarlet Rose',500000,'love'],
+      ['shop-frame-love-rings','Love Rings',750000,'love'],
+      ['shop-frame-love-wings','Love Wings',1000000,'love'],
+      ['shop-frame-couple-kiss','Couple Kiss',1500000,'love'],
+      ['shop-frame-wedding-bells','Wedding Bells',2000000,'love'],
+      ['shop-frame-butterfly-love','Butterfly Love',2500000,'love'],
+      ['shop-frame-forever-heart','Forever Heart',3000000,'love'],
+      ['shop-frame-gold-crown','Gold Crown',4000000,'royal'],
+      ['shop-frame-diamond-ice','Diamond Ice',4500000,'royal'],
+      ['shop-frame-phoenix-fire','Phoenix Fire',5000000,'royal'],
+      ['shop-frame-galaxy-orbit','Galaxy Orbit',6000000,'royal'],
+      ['shop-frame-ocean-waves','Ocean Waves',6500000,'nature'],
+      ['shop-frame-nature-bloom','Nature Bloom',7000000,'nature'],
+      ['shop-frame-india-pride','India Pride',8000000,'royal'],
+    ];
+    for (let index=0;index<animatedShopFrames.length;index++) {
+      const [id,name,coins,category]=animatedShopFrames[index];
+      this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO owner_catalog
+        (id,kind,name,data_json,enabled,created_at,updated_at) VALUES(?,'frame',?,?,1,?,?)`,
+        id,name,JSON.stringify({coin_price:coins,duration_days:0,order:101+index,
+          effect_style:id,animated:true,category,asset_url:"",preview_mode:"canvas"}),Date.now(),Date.now());
+    }
+
   }
 
   _ensureEconomyMigrations() {

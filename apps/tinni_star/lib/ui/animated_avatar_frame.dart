@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'animated_shop_frames.dart';
 
 class AnimatedAvatarFrame extends StatefulWidget {
   const AnimatedAvatarFrame({
@@ -96,6 +97,11 @@ class _AvatarFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final shopTheme = animatedShopFrame(id);
+    if (shopTheme != null) {
+      _paintShopFrame(canvas, size, shopTheme);
+      return;
+    }
     if (id.startsWith('rocket-l')) {
       _paintRocketFrame(canvas, size);
       return;
@@ -157,6 +163,99 @@ class _AvatarFramePainter extends CustomPainter {
     }
   }
 
+
+
+  void _paintShopFrame(Canvas canvas, Size size, ShopFrameTheme theme) {
+    final center = size.center(Offset.zero);
+    final radius = size.width * .38;
+    final phase = t * math.pi * 2;
+    final variant = theme.variant;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final pulse = .92 + .08 * math.sin(phase * (1 + variant % 3));
+    final colors = [theme.primary, theme.accent, theme.primary.withValues(alpha: .25), theme.primary];
+    final shader = SweepGradient(colors: colors, transform: GradientRotation(phase * (variant.isEven ? 1 : -1))).createShader(rect);
+    canvas.drawCircle(center, radius, Paint()
+      ..style = PaintingStyle.stroke..strokeWidth = size.width * .075 * pulse
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * .035)
+      ..shader = shader);
+    final ring = Paint()..style = PaintingStyle.stroke..strokeWidth = size.width * .032..shader = shader;
+    canvas.drawCircle(center, radius * pulse, ring);
+    if (theme.category == 'simple') {
+      final count = 2 + variant;
+      for (var i = 0; i < count; i++) {
+        final a = phase * (1 + variant * .15) + i * math.pi * 2 / count;
+        canvas.drawArc(Rect.fromCircle(center: center, radius: radius * (1.06 + .015 * i)),
+          a, math.pi / (3 + variant), false, Paint()..color = theme.accent..style = PaintingStyle.stroke..strokeWidth = size.width * .015);
+        final dot = center + Offset(math.cos(a), math.sin(a)) * radius;
+        canvas.drawCircle(dot, size.width * (.012 + variant * .002), Paint()..color = theme.accent);
+      }
+      return;
+    }
+    final love = theme.category == 'love';
+    final funny = theme.category == 'funny';
+    final count = love ? 4 + variant % 3 : funny ? 3 + variant % 3 : 6;
+    for (var i = 0; i < count; i++) {
+      final a = i * math.pi * 2 / count + (funny ? math.sin(phase) * .13 : phase * .12);
+      final drift = love ? .03 * math.sin(phase * 2 + i) : .07 * math.sin(phase * 3 + i);
+      final p = center + Offset(math.cos(a), math.sin(a)) * radius * (1.07 + drift);
+      canvas.save();
+      canvas.translate(p.dx, p.dy);
+      canvas.rotate((funny ? .18 : .07) * math.sin(phase * 2 + i));
+      final painter = TextPainter(
+        text: TextSpan(text: theme.motif, style: TextStyle(fontSize: size.width * (funny ? .14 : .12))),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+      canvas.restore();
+    }
+    final particles = love ? 8 : 10 + variant % 5;
+    for (var i = 0; i < particles; i++) {
+      final travel = (t + i / particles) % 1;
+      final a = i * math.pi * 2 / particles + phase * .16;
+      final p = center + Offset(math.cos(a), math.sin(a)) * radius * (1.03 + travel * .25);
+      final color = (i.isEven ? theme.primary : theme.accent).withValues(alpha: 1 - travel);
+      if (love) {
+        final h = size.width * .025 * (1 - travel * .5);
+        final heart = Path()..moveTo(p.dx, p.dy + h)
+          ..cubicTo(p.dx - h * 2, p.dy - h * .2, p.dx - h, p.dy - h * 1.4, p.dx, p.dy - h * .4)
+          ..cubicTo(p.dx + h, p.dy - h * 1.4, p.dx + h * 2, p.dy - h * .2, p.dx, p.dy + h)..close();
+        canvas.drawPath(heart, Paint()..color = color);
+      } else if (funny) {
+        canvas.save(); canvas.translate(p.dx, p.dy); canvas.rotate(phase + i);
+        canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: size.width * .025, height: size.width * .055), Paint()..color = color);
+        canvas.restore();
+      } else {
+        canvas.drawCircle(p, size.width * .015 * (1 - travel), Paint()..color = color);
+      }
+    }
+
+    if (variant >= 18) {
+      for (var layer = 0; layer < 2 + (variant - 18) ~/ 3; layer++) {
+        final outerRadius = radius * (1.08 + layer * .055);
+        canvas.drawArc(Rect.fromCircle(center: center, radius: outerRadius),
+          (layer.isEven ? phase : -phase) + layer, math.pi * 1.45, false,
+          Paint()..style = PaintingStyle.stroke..strokeWidth = size.width * .012
+            ..color = (layer.isEven ? theme.primary : theme.accent).withValues(alpha: .7));
+      }
+      for (final side in [-1.0, 1.0]) {
+        final wing = Path()
+          ..moveTo(center.dx + side * radius, center.dy + radius * .6)
+          ..quadraticBezierTo(center.dx + side * radius * (1.38 + .06 * math.sin(phase)),
+            center.dy, center.dx + side * radius * .8, center.dy - radius * .7);
+        canvas.drawPath(wing, Paint()..style = PaintingStyle.stroke..strokeWidth = size.width * .038
+          ..color = theme.accent.withValues(alpha: .75));
+      }
+    }
+
+    if (theme.category == 'royal') {
+      final crown = Path()..moveTo(center.dx - radius * .35, center.dy - radius * 1.04)
+        ..lineTo(center.dx - radius * .2, center.dy - radius * 1.27)
+        ..lineTo(center.dx, center.dy - radius * 1.10)
+        ..lineTo(center.dx + radius * .2, center.dy - radius * 1.27)
+        ..lineTo(center.dx + radius * .35, center.dy - radius * 1.04)..close();
+      canvas.drawPath(crown, Paint()..color = theme.accent);
+    }
+  }
 
   void _paintRocketFrame(Canvas canvas, Size size) {
     final match = RegExp(r'^rocket-l(\d+)-(top|member)(\d+)$').firstMatch(id);

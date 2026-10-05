@@ -364,7 +364,7 @@ class _StoreScreenState extends State<StoreScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.id.startsWith('rocket-l'))
+              if ((item.id.startsWith('rocket-l') || item.id.startsWith('shop-frame-')))
                 AnimatedAvatarFrame(frameId: item.id, size: 160, child: const Icon(Icons.person, size: 82, color: Colors.white))
               else if (PremiumEffectStyle.isPremiumId(item.id))
                 PremiumEffectPreview(
@@ -660,7 +660,7 @@ class _StoreScreenState extends State<StoreScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    if (item.id.startsWith('rocket-l'))
+                                    if ((item.id.startsWith('rocket-l') || item.id.startsWith('shop-frame-')))
                                       AnimatedAvatarFrame(frameId: item.id, size: 52, child: const Icon(Icons.person, color: Colors.white))
                                     else if (PremiumEffectStyle.isPremiumId(item.id))
                                       PremiumEffectThumbnail(
