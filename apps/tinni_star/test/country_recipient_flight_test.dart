@@ -16,10 +16,10 @@ void main() {
       runtime: FunctionPackRuntime(signatureVerifier: const DevelopmentSignatureVerifier()),
       roomPresenceFallbackTimerEnabled: false,
     );
-    final account = attachTestAccount(state);
+    final account = attachTestAccount(state, userId: '94000021');
     final now = DateTime.now();
     state.roomPresence.members.add(RoomPresenceMember(
-      userId: '92000002', displayName: 'Receiver off mic',
+      userId: '94000022', displayName: 'Receiver off mic',
       joinedAt: now, lastSeen: now,
     ));
     state.discovery.rooms.add(RoomSummary(
@@ -35,19 +35,20 @@ void main() {
     await tester.tap(roomCard);
     await tester.pumpAndSettle();
 
+    expect(tester.getSize(find.byKey(const Key('room-message-list'))).height, greaterThan(0));
     final overlay = tester.widget<GiftSceneOverlay>(find.byType(GiftSceneOverlay));
     overlay.queue.add(GiftSceneEvent(
-      gift: PremiumGiftCatalog.find('flag-in')!, recipients: ['92000002'],
+      gift: PremiumGiftCatalog.find('flag-in')!, recipients: ['94000022'],
     ));
     await tester.pump();
-    expect(find.byKey(const Key('country-recipient-landing-92000002')), findsNothing);
+    expect(find.byKey(const Key('country-recipient-landing-94000022')), findsNothing);
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(milliseconds: 16));
-    final flight = find.byKey(const Key('country-flag-flight-92000002'));
-    final target = find.byKey(const Key('country-recipient-dp-92000002'));
+    final flight = find.byKey(const Key('country-flag-flight-94000022'));
+    final target = find.byKey(const Key('country-recipient-dp-94000022'));
     expect(flight, findsOneWidget);
     expect(target, findsOneWidget);
-    expect(find.byKey(const Key('country-recipient-landing-91000001')), findsNothing);
+    expect(find.byKey(const Key('country-recipient-landing-94000021')), findsNothing);
     final start = tester.getRect(flight);
     final startDistance = (start.center - tester.getCenter(target)).distance;
     await tester.pump(const Duration(milliseconds: 800));
@@ -56,7 +57,8 @@ void main() {
     expect((approaching.center - tester.getCenter(target)).distance, lessThan(startDistance));
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(seconds: 2));
-    expect(find.byKey(const Key('country-recipient-landing-92000002')), findsNothing);
+    expect(find.byKey(const Key('country-recipient-landing-94000022')), findsNothing);
+    expect(tester.getSize(find.byKey(const Key('room-message-list'))).height, greaterThan(0));
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });

@@ -2850,7 +2850,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (gift == null || !gift.id.startsWith('flag-') ||
         !widget.state.roomControls.effectsEnabled ||
         !widget.state.roomControls.giftEffectsEnabled) {
-      return const SizedBox.shrink();
+      return const Positioned(left: 0, top: 0, child: SizedBox.shrink());
     }
     final seated = <String>{...widget.state.roomControls.seatUsers.values};
     final members = widget.state.roomSession.liveMembers;
@@ -2860,7 +2860,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final account = widget.state.auth.current;
     if (controller.mySeat != null && account != null) seated.add(account.userId);
     final receivers = _seatGiftEffectReceiverIds.where((id) => !seated.contains(id)).toList();
-    if (receivers.isEmpty) return const SizedBox.shrink();
+    if (receivers.isEmpty) return const Positioned(left: 0, top: 0, child: SizedBox.shrink());
     return Positioned(
       left: 12, right: 12, bottom: 148, height: 86,
       child: IgnorePointer(child: SingleChildScrollView(
