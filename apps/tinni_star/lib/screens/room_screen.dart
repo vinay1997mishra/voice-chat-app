@@ -44,6 +44,7 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final chat = TextEditingController();
   final ScrollController _roomMessageScrollController = ScrollController();
+  final ScrollController _rocketLevelScrollController = ScrollController();
   int _lastRoomMessageCount = 0;
   int? _lastCommentsClearVersion;
   String? _roomLockPassword;
@@ -761,6 +762,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _rocketCompleted.dispose();
+    _rocketLevelScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_refresh);
     _emoteExpiryTimer?.cancel();
@@ -5343,9 +5345,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         SizedBox(
                           width: 86,
                           child: Scrollbar(
+                            controller: _rocketLevelScrollController,
                             thumbVisibility: true,
                             child: ListView.builder(
                               key: const Key('room-rocket-level-scroll'),
+                              controller: _rocketLevelScrollController,
                               primary: false,
                               padding: const EdgeInsets.symmetric(
                                 vertical: 6,
