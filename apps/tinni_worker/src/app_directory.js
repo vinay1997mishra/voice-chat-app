@@ -3928,7 +3928,7 @@ export class AppDirectoryStore extends DurableObject {
       });
       case "unique-id-new": {
         const requestedId = String(data.public_id || "").trim();
-        const numericId = /^\\d{4,8}$/.test(requestedId);
+        const numericId = /^\d{4,8}$/.test(requestedId);
         const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(requestedId);
         if (!numericId && !nameId) {
           throw new Error(

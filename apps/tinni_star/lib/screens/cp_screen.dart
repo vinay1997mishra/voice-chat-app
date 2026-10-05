@@ -596,11 +596,7 @@ class _CpScreenState extends State<CpScreen> {
                                   padding: EdgeInsets.symmetric(horizontal: 5),
                                   child: Column(
                                     children: [
-                                      Icon(
-                                        Icons.favorite_rounded,
-                                        color: FeaturePalette.cp,
-                                        size: 38,
-                                      ),
+                                      _CpHeart(),
                                       Text(
                                         'LOVE',
                                         style: TextStyle(
@@ -1138,3 +1134,28 @@ class _CpRuleTile extends StatelessWidget {
   }
 }
 
+
+class _CpHeart extends StatelessWidget {
+  const _CpHeart();
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'CP love heart',
+    child: Container(
+      width: 64, height: 64, alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const RadialGradient(
+          colors: [Color(0xFF873E66), Color(0xFF341D3A)]),
+        border: Border.all(color: FeaturePalette.cpSoft.withValues(alpha: .65)),
+        boxShadow: [BoxShadow(color: FeaturePalette.cp.withValues(alpha: .25),
+          blurRadius: 18, spreadRadius: 1)]),
+      child: ShaderMask(
+        blendMode: BlendMode.srcIn,
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFFFDFE9), Color(0xFFFF91B9), Color(0xFFD94F86)],
+        ).createShader(bounds),
+        child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 42)),
+    ),
+  );
+}
