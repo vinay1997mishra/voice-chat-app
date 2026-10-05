@@ -1609,9 +1609,9 @@ export class RoomPresenceStore extends DurableObject {
     return result;
   }
 
-  chatMessages() {
+  chatMessages(since = 0) {
     return this.ctx.storage.sql.exec(
-      "SELECT id,user_id,display_name,text,created_at FROM (SELECT * FROM room_chat_messages ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+      "SELECT id,user_id,display_name,text,created_at FROM (SELECT * FROM room_chat_messages WHERE created_at>=? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC", Number(since) || 0
     ).toArray();
   }
 
@@ -1633,7 +1633,7 @@ export class RoomPresenceStore extends DurableObject {
       id,userId,event.display_name,text,isOwner?1:0,now);
     this.ctx.storage.sql.exec("DELETE FROM room_chat_messages WHERE id NOT IN (SELECT id FROM room_chat_messages ORDER BY created_at DESC LIMIT 50)");
     this._touchSocketMember(userId,now);
-    this._broadcastRoomEvent({type:"chat_message",message:event});
+    this._broadcastRoomEvent({type: "chat_message",message:event});
     return event;
   }
 
@@ -1660,7 +1660,7 @@ export class RoomPresenceStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     const member = userId
       ? this.ctx.storage.sql.exec(
-          "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1",
+          "SELECT seat_index,joined_at FROM room_members WHERE user_id = ? LIMIT 1",
           userId,
         ).toArray()[0]
       : null;
@@ -1683,6 +1683,7 @@ export class RoomPresenceStore extends DurableObject {
 
     return {
       ...this._presenceState(now),
+      chat_messages: member ? this.chatMessages(Number(member.joined_at)) : [],
       self_mic_muted: userId ? this.muteStatus(userId, seatIndex) : false,
       self_chat_banned: userId ? this.chatBanStatus(userId) : false,
       self_seat_forced: seatForced,

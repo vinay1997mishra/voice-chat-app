@@ -194,6 +194,9 @@ class RoomPresenceService extends ChangeNotifier {
   DateTime? lastSuccessfulContact;
   bool _httpFailed = false;
   int _latestSnapshotTime = 0;
+  int _roomGeneration = 0;
+  String? _httpRoomId;
+  int _roomJoinedServerAt = 0;
 
   bool get hasConnectionProblem => !liveConnected &&
       (_httpFailed || (!connected && lastError != null));
@@ -243,6 +246,9 @@ class RoomPresenceService extends ChangeNotifier {
     _liveRoomId = null;
     _liveAuthToken = null;
     _latestSnapshotTime = 0;
+    _roomGeneration++;
+    _httpRoomId = null;
+    _roomJoinedServerAt = 0;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
     _liveReconnectDelaySeconds = 2;
@@ -955,6 +961,7 @@ class RoomPresenceService extends ChangeNotifier {
     Map<String, Object> payload, {
     bool applyResponse = true,
   }) async {
+    final generation = _roomGeneration;
     const maxAttempts = 3;
     // Never replay transactions or random draws after an ambiguous response.
     final attempts = path == '/gifts/send' ||
@@ -992,6 +999,7 @@ class RoomPresenceService extends ChangeNotifier {
           throw StateError(message);
         }
 
+        if (generation != _roomGeneration) return data;
         _markHttpHealthy();
         if (applyResponse) {
           _apply(data);
@@ -999,6 +1007,7 @@ class RoomPresenceService extends ChangeNotifier {
         notifyListeners();
         return data;
       } catch (error) {
+        if (generation != _roomGeneration) rethrow;
         lastFailure = error;
         final lower = error.toString().toLowerCase();
         final transient = lower.contains('temporarily unavailable') ||
@@ -1112,6 +1121,7 @@ class RoomPresenceService extends ChangeNotifier {
     required String roomId,
     required String authToken,
   }) async {
+    final generation = _roomGeneration;
     try {
       final uri = apiBase.replace(
         path: '/room-presence/state',
@@ -1131,9 +1141,11 @@ class RoomPresenceService extends ChangeNotifier {
           data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
         );
       }
+      if (generation != _roomGeneration) return;
       _apply(data);
       _markHttpHealthy();
     } catch (error) {
+      if (generation != _roomGeneration) return;
       _httpFailed = true;
       // A failed HTTP refresh must not evict an otherwise-live room session.
       // Keep the last known members/seat state while realtime reconnects.
@@ -1162,6 +1174,13 @@ class RoomPresenceService extends ChangeNotifier {
     String? equippedProfileCardId,
     bool notifyOnlyOnVisibleChange = false,
   }) async {
+    if (path == '/room-presence/join' && _httpRoomId != roomId) {
+      _httpRoomId = roomId;
+      _roomGeneration++;
+      _latestSnapshotTime = 0;
+      _roomJoinedServerAt = 0;
+    }
+    final generation = _roomGeneration;
     const maxAttempts = 3;
 
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1205,6 +1224,10 @@ class RoomPresenceService extends ChangeNotifier {
           throw StateError(message);
         }
 
+        if (generation != _roomGeneration) return;
+        if (path == '/room-presence/join' && _roomJoinedServerAt == 0) {
+          _roomJoinedServerAt = _asInt(data['server_time']);
+        }
         final before = notifyOnlyOnVisibleChange
             ? _visibleStateSignature()
             : null;
@@ -1218,6 +1241,7 @@ class RoomPresenceService extends ChangeNotifier {
         }
         return;
       } catch (error) {
+        if (generation != _roomGeneration) return;
         final lower = error.toString().toLowerCase();
         final transient = lower.contains('temporarily unavailable') ||
             lower.contains('invalid response') ||
@@ -1450,7 +1474,8 @@ class RoomPresenceService extends ChangeNotifier {
             userId: row['user_id']?.toString() ?? '',
             displayName: row['display_name']?.toString() ?? 'User',
             text: row['text']?.toString() ?? '',
-            createdAt: DateTime.fromMillisecondsSinceEpoch(_asInt(row['created_at'])))));
+            createdAt: DateTime.fromMillisecondsSinceEpoch(_asInt(row['created_at']))))
+          .where((event) => event.createdAt.millisecondsSinceEpoch >= _roomJoinedServerAt));
     }
     final rawMembers = data['members'];
     if (rawMembers is! List) return;

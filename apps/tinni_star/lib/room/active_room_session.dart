@@ -64,6 +64,7 @@ class ActiveRoomSession extends ChangeNotifier {
   DateTime? _nextVoiceAttempt;
   Timer? _presenceRecoveryTimer;
   bool _presenceRecoveryRunning = false;
+  bool _fallbackRefreshRunning = false;
   int _presenceRecoveryDelaySeconds = 2;
   String? _activeAuthToken;
   String? _activeUserId;
@@ -155,7 +156,7 @@ class ActiveRoomSession extends ChangeNotifier {
 
     // A previous voice/permission failure must never leave a dead RoomScreen
     // that only resumes a controller with no authenticated backend session.
-    if (sameRoom && _activeAuthToken != null && _activeUserId != null) {
+    if (sameRoom && _activeAuthToken == authToken && _activeUserId == userId) {
       minimized = false;
       if (!connected) await retryVoice();
       notifyListeners();
@@ -277,11 +278,13 @@ class ActiveRoomSession extends ChangeNotifier {
       await retryVoice(requestPermission: false);
     });
     _fallbackStateTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (_disposed || presence.liveConnected || _presenceRecoveryRunning) return;
+      if (_disposed || presence.liveConnected || _presenceRecoveryRunning || _fallbackRefreshRunning) return;
       final roomId = room?.id;
       final token = _activeAuthToken;
       if (roomId == null || token == null) return;
-      await presence.refresh(roomId: roomId, authToken: token);
+       _fallbackRefreshRunning = true;
+      try { await presence.refresh(roomId: roomId, authToken: token); }
+      finally { _fallbackRefreshRunning = false; }
     });
   }
 

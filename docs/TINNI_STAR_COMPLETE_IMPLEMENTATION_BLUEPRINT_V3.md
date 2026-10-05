@@ -1297,3 +1297,5 @@ Unless explicitly changed by Platform Owner:
 - Music playback start/resume returns immediately so pause, previous, next, stop and seat-down/exit controls stay responsive.
 
 - Room comments use a bounded server history and idempotent HTTP fallback when WebSocket is unavailable; owner/admin clear scope is preserved. Room controls and voice credentials look up authorized locked/empty rooms directly instead of using public discovery filters.
+
+- The comment fallback only delivers comments created after the current room entry; past comments are not shown to new entrants. Late responses from a previous room cannot overwrite the current room's seat/member state.

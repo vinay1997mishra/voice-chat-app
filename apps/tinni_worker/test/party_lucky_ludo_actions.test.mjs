@@ -131,3 +131,22 @@ test('Ludo moves obey six entry, capture, safe cells, exact finish and winner ru
   const finished=await r.request('/ludo/roll',green.token,{room_id:room.id});
   assert.equal(finished.data.winner,'red');
 });
+
+test('HTTP fallback delivers comments after entry and does not show older room comments',async t=>{
+  const r=runtime();t.after(r.close);
+  const owner=await r.user(1),guest=await r.user(2);
+  const room=await r.directory.createRoom(owner.user_id,{title:'Comments',seat_count:12});
+  const originalNow=Date.now;let now=100000;Date.now=()=>now;t.after(()=>{Date.now=originalNow;});
+  await r.request('/room-presence/join',owner.token,{room_id:room.id});
+  await r.request('/room-presence/public-screen',owner.token,{room_id:room.id,enabled:true});
+  now++;
+  await r.request('/room-presence/comment',owner.token,{room_id:room.id,text:'Before entry',client_event_id:'old'});
+  now++;
+  await r.request('/room-presence/join',guest.token,{room_id:room.id});
+  let state=await r.request('/room-presence/state?room_id='+room.id,guest.token);
+  assert.equal(state.data.chat_messages.length,0);
+  now++;
+  await r.request('/room-presence/comment',owner.token,{room_id:room.id,text:'After entry',client_event_id:'new'});
+  state=await r.request('/room-presence/state?room_id='+room.id,guest.token);
+  assert.deepEqual(state.data.chat_messages.map(x=>x.text),['After entry']);
+});
