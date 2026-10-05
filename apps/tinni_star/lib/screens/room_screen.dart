@@ -2845,6 +2845,69 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     });
   }
 
+  Widget _buildCountryAudienceLandings() {
+    final gift = _seatGiftEffect;
+    if (gift == null || !gift.id.startsWith('flag-') ||
+        !widget.state.roomControls.effectsEnabled ||
+        !widget.state.roomControls.giftEffectsEnabled) {
+      return const SizedBox.shrink();
+    }
+    final seated = <String>{...widget.state.roomControls.seatUsers.values};
+    final members = widget.state.roomSession.liveMembers;
+    for (final member in members) {
+      if (member.seatIndex != null) seated.add(member.userId);
+    }
+    final account = widget.state.auth.current;
+    if (controller.mySeat != null && account != null) seated.add(account.userId);
+    final receivers = _seatGiftEffectReceiverIds.where((id) => !seated.contains(id)).toList();
+    if (receivers.isEmpty) return const SizedBox.shrink();
+    return Positioned(
+      left: 12, right: 12, bottom: 148, height: 86,
+      child: IgnorePointer(child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal, clipBehavior: Clip.none,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (final receiverId in receivers)
+            _buildCountryAudienceLanding(receiverId, gift, members, account?.userId,
+              account?.avatarDataUrl),
+        ]),
+      )),
+    );
+  }
+
+  Widget _buildCountryAudienceLanding(
+    String receiverId, GiftDefinition gift, List<RoomPresenceMember> members,
+    String? ownId, String? ownAvatar,
+  ) {
+    final member = members.where((row) => row.userId == receiverId).firstOrNull;
+    final source = member?.avatarDataUrl ?? (receiverId == ownId ? ownAvatar : null);
+    final avatar = _roomAvatarProvider(source);
+    return SizedBox(
+      key: Key('country-recipient-landing-$receiverId'),
+      width: 90,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          key: Key('country-recipient-dp-$receiverId'), width: 44, height: 44,
+          child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+            CircleAvatar(
+              backgroundColor: const Color(0xFF20304C),
+              child: avatar == null ? const Icon(Icons.person, color: Colors.white)
+                  : ClipOval(child: Image(image: avatar, fit: BoxFit.cover,
+                      width: 44, height: 44,
+                      errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white))),
+            ),
+            _buildSeatGiftImpactEffect(
+              gift: gift, seatDiameter: 44, receiverId: receiverId,
+            ),
+          ]),
+        ),
+        const SizedBox(height: 4),
+        Text('ID $receiverId', maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Color(0xFFFFD479), fontSize: 10,
+            fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+
   String _newLuckySessionId(String userId) =>
       'lucky-' + userId + '-' + DateTime.now().microsecondsSinceEpoch.toString();
 
@@ -3037,6 +3100,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Widget _buildSeatGiftImpactEffect({
     required GiftDefinition gift,
     required double seatDiameter,
+    String? receiverId,
   }) {
     final countryFlag = gift.id.startsWith('flag-');
     return IgnorePointer(
@@ -3080,9 +3144,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ],
                   ),
-                  child: _luckyArtwork(
-                    gift,
-                    size: seatDiameter * 0.76,
+                  child: KeyedSubtree(
+                    key: countryFlag && receiverId != null
+                        ? Key('country-flag-flight-$receiverId') : null,
+                    child: _luckyArtwork(gift, size: seatDiameter * 0.76),
                   ),
                 ),
               ),
@@ -8694,6 +8759,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     _buildSeatGiftImpactEffect(
                       gift: _seatGiftEffect!,
                       seatDiameter: seatDiameter,
+                      receiverId: authoritativeSeatUserId,
                     ),
                   if (showLuckySeatEffect &&
                       _luckySeatEffectGift != null)
@@ -9634,6 +9700,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
       ),
             ),
+            _buildCountryAudienceLandings(),
             Positioned.fill(child: RocketLaunchOverlay(
               completed: _rocketCompleted,
               viewerId: widget.state.auth.current?.userId,
