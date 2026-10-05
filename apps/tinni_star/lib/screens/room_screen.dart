@@ -9598,7 +9598,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               completed: _rocketCompleted,
               enabled: widget.state.roomControls.effectsEnabled && widget.state.roomControls.rocketDrawNoticeEnabled,
             )),
-            Positioned.fill(child:GiftSceneOverlay(queue:_giftScenes,onDelivered:_deliverGiftScene)),
+            Positioned.fill(child:GiftSceneOverlay(
+              queue:_giftScenes,
+              onDelivered:_deliverGiftScene,
+              enabled:widget.state.roomControls.effectsEnabled,
+            )),
             for (var ribbonIndex = 0; ribbonIndex < _ribbonQueue.length && ribbonIndex < 2; ribbonIndex++)
               _buildRibbonLane(_ribbonQueue[ribbonIndex], ribbonIndex),
             Positioned.fill(

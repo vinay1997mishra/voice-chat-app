@@ -1,67 +1,227 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../economy/economy.dart';
 import '../economy/premium_gift_catalog.dart';
+import 'cinematic_video.dart';
 
 class GiftSceneEvent {
-  GiftSceneEvent({required this.gift,required List<String> recipients})
-    : recipients=List.unmodifiable(recipients.toSet());
+  GiftSceneEvent({required this.gift, required List<String> recipients})
+      : recipients = List.unmodifiable(recipients.toSet());
   final GiftDefinition gift;
   final List<String> recipients;
 }
+
 class GiftSceneQueue extends ChangeNotifier {
-  final _pending=<GiftSceneEvent>[];
-  void add(GiftSceneEvent event) { _pending.add(event);notifyListeners(); }
-  GiftSceneEvent? take()=>_pending.isEmpty?null:_pending.removeAt(0);
+  final _pending = <GiftSceneEvent>[];
+  void add(GiftSceneEvent event) {
+    _pending.add(event);
+    notifyListeners();
+  }
+
+  GiftSceneEvent? take() =>
+      _pending.isEmpty ? null : _pending.removeAt(0);
+
+  void clear() => _pending.clear();
 }
+
 class GiftSceneOverlay extends StatefulWidget {
-  const GiftSceneOverlay({super.key,required this.queue,required this.onDelivered});
+  const GiftSceneOverlay({
+    super.key,
+    required this.queue,
+    required this.onDelivered,
+    this.enabled = true,
+  });
+
   final GiftSceneQueue queue;
   final void Function(GiftSceneEvent) onDelivered;
-  @override State<GiftSceneOverlay> createState()=>_GiftSceneOverlayState();
+  final bool enabled;
+
+  @override
+  State<GiftSceneOverlay> createState() => _GiftSceneOverlayState();
 }
-class _GiftSceneOverlayState extends State<GiftSceneOverlay> with SingleTickerProviderStateMixin {
+
+class _GiftSceneOverlayState extends State<GiftSceneOverlay>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _motion;
   GiftSceneEvent? _event;
   Timer? _hold;
-  @override void initState() {
+  int _generation = 0;
+  bool _foreground = true;
+
+  @override
+  void initState() {
     super.initState();
-    _motion=AnimationController(vsync:this);
-    widget.queue.addListener(_next);_next();
-  }
-  void _next() {
-    if(_event!=null||!mounted) { return; }
-    final event=widget.queue.take();
-    if(event==null) { return; }
-    setState(()=>_event=event);
-    _motion.duration=Duration(seconds:PremiumGiftCatalog.holdSeconds(event.gift.id));
-    _motion.forward(from:0);
-    _hold=Timer(_motion.duration!,_finish);
-  }
-  void _finish() {
-    if(!mounted) { return; }
-    final event=_event;
-    if(event!=null) { widget.onDelivered(event); }
-    setState(()=>_event=null);
+    _motion = AnimationController(
+      vsync: this,
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    WidgetsBinding.instance.addObserver(this);
+    final state = WidgetsBinding.instance.lifecycleState;
+    _foreground = state == null || state == AppLifecycleState.resumed;
+    widget.queue.addListener(_next);
     _next();
   }
-  @override void dispose() { _hold?.cancel();widget.queue.removeListener(_next);_motion.dispose();super.dispose(); }
-  @override Widget build(BuildContext context) {
-    final event=_event;
-    if(event==null) { return const SizedBox.shrink(); }
-    return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
-      animation:_motion,builder:(context,child)=>CustomPaint(
-        key:ValueKey('gift-scene-'+event.gift.id),
-        painter:_GiftScenePainter(gift:event.gift,t:_motion.value),
-        child:Align(alignment:const Alignment(0,.65),child:Column(mainAxisSize:MainAxisSize.min,children:[
-          Text(event.gift.name,textAlign:TextAlign.center,style:const TextStyle(
-            color:Colors.white,fontSize:22,fontWeight:FontWeight.w900,shadows:[Shadow(blurRadius:8)])),
-          Text('To '+event.recipients.map((id)=>'ID '+id).join(' • '),
-            textAlign:TextAlign.center,style:const TextStyle(color:Color(0xFFFFD479),fontSize:12)),
-        ])),
+
+  @override
+  void didUpdateWidget(covariant GiftSceneOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.queue != widget.queue) {
+      oldWidget.queue.removeListener(_next);
+      _cancel();
+      widget.queue.addListener(_next);
+    }
+    if (!widget.enabled) {
+      _cancel();
+      widget.queue.clear();
+    } else {
+      _next();
+    }
+  }
+
+  void _next() {
+    if (!mounted || _event != null || !_foreground) return;
+    if (!widget.enabled) {
+      widget.queue.clear();
+      return;
+    }
+    final event = widget.queue.take();
+    if (event == null) return;
+    setState(() => _event = event);
+    _motion.duration =
+        Duration(seconds: PremiumGiftCatalog.holdSeconds(event.gift.id));
+    _motion.value = 0;
+    _resume();
+  }
+
+  void _resume() {
+    if (_event == null || !_foreground || !widget.enabled) return;
+    _hold?.cancel();
+    final token = ++_generation;
+    final remaining = Duration(
+      microseconds:
+          (_motion.duration!.inMicroseconds * (1 - _motion.value)).round(),
+    );
+    _motion.forward();
+    _hold = Timer(remaining, () {
+      if (mounted && token == _generation) _finish();
+    });
+  }
+
+  void _cancel() {
+    _hold?.cancel();
+    _hold = null;
+    _generation++;
+    _motion.stop();
+    _event = null;
+  }
+
+  void _finish() {
+    final event = _event;
+    if (!mounted || event == null) return;
+    _cancel();
+    setState(() {});
+    widget.onDelivered(event);
+    if (mounted) _next();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    if (!foreground) {
+      _hold?.cancel();
+      _generation++;
+      _motion.stop();
+    } else if (_event != null) {
+      _resume();
+    } else {
+      _next();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cancel();
+    widget.queue.removeListener(_next);
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final event = _event;
+    if (event == null || !widget.enabled) return const SizedBox.shrink();
+    final fullScreen = PremiumGiftCatalog.isFullScreen(event.gift.id);
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return IgnorePointer(
+      child: RepaintBoundary(
+        key: ValueKey('gift-scene-' + event.gift.id),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedBuilder(
+              animation: _motion,
+              builder: (context, child) {
+                final fallback = CustomPaint(
+                  painter: _GiftScenePainter(
+                    gift: event.gift,
+                    t: reduced ? .6 : _motion.value,
+                  ),
+                  child: const SizedBox.expand(),
+                );
+                return Center(
+                  child: FractionallySizedBox(
+                    widthFactor: fullScreen ? 1 : .72,
+                    heightFactor: fullScreen ? 1 : .62,
+                    child: CinematicVideo(
+                      key: ObjectKey(event),
+                      sceneId: event.gift.id,
+                      duration: _motion.duration!,
+                      timeline: _motion,
+                      fallback: fallback,
+                    ),
+                  ),
+                );
+              },
+            ),
+            Align(
+              alignment: const Alignment(0, .65),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(event.gift.name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          shadows: [Shadow(blurRadius: 8)],
+                        )),
+                    Text(
+                      'To ' + event.recipients.map((id) => 'ID $id').join(' • '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFFFD479),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    )));
+    );
   }
 }
 class _GiftScenePainter extends CustomPainter {

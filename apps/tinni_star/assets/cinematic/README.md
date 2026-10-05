@@ -1,0 +1,1 @@
+This directory receives the verified local movie/poster bundle during the Android build. See tools/cinematic/README.md and bundle-lock.json. Generated media is pinned by source and SHA-256; it is not downloaded while a gift plays.

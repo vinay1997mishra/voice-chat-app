@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'cinematic_video.dart';
 
 /// The ten server-backed gift milestones, expressed as incremental targets.
 const rocketStageTargets = <int>[
@@ -164,96 +165,200 @@ _RocketFlightMotion _rocketFlightMotion(int level,double t) {
     thrustBoost:1+level*.06);
 }
 
-class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTickerProviderStateMixin {
+class _RocketLaunchOverlayState extends State<RocketLaunchOverlay>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _flight;
-  final _queue=<int>[];
+  final _queue = <int>[];
   Timer? _launchTimer;
   int? _seen;
   int? _level;
-  @override void initState() {
+  int _generation = 0;
+  bool _foreground = true;
+
+  @override
+  void initState() {
     super.initState();
-    _seen=widget.completed.value;
-    _flight=AnimationController(vsync:this,duration:const Duration(seconds:9));
+    _seen = widget.completed.value;
+    _flight = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 9),
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    WidgetsBinding.instance.addObserver(this);
+    final state = WidgetsBinding.instance.lifecycleState;
+    _foreground = state == null || state == AppLifecycleState.resumed;
     widget.completed.addListener(_changed);
   }
+
+  @override
+  void didUpdateWidget(covariant RocketLaunchOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.completed != widget.completed) {
+      oldWidget.completed.removeListener(_changed);
+      widget.completed.addListener(_changed);
+      _seen = widget.completed.value;
+      _clear();
+    }
+    if (!widget.enabled) {
+      _clear();
+      _seen = widget.completed.value;
+    }
+  }
+
+  void _clear() {
+    _launchTimer?.cancel();
+    _generation++;
+    _flight.stop();
+    _queue.clear();
+    _level = null;
+  }
+
   void _changed() {
-    final next=widget.completed.value;
-    if(next==null) {
+    final next = widget.completed.value;
+    final previous = _seen;
+    _seen = next;
+    if (next == null || (previous != null && next < previous)) {
+      _clear();
+      if (mounted) setState(() {});
       return;
     }
-    final previous=_seen;
-    _seen=next;
-    if(previous==null||next<=previous||!widget.enabled) {
-      return;
-    }
-    for(var level=previous+1;level<=next&&level<=10;level++) {
+    if (previous == null || next <= previous || !widget.enabled) return;
+    for (var level = previous + 1; level <= next && level <= 10; level++) {
       _queue.add(level);
     }
-    if(_level==null) {
+    if (_level == null) _next();
+  }
+
+  void _resume() {
+    if (_level == null || !_foreground || !widget.enabled) return;
+    _launchTimer?.cancel();
+    final token = ++_generation;
+    final remaining = Duration(
+      microseconds:
+          (_flight.duration!.inMicroseconds * (1 - _flight.value)).round(),
+    );
+    _flight.forward();
+    _launchTimer = Timer(remaining, () {
+      if (mounted && token == _generation) _next();
+    });
+  }
+
+  void _next() {
+    if (!mounted || !_foreground || !widget.enabled) return;
+    _launchTimer?.cancel();
+    if (_queue.isNotEmpty) {
+      setState(() => _level = _queue.removeAt(0));
+      _flight.value = 0;
+      _resume();
+    } else {
+      _generation++;
+      _flight.stop();
+      setState(() => _level = null);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    if (!foreground) {
+      _launchTimer?.cancel();
+      _generation++;
+      _flight.stop();
+    } else if (_level != null) {
+      _resume();
+    } else {
       _next();
     }
   }
-  void _next() {
-    if(!mounted) {
-      return;
-    }
-    _launchTimer?.cancel();
-    if(_queue.isNotEmpty) {
-      setState(()=>_level=_queue.removeAt(0));
-      _flight.forward(from:0);
-      _launchTimer=Timer(const Duration(seconds:9),_next);
-      return;
-    }
-    setState(()=>_level=null);
-    _flight.stop();
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _clear();
+    widget.completed.removeListener(_changed);
+    _flight.dispose();
+    super.dispose();
   }
-  @override void dispose() {
-    _launchTimer?.cancel();
-    widget.completed.removeListener(_changed);_flight.dispose();super.dispose();
-  }
-  @override Widget build(BuildContext context) {
-    if(_level==null) {
-      return const SizedBox.shrink();
-    }
-    return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
-      animation:_flight,builder:(context,child)=>LayoutBuilder(builder:(context,c) {
-        final t=_flight.value;
-        // Every Rocket level has its own nine-second flight animation.
-        // If another level is queued it starts next; otherwise the overlay ends.
-        final width=math.min(c.maxWidth*.30,140.0);
-        final motion=_rocketFlightMotion(_level!,t);
-        final y=c.maxHeight*.60-
-            motion.yFactor*(c.maxHeight+width*2);
-        final baseLeft=(c.maxWidth-width)/2;
-        final launchThrust=(t/.18).clamp(0.0,1.0)*
-            (0.90+0.10*math.sin(t*180))*motion.thrustBoost;
-        return Stack(key:const Key('rocket-nine-second-launch'),children:[
-          Positioned.fill(child:CustomPaint(painter:_LaunchAtmosphere(
-            t:t,level:_level!,padY:c.maxHeight*.60+width*1.18))),
-          Positioned(top:36,left:16,right:16,child:Opacity(
-            opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
-              Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
-              Text('100% • VERTICAL LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
-            ]))),
-          Positioned(
-            top:y,
-            left:baseLeft+motion.x,
-            child:Transform.rotate(
-              angle:motion.rotation,
-              child:Transform.scale(
-                scale:motion.scale,
-                child:RocketModel(
-                  key:ValueKey('launch-rocket-$_level'),
-                  level:_level!,
-                  size:width,
-                  thrust:launchThrust,
-                ),
-              ),
+
+  Widget _fallback(BoxConstraints c, double t, bool reduced) {
+    final width = math.min(c.maxWidth * .30, 140.0);
+    final motion = _rocketFlightMotion(_level!, reduced ? 0 : t);
+    final y = c.maxHeight * .60 -
+        motion.yFactor * (c.maxHeight + width * 2);
+    final launchThrust = reduced ? 0.0 : (t / .18).clamp(0.0, 1.0) *
+        (0.90 + 0.10 * math.sin(t * 180)) * motion.thrustBoost;
+    return Stack(children: [
+      Positioned.fill(
+        child: CustomPaint(
+          painter: _LaunchAtmosphere(
+            t: reduced ? .3 : t,
+            level: _level!,
+            padY: c.maxHeight * .60 + width * 1.18,
+          ),
+        ),
+      ),
+      Positioned(
+        top: y,
+        left: (c.maxWidth - width) / 2 + motion.x,
+        child: Transform.rotate(
+          angle: motion.rotation,
+          child: Transform.scale(
+            scale: motion.scale,
+            child: RocketModel(
+              key: ValueKey('launch-rocket-$_level'),
+              level: _level!,
+              size: width,
+              thrust: launchThrust,
             ),
           ),
-        ]);
-      }),
-    )));
+        ),
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_level == null || !widget.enabled) return const SizedBox.shrink();
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _flight,
+          builder: (context, child) => LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              key: const Key('rocket-nine-second-launch'),
+              fit: StackFit.expand,
+              children: [
+                CinematicVideo(
+                  key: ValueKey('rocket-movie-$_level'),
+                  sceneId: 'rocket-$_level',
+                  duration: const Duration(seconds: 9),
+                  timeline: _flight,
+                  fallback: _fallback(constraints, _flight.value, reduced),
+                ),
+                Positioned(
+                  top: 36,
+                  left: 16,
+                  right: 16,
+                  child: Text(
+                    'Rocket Level $_level',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFFFD479),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      shadows: [Shadow(blurRadius: 8)],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 class _LaunchAtmosphere extends CustomPainter {
