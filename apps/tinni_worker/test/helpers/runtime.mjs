@@ -1,3 +1,4 @@
+import { rocketPolicy, rocketAllocation, rocketDraw } from '../../src/rocket_rewards.js';
 import { premiumGiftCatalog } from '../../src/premium_gift_catalog.js';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -14,7 +15,7 @@ function source(file) {
     .replace(/export (?=(?:async )?(?:class|function|const|let) )/g, '');
 }
 function storeClass(file, name) {
-  return new Function('DurableObject', 'premiumGiftCatalog', source(file) + '\nreturn ' + name)(DurableObject, premiumGiftCatalog);
+  return new Function('DurableObject', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', source(file) + '\nreturn ' + name)(DurableObject, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw);
 }
 export function runtime() {
   const databases = [];

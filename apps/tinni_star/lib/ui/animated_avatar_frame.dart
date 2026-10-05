@@ -96,6 +96,10 @@ class _AvatarFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (id.startsWith('rocket-l')) {
+      _paintRocketFrame(canvas, size);
+      return;
+    }
     final c = size.center(Offset.zero);
     final r = size.shortestSide * .38;
     final palette = colors;
@@ -150,6 +154,68 @@ class _AvatarFramePainter extends CustomPainter {
       canvas.drawArc(
         Rect.fromCenter(center: c + Offset(r * .75, flap), width: r, height: r * 1.25),
         math.pi * 1.6, math.pi * .75, false, wing);
+    }
+  }
+
+
+  void _paintRocketFrame(Canvas canvas, Size size) {
+    final match = RegExp(r'^rocket-l(\d+)-(top|member)(\d+)(covariant _AvatarFramePainter oldDelegate) =>
+      oldDelegate.t != t || oldDelegate.id != id;
+}
+).firstMatch(id);
+    if (match == null) return;
+    final level = int.parse(match.group(1)!).clamp(1, 10);
+    final isTop = match.group(2) == 'top';
+    final variant = int.parse(match.group(3)!);
+    final accent = isTop
+        ? [const Color(0xFFFFD166), const Color(0xFFD9E7F3), const Color(0xFFFFAA79)][(variant - 1).clamp(0, 2)]
+        : Color.lerp(const Color(0xFF63D9FF), const Color(0xFFAD8CFF), (variant % 10) / 9)!;
+    final center = size.center(Offset.zero);
+    final radius = size.width * .38;
+    final angle = t * math.pi * 2;
+    final rings = isTop ? 2 + level ~/ 3 : 1 + level ~/ 5;
+    for (var i = 0; i < rings; i++) {
+      final r = radius + i * size.width * .027;
+      canvas.drawCircle(center, r, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * (isTop ? .037 : .023)
+        ..shader = SweepGradient(
+          colors: [accent, const Color(0xFF182535), accent, const Color(0xFF66E5FF), accent],
+          transform: GradientRotation(i.isEven ? angle : -angle),
+        ).createShader(Rect.fromCircle(center: center, radius: r)));
+    }
+    final count = isTop ? 6 + level * 2 : 4 + level ~/ 2;
+    for (var i = 0; i < count; i++) {
+      final a = i * math.pi * 2 / count + (isTop ? angle * .3 : 0);
+      final p = center + Offset(math.cos(a), math.sin(a)) * (radius * 1.10);
+      final pulse = .6 + .4 * math.sin(angle * 2 + i).abs();
+      canvas.drawCircle(p, size.width * (isTop ? .025 : .014) * pulse, Paint()..color = accent);
+      if (isTop && level >= 4) {
+        final outer = center + Offset(math.cos(a), math.sin(a)) * (radius * 1.22);
+        canvas.drawLine(p, outer, Paint()..color = accent.withValues(alpha: .7)..strokeWidth = size.width * .018);
+      }
+    }
+    if (isTop) {
+      for (final side in [-1.0, 1.0]) {
+        final x = center.dx + side * radius * .97;
+        final body = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset(x, center.dy + radius * .18), width: size.width * (.07 + level * .002), height: size.width * .30),
+          Radius.circular(size.width * .03));
+        canvas.drawRRect(body, Paint()..color = const Color(0xFF111925));
+        canvas.drawRRect(body, Paint()..style = PaintingStyle.stroke..strokeWidth = size.width * .015..color = accent);
+        final flame = Path()
+          ..moveTo(x - size.width * .025, center.dy + radius * .57)
+          ..quadraticBezierTo(x, center.dy + radius * (.95 + .15 * math.sin(angle * 4)), x + size.width * .025, center.dy + radius * .57)
+          ..close();
+        canvas.drawPath(flame, Paint()..color = const Color(0xFF64DAFF));
+      }
+      final crown = Path()
+        ..moveTo(center.dx - radius * .42, center.dy - radius * 1.03)
+        ..lineTo(center.dx - radius * .25, center.dy - radius * 1.30)
+        ..lineTo(center.dx, center.dy - radius * 1.12)
+        ..lineTo(center.dx + radius * .25, center.dy - radius * 1.30)
+        ..lineTo(center.dx + radius * .42, center.dy - radius * 1.03)..close();
+      canvas.drawPath(crown, Paint()..color = accent);
     }
   }
 

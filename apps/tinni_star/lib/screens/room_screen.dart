@@ -27,6 +27,8 @@ import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import '../ui/room_emotion_backdrop.dart';
 import '../ui/animated_avatar_frame.dart';
+import '../ui/rocket_rewards_panel.dart';
+import '../ui/rocket_launch_banner.dart';
 import '../ui/premium_effects.dart';
 import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
@@ -92,6 +94,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final _rocketCompleted = ValueNotifier<int?>(null);
   int? _selectedRocketPreviewLevel;
+  Timer? _rocketBannerPoll;
+  bool _ribbonFetchRunning = false;
   Timer? _roomRecoveryTimer;
   bool _roomRecoveryRunning = false;
   static const List<int> _rocketStageTargets = <int>[
@@ -161,6 +165,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     widget.state.roomSession.addListener(_refresh);
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCountryRibbons());
     _primeRoomSendingSummary();
+    _rocketBannerPoll = Timer.periodic(const Duration(seconds: 1), (_) => _refreshCountryRibbons());
     widget.state.social.unreadMessages.addListener(_refresh);
     final account = widget.state.auth.current;
     if (account != null) {
@@ -776,6 +781,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _luckyComboExpiryTimer?.cancel();
     _luckyComboCountdownTimer?.cancel();
     _roomRecoveryTimer?.cancel();
+    _rocketBannerPoll?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
     widget.state.social.disconnectMessageEvents();
     chat.dispose();
@@ -784,8 +790,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshCountryRibbons() async {
+    if (_ribbonFetchRunning || !mounted) return;
     final account = widget.state.auth.current;
     if (account == null) return;
+    _ribbonFetchRunning = true;
     try {
       final rows = await widget.state.discovery.countryRibbons(account.authToken);
       var changed = false;
@@ -803,7 +811,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             .compareTo((b['created_at'] as num?)?.toInt() ?? 0);
       });
       if (changed && mounted) setState(() {});
-    } catch (_) {}
+    } catch (_) {} finally {
+      _ribbonFetchRunning = false;
+    }
   }
 
   void _finishRibbon(String id) {
@@ -826,6 +836,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Widget _buildRibbonLane(Map<String, dynamic> ribbon, int lane) {
     final id = ribbon['id']?.toString() ?? '';
     final kind = ribbon['kind']?.toString() ?? '';
+    if (kind == 'rocket_launch') {
+      return Positioned(
+        left: 10, right: 10, top: 6.0 + lane * 76.0, height: 72,
+        child: RocketLaunchBanner(
+          key: ValueKey<String>(id),
+          level: (ribbon['amount'] as num? ?? 1).toInt(),
+          roomName: ribbon['user_name']?.toString() ?? 'Room',
+          launchedAt: (ribbon['created_at'] as num? ?? 0).toInt(),
+          onEnter: () => _enterRibbonRoom(ribbon),
+          onEnd: () => _finishRibbon(id),
+        ),
+      );
+    }
     final isLp = kind == 'lp';
     final isLucky = kind == 'lucky_gift' || kind == 'lucky_gift_ultra';
     final isLuckyUltra = kind == 'lucky_gift_ultra';
@@ -5209,6 +5232,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               final percent = rocket['percent']!.toDouble();
               final allComplete = completed >= _rocketStageTargets.length;
 
+              final selectedLevel = _selectedRocketPreviewLevel ?? (allComplete ? 10 : currentIndex + 1);
+              final levels = (snapshot.data?['rocket_levels'] as List? ?? const []).whereType<Map>().toList();
+              final rewardData = levels.where((row) => row['level'] == selectedLevel).firstOrNull;
+
               return Column(
                 children: [
                   Padding(
@@ -5384,6 +5411,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
+                  RocketRewardsPanel(level: selectedLevel, data: rewardData == null ? null : Map<String, dynamic>.from(rewardData)),
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),

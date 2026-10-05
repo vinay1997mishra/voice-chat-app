@@ -37,6 +37,10 @@ jobs:
         working-directory: apps/tinni_worker
         run: npm install --no-audit --no-fund
 
+      - name: Verify backend before deployment
+        working-directory: apps/tinni_worker
+        run: npm test
+
       - name: Deploy Worker and Owner Panel
         working-directory: apps/tinni_worker
         run: npx wrangler deploy

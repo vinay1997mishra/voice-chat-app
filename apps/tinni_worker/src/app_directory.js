@@ -1,3 +1,4 @@
+import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
 import { premiumGiftCatalog } from './premium_gift_catalog.js';
 import { DurableObject } from "cloudflare:workers";
 
@@ -1891,7 +1892,9 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
     if (!user) return [];
 
-    const medals = [];
+    this._ensureRocketTables();
+    const rocketMedals = this.ctx.storage.sql.exec("SELECT DISTINCT medal FROM rocket_rewards WHERE user_id=? AND medal IS NOT NULL ORDER BY level DESC",userId).toArray();
+    const medals = rocketMedals.map(row=>({name:String(row.medal),color:"#FFD54F"}));
     if (Number(user.call_verified || 0) === 1) {
       medals.push({ name: "Verified", color: "#4FC3F7" });
     }
@@ -5130,6 +5133,7 @@ export class AppDirectoryStore extends DurableObject {
         roomId, count, now,
       );
     }
+    if (roomId) this._captureRocketAudience(roomId,userId,now);
     return { ok: true, online: true, room_id: roomId || null, last_seen: now };
   }
 
@@ -5603,6 +5607,172 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0]);
   }
 
+
+  _ensureRocketTables() {
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS rocket_rooms (
+        room_id TEXT PRIMARY KEY, total INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS rocket_contributions (
+        room_id TEXT NOT NULL, level INTEGER NOT NULL, user_id TEXT NOT NULL, sending INTEGER NOT NULL,
+        PRIMARY KEY(room_id,level,user_id));
+      CREATE TABLE IF NOT EXISTS rocket_completions (
+        room_id TEXT NOT NULL, level INTEGER NOT NULL, completed_at INTEGER NOT NULL,
+        historical INTEGER NOT NULL DEFAULT 0, settled_at INTEGER, PRIMARY KEY(room_id,level));
+      CREATE TABLE IF NOT EXISTS rocket_audience (
+        room_id TEXT NOT NULL, level INTEGER NOT NULL, user_id TEXT NOT NULL, entered_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id,level,user_id));
+      CREATE TABLE IF NOT EXISTS rocket_rewards (
+        room_id TEXT NOT NULL, level INTEGER NOT NULL, user_id TEXT NOT NULL, rank INTEGER,
+        coins INTEGER NOT NULL DEFAULT 0, frame_id TEXT, medal TEXT, sending INTEGER NOT NULL DEFAULT 0,
+        credited INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+        PRIMARY KEY(room_id,level,user_id));
+    `);
+  }
+
+  _ensureRocketRoom(roomId) {
+    this._ensureRocketTables();
+    if (this.ctx.storage.sql.exec("SELECT total FROM rocket_rooms WHERE room_id=?",roomId).toArray().length) return;
+    // Replay old contributions to preserve progress without paying historical launches.
+    let total = 0;
+    const rows = this.ctx.storage.sql.exec(`
+      SELECT g.sender_id,COALESCE(l.social_value_coins,g.total_cost) AS value,g.created_at
+      FROM gift_transactions g LEFT JOIN lucky_gift_results l ON l.transaction_id=g.id
+      WHERE g.room_id=? ORDER BY g.created_at,g.id`,roomId).toArray();
+    for (const row of rows) {
+      const value = Math.max(0,Number(row.value || 0));
+      for (const slice of rocketAllocation(total,value)) {
+        this.ctx.storage.sql.exec(`INSERT INTO rocket_contributions(room_id,level,user_id,sending)
+          VALUES(?,?,?,?) ON CONFLICT(room_id,level,user_id) DO UPDATE SET sending=sending+excluded.sending`,
+          roomId,slice.level,String(row.sender_id),slice.value);
+        if (slice.completed) this.ctx.storage.sql.exec(
+          "INSERT OR IGNORE INTO rocket_completions(room_id,level,completed_at,historical) VALUES(?,?,?,1)",
+          roomId,slice.level,Number(row.created_at));
+      }
+      total += value;
+    }
+    this.ctx.storage.sql.exec("INSERT INTO rocket_rooms(room_id,total) VALUES(?,?)",roomId,total);
+  }
+
+  _rocketRanking(roomId,level) {
+    return this.ctx.storage.sql.exec(`SELECT c.user_id,c.sending,u.display_name,u.avatar_data_url
+      FROM rocket_contributions c JOIN app_users u ON u.user_id=c.user_id
+      WHERE c.room_id=? AND c.level=? AND c.sending>0 ORDER BY c.sending DESC,c.user_id ASC`,
+      roomId,level).toArray().map(row=>({...row,user_id:String(row.user_id),sending:Number(row.sending)}));
+  }
+
+  _settleRocketCoins(userId) {
+    this._ensureRocketTables();
+    const pending = this.ctx.storage.sql.exec(
+      "SELECT * FROM rocket_rewards WHERE user_id=? AND coins>0 AND credited=0",userId).toArray();
+    if (!pending.length) return;
+    const guard = this._normalWalletGuard(userId);
+    if (guard.security_frozen || this.getWallet(userId).banned) return;
+    for (const reward of pending) {
+      const reference = "rocket:" + reward.room_id + ":" + reward.level + ":" + userId;
+      if (!this.ctx.storage.sql.exec("SELECT id FROM wallet_transactions WHERE user_id=? AND reference_id=?",userId,reference).toArray().length) {
+        this._creditNormalWalletAuthorized(userId,Number(reward.coins),"rocket_reward");
+        this.ctx.storage.sql.exec(`INSERT INTO wallet_transactions
+          (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at)
+          VALUES(?,?,'rocket_reward',?,0,?,?,?)`,crypto.randomUUID(),userId,Number(reward.coins),
+          reference,"Rocket " + reward.level + (reward.rank ? " Top " + reward.rank : " audience reward"),Date.now());
+      }
+      this.ctx.storage.sql.exec("UPDATE rocket_rewards SET credited=1 WHERE room_id=? AND level=? AND user_id=?",
+        reward.room_id,reward.level,userId);
+    }
+  }
+
+  _recordRocketGift(roomId,senderId,value,now) {
+    const previous = Number(this.ctx.storage.sql.exec("SELECT total FROM rocket_rooms WHERE room_id=?",roomId).toArray()[0].total);
+    for (const slice of rocketAllocation(previous,value)) {
+      this.ctx.storage.sql.exec(`INSERT INTO rocket_contributions(room_id,level,user_id,sending)
+        VALUES(?,?,?,?) ON CONFLICT(room_id,level,user_id) DO UPDATE SET sending=sending+excluded.sending`,
+        roomId,slice.level,senderId,slice.value);
+      if (!slice.completed) continue;
+      if (this.ctx.storage.sql.exec("SELECT 1 FROM rocket_completions WHERE room_id=? AND level=?",roomId,slice.level).toArray().length) continue;
+      this.ctx.storage.sql.exec("INSERT INTO rocket_completions(room_id,level,completed_at,historical) VALUES(?,?,?,0)",
+        roomId,slice.level,now);
+      const room = this._roomRow(roomId);
+      this.ctx.storage.sql.exec(`INSERT INTO country_ribbons
+        (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at)
+        VALUES(?, '*','rocket_launch',?,?,?,?,NULL,?,?,?,?)`,
+        "rocket-launch:" + roomId + ":" + slice.level,10 + slice.level,roomId,senderId,
+        String(room?.title || roomId),slice.level,"Rocket " + slice.level,now,now+9000);
+      this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO rocket_audience(room_id,level,user_id,entered_at)
+        SELECT ?,?,user_id,? FROM app_user_presence WHERE room_id=? AND last_seen>=?`,
+        roomId,slice.level,now,roomId,now-120000);
+
+    }
+    this.ctx.storage.sql.exec("UPDATE rocket_rooms SET total=? WHERE room_id=?",previous+value,roomId);
+    this._scheduleDirectoryAlarm(now);
+  }
+
+
+  _captureRocketAudience(roomId,userId,now) {
+    this._ensureRocketTables();
+    this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO rocket_audience(room_id,level,user_id,entered_at)
+      SELECT room_id,level,?,? FROM rocket_completions
+      WHERE room_id=? AND historical=0 AND settled_at IS NULL AND completed_at<=? AND completed_at+7000>?`,
+      userId,now,roomId,now,now);
+  }
+
+  _scheduleDirectoryAlarm(now=Date.now()) {
+    this._ensureRocketTables();
+    const next=this.ctx.storage.sql.exec(
+      "SELECT MIN(completed_at+7000) AS deadline FROM rocket_completions WHERE historical=0 AND settled_at IS NULL").toArray()[0]?.deadline;
+    this.ctx.storage.setAlarm(Math.min(this._nextIndiaMidnightUtc(now),next == null ? Infinity : Math.max(now+1,Number(next))));
+  }
+
+  settleRocketLaunches(now=Date.now()) {
+    this._ensureRocketTables();
+    return this.ctx.storage.transactionSync(()=>{
+      const launches=this.ctx.storage.sql.exec(
+        "SELECT * FROM rocket_completions WHERE historical=0 AND settled_at IS NULL AND completed_at+7000<=?",now).toArray();
+      for (const launch of launches) {
+        const roomId=String(launch.room_id),slice={level:Number(launch.level)};
+      const ranking = this._rocketRanking(roomId,slice.level);
+      const audience = this.ctx.storage.sql.exec(`SELECT a.user_id FROM rocket_audience a
+        JOIN app_users u ON u.user_id=a.user_id LEFT JOIN owner_user_controls c ON c.user_id=a.user_id
+        WHERE a.room_id=? AND a.level=? AND a.entered_at<? AND COALESCE(c.banned,0)=0`,
+        roomId,slice.level,launch.completed_at+7000).toArray();
+      const awards = rocketDraw(slice.level,ranking,audience.map(row=>String(row.user_id)));
+      for (const reward of awards) {
+        this.ctx.storage.sql.exec(`INSERT INTO rocket_rewards
+          (room_id,level,user_id,rank,coins,frame_id,medal,sending,credited,created_at)
+          VALUES(?,?,?,?,?,?,?,?,0,?)`,roomId,slice.level,reward.user_id,reward.rank,reward.coins,
+          reward.frame_id,reward.medal,reward.sending,now);
+        if (reward.frame_id) this.ctx.storage.sql.exec(`INSERT INTO user_inventory
+          (user_id,item_id,item_kind,acquired_at,expires_at) VALUES(?,?,'frame',?,NULL)
+          ON CONFLICT(user_id,item_id) DO NOTHING`,reward.user_id,reward.frame_id,now);
+        this._settleRocketCoins(reward.user_id);
+        this._notifyUser(reward.user_id,"rocket_reward","Rocket " + slice.level + " reward",
+          reward.coins ? reward.coins.toLocaleString("en-US") + " coins" : "Animated frame received",
+          {metadata:{room_id:roomId,rocket_level:slice.level,frame_id:reward.frame_id,coins:reward.coins}});
+      }
+        this.ctx.storage.sql.exec("UPDATE rocket_completions SET settled_at=? WHERE room_id=? AND level=?",now,roomId,slice.level);
+      }
+      return launches.length;
+    });
+  }
+
+  rocketRewardState(roomId) {
+    this._ensureRocketRoom(roomId);
+    this.settleRocketLaunches();
+    return Array.from({length:10},(_,i)=>{
+      const level=i+1,policy=rocketPolicy(level);
+      const completed=this.ctx.storage.sql.exec("SELECT historical FROM rocket_completions WHERE room_id=? AND level=?",roomId,level).toArray()[0];
+      const rewards=this.ctx.storage.sql.exec(`SELECT r.*,u.display_name,u.avatar_data_url FROM rocket_rewards r
+        JOIN app_users u ON u.user_id=r.user_id WHERE r.room_id=? AND r.level=? AND r.rank IS NOT NULL ORDER BY r.rank`,
+        roomId,level).toArray();
+      const top=(completed && rewards.length ? rewards : this._rocketRanking(roomId,level).slice(0,3));
+      return {level,completed:!!completed,historical:!!completed?.historical,
+        reward_users:policy.winners,audience_coin_users:25,audience_coin_max:policy.normalCoinMax,
+        top:top.map((row,index)=>({rank:index+1,user_id:String(row.user_id),
+          name:String(row.display_name || row.user_id),avatar_data_url:row.avatar_data_url || null,
+          sending:Number(row.sending),coins:policy.topCoins[index],
+          frame_id:"rocket-l"+level+"-top"+(index+1),medal:"Rocket "+level,awarded:rewards.length > 0}))};
+    });
+  }
+
   roomGiftRanking(roomIdValue, periodValue = "day") {
     const roomId = String(roomIdValue || "").trim();
     const period = ["day","week","month"].includes(String(periodValue)) ? String(periodValue) : "day";
@@ -5636,6 +5806,7 @@ export class AppDirectoryStore extends DurableObject {
     return {
       ok: true, room_id: roomId, period,
       lifetime_total: Math.max(0, Number(lifetimeRow?.total || 0)),
+      rocket_levels: this.rocketRewardState(roomId),
       ranking: rows.map((row, index) => ({
         rank: index + 1, user_id: String(row.sender_id),
         name: String(row.display_name || row.sender_id),
@@ -5738,7 +5909,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     this.ctx.storage.sql.exec("DELETE FROM country_ribbons WHERE expires_at <= ?", now);
     return this.ctx.storage.sql.exec(
-      "SELECT * FROM country_ribbons WHERE country_code = ? AND expires_at > ? ORDER BY priority DESC, created_at ASC LIMIT 50",
+      "SELECT * FROM country_ribbons WHERE (country_code = ? OR (country_code='*' AND kind='rocket_launch')) AND expires_at > ? ORDER BY priority DESC, created_at ASC LIMIT 50",
       countryCode, now,
     ).toArray().map((row)=>({ ...row, priority:Number(row.priority), amount:Number(row.amount), created_at:Number(row.created_at), expires_at:Number(row.expires_at) }));
   }
@@ -5786,7 +5957,7 @@ export class AppDirectoryStore extends DurableObject {
          owner_id = excluded.owner_id`,
       roomId, ownerId, dayKey, coins,
     );
-    this.ctx.storage.setAlarm(this._nextIndiaMidnightUtc(timestamp));
+    this._scheduleDirectoryAlarm(timestamp);
   }
 
   settleRoomGiftOwnerShares(timestamp = Date.now()) {
@@ -5831,7 +6002,7 @@ export class AppDirectoryStore extends DurableObject {
       );
       settled += 1;
     }
-    this.ctx.storage.setAlarm(this._nextIndiaMidnightUtc(timestamp));
+    this._scheduleDirectoryAlarm(timestamp);
     return { ok: true, settled_days: settled, credited_coins: credited };
   }
 
@@ -5860,11 +6031,13 @@ export class AppDirectoryStore extends DurableObject {
 
   async alarm() {
     const now = Date.now();
+    const rocketLaunches = this.settleRocketLaunches(now);
     const gifts = this.settleRoomGiftOwnerShares(now);
     const uniqueIdsReleased = this.settleExpiredUniqueIds(now);
     const eventNotifications = this.dispatchEventNotifications(now);
     return {
       ...gifts,
+      rocket_launches: rocketLaunches,
       unique_ids_released: uniqueIdsReleased,
       event_notifications_sent: Number(eventNotifications?.sent || 0),
     };
@@ -6250,6 +6423,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   sendGift(senderIdValue, input) {
+    return this.ctx.storage.transactionSync(() => this._sendGiftWithRocket(senderIdValue,input));
+  }
+
+  _sendGiftWithRocket(senderIdValue, input) {
     const senderId = String(senderIdValue || "").trim();
     this._enforceActionRate(senderId, "gift_send", 20, 10000, 60000);
     const roomId = String(input?.room_id || "").trim();
@@ -6378,6 +6555,7 @@ export class AppDirectoryStore extends DurableObject {
       if (!exists) throw new Error("Gift recipient not found");
     }
 
+    this._ensureRocketRoom(roomId);
     const wallet = this.getWallet(senderId);
     if (wallet.banned) throw new Error("Wallet is unavailable");
     if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
@@ -6623,6 +6801,8 @@ export class AppDirectoryStore extends DurableObject {
     } else {
       this._normalWalletGuard(senderId);
     }
+
+    this._recordRocketGift(roomId,senderId,roomSocialValue,now);
 
     return {
       ok: true,
@@ -8020,6 +8200,7 @@ export class AppDirectoryStore extends DurableObject {
   inventoryState(userIdValue) {
     this._ensureEconomyMigrations();
     const userId = this._resolveOwnerUserId(userIdValue);
+    this.ctx.storage.transactionSync(() => this._settleRocketCoins(userId));
     const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
       `SELECT ui.item_id,ui.item_kind,ui.acquired_at,ui.expires_at,
