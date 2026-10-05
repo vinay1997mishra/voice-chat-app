@@ -8,6 +8,7 @@ import '../app/tinni_state.dart';
 import '../identity/owner_tag.dart';
 import '../i18n/tinni_localization.dart';
 import '../infra/app_backend_service.dart';
+import '../infra/backend_http.dart';
 import '../ui/animated_avatar_frame.dart';
 import '../ui/premium_effects.dart';
 import 'family_home_screen.dart';
@@ -363,14 +364,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         path: '/app-user/tags',
         queryParameters: <String, String>{'user_id': account.userId},
       );
-      final request = await client.getUrl(uri);
+      final request = await openBackendRequest(client, 'GET', uri);
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer ' + account.authToken,
       );
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-      final response = await request.close();
-      final body = await utf8.decoder.bind(response).join();
+      final response = await closeBackendRequest(request);
+      final body = await readBackendResponse(response);
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final decoded = body.trim().isEmpty ? null : jsonDecode(body);
       if (decoded is! Map) return;

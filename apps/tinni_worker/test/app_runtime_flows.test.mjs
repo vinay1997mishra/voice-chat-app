@@ -7,9 +7,13 @@ test('authenticated app entry, core catalogs and social/profile reads use real S
   const a = await r.user(1);
   const room = await r.directory.createRoom(a.user_id, { title: 'Test room', seat_count: 12 });
   const paths = ['/app/me', '/wallet', '/account/preferences', '/profile-media',
-    '/profile/trends', '/notifications', '/cp', '/cp/ranking', '/families',
-    '/store/catalog', '/store/inventory', '/vip/catalog', '/unique-id/catalog',
-    '/gifts/lucky/state', '/rooms', '/rooms/themes',
+    '/profile/trends', '/notifications', '/account/stats', '/tasks', '/account/identities', '/feedback',
+    '/social/following', '/social/friends', '/social/blocked', '/social/blocked/details',
+    '/messages/inbox', '/calls/incoming', '/wallet/transactions',
+    '/wallet/coins/history', '/wallet/diamonds/history', '/hierarchy/portal',
+    '/hierarchy/invites', '/vip/me', '/frames/catalog', '/cp', '/cp/ranking', '/family/list',
+    '/store/catalog', '/inventory', '/vip/catalog', '/unique-ids/catalog',
+    '/gifts/lucky/state', '/rooms', '/room-themes',
     '/rooms/follow?room_id=' + room.id, '/rooms/membership?room_id=' + room.id];
   for (const path of paths) {
     const result = await r.request(path, a.token);

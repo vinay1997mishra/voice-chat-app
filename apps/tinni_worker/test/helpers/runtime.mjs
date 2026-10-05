@@ -10,7 +10,7 @@ function source(file) {
   return readFileSync(new URL('../../src/' + file, import.meta.url), 'utf8')
     .replace(/^import .*;\r?\n/gm, '')
     .replace(/^export \{.*\};\r?\n/gm, '')
-    .replace(/export class /g, 'class ');
+    .replace(/export (?=(?:async )?(?:class|function|const|let) )/g, '');
 }
 function storeClass(file, name) {
   return new Function('DurableObject', source(file) + '\nreturn ' + name)(DurableObject);
