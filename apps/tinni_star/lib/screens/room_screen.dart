@@ -88,6 +88,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       <String, ImageProvider>{};
   Future<Map<String, dynamic>>? _roomSendingSummaryFuture;
   final _rocketCompleted = ValueNotifier<int?>(null);
+  int? _selectedRocketPreviewLevel;
   Timer? _roomRecoveryTimer;
   bool _roomRecoveryRunning = false;
   static const List<int> _rocketStageTargets = <int>[
@@ -5366,64 +5367,82 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                     : current
                                         ? const Color(0xFF61D9FF)
                                         : const Color(0xFF56627E);
-                                return Container(
+                                final level=index+1;
+                                final previewSelected=
+                                    _selectedRocketPreviewLevel==level;
+                                return InkWell(
                                   key: Key(
-                                    'room-rocket-stage-' +
-                                        (index + 1).toString(),
+                                    'room-rocket-stage-' + level.toString(),
                                   ),
-                                  margin: const EdgeInsets.only(bottom: 7),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 7,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: current
-                                        ? const Color(0xFF0D2D72)
-                                        : const Color(0xFF071B4D),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: color.withValues(alpha: 0.95),
-                                      width: current ? 1.6 : 1,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedRocketPreviewLevel=level;
+                                    });
+                                  },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 7),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 7,
                                     ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 22,
-                                        child: Text(
-                                          (index + 1).toString(),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: color,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w900,
+                                    decoration: BoxDecoration(
+                                      color: previewSelected
+                                          ? const Color(0xFF173E8F)
+                                          : current
+                                              ? const Color(0xFF0D2D72)
+                                              : const Color(0xFF071B4D),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: previewSelected
+                                            ? const Color(0xFFFFFFFF)
+                                            : color.withValues(alpha: 0.95),
+                                        width: previewSelected
+                                            ? 2
+                                            : current
+                                                ? 1.6
+                                                : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 22,
+                                          child: Text(
+                                            level.toString(),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: color,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w900,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            RocketModel(
-                                              level: index + 1,
-                                              size: 20,
-                                            ),
-                                            Text(
-                                              _compactRoomSending(target),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: RoyalPalette.cream,
-                                                fontSize: 7.5,
-                                                fontWeight: FontWeight.w700,
+                                        const SizedBox(width: 3),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              RocketModel(
+                                                level: level,
+                                                size: 20,
                                               ),
-                                            ),
-                                          ],
+                                              Text(
+                                                _compactRoomSending(target),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: RoyalPalette.cream,
+                                                  fontSize: 7.5,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 );
                               },
@@ -5434,8 +5453,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         Expanded(
                           child: Center(
                             child: RocketModel(
-                              level: allComplete ? 10 : currentIndex + 1,
-                              size: 92,
+                              key: Key(
+                                'room-rocket-large-preview-' +
+                                    (_selectedRocketPreviewLevel ??
+                                            (allComplete
+                                                ? 10
+                                                : currentIndex + 1))
+                                        .toString(),
+                              ),
+                              level: _selectedRocketPreviewLevel ??
+                                  (allComplete ? 10 : currentIndex + 1),
+                              size: 112,
                             ),
                           ),
                         ),
