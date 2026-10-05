@@ -8,7 +8,7 @@ class _Player implements AudioPlayer {
   int pauses=0,stops=0;
   @override bool get playing=>playingValue;
   @override Stream<PlayerState> get playerStateStream=>const Stream.empty();
-  @override Future<Duration?> setFilePath(String path,{Duration? initialPosition, dynamic tag}) async=>Duration.zero;
+  @override Future<Duration?> setFilePath(String path,{Duration? initialPosition, bool preload=true, dynamic tag}) async=>Duration.zero;
   @override Future<void> setVolume(double volume) async {}
   @override Future<void> play(){playingValue=true;return pending.future;}
   @override Future<void> pause() async {pauses++;playingValue=false;}

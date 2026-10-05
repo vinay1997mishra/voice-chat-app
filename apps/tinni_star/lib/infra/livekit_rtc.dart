@@ -28,6 +28,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
   Timer? _speakingTimer;
   int _generation = 0;
   bool _applyingAudioPreference = false;
+  final Set<String> _disabledRemoteTrackSids = <String>{};
   final ValueNotifier<Map<String, double>> _speakingLevels =
       ValueNotifier<Map<String, double>>(const <String, double>{});
 
@@ -129,6 +130,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
     _publishing = false;
     _publishingCamera = false;
     _remoteAudioEnabled = true;
+    _disabledRemoteTrackSids.clear();
 
     if (oldRoom != null) {
       try {
@@ -189,7 +191,7 @@ class LiveKitRtcAdapter implements RtcAdapter {
       return;
     }
 
-    if (!_remoteAudioEnabled && !_applyingAudioPreference) {
+    if ((!_remoteAudioEnabled || _disabledRemoteTrackSids.isNotEmpty) && !_applyingAudioPreference) {
       unawaited(_applyRemoteAudioPreference().catchError((Object _) {}));
     }
     final next = <String, double>{};
@@ -230,9 +232,10 @@ class LiveKitRtcAdapter implements RtcAdapter {
     for (final participant in room.remoteParticipants.values) {
       for (final publication in participant.audioTrackPublications) {
         if (_remoteAudioEnabled) {
-          await publication.enable();
-        } else {
-          await publication.disable();
+          if (_disabledRemoteTrackSids.remove(publication.sid)) await publication.enable();
+        } else if (_disabledRemoteTrackSids.add(publication.sid)) {
+          try { await publication.disable(); }
+          catch (_) { _disabledRemoteTrackSids.remove(publication.sid); rethrow; }
         }
       }
     }

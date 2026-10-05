@@ -137,7 +137,7 @@ class ActiveRoomSession extends ChangeNotifier {
     final seatMuted = seatIndex >= 0 &&
         seatIndex < roomController.seats.length &&
         roomController.seats[seatIndex].roomMuted;
-    return connected && realtime.rtc.publishingMic &&
+    return connected && realtime.rtc.state == RtcConnectionState.joined && realtime.rtc.publishingMic &&
         roomController.micState == MicState.live &&
         !roomController.selfMuted &&
         !presence.selfMicMuted &&
@@ -230,8 +230,8 @@ class ActiveRoomSession extends ChangeNotifier {
       await setMicFromController();
     } catch (error) {
       if (epoch != _voiceEpoch) return;
-      connected = false;
-      connectionError = 'Voice connection failed: ' +
+      connected = realtime.rtc.state == RtcConnectionState.joined;
+      connectionError = (connected ? 'Microphone update failed: ' : 'Voice connection failed: ') +
           error.toString().replaceFirst('Bad state: ', '');
       _nextVoiceAttempt = DateTime.now().add(Duration(seconds: _voiceRetrySeconds));
       _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 30).toInt();
@@ -317,6 +317,9 @@ class ActiveRoomSession extends ChangeNotifier {
       await setMicFromController();
     } catch (_) {
       current.forceMicMuted();
+      if (realtime.rtc.publishingMic) {
+        try { await realtime.setMic(false); } catch (_) {}
+      }
       rethrow;
     } finally { _micActionRunning = false; }
   }
@@ -399,6 +402,14 @@ class ActiveRoomSession extends ChangeNotifier {
           !roomController.selfMuted &&
           roomController.micState == MicState.live,
     );
+    // Permission/seat moderation can change while LiveKit creates a track.
+    // Recheck after publishing so a late track cannot bypass a new mute.
+    final latestSeat = roomController.mySeat;
+    final allowedNow = identical(controller, roomController) &&
+        latestSeat != null && !presence.selfMicMuted &&
+        !roomController.seats[latestSeat].roomMuted && !roomController.selfMuted &&
+        roomController.micState == MicState.live;
+    if (!allowedNow && realtime.rtc.publishingMic) await realtime.setMic(false);
     await syncCurrentPresence();
   }
 
