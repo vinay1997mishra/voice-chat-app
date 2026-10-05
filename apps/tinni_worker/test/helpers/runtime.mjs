@@ -1,3 +1,4 @@
+import { premiumGiftCatalog } from '../../src/premium_gift_catalog.js';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { webcrypto } from 'node:crypto';
@@ -13,7 +14,7 @@ function source(file) {
     .replace(/export (?=(?:async )?(?:class|function|const|let) )/g, '');
 }
 function storeClass(file, name) {
-  return new Function('DurableObject', source(file) + '\nreturn ' + name)(DurableObject);
+  return new Function('DurableObject', 'premiumGiftCatalog', source(file) + '\nreturn ' + name)(DurableObject, premiumGiftCatalog);
 }
 export function runtime() {
   const databases = [];
