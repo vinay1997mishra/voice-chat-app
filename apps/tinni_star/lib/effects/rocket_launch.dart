@@ -83,16 +83,24 @@ class RocketModelPainter extends CustomPainter {
     if(tier>=4) for(final y in [66.0,92.0]) {
       canvas.drawRect(Rect.fromLTWH(35,y,30,3),Paint()..color=accent);
     }
-    if(tier>=5) metal(const Rect.fromLTWH(40,58,20,9),radius:2);
-    if(tier>=6) for(final x in [40.0,60.0]) {
-      canvas.drawLine(Offset(x,70),Offset(x,90),Paint()..color=accent..strokeWidth=2);
+    if(tier>=5) {
+      metal(const Rect.fromLTWH(40,58,20,9),radius:2);
+    }
+    if(tier>=6) {
+      for(final x in [40.0,60.0]) {
+        canvas.drawLine(Offset(x,70),Offset(x,90),Paint()..color=accent..strokeWidth=2);
+      }
     }
     if(tier>=8) {
-      for(final x in [18.0,69.0]) metal(Rect.fromLTWH(x,54,13,8),radius:1);
+      for(final x in [18.0,69.0]) {
+        metal(Rect.fromLTWH(x,54,13,8),radius:1);
+      }
     }
-    if(tier>=9) for(final y in [73.0,83.0,98.0]) {
-      canvas.drawCircle(Offset(39,y),1.5,Paint()..color=accent);
-      canvas.drawCircle(Offset(61,y),1.5,Paint()..color=accent);
+    if(tier>=9) {
+      for(final y in [73.0,83.0,98.0]) {
+        canvas.drawCircle(Offset(39,y),1.5,Paint()..color=accent);
+        canvas.drawCircle(Offset(61,y),1.5,Paint()..color=accent);
+      }
     }
     if(tier>=10) {
       canvas.drawLine(const Offset(50,5),const Offset(50,0),Paint()..color=accent..strokeWidth=2);
