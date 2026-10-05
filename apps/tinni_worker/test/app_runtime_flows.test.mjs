@@ -13,7 +13,7 @@ test('authenticated app entry, core catalogs and social/profile reads use real S
     '/wallet/coins/history', '/wallet/diamonds/history', 
     '/hierarchy/invites', '/vip/me', '/frames/catalog', '/cp', '/cp/ranking', '/family/list',
     '/store/catalog', '/inventory', '/vip/catalog', '/unique-ids/catalog',
-    '/gifts/lucky/state', '/rooms', '/room-themes',
+    '/gifts/lucky/state', '/rooms', '/room-themes?room_id=' + room.id,
     '/rooms/follow?room_id=' + room.id, '/rooms/membership?room_id=' + room.id];
   for (const path of paths) {
     await t.test(path, async () => {
@@ -76,6 +76,8 @@ test('profile preferences, room following and direct messages persist through re
   assert.equal(followed.status, 200, JSON.stringify(followed.data));
   const social = await r.request('/social/follow', a.token, { target_user_id: b.user_id, following: true });
   assert.equal(social.status, 200, JSON.stringify(social.data));
+  const reciprocal = await r.request('/social/follow', b.token, { target_user_id: a.user_id, following: true });
+  assert.equal(reciprocal.status, 200, JSON.stringify(reciprocal.data));
   const message = await r.request('/messages', a.token, { to_user_id: b.user_id, text: 'Hello from the flow test' });
   assert.equal(message.status, 201, JSON.stringify(message.data));
   const inbox = await r.request('/messages?peer_user_id=' + a.user_id, b.token);
