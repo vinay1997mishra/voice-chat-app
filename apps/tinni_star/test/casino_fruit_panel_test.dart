@@ -8,6 +8,8 @@ import 'package:tinni_star/screens/casino_fruit_panel.dart';
 import 'package:tinni_star/ui/casino_fruit_art.dart';
 
 class _Game extends ChangeNotifier {
+  _Game({this.party = false});
+  final bool party;
   int balance = 50000;
   int mine = 0;
   int round = 1;
@@ -16,7 +18,7 @@ class _Game extends ChangeNotifier {
     connected: true, loading: false, bettingOpen: remaining > Duration.zero,
     spinning: false, remaining: remaining, spinRemaining: Duration.zero,
     roundDuration: 21000, round: round, balance: balance, mine: mine, winnings: 0,
-    jackpot: 85763, history: const [],
+    jackpot: party ? null : 85763, history: const [],
     fruits: [
       for (final key in ['lemon', 'cherry', 'kiwi', 'strawberry',
         'watermelon', 'banana', 'raspberry', 'plum'])
@@ -52,7 +54,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
-        final game = _Game();
+        final game = _Game(party: party);
         final id = party ? 'fruit-party' : 'fruit-jackpot';
         await tester.pumpWidget(_harness(game, id: id, party: party));
         await tester.pump(const Duration(milliseconds: 180));
