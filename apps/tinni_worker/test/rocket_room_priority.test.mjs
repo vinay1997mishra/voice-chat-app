@@ -10,6 +10,7 @@ test('higher rocket launch outranks experience, ties use recent launch and expir
  const rooms=[];
  for(const user of users) rooms.push(await r.directory.createRoom(user.user_id,{title:'Priority '+user.user_id,seat_count:12}));
  const d=r.directory;
+ d.ctx.storage.sql.exec(`INSERT INTO gift_transactions(id,room_id,sender_id,receiver_id,gift_id,gift_name,quantity,unit_price,total_cost,created_at) VALUES('experience-fixture',?,?,?,'rose','Rose',1,999999999,999999999,?)`,rooms[0].id,users[0].user_id,users[1].user_id,now);
  d.ctx.storage.sql.exec("UPDATE app_rooms SET country_code='SA' WHERE id=?",rooms[1].id);
  d._boostRocketRoom(rooms[0].id,4,now);
  d._boostRocketRoom(rooms[1].id,9,now);
