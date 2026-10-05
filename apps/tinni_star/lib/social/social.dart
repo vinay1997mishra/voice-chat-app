@@ -91,6 +91,8 @@ class SocialService {
   WebSocket? _messageSocket;
   StreamSubscription<dynamic>? _messageSocketSubscription;
   Timer? _messageReconnectTimer;
+  Timer? _messageConnectTimeout;
+  Completer<WebSocket>? _pendingMessageConnection;
   String? _messageAuthToken;
   bool _messageEventsWanted = false;
   bool _messageSocketConnecting = false;
@@ -114,6 +116,13 @@ class SocialService {
   Future<void> disconnectMessageEvents() async {
     _messageEventsWanted = false;
     _messageAuthToken = null;
+    _messageConnectTimeout?.cancel();
+    _messageConnectTimeout = null;
+    final pending = _pendingMessageConnection;
+    if (pending != null && !pending.isCompleted) {
+      pending.completeError(StateError('Message connection cancelled'));
+    }
+    _pendingMessageConnection = null;
     _messageReconnectTimer?.cancel();
     _messageReconnectTimer = null;
     final subscription = _messageSocketSubscription;
@@ -140,21 +149,31 @@ class SocialService {
         path: '/messages/live',
         query: null,
       );
-      var connectExpired = false;
-      final connection = WebSocket.connect(
+      final pending = Completer<WebSocket>();
+      _pendingMessageConnection = pending;
+      _messageConnectTimeout = Timer(const Duration(seconds: 15), () {
+        if (!pending.isCompleted) {
+          pending.completeError(TimeoutException('Message connection timed out'));
+        }
+      });
+      unawaited(WebSocket.connect(
         socketUri.toString(),
         headers: <String, dynamic>{
           HttpHeaders.authorizationHeader: 'Bearer $token',
         },
-      );
-      unawaited(connection.then<void>((lateSocket) {
-        if (connectExpired) unawaited(lateSocket.close());
-      }, onError: (Object error, StackTrace stack) {}));
-      final socket = await connection.timeout(const Duration(seconds: 15),
-        onTimeout: () {
-          connectExpired = true;
-          throw TimeoutException('Message connection timed out');
-        });
+      ).then<void>((socket) {
+        if (pending.isCompleted) {
+          unawaited(socket.close());
+        } else {
+          pending.complete(socket);
+        }
+      }, onError: (Object error, StackTrace stack) {
+        if (!pending.isCompleted) pending.completeError(error, stack);
+      }));
+      final socket = await pending.future;
+      _messageConnectTimeout?.cancel();
+      _messageConnectTimeout = null;
+      _pendingMessageConnection = null;
       if (!_messageEventsWanted || token != _messageAuthToken) {
         await socket.close();
         return;
@@ -170,6 +189,9 @@ class SocialService {
     } catch (_) {
       _scheduleMessageSocketReconnect();
     } finally {
+      _messageConnectTimeout?.cancel();
+      _messageConnectTimeout = null;
+      _pendingMessageConnection = null;
       _messageSocketConnecting = false;
     }
   }
@@ -735,6 +757,11 @@ class SocialService {
   void dispose() {
     _messageEventsWanted = false;
     _messageAuthToken = null;
+    _messageConnectTimeout?.cancel();
+    final pending = _pendingMessageConnection;
+    if (pending != null && !pending.isCompleted) {
+      pending.completeError(StateError('Message service disposed'));
+    }
     unawaited(_messageSocketSubscription?.cancel());
     unawaited(_messageSocket?.close());
     _messageSocket = null;

@@ -373,6 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _rocketRoomRefresh?.cancel();
     widget.state.social.roomEvents.removeListener(_onRoomEvent);
+    unawaited(widget.state.social.disconnectMessageEvents());
     _pageController.dispose();
     super.dispose();
   }
