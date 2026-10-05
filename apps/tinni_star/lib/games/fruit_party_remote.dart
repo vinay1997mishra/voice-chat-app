@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,12 +10,16 @@ class FruitPartyRemoteService extends ChangeNotifier {
   FruitPartyRemoteService({
     Uri? apiBase,
     HttpClient? httpClient,
+    this.requestTimeout = const Duration(seconds: 15),
   })  : apiBase = apiBase ??
             Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
         _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  final Duration requestTimeout;
+  Future<void>? _syncFuture;
+  bool _disposed = false;
 
   bool connected = false;
   bool loading = false;
@@ -69,25 +74,29 @@ class FruitPartyRemoteService extends ChangeNotifier {
   int get userTotalBet =>
       myBets.values.fold<int>(0, (sum, amount) => sum + amount);
 
-  Future<void> sync(String authToken) async {
-    if (loading) return;
+  Future<void> sync(String authToken) {
+    if (_disposed) return Future<void>.value();
+    final pending = _syncFuture;
+    if (pending != null) return pending;
+    final operation = _sync(authToken);
+    _syncFuture = operation;
+    return operation.whenComplete(() {
+      if (identical(_syncFuture, operation)) _syncFuture = null;
+    });
+  }
+
+  Future<void> _sync(String authToken) async {
     loading = true;
     try {
       final startedAt = DateTime.now().millisecondsSinceEpoch;
       final uri = apiBase.replace(path: '/fruit-party/state');
-      final request = await _httpClient.getUrl(uri);
+      final request = await _httpClient.getUrl(uri).timeout(requestTimeout);
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer $authToken',
       );
-      final response = await request.close();
-      final data = await _readJson(response);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
-          data['error']?.toString() ?? 'Server HTTP ${response.statusCode}',
-        );
-      }
+      final data = await _requestJson(request);
 
       final finishedAt = DateTime.now().millisecondsSinceEpoch;
       final midpoint = startedAt + ((finishedAt - startedAt) ~/ 2);
@@ -99,7 +108,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
       lastError = error.toString();
     } finally {
       loading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -109,12 +118,18 @@ class FruitPartyRemoteService extends ChangeNotifier {
     required FruitPartyKind fruit,
     required int amount,
   }) async {
-    if (!connected) return 'Server is reconnecting.';
+    if (!connected) {
+      await sync(authToken);
+      if (!connected) {
+        return lastError?.replaceFirst('Bad state: ', '') ??
+            'Server connection failed. Please retry.';
+      }
+    }
     if (!bettingOpen) return 'Betting locked for this round.';
 
     try {
       final uri = apiBase.replace(path: '/fruit-party/bet');
-      final request = await _httpClient.postUrl(uri);
+      final request = await _httpClient.postUrl(uri).timeout(requestTimeout);
       request.headers.contentType = ContentType.json;
       request.headers.set(
         HttpHeaders.authorizationHeader,
@@ -129,24 +144,36 @@ class FruitPartyRemoteService extends ChangeNotifier {
       );
 
       final startedAt = DateTime.now().millisecondsSinceEpoch;
-      final response = await request.close();
-      final data = await _readJson(response);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return data['error']?.toString() ?? 'Bet failed.';
-      }
+      final data = await _requestJson(request);
 
       final finishedAt = DateTime.now().millisecondsSinceEpoch;
       final midpoint = startedAt + ((finishedAt - startedAt) ~/ 2);
       _applyState(data, clientMidpointMs: midpoint);
       connected = true;
       lastError = null;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       return null;
     } catch (error) {
       connected = false;
       lastError = error.toString();
-      notifyListeners();
-      return 'Server connection failed.';
+      if (!_disposed) notifyListeners();
+      return lastError!.replaceFirst('Bad state: ', '');
+    }
+  }
+
+  Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
+    try {
+      final response = await request.close().timeout(requestTimeout);
+      final data = await _readJson(response).timeout(requestTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(
+          data['error']?.toString() ?? 'Server HTTP ${response.statusCode}',
+        );
+      }
+      return data;
+    } catch (error) {
+      request.abort(error);
+      rethrow;
     }
   }
 
@@ -268,6 +295,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _httpClient.close(force: true);
     super.dispose();
   }
