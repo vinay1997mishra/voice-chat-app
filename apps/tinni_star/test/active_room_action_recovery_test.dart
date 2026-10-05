@@ -60,6 +60,11 @@ class _Presence extends RoomPresenceService {
   @override Future<void> leaveSeat({required String roomId,required String authToken}) async {snapshot(null,false);}
   @override Future<void> leave({required String roomId,required String authToken}) async {}
 }
+class _UnconfirmedPresence extends _Presence {
+  @override Future<void> takeSeat({required String roomId,required String authToken,required int seatIndex}) async {
+    snapshot(null,false);
+  }
+}
 class _Permissions extends RoomPermissionBridge {
   bool granted = true;
   @override Future<bool> requestVoiceRoomPermissions() async => granted;
@@ -99,6 +104,13 @@ void main() {
     expect(rtc.publishingMic,false);
     await session.takeMySeat(1);
     expect(session.controller!.mySeat,1);
+    await session.close();session.dispose();presence.dispose();
+  });
+  testWidgets('unconfirmed seat response throws instead of reporting success',(tester) async {
+    final rtc=_Rtc(),presence=_UnconfirmedPresence(),session=_session(rtc,presence);
+    await session.open(_room,userId:'me',authToken:'token');
+    await expectLater(session.takeMySeat(0),throwsA(isA<StateError>()));
+    expect(session.controller!.mySeat,isNull);
     await session.close();session.dispose();presence.dispose();
   });
   testWidgets('seat moderation mute/unmute restores a live microphone',(tester) async {

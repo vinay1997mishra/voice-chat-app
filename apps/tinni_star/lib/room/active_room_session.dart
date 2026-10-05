@@ -523,6 +523,10 @@ class ActiveRoomSession extends ChangeNotifier {
       seatIndex: seatIndex,
     );
     await _applyForcedSeatChange();
+    _reconcileMySeatFromPresence();
+    if (controller?.mySeat != seatIndex) {
+      throw StateError('Seat join was not confirmed. Please try again.');
+    }
     await _enforceModerationMute();
   }
 

@@ -238,9 +238,9 @@ void main() {
     }
   });
 
-  test('room action notification lasts one second', () {
+  test('room action errors remain readable during recovery', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
-    expect(room.contains('duration: const Duration(seconds: 1)'), true);
+    expect(room.contains('duration: const Duration(seconds: 5)'), true);
     expect(room.contains('messenger.hideCurrentSnackBar();'), true);
   });
 
