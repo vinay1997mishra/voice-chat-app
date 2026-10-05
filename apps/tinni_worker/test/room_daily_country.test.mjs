@@ -27,8 +27,7 @@ test('country-local owner bonus credits one closed sending day exactly once; no 
   assert.equal(credits.length,1);assert.equal(credits[0].coins_delta,100);
   assert.equal(r.directory.settleRoomGiftOwnerShares(now).credited_coins,0);
  }
- now+=4*86400000;
- assert.equal(r.directory.settleRoomGiftOwnerShares(now).credited_coins,0);
+ assert.equal(r.directory.settleRoomGiftOwnerShares(now+4*86400000).credited_coins,0);
  const item=owners[0];
  const sent=await r.request('/gifts/send',item.owner.token,{room_id:item.room.id,gift_id:'rose',quantity:20,receiver_ids:[receiver.user_id]});
  assert.equal(sent.status,201);
