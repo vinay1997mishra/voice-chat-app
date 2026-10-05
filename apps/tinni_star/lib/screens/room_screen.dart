@@ -3549,10 +3549,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       'Luxury',
     ];
 
-    final roomGifts = <GiftDefinition>[
-      ...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,
-      ...PremiumGiftCatalog.countries,...GiftService.luckyCatalog,
-    ];
     List<GiftDefinition> visibleGifts() {
       switch(giftCategory) {
         case 'Lucky': return GiftService.luckyCatalog;
