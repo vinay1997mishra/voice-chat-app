@@ -20,16 +20,26 @@ test('25 animated shop frames cover themes and charge 10k through 8m authoritati
  for(const frame of frames){
   assert.equal(frame.data.animated,true);
   assert.throws(()=>d.equipFrame(b.user_id,frame.id),/not owned/);
-  const purchased=d.purchaseFrame(a.user_id,frame.id,'IN');
+  const purchaseResponse=await r.request('/frames/purchase',a.token,{frame_id:frame.id,price:1});
+  assert.equal(purchaseResponse.status,200,JSON.stringify(purchaseResponse.data));
+  const purchased=purchaseResponse.data;
   balance-=frame.price;
   assert.equal(purchased.wallet.coins,balance);
   assert.ok(purchased.inventory.owned.some(x=>x.item_id===frame.id));
-  const duplicate=d.purchaseFrame(a.user_id,frame.id,'IN');
+  const duplicateResponse=await r.request('/frames/purchase',a.token,{frame_id:frame.id});
+  assert.equal(duplicateResponse.status,200);
+  const duplicate=duplicateResponse.data;
   assert.equal(duplicate.duplicate,true);
   assert.equal(duplicate.wallet.coins,balance);
-  assert.equal(d.equipFrame(a.user_id,frame.id).inventory.equipped_frame_id,frame.id);
+  const equipped=await r.request('/frames/equip',a.token,{frame_id:frame.id});
+  assert.equal(equipped.status,200);
+  assert.equal(equipped.data.inventory.equipped_frame_id,frame.id);
  }
  assert.equal(balance,0);
+ const denied=await r.request('/frames/purchase',b.token,{frame_id:frames[24].id,price:1});
+ assert.equal(denied.status,400);
+ assert.equal(d.getWallet(b.user_id).coins,0);
+ assert.ok(!d.inventoryState(b.user_id).owned.some(x=>x.item_id===frames[24].id));
  const row=d.ctx.storage.sql.exec("SELECT * FROM owner_catalog WHERE id=?",frames[0].id).toArray()[0];
  const data=JSON.parse(row.data_json);data.coin_price=12345;
  d.ctx.storage.sql.exec("UPDATE owner_catalog SET data_json=? WHERE id=?",JSON.stringify(data),row.id);
