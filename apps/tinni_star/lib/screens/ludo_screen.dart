@@ -192,8 +192,12 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
         ])),
-        Text(player.name.substring(0,1).toUpperCase(),
-          style: TextStyle(color: _color(player), fontSize: 11, fontWeight: FontWeight.w900)),
+        Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(player.name.substring(0,1).toUpperCase(),
+            style: TextStyle(color: _color(player), fontSize: 11, fontWeight: FontWeight.w900)),
+          Text(game.tokens[player]!.where((token) => token.isFinished).length.toString() + '/4',
+            style: const TextStyle(color: Colors.white60, fontSize: 8)),
+        ]),
         IconButton(key: Key('ludo-mic-' + player.name),
           tooltip: mine ? 'Toggle your room microphone' : (voice ? 'Microphone on' : 'Microphone off'),
           padding: EdgeInsets.zero, constraints: const BoxConstraints.tightFor(width: 30, height: 32),
@@ -254,6 +258,19 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
           ));
         })),
         const SizedBox(height: 4),
+        if (mine && game.rolled != null && game.winner == null)
+          SizedBox(height: 30, child: Row(children: [
+            for (var index = 0; index < 4; index++)
+              Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: OutlinedButton(
+                  key: Key('ludo-move-token-' + index.toString()),
+                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                  onPressed: !_busy && movable.contains(index)
+                    ? () => _act((auth) => widget.state.backend.ludoMove(
+                      auth, roomId: widget.roomId, tokenIndex: index)) : null,
+                  child: Text('Token ' + (index + 1).toString(), style: const TextStyle(fontSize: 10)),
+                ))),
+          ])),
         Row(children: [_player(LudoPlayer.blue), _player(LudoPlayer.yellow)]),
         const SizedBox(height: 4),
       ]);
@@ -473,6 +490,13 @@ class _LudoBoardPainter extends CustomPainter {
       canvas.drawRect(rect, border);
     }
 
+    for (final index in [0,8,13,21,26,34,39,47]) {
+      final point = _LudoGeometry.track(side)[index];
+      final star = TextPainter(text: TextSpan(text:'★',
+        style:TextStyle(color:const Color(0xFF80682C),fontSize:cell*.7)),
+        textDirection:TextDirection.ltr)..layout();
+      star.paint(canvas,point-Offset(star.width/2,star.height/2));
+    }
     for (final player in LudoPlayer.values) {
       final start = _LudoGeometry.track(side)[LudoGame.startOffsets[player]!];
       canvas.drawRect(Rect.fromCenter(center:start,width:cell,height:cell),

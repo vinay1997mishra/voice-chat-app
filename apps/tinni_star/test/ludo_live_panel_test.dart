@@ -12,6 +12,7 @@ import 'package:tinni_star/screens/ludo_screen.dart';
 
 class _Backend extends AppBackendService {
   int rolls=0,moves=0,leaves=0;
+  int? lastToken;
   Completer<Map<String,dynamic>>? pendingRoll;
   Map<String,dynamic> state={
     'ok':true,'version':1,'player_color':'red','current_player':'red','rolled':null,
@@ -27,7 +28,7 @@ class _Backend extends AppBackendService {
     rolls++;return pendingRoll!.future;
   }
   @override Future<Map<String,dynamic>> ludoMove(String token,{required String roomId,required int tokenIndex}) async {
-    moves++;
+    moves++;lastToken=tokenIndex;
     state={...state,'version':3,'current_player':'green','rolled':null,'status':'GREEN turn.',
       'tokens':{...state['tokens'] as Map,'red':[0,-1,-1,-1]}};
     return state;
@@ -98,4 +99,18 @@ void main() {
     expect(tester.widget<FilledButton>(find.byKey(const Key('ludo-roll-dice'))).onPressed,isNotNull);
     await tester.pumpWidget(const SizedBox());await tester.pump();
   });
+  testWidgets('stacked tokens remain selectable through numbered move buttons',(tester) async{
+    final backend=_Backend();
+    backend.state={...backend.state,'rolled':6,
+      'tokens':{...backend.state['tokens'] as Map,'red':[0,0,0,0]}};
+    final state=_state(backend);
+    await tester.pumpWidget(_view(state,446));await tester.pump();
+    for(var index=0;index<4;index++) {
+      expect(find.byKey(Key('ludo-move-token-'+index.toString())),findsOneWidget);
+    }
+    await tester.tap(find.byKey(const Key('ludo-move-token-2')));await tester.pump();
+    expect(backend.lastToken,2);expect(backend.moves,1);
+    await tester.pumpWidget(const SizedBox());await tester.pump();
+  });
+
 }
