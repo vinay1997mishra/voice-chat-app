@@ -46,7 +46,7 @@ test('a committed gift stays successful when room visual delivery fails', async 
   const getPresence = r.env.ROOM_PRESENCE.get.bind(r.env.ROOM_PRESENCE);
   r.env.ROOM_PRESENCE.get = id => {
     const presence = getPresence(id);
-    presence.recordGift = () => { throw new Error('Simulated broadcast failure'); };
+    r.objects.get('ROOM_PRESENCE:' + id).recordGift = () => { throw new Error('Simulated broadcast failure'); };
     return presence;
   };
   const sent = await r.request('/gifts/send', a.token, {

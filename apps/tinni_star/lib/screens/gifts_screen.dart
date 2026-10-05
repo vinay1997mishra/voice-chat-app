@@ -119,13 +119,17 @@ class _GiftsScreenState extends State<GiftsScreen> {
         id: 'gift-ui-${widget.state.gifts.sent.length}',
         kind: EffectKind.gift, asset: '${gift.effectKind}:${gift.id}', priority: 60,
       ));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${gift.name} sent.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${gift.name} sent.')),
+        );
+      }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.state.backend.userSafeError(error))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.state.backend.userSafeError(error))),
+        );
+      }
     } finally {
       if (mounted) setState(() => sending = false);
     }
