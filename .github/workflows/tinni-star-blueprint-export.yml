@@ -3,7 +3,7 @@ name: Tinni Star Blueprint Export
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [tinnistar]
     paths:
       - 'docs/TINNI_STAR_COMPLETE_IMPLEMENTATION_BLUEPRINT_V3.md'
       - '.github/workflows/tinni-star-blueprint-export.yml'

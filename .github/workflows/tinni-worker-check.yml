@@ -2,13 +2,13 @@ name: Tinni Worker Check
 
 on:
   push:
-    branches: [main, fix/final-gift-rocket-flow]
+    branches: [tinnistar]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
       - '.github/workflows/tinni-worker-check.yml'
   pull_request:
-    branches: [main, fix/final-gift-rocket-flow]
+    branches: [tinnistar]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
