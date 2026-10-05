@@ -9,7 +9,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -26,11 +26,16 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout --signal=TERM --kill-after=5s 180s npx wrangler tail --format=json > /tmp/tinni-seat-tail.json 2>/tmp/tinni-seat-tail-status.txt
+          timeout --signal=TERM --kill-after=5s 300s npx wrangler tail --format=json > /tmp/tinni-seat-tail.json 2>/tmp/tinni-seat-tail-status.txt
           python3 - <<'PY'
           import json,re
           from pathlib import Path
           raw=Path('/tmp/tinni-seat-tail.json').read_text()
+          status=Path('/tmp/tinni-seat-tail-status.txt').read_text()
+          print('Tail output bytes: '+str(len(raw)))
+          for line in status.splitlines():
+              if any(marker in line.lower() for marker in ['authentication','permission','error code','[error]']):
+                  print('Tail client status: '+line[:300])
           decoder=json.JSONDecoder()
           events=[]
           while raw.strip():
