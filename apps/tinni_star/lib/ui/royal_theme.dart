@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
 abstract final class RoyalPalette {
-  // Luxury base: deep obsidian with restrained warm-metal highlights.
-  static const black = Color(0xFF030303);
-  static const nearBlack = Color(0xFF0A0908);
-  static const panel = Color(0xFF12100D);
-  static const panel2 = Color(0xFF1A1712);
+  // Midnight blue surfaces, readable text and restrained champagne accents.
+  static const black = Color(0xFF0B1020);
+  static const nearBlack = Color(0xFF101729);
+  static const panel = Color(0xFF172136);
+  static const panel2 = Color(0xFF202D45);
   static const gold = Color(0xFFE8C36A);
   static const deepGold = Color(0xFF9B7428);
-  static const bronze = Color(0xFF684C24);
-  static const cream = Color(0xFFF1E7CF);
-  static const muted = Color(0xFF9B9282);
+  static const bronze = Color(0xFF42516B);
+  static const cream = Color(0xFFF3F5FC);
+  static const muted = Color(0xFFAAB7CC);
 }
 
 abstract final class FeaturePalette {
   // Jewel accents: each module keeps its identity without turning the UI neon.
-  static const cp = Color(0xFFC85A7A);
-  static const cpSoft = Color(0xFFE1A1B3);
+  static const cp = Color(0xFFED739E);
+  static const cpSoft = Color(0xFFFFBAD0);
   static const vip = Color(0xFF5B78B8);
   static const gift = Color(0xFF8B62A8);
   static const family = Color(0xFF4A9878);
@@ -61,7 +61,7 @@ class ShiningIcon extends StatelessWidget {
     required this.color,
     this.size = 28,
     this.boxSize,
-    this.glow = 0.42,
+    this.glow = 0.20,
   });
 
   final IconData icon;

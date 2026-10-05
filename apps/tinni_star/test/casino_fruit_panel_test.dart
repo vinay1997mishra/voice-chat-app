@@ -10,6 +10,7 @@ import 'package:tinni_star/ui/casino_fruit_art.dart';
 class _Game extends ChangeNotifier {
   _Game({this.party = false});
   final bool party;
+  List<CasinoResult> history = [];
   int balance = 50000;
   int mine = 0;
   int round = 1;
@@ -18,7 +19,7 @@ class _Game extends ChangeNotifier {
     connected: true, loading: false, bettingOpen: remaining > Duration.zero,
     spinning: false, remaining: remaining, spinRemaining: Duration.zero,
     roundDuration: 21000, round: round, balance: balance, mine: mine, winnings: 0,
-    jackpot: party ? null : 85763, history: const [],
+    jackpot: party ? null : 85763, history: history,
     fruits: [
       for (final key in ['lemon', 'cherry', 'kiwi', 'strawberry',
         'watermelon', 'banana', 'raspberry', 'plum'])
@@ -46,6 +47,37 @@ Widget _harness(_Game game, {required String id, bool party = false,
   );
 
 void main() {
+  test('latest seven results sort by round and remove repeated snapshots', () {
+    final rows = [for (var round = 1; round <= 10; round++)
+      CasinoResult(round: round, fruit: 'lemon', settledAt: DateTime(2026))];
+    final recent = recentCasinoResults([...rows, rows.last, rows[8]]);
+    expect(recent.map((row) => row.round), [10, 9, 8, 7, 6, 5, 4]);
+  });
+
+  for (final party in [false, true]) {
+    testWidgets('latest result replaces oldest while seven slots remain party=$party', (tester) async {
+      final game = _Game(party: party);
+      final id = party ? 'fruit-party' : 'fruit-jackpot';
+      game.history = [for (var round = 1; round <= 7; round++)
+        CasinoResult(round: round, fruit: 'lemon', settledAt: DateTime(2026))];
+      await tester.pumpWidget(_harness(game, id: id, party: party));
+      await tester.pump();
+      for (var slot = 0; slot < 7; slot++) {
+        expect(find.byKey(Key(id + '-recent-slot-$slot')), findsOneWidget);
+      }
+      expect(find.byTooltip('Round 7 • lemon'), findsOneWidget);
+      game.history.insert(0, CasinoResult(round: 8, fruit: 'cherry', settledAt: DateTime(2026)));
+      game.change();
+      await tester.pump();
+      expect(find.byTooltip('Round 8 • cherry'), findsOneWidget);
+      expect(find.byTooltip('Round 1 • lemon'), findsNothing);
+      expect(find.byTooltip('Round 2 • lemon'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      game.dispose();
+    });
+  }
+
   for (final party in [false, true]) {
     for (final size in [const Size(360, 640), const Size(412, 892), const Size(640, 360)]) {
       testWidgets('casino bottom-half layout fits ' + size.toString() + ' party=' + party.toString(),

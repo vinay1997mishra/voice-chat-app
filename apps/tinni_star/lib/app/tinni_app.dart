@@ -23,7 +23,7 @@ class TinniStarApp extends StatelessWidget {
       builder: (context, _) => MaterialApp(
       key: ValueKey(state.auth.current?.authToken),
       debugShowCheckedModeBanner: false,
-      title: 'Tinni Star',
+      title: const String.fromEnvironment('TINNI_APP_NAME', defaultValue: 'Tinni Star'),
       theme: buildRoyalTheme(),
       home: state.auth.isLoggedIn
           ? TinniShell(state: state)

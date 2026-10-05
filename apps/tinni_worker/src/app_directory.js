@@ -1827,7 +1827,7 @@ export class AppDirectoryStore extends DurableObject {
       : null;
 
     const recentRooms = this.ctx.storage.sql.exec(
-      `SELECT rr.room_id, rr.last_entered_at,
+      `SELECT rr.room_id, rr.visited_at AS last_entered_at,
               r.title, r.owner_id, r.photo_data_url, r.theme_asset,
               r.seat_count, r.party_mode, r.locked,
               u.display_name AS owner_name
@@ -1835,7 +1835,7 @@ export class AppDirectoryStore extends DurableObject {
          LEFT JOIN app_rooms r ON r.id = rr.room_id
          LEFT JOIN app_users u ON u.user_id = r.owner_id
         WHERE rr.user_id = ?
-        ORDER BY rr.last_entered_at DESC
+        ORDER BY rr.visited_at DESC
         LIMIT 50`,
       userId,
     ).toArray().map((item) => ({
@@ -2920,7 +2920,8 @@ export class AppDirectoryStore extends DurableObject {
 
   _ownerTreasurySend(userIdValue, walletTypeValue, amountValue) {
     const amount = Math.floor(Number(amountValue || 0));
-    if (amount <= 0) throw new Error("Enter a valid coin amount");
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("Enter a valid coin amount");
+    return this.ctx.storage.transactionSync(() => {
     const treasury = this.ownerState().treasury;
     if (treasury.balance < amount) throw new Error("Owner Treasury balance is not enough");
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
@@ -2937,6 +2938,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     const wallet = this._manageWallet(userIdValue, walletType, "credit", amount);
     return { treasury: this.ownerState().treasury, wallet };
+    });
   }
 
   _setHierarchy(userIdValue, roleValue, parentValue, activeValue, dataValue = {}) {
@@ -3928,7 +3930,7 @@ export class AppDirectoryStore extends DurableObject {
       });
       case "unique-id-new": {
         const requestedId = String(data.public_id || "").trim();
-        const numericId = /^\\d{4,8}$/.test(requestedId);
+        const numericId = /^\d{4,8}$/.test(requestedId);
         const nameId = /^[A-Za-z][A-Za-z0-9_]{2,19}$/.test(requestedId);
         if (!numericId && !nameId) {
           throw new Error(

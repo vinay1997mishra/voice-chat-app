@@ -47,6 +47,13 @@ class CasinoResult {
   final DateTime settledAt;
 }
 
+/// Newest distinct settled rounds. Repeated snapshots never duplicate a slot.
+List<CasinoResult> recentCasinoResults(Iterable<CasinoResult> history) {
+  final ordered = history.toList()..sort((a, b) => b.round.compareTo(a.round));
+  final seen = <int>{};
+  return ordered.where((result) => seen.add(result.round)).take(7).toList();
+}
+
 class CasinoSnapshot {
   const CasinoSnapshot({required this.connected, required this.loading,
     required this.bettingOpen, required this.spinning, required this.remaining,
@@ -303,7 +310,8 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
             boxShadow: const [BoxShadow(color: Color(0x50260739), blurRadius: 18,
               offset: Offset(0, -5))],
           ),
-          child: Column(
+          child: LayoutBuilder(builder: (context, viewport) {
+            final content = Column(
             children: [
               SizedBox(height: 44, child: Row(
                 children: [
@@ -351,6 +359,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                   onPressed: _waiting ? null : () => unawaited(_refresh()),
                   icon: Icon(Icons.refresh_rounded, size: 16, color: _waiting ? Colors.white38 : _gold)),
               ])),
+              _RecentFruitStrip(gameId: widget.gameId, results: recentCasinoResults(view.history)),
               const SizedBox(height: 4),
               Expanded(child: LayoutBuilder(builder: (context, constraints) {
                 final height = math.max(168.0, constraints.maxHeight);
@@ -411,7 +420,63 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                   icon: const Icon(Icons.history_rounded, color: _gold, size: 18)),
               ])),
             ],
-          ),
+          );
+            return viewport.maxHeight < 230
+              ? SingleChildScrollView(child: SizedBox(height: 320, child: content))
+              : content;
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentFruitStrip extends StatelessWidget {
+  const _RecentFruitStrip({required this.gameId, required this.results});
+  final String gameId;
+  final List<CasinoResult> results;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    key: Key(gameId + '-recent-seven'), height: 34,
+    child: Row(children: [
+      const Padding(padding: EdgeInsets.only(right: 5),
+        child: Text('LAST 7', style: TextStyle(color: _gold, fontSize: 8,
+          fontWeight: FontWeight.w800))),
+      for (var slot = 0; slot < 7; slot++)
+        Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: _RecentFruitResult(
+            key: Key(gameId + '-recent-slot-' + slot.toString()),
+            result: slot < results.length ? results[slot] : null,
+            newest: slot == 0 && results.isNotEmpty))),
+    ]),
+  );
+}
+
+class _RecentFruitResult extends StatelessWidget {
+  const _RecentFruitResult({super.key, required this.result, required this.newest});
+  final CasinoResult? result;
+  final bool newest;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = result;
+    return Semantics(
+      label: value == null ? 'No settled result yet'
+        : 'Round ${value.round}, ${value.lucky ? 'Lucky 11, bonus fruits ' + value.bonus.join(', ') : value.fruit}${newest ? ', newest' : ''}',
+      child: Tooltip(
+        message: value == null ? 'Waiting for a settled round'
+          : 'Round ${value.round} • ${value.lucky ? 'Lucky 11: ' + value.bonus.join(', ') : value.fruit}',
+        child: Container(
+          height: 30, alignment: Alignment.center,
+          decoration: BoxDecoration(color: const Color(0xFF141D2F),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: newest ? _gold : const Color(0xFF39465D))),
+          child: value == null
+            ? const Text('—', style: TextStyle(color: Colors.white38, fontSize: 10))
+            : value.lucky
+              ? const Icon(Icons.auto_awesome_rounded, color: _gold, size: 20)
+              : CasinoFruitArt(fruitKey: value.fruit, size: 22),
         ),
       ),
     );

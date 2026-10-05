@@ -14,6 +14,7 @@ export default {
       const room = body.createRoom
         ? await directory.createRoom(user.user_id, { title: 'Workerd room', seat_count: 12 })
         : null;
+      if (room && body.markRecent) await directory.markRecentRoom(user.user_id, room.id);
       return Response.json({ user, room });
     }
     return worker.fetch(request, env, ctx);
