@@ -1277,3 +1277,13 @@ Unless explicitly changed by Platform Owner:
 - Successful Unique ID purchases immediately synchronize the authenticated account, profile and persisted identity. Purchase controls reject concurrent submissions.
 
 - Unique ID and store catalogs use asynchronous Durable Object RPC methods; routes must await catalog/purchase results and must never access remote private storage.
+
+## Fruit casino presentation and smooth controls — October 5, 2026
+
+- Fruit Jackpot and Fruit Party open from the bottom and occupy half the available screen. Room activity remains visible above the game.
+- Both games use clear resolution-independent fruit artwork, legible fruit names/multipliers, gold casino chips, calm highlight transitions and distinct coordinated palettes.
+- Keep all existing server bet denominations, multipliers, settlement, jackpot and Lucky 11 rules authoritative and unchanged.
+- Poll state only while the game is open and the app is active; refresh at round expiry, pause timers in the background and remove listeners/timers on close.
+- Only one bet submission may be pending per panel. Disable fruit/chip submissions during that request, keep the chosen amount fixed and never replay an ambiguous bet automatically.
+- Reflect wallet/bet/result changes only after server confirmation. History displays real settled server rounds.
+- Respect reduced-motion preferences. On short displays scroll the board while preserving access to chips, balance, history, retry and close controls.

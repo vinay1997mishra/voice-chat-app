@@ -1,46 +1,20 @@
 import 'package:flutter/material.dart';
-
 import '../app/tinni_state.dart';
+import 'casino_fruit_panel.dart';
 import 'fruit_jackpot_panel.dart';
 
-class FruitJackpotScreen extends StatefulWidget {
+class FruitJackpotScreen extends StatelessWidget {
   const FruitJackpotScreen({super.key, required this.state});
-
   final TinniState state;
-
   @override
-  State<FruitJackpotScreen> createState() => _FruitJackpotScreenState();
-}
-
-class _FruitJackpotScreenState extends State<FruitJackpotScreen> {
-  Future<void> _refresh() async {
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    await widget.state.fruitJackpotRemote.sync(account.authToken);
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF050817),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: FruitJackpotPanel(
-                  state: widget.state,
-                  onClose: () => Navigator.maybePop(context),
-                ),
-              ),
-            ],
-          ),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFF100C1C),
+    body: SafeArea(
+      child: CasinoGameDock(
+        child: FruitJackpotPanel(
+          state: state, onClose: () => Navigator.maybePop(context),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
