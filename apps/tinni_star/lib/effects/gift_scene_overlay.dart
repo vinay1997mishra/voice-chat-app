@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../economy/economy.dart';
@@ -23,15 +24,10 @@ class GiftSceneOverlay extends StatefulWidget {
 class _GiftSceneOverlayState extends State<GiftSceneOverlay> with SingleTickerProviderStateMixin {
   late final AnimationController _motion;
   GiftSceneEvent? _event;
+  Timer? _hold;
   @override void initState() {
     super.initState();
-    _motion=AnimationController(vsync:this)..addStatusListener((status) {
-      if(status==AnimationStatus.completed) {
-        final event=_event;
-        if(event!=null) { widget.onDelivered(event); }
-        setState(()=>_event=null);_next();
-      }
-    });
+    _motion=AnimationController(vsync:this);
     widget.queue.addListener(_next);_next();
   }
   void _next() {
@@ -41,8 +37,16 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay> with SingleTickerPr
     setState(()=>_event=event);
     _motion.duration=Duration(seconds:PremiumGiftCatalog.holdSeconds(event.gift.id));
     _motion.forward(from:0);
+    _hold=Timer(_motion.duration!,_finish);
   }
-  @override void dispose() { widget.queue.removeListener(_next);_motion.dispose();super.dispose(); }
+  void _finish() {
+    if(!mounted) { return; }
+    final event=_event;
+    if(event!=null) { widget.onDelivered(event); }
+    setState(()=>_event=null);
+    _next();
+  }
+  @override void dispose() { _hold?.cancel();widget.queue.removeListener(_next);_motion.dispose();super.dispose(); }
   @override Widget build(BuildContext context) {
     final event=_event;
     if(event==null) { return const SizedBox.shrink(); }
