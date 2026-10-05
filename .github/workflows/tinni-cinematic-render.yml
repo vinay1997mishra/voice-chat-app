@@ -1,0 +1,48 @@
+name: Tinni cinematic 3D prototypes
+on:
+  push:
+    branches: [tinnistar]
+    paths: [tools/cinematic/**, .github/workflows/tinni-cinematic-render.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tinni-cinematic-prototypes
+  cancel-in-progress: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        scene: [rocket-5, rose-bouquet, hot-biryani]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scene script
+        run: python3 -m py_compile tools/cinematic/render.py
+      - name: Install headless rendering tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb libegl1 libgl1 libxrender1 libxi6 libxkbcommon0 ffmpeg
+          curl --fail --location --retry 3 https://download.blender.org/release/Blender4.5/blender-4.5.2-linux-x64.tar.xz -o /tmp/blender.tar.xz
+          tar -xf /tmp/blender.tar.xz -C /tmp
+      - name: Render original animated 3D geometry
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          xvfb-run -a /tmp/blender-4.5.2-linux-x64/blender --background --python tools/cinematic/render.py -- --scene "${{ matrix.scene }}"
+      - name: Encode silent phone-compatible video
+        run: |
+          ffmpeg -y -framerate 24 -i "cinematic-preview/${{ matrix.scene }}/frame-%04d.png" -an -c:v libx264 -preset medium -crf 22 -pix_fmt yuv420p -movflags +faststart "cinematic-preview/${{ matrix.scene }}/${{ matrix.scene }}.mp4"
+          ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate -show_entries format=duration,size -of json "cinematic-preview/${{ matrix.scene }}/${{ matrix.scene }}.mp4" > "cinematic-preview/${{ matrix.scene }}/metadata.json"
+      - name: Publish reviewable movie prototypes
+        uses: actions/upload-artifact@v4
+        with:
+          name: cinematic-${{ matrix.scene }}
+          path: |
+            cinematic-preview/${{ matrix.scene }}/*.mp4
+            cinematic-preview/${{ matrix.scene }}/poster.png
+            cinematic-preview/${{ matrix.scene }}/metadata.json
+          retention-days: 14
