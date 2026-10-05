@@ -240,7 +240,7 @@ class ActiveRoomSession extends ChangeNotifier {
       connectionError = (connected ? 'Microphone update failed: ' : 'Voice connection failed: ') +
           error.toString().replaceFirst('Bad state: ', '');
       _nextVoiceAttempt = nowProvider().add(Duration(seconds: _voiceRetrySeconds));
-      _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 30).toInt();
+      _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 120).toInt();
     } finally {
       _voiceAttemptRunning = false;
       if (epoch == _voiceEpoch) {
@@ -770,7 +770,7 @@ class ActiveRoomSession extends ChangeNotifier {
     final delaySeconds = immediate ? 0 : _presenceRecoveryDelaySeconds;
     if (!immediate) {
       _presenceRecoveryDelaySeconds =
-          (_presenceRecoveryDelaySeconds * 2).clamp(2, 30).toInt();
+          (_presenceRecoveryDelaySeconds * 2).clamp(2, 120).toInt();
     }
 
     _presenceRecoveryTimer = Timer(Duration(seconds: delaySeconds), () {

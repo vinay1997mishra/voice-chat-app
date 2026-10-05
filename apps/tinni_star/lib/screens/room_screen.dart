@@ -104,6 +104,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _ribbonFetchRunning = false;
   Timer? _roomRecoveryTimer;
   bool _roomRecoveryRunning = false;
+  int _roomRecoveryFailures = 0;
   static const List<int> _rocketStageTargets = <int>[
     8000000,
     15000000,
@@ -1334,9 +1335,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         throw StateError('Room presence reconnect pending');
       }
       session.resume();
+      _roomRecoveryFailures = 0;
     } catch (_) {
       if (mounted && _roomRecoveryTimer == null) {
-        _roomRecoveryTimer = Timer(const Duration(seconds: 2), () {
+        _roomRecoveryTimer = Timer(RequestBudget.reconnectDelay(_roomRecoveryFailures++), () {
           _roomRecoveryTimer = null;
           _scheduleRoomRecovery();
         });
