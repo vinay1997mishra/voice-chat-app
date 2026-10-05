@@ -205,6 +205,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
                     child: CinematicVideo(
                       key: ObjectKey(event),
                       sceneId: event.gift.id,
+                      fit: countryFlag ? BoxFit.cover : BoxFit.contain,
                       duration: _motion.duration!,
                       timeline: _motion,
                       fallback: fallback,

@@ -24,12 +24,14 @@ class CinematicVideo extends StatefulWidget {
     required this.duration,
     required this.timeline,
     required this.fallback,
+    this.fit = BoxFit.contain,
   });
 
   final String sceneId;
   final Duration duration;
   final Animation<double> timeline;
   final Widget fallback;
+  final BoxFit fit;
 
   @override
   State<CinematicVideo> createState() => _CinematicVideoState();
@@ -156,7 +158,7 @@ class _CinematicVideoState extends State<CinematicVideo>
       return Image.asset(
         CinematicAssets.posterFor(widget.sceneId),
         key: ValueKey('cinematic-poster-' + widget.sceneId),
-        fit: BoxFit.contain,
+        fit: widget.fit,
         errorBuilder: (_, error, stackTrace) => widget.fallback,
       );
     }

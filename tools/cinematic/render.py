@@ -640,7 +640,8 @@ def country():
     nodes.active = image
     cloth.node_tree.links.new(image.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
     verts, faces = [], []
-    nx, nz = 24, 12
+    nx, nz = (64, 48) if code == "np" else (24, 12)
+    pixels = list(image.image.pixels) if code == "np" else None
     height = 2.1*image.image.size[1]/image.image.size[0]
     for z in range(nz+1):
         for x in range(nx+1):
@@ -648,6 +649,11 @@ def country():
     for z in range(nz):
         for x in range(nx):
             a = z*(nx+1)+x
+            if pixels is not None:
+                px = min(image.image.size[0]-1, int((x+.5)/nx*image.image.size[0]))
+                pz = min(image.image.size[1]-1, int((z+.5)/nz*image.image.size[1]))
+                if pixels[(pz*image.image.size[0]+px)*4+3] < .5:
+                    continue
             faces.append((a, a+1, a+nx+2, a+nx+1))
     flag = mesh("Waving " + code.upper() + " national flag", verts, faces, cloth, root)
     uv = flag.data.uv_layers.new(name="Flag UV")
@@ -672,7 +678,7 @@ def country():
             shape.keyframe_insert(data_path="value", frame=f)
     cone("Gold flag mast", .026, .026, 2.6, (-1.04, 0, 1.3), gold, root)
     sphere("Mast finial", (-1.04, 0, 2.64), (.07,)*3, gold, root)
-    camera.location = (.05, -3.2, 1.75)
+    camera.location = (.05, -5.8, 1.75)
     camera.data.lens = 52
     camera.rotation_euler = aim(camera, (0, 0, 1.75))
 

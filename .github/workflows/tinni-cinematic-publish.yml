@@ -73,17 +73,21 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
-          # The review commit belongs only on the review branch.
-          git checkout --detach "$SOURCE_SHA"
-          actual="$(git ls-remote origin refs/heads/tinnistar | cut -f1)"
-          test "$actual" = "$SOURCE_SHA"
+          # Keep later app fixes while verifying that the rendered sources still match.
+          git fetch --depth=1 origin refs/heads/tinnistar
+          actual="$(git rev-parse FETCH_HEAD)"
+          git checkout --detach "$actual"
           python3 - "$SOURCE_SHA" <<'PY'
           import json
           import sys
           from pathlib import Path
+          sys.path.insert(0, "tools/cinematic")
+          import catalog
           source = sys.argv[1]
           manifest = json.loads(Path("cinematic-package/assets/manifest.json").read_text())
           assert manifest["source_commit"] == source
+          assert catalog.fingerprint() == manifest["source_fingerprint"], "Rendered sources changed during the build"
+          catalog.validate()
           checksum = Path("cinematic-package/cinematic-assets.sha256").read_text().split()[0]
           lock = {
               "schema": 1, "source_commit": source,
