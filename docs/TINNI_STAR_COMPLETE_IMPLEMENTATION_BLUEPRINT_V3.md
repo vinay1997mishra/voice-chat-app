@@ -1295,3 +1295,5 @@ Unless explicitly changed by Platform Owner:
 - Fruit Party now has Lucky 11: 3–4 server-selected rounds per two-hour window, three distinct random winning fruits with their existing Party multipliers. Existing round timings, bet denominations, balances and normal weighted outcomes remain unchanged. Settlement and all payouts are atomic and cannot be repeated by failed secondary notices.
 - Room Game Center exposes Ludo. Ludo opens at the bottom in half the screen, shows four matching colour positions with actual player DP/name and room microphone state, polls live turns, and releases players when the panel closes. Mic buttons use the existing real room seat admission, approval and audio publishing rules.
 - Music playback start/resume returns immediately so pause, previous, next, stop and seat-down/exit controls stay responsive.
+
+- Room comments use a bounded server history and idempotent HTTP fallback when WebSocket is unavailable; owner/admin clear scope is preserved. Room controls and voice credentials look up authorized locked/empty rooms directly instead of using public discovery filters.

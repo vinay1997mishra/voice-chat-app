@@ -186,15 +186,17 @@ class RoomPresenceService extends ChangeNotifier {
       <RoomLuckyNumberEvent>[];
   RoomGiftVisualEvent? latestGiftVisualEvent;
   RoomChatEvent? latestChatEvent;
+  final List<RoomChatEvent> chatEvents = <RoomChatEvent>[];
   final Set<int> lockedSeats = <int>{};
   final Set<int> mutedSeats = <int>{};
   String? lastError;
+  void Function(String token)? onSessionExpired;
   DateTime? lastSuccessfulContact;
   bool _httpFailed = false;
   int _latestSnapshotTime = 0;
 
   bool get hasConnectionProblem => !liveConnected &&
-      (_httpFailed || !connected);
+      (_httpFailed || (!connected && lastError != null));
 
   void _markHttpHealthy() {
     connected = true;
@@ -459,7 +461,7 @@ class RoomPresenceService extends ChangeNotifier {
     });
   }
 
-  Future<void> sendChatMessage(String text) async {
+  Future<void> sendChatMessage(String text, {String? roomId, String? authToken}) async {
     final value = text.trim();
     if (value.isEmpty) return;
     if (value.length > 500) {
@@ -467,7 +469,14 @@ class RoomPresenceService extends ChangeNotifier {
     }
     final socket = _liveSocket;
     if (socket == null || socket.readyState != WebSocket.open) {
-      throw StateError('Room chat is reconnecting.');
+      final id = roomId ?? _liveRoomId;
+      final token = authToken ?? _liveAuthToken;
+      if (id == null || token == null) throw StateError('Room session is not active.');
+      await _commandPost('/room-presence/comment', token, <String,Object>{
+        'room_id': id, 'text': value,
+        'client_event_id': DateTime.now().microsecondsSinceEpoch.toString(),
+      });
+      return;
     }
     socket.add(
       jsonEncode(<String, Object?>{
@@ -592,7 +601,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to kick room user',
@@ -895,7 +905,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to update room mute',
@@ -927,7 +938,8 @@ class RoomPresenceService extends ChangeNotifier {
       }),
     );
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to send room emote',
@@ -966,6 +978,7 @@ class RoomPresenceService extends ChangeNotifier {
         final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
+        if (response.statusCode == 401) onSessionExpired?.call(authToken);
         final data = await _readJson(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final message =
@@ -1056,7 +1069,8 @@ class RoomPresenceService extends ChangeNotifier {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load room gift feed',
@@ -1084,7 +1098,8 @@ class RoomPresenceService extends ChangeNotifier {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     final response = await closeBackendRequest(request);
-    final data = await _readJson(response);
+    if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         data['error']?.toString() ?? 'Unable to load Lucky Gift state',
@@ -1109,7 +1124,8 @@ class RoomPresenceService extends ChangeNotifier {
         'Bearer $authToken',
       );
       final response = await closeBackendRequest(request);
-      final data = await _readJson(response);
+      if (response.statusCode == 401) onSessionExpired?.call(authToken);
+        final data = await _readJson(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
           data['error']?.toString() ?? 'Presence HTTP ${response.statusCode}',
@@ -1175,6 +1191,7 @@ class RoomPresenceService extends ChangeNotifier {
         final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 15),
         );
+        if (response.statusCode == 401) onSessionExpired?.call(authToken);
         final data = await _readJson(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final message =
@@ -1425,6 +1442,16 @@ class RoomPresenceService extends ChangeNotifier {
         );
     }
 
+    if (data['chat_messages'] is List) {
+      chatEvents
+        ..clear()
+        ..addAll((data['chat_messages'] as List).whereType<Map>().map((row) =>
+          RoomChatEvent(id: row['id']?.toString() ?? '',
+            userId: row['user_id']?.toString() ?? '',
+            displayName: row['display_name']?.toString() ?? 'User',
+            text: row['text']?.toString() ?? '',
+            createdAt: DateTime.fromMillisecondsSinceEpoch(_asInt(row['created_at'])))));
+    }
     final rawMembers = data['members'];
     if (rawMembers is! List) return;
 

@@ -76,3 +76,25 @@ test('Ludo uses four real profiles, rejects wrong turns and releases/rejoins col
   const forbiddenReset=await r.request('/ludo/reset',players[1].token,{room_id:room.id});
   assert.equal(forbiddenReset.status,400); assert.match(forbiddenReset.data.error,/Only the room owner/);
 });
+
+test('locked empty room gets voice credentials and owner controls without public discovery',async t=>{
+  const r=runtime(); t.after(r.close);
+  r.env.LIVEKIT_URL='wss://voice.example.test';
+  r.env.LIVEKIT_API_KEY='test-api-key';r.env.LIVEKIT_API_SECRET='test-api-secret';
+  const owner=await r.user(1);
+  const room=await r.directory.createRoom(owner.user_id,{title:'Locked',seat_count:12});
+  r.directory.ctx.storage.sql.exec('UPDATE app_rooms SET locked=1 WHERE id=?',room.id);
+  assert.ok(!(await r.directory.listRooms()).some(x=>x.id===room.id));
+  const credentials=await r.request('/livekit/token',owner.token,{room_id:room.id});
+  assert.equal(credentials.status,200,JSON.stringify(credentials.data));
+  const claims=JSON.parse(Buffer.from(credentials.data.token.split('.')[1],'base64url'));
+  assert.equal(claims.sub,owner.user_id);assert.equal(claims.video.room,room.id);
+  assert.equal(claims.video.canPublish,true);assert.equal(claims.video.canSubscribe,true);
+  const mode=await r.request('/room-presence/mic-mode',owner.token,{room_id:room.id,mic_mode:'free'});
+  assert.equal(mode.status,200,JSON.stringify(mode.data));
+  await r.request('/room-presence/join',owner.token,{room_id:room.id});
+  const locked=await r.request('/room-presence/seat-lock',owner.token,{room_id:room.id,seat_index:0,locked:true});
+  assert.equal(locked.status,200,JSON.stringify(locked.data));
+  const unlocked=await r.request('/room-presence/seat-lock',owner.token,{room_id:room.id,seat_index:0,locked:false});
+  assert.equal(unlocked.status,200);
+});

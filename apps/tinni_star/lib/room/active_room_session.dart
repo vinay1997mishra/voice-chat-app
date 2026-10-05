@@ -270,7 +270,7 @@ class ActiveRoomSession extends ChangeNotifier {
       }
       if (voiceState == RtcConnectionState.reconnecting ||
           !_voicePermissionGranted ||
-          (_nextVoiceAttempt?.isAfter(DateTime.now()) ?? false)) return;
+          (_nextVoiceAttempt?.isAfter(DateTime.now()) ?? false)) { return; }
       await retryVoice(requestPermission: false);
     });
     _fallbackStateTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
@@ -552,7 +552,7 @@ class ActiveRoomSession extends ChangeNotifier {
     if (room == null || _activeAuthToken == null) {
       throw StateError('Room session is not active.');
     }
-    await presence.sendChatMessage(text);
+    await presence.sendChatMessage(text, roomId: room?.id, authToken: _activeAuthToken);
   }
 
     Future<void> requestMySeat(int seatIndex) async {
@@ -1084,14 +1084,15 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _syncRoomChatMessages() {
-    final roomController = controller;
-    final event = presence.latestChatEvent;
-    if (roomController == null || event == null) return;
-    if (!_seenRoomChatEventIds.add(event.id)) return;
-    roomController.addRoomMessage(
-      event.displayName,
-      event.text,
-    );
+    final current = controller;
+    if (current == null) return;
+    for (final event in <RoomChatEvent>[
+      ...presence.chatEvents,
+      if (presence.latestChatEvent != null) presence.latestChatEvent!,
+    ]) {
+      if (!_seenRoomChatEventIds.add(event.id)) continue;
+      current.addRoomMessage(event.displayName, event.text);
+    }
   }
 
   void _syncLuckyNumberMessages() {

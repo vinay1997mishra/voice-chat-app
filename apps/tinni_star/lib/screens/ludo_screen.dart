@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../games/ludo_game.dart';
 import '../room/room_presence_service.dart';
-import '../ui/royal_theme.dart';
 
 class LudoScreen extends StatefulWidget {
   const LudoScreen({super.key, required this.state, required this.roomId});
@@ -174,7 +173,7 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
     final mine = id.isNotEmpty && id == widget.state.auth.current?.userId;
     final voice = mine
         ? widget.state.roomSession.connected && widget.state.realtime.rtc.publishingMic
-        : member?.micEnabled == true;
+        : member != null && member.seatIndex != null && !member.micMuted && !member.moderationMuted;
     final turn = _ready && game.currentPlayer == player && row != null;
     return Expanded(child: Container(
       key: Key('ludo-player-' + player.name),
@@ -219,7 +218,8 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
           IconButton(tooltip: 'Refresh Ludo', icon: const Icon(Icons.refresh, size: 20),
             onPressed: _busy ? null : _refresh),
         ]),
-      body: SafeArea(top: false, child: Column(children: [
+      body: SafeArea(top: false, child: LayoutBuilder(builder: (context, viewport) {
+        final content = Column(children: [
         Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           child: Row(children: [
             Expanded(child: Text(_errorText ?? (!_ready ? 'Connecting…' :
@@ -256,7 +256,11 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
         const SizedBox(height: 4),
         Row(children: [_player(LudoPlayer.blue), _player(LudoPlayer.yellow)]),
         const SizedBox(height: 4),
-      ])),
+      ]);
+        return viewport.maxHeight < 260
+            ? SingleChildScrollView(child: SizedBox(height: 320, child: content))
+            : content;
+      })),
     );
   }
 
@@ -329,7 +333,7 @@ class _TokenButton extends StatelessWidget {
           alignment: Alignment.center,
           child: Text(
             '${token.index + 1}',
-            style: const TextStyle(
+            style: TextStyle(
               color: token.player == LudoPlayer.yellow ? Colors.black : Colors.white,
               fontSize: math.max(6.0, boardSize / 45),
               fontWeight: FontWeight.w900,

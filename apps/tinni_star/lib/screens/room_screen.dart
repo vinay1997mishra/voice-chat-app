@@ -1278,14 +1278,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildRoomConnectionStatus() {
     final presence = widget.state.roomSession.presence;
-    final shouldShow = presence.hasConnectionProblem;
+    final session = widget.state.roomSession;
+    final voiceProblem = !session.connected && !session.connecting && session.connectionError != null;
+    final shouldShow = presence.hasConnectionProblem || voiceProblem;
     if (!shouldShow) return const SizedBox.shrink();
 
-    final text = presence.connected
-        ? 'Room reconnecting…'
-        : 'Connection problem • retrying…';
+    final text = presence.hasConnectionProblem
+        ? 'Connection problem • retrying…'
+        : 'Voice unavailable • Tap to retry';
 
-    return IgnorePointer(
+    return GestureDetector(
+      onTap: () async {
+        await widget.state.roomSession.retryVoice();
+        _scheduleRoomRecovery();
+      },
       child: Center(
         child: Container(
           key: const Key('room-connection-retrying'),
@@ -9592,7 +9598,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-            if (widget.state.roomSession.presence.hasConnectionProblem)
+            if (widget.state.roomSession.presence.hasConnectionProblem ||
+                (!widget.state.roomSession.connected && !widget.state.roomSession.connecting &&
+                    widget.state.roomSession.connectionError != null))
               Positioned(
                 left: 20,
                 right: 20,

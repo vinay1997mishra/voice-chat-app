@@ -68,7 +68,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   if (wsResponse.status !== 101) assert.fail(await wsResponse.text());
   const socket=wsResponse.webSocket;
   socket.accept();
-  t.after(()=>socket.close());
+  t.after(()=>{try {socket.close();} catch (_) {}});
   const messages=[];
   socket.addEventListener('message',event=>messages.push(JSON.parse(event.data)));
   socket.send(JSON.stringify({type:'seat_state',seat_index:1,mic_enabled:true}));
@@ -99,6 +99,12 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   assert.equal(acceptedAgain.seat_index,3);
   await action('/room-presence/public-screen',owner,{room_id:roomId,enabled:true});
   assert.equal((await action('/room-presence/state?room_id='+roomId,guest)).public_screen_enabled,true);
+  const comment=await action('/room-presence/comment',guest,{room_id:roomId,text:'HTTP fallback comment',client_event_id:'comment-1'});
+  const repeatedComment=await action('/room-presence/comment',guest,{room_id:roomId,text:'HTTP fallback comment',client_event_id:'comment-1'});
+  assert.equal(comment.message.id,repeatedComment.message.id);
+  assert.equal((await action('/room-presence/state?room_id='+roomId,owner)).chat_messages.length,1);
+  await action('/room-presence/clear-comments',owner,{room_id:roomId});
+  assert.equal((await action('/room-presence/state?room_id='+roomId,guest)).chat_messages.length,0);
   await action('/room-presence/public-screen',owner,{room_id:roomId,enabled:false});
   assert.equal((await action('/room-presence/state?room_id='+roomId,guest)).public_screen_enabled,false);
   await action('/room-presence/seat-leave',guest,{room_id:roomId});
