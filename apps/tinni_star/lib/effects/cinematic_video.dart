@@ -130,7 +130,7 @@ class _CinematicVideoState extends State<CinematicVideo>
     _video = null;
     if (controller != null) {
       controller.removeListener(_playerChanged);
-      unawaited(controller.dispose());
+      unawaited(controller.dispose().catchError((Object _) {}));
     }
   }
 

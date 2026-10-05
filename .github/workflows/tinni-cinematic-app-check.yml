@@ -1,0 +1,37 @@
+name: Tinni cinematic app checks
+
+on:
+  push:
+    branches: [cinematic-apk-integration, tinnistar]
+    paths:
+      - 'apps/tinni_star/lib/effects/**'
+      - 'apps/tinni_star/test/cinematic_playback_test.dart'
+      - '.github/workflows/tinni-cinematic-app-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cinematic-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve packages
+        working-directory: apps/tinni_star
+        run: flutter pub get
+      - name: Analyze app
+        working-directory: apps/tinni_star
+        run: flutter analyze
+      - name: Verify gift, Rocket, lifecycle and all locked behavior
+        working-directory: apps/tinni_star
+        run: timeout --signal=TERM --kill-after=10s 600s flutter test --reporter expanded --timeout 45s --fail-fast
